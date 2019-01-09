@@ -1,0 +1,5 @@
+Version 0.1 (baseline):
+- Add a data sink connector, supporting standard 'write' operations ('writeStream' interface is also supported)
+- Add a basic data source connector, supporting standard 'read' operations
+  Note: in this version, a single partition is forced
+
