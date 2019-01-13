@@ -62,6 +62,11 @@ mvn clean package
 // Builds jar, runs all tests, and installs jar to your local maven repository
 mvn clean install
 ```
+
+## Pre-Compiled Libraries
+In order to facilitate ramp-up on platforms such as Azure Databricks, pre-compiled libraries
+can be found [here](lib) 
+
 	
 ## Documentation
 Detailed documentation can be found [here](docs).

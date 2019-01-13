@@ -64,7 +64,7 @@
     </dependency>
     <dependency>
       <groupId>org.json4s</groupId>
-      <artifactId>json4s-native_2.11</artifactId>
+      <artifactId>json4s-jackson_2.11</artifactId>
       <version>3.6.2</version>
     </dependency>
     <dependency>
@@ -76,6 +76,11 @@
       <groupId>org.scalaj</groupId>
       <artifactId>scalaj-http_2.11</artifactId>
       <version>2.3.0</version>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.module</groupId>
+      <artifactId>jackson-module-scala_2.11</artifactId>
+      <version>2.9.6</version>
     </dependency>
     <dependency>
       <groupId>org.apache.logging.log4j</groupId>
@@ -191,7 +196,7 @@
         <!-- see http://davidb.github.com/scala-maven-plugin -->
         <groupId>net.alchim31.maven</groupId>
         <artifactId>scala-maven-plugin</artifactId>
-        <version>3.3.2</version>
+        <version>3.4.4</version>
         <executions>
           <execution>
             <goals>
@@ -220,31 +225,31 @@
         </configuration>
       </plugin>
       <!-- A plugin for creating an assembly JAR file (Java or Scala) -->
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-shade-plugin</artifactId>
-        <version>3.2.0</version>
-        <executions>
-          <execution>
-            <phase>package</phase>
-            <goals>
-              <goal>shade</goal>
-            </goals>
-          </execution>
-        </executions>
-        <configuration>
-          <filters>
-            <filter>
-              <artifact>*:*</artifact>
-              <excludes>
-                <exclude>META-INF/*.SF</exclude>
-                <exclude>META-INF/*.DSA</exclude>
-                <exclude>META-INF/*.RSA</exclude>
-              </excludes>
-            </filter>
-          </filters>
-        </configuration>
-      </plugin>
+      <!--<plugin>-->
+        <!--<groupId>org.apache.maven.plugins</groupId>-->
+        <!--<artifactId>maven-shade-plugin</artifactId>-->
+        <!--<version>3.2.0</version>-->
+        <!--<executions>-->
+          <!--<execution>-->
+            <!--<phase>package</phase>-->
+            <!--<goals>-->
+              <!--<goal>shade</goal>-->
+            <!--</goals>-->
+          <!--</execution>-->
+        <!--</executions>-->
+        <!--<configuration>-->
+          <!--<filters>-->
+            <!--<filter>-->
+              <!--<artifact>*:*</artifact>-->
+              <!--<excludes>-->
+                <!--<exclude>META-INF/*.SF</exclude>-->
+                <!--<exclude>META-INF/*.DSA</exclude>-->
+                <!--<exclude>META-INF/*.RSA</exclude>-->
+              <!--</excludes>-->
+            <!--</filter>-->
+          <!--</filters>-->
+        <!--</configuration>-->
+      <!--</plugin>-->
       <plugin>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest-maven-plugin</artifactId>
