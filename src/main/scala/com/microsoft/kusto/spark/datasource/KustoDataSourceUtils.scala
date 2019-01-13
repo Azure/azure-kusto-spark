@@ -11,7 +11,7 @@ import com.microsoft.kusto.spark.utils.DataTypeMapping
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark.sql.types.DataTypes.StringType
 import org.apache.spark.sql.types.StructType
-import org.json4s.native.JsonMethods.parse
+import org.json4s.jackson.JsonMethods.parse
 
 object KustoDataSourceUtils{
   private val klog = Logger.getLogger("KustoConnector")
