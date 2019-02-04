@@ -6,15 +6,16 @@ package com.microsoft.kusto.spark.Sample
 /*   (Apache Spark 2.4.0, Scala 2.11)                                                  */
 /***************************************************************************************/
 
-import com.microsoft.kusto.spark.datasource.{KustoDataSourceUtils => KDSU}
-import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.types.{StringType, StructType}
-import java.util.concurrent.atomic.AtomicInteger
-import org.apache.spark.sql.streaming.Trigger
-import com.microsoft.kusto.spark.datasource.KustoOptions
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
+
+import com.microsoft.kusto.spark.datasource.KustoOptions
 import com.microsoft.kusto.spark.sql.extension.SparkExtension._
+import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.sql.types.DataTypes.IntegerType
+import org.apache.spark.sql.types.{StringType, StructType}
 
 object KustoConnectorDemo {
   def main(args: Array[String]): Unit = {

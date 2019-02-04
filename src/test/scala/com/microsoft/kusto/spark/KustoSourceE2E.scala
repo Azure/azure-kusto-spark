@@ -1,18 +1,13 @@
 package com.microsoft.kusto.spark
-import com.microsoft.kusto.spark.datasource.KustoOptions
-import org.apache.spark.sql._
-import com.microsoft.kusto.spark.sql.extension.SparkExtension._
-import org.apache.spark.SparkConf
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 
 import com.microsoft.azure.kusto.data.{ClientFactory, ConnectionStringBuilder}
-import com.microsoft.kusto.spark.datasource.KustoDataSourceUtils.{generateDropTablesCommand, generateTableCreateCommand}
-import com.microsoft.kusto.spark.datasource.{KustoOptions, KustoDataSourceUtils => KDSU}
-import com.microsoft.kusto.spark.utils.KustoQueryUtils
+import com.microsoft.kusto.spark.datasource.KustoOptions
+import com.microsoft.kusto.spark.sql.extension.SparkExtension._
+import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
+import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.types.DataTypes.IntegerType
-import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.sql.{SQLContext, SparkSession}
 import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
@@ -77,7 +72,7 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
     val expectedNumberOfRows: Int =  100
     val rows: immutable.IndexedSeq[(String, Int)] = (1 to expectedNumberOfRows).map(v => (newRow(), v))
     val dfOrig = rows.toDF("name", "value")
-    val table = KustoQueryUtils.simplifyTableName(s"KustoSparkReadWRiteTest_${UUID.randomUUID()}")
+    val table = KustoQueryUtils.simplifyName(s"KustoSparkReadWRiteTest_${UUID.randomUUID()}")
 
     // Create a new table. TODO: This can be replaced by calling sink with "create table if not exists" once available
     val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://$cluster.kusto.windows.net", appId, appKey, authority)
@@ -110,6 +105,6 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
     }
 
     // Cleanup
-    KustoTestUtils.dropAllTablesByPrefix(kustoAdminClient, database, "KustoSparkReadWRiteTest")
+    KustoTestUtils.tryDropAllTablesByPrefix(kustoAdminClient, database, "KustoSparkReadWRiteTest")
   }
 }

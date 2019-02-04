@@ -3,9 +3,9 @@ package com.microsoft.kusto.spark
 import java.util.UUID
 
 import com.microsoft.azure.kusto.data.{ClientFactory, ConnectionStringBuilder}
-import com.microsoft.kusto.spark.datasource.KustoDataSourceUtils._
 import com.microsoft.kusto.spark.datasource.KustoOptions
 import com.microsoft.kusto.spark.datasource.KustoOptions.SinkTableCreationMode
+import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.sql.types.DataTypes.IntegerType
@@ -94,8 +94,7 @@ class KustoSinkStreamingE2E extends FlatSpec with BeforeAndAfterAll{
     KustoTestUtils.validateResultsAndCleanup(kustoAdminClient, table, database, expectedNumberOfRows, timeoutMs - sleepTimeTillTableCreate, tableCleanupPrefix = prefix)
   }
 
-  // "KustoStreamingSinkAsync"
-  ignore should "also ingest structured data to a Kusto cluster" taggedAs KustoE2E in {
+  "KustoStreamingSinkAsync" should "also ingest structured data to a Kusto cluster" taggedAs KustoE2E in {
 
     if(appId == null || appKey == null || authority == null || cluster == null || database == null){
       fail()

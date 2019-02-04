@@ -15,11 +15,10 @@ import com.microsoft.azure.kusto.ingest.source.BlobSourceInfo
 import com.microsoft.azure.kusto.ingest.{IngestClientFactory, IngestionProperties}
 import com.microsoft.azure.storage.StorageCredentialsSharedAccessSignature
 import com.microsoft.azure.storage.blob.{BlobOutputStream, CloudBlobContainer}
-import com.microsoft.kusto.spark.datasource.KustoDataSourceUtils._
 import com.microsoft.kusto.spark.datasource.KustoOptions.SinkTableCreationMode
 import com.microsoft.kusto.spark.datasource.KustoOptions.SinkTableCreationMode.SinkTableCreationMode
-import com.microsoft.kusto.spark.datasource.{KustoDataSourceUtils => KDSU}
-import com.microsoft.kusto.spark.utils.KustoQueryUtils
+import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
+import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import com.univocity.parsers.csv.{CsvWriter, CsvWriterSettings}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types.StructType
@@ -44,7 +43,6 @@ object KustoWriter{
   val timeOut: FiniteDuration = 10 minutes
   val delayPeriodBetweenCalls: Int = 1000
   val GZIP_BUFFER_SIZE: Int = 16 * 1024
-
   private[kusto] def write(
                       batchId: Option[Long],
                       data: DataFrame,
@@ -56,20 +54,22 @@ object KustoWriter{
                       authorityId: String,
                       enableAsync: Boolean = false,
                       tableCreation: SinkTableCreationMode = SinkTableCreationMode.FailIfNotExist,
-                      mode: SaveMode = SaveMode.Append): Unit = {
+                      mode: SaveMode = SaveMode.Append,
+                      timeZone: String): Unit = {
 
     if(mode != SaveMode.Append)
     {
       KDSU.logWarn(myName, s"Kusto data source supports only append mode. Ignoring '$mode' directive")
     }
-
     val schema = data.schema
-    var batchIdIfExists = { if (batchId.isEmpty || batchId == Option(0)) { "" } else { s"$batchId%d"} }
+    var batchIdIfExists = { if (batchId.isEmpty || batchId == Option(0)) { "" } else { s"${batchId.get}"} }
 
     val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://$cluster.kusto.windows.net", appId, appKey, authorityId)
+    engineKcsb.setClientVersionForTracing(KDSU.ClientName)
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
     val appName = data.sparkSession.sparkContext.appName
     val ingestKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://ingest-$cluster.kusto.windows.net", appId, appKey, authorityId)
+    ingestKcsb.setClientVersionForTracing(KDSU.ClientName)
 
     try {
       // Try delete temporary tablesToCleanup created and not used
@@ -88,13 +88,13 @@ object KustoWriter{
         KDSU.reportExceptionAndThrow(myName, ex, "trying to drop temporary tables", cluster, database, table, isLogDontThrow = true)
     }
 
-    val tmpTableName = KustoQueryUtils.simplifyTableName(s"$TempIngestionTablePrefix${appName}_$table${batchIdIfExists}_${UUID.randomUUID().toString}")
+    val tmpTableName = KustoQueryUtils.simplifyName(s"$TempIngestionTablePrefix${appName}_$table${batchIdIfExists}_${UUID.randomUUID().toString}")
 
     if(batchIdIfExists != "") batchIdIfExists = s", batch'$batchIdIfExists'"
 
     // KustoWriter will create a temporary table ingesting the data to it.
     // Only if all executors succeeded the table will be appended to the original destination table.
-    createTmpTableWithSameSchema(kustoAdminClient, table, database, tmpTableName, cluster, tableCreation, schema)
+    KDSU.createTmpTableWithSameSchema(kustoAdminClient, table, database, tmpTableName, cluster, tableCreation, schema)
 
     KDSU.logInfo(myName, s"Successfully created temporary table $tmpTableName, will be deleted after completing the operation")
 
@@ -102,6 +102,8 @@ object KustoWriter{
 
     def ingestRowsIntoKusto(schema: StructType, rows: Iterator[InternalRow]): IngestionResult = {
       val ingestKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://ingest-$cluster.kusto.windows.net", appId, appKey, authorityId)
+      ingestKcsb.setClientVersionForTracing(KDSU.ClientName)
+
       val ingestClient = IngestClientFactory.createClient(ingestKcsb)
       val ingestionProperties = new IngestionProperties(database, tmpTableName)
 
@@ -109,7 +111,7 @@ object KustoWriter{
       val container = new CloudBlobContainer(new URI(storageUri))
       val blob = container.getBlockBlobReference(blobName)
 
-      serializeRows(rows, schema, blob.openOutputStream)
+      serializeRows(rows, schema, blob.openOutputStream, timeZone)
 
       val signature = blob.getServiceClient.getCredentials.asInstanceOf[StorageCredentialsSharedAccessSignature]
       val blobPath = blob.getStorageUri.getPrimaryUri.toString + "?" + signature.getToken
@@ -125,9 +127,17 @@ object KustoWriter{
 
     if (enableAsync) {
       val asyncWork: FutureAction[Unit] = rdd.foreachPartitionAsync {
-        rows => ingestToTemporaryTableByWorkers(batchId, cluster, database, table, schema, batchIdIfExists, ingestRowsIntoKusto, rows)
+        rows => {
+          if(rows.isEmpty)
+          {
+            KDSU.logWarn(myName, s"sink to Kusto table '$table' with no rows to write on partition ${TaskContext.getPartitionId}")
+          }
+          else {
+            ingestToTemporaryTableByWorkers(batchId, cluster, database, table, schema, batchIdIfExists, ingestRowsIntoKusto, rows)
+          }
+        }
       }
-      KDSU.logInfo(myName, s"asynchronous write to Kusto table $table in progress")
+      KDSU.logInfo(myName, s"asynchronous write to Kusto table '$table' in progress")
 
       // This part runs back on the driver
       asyncWork.onSuccess {
@@ -146,7 +156,16 @@ object KustoWriter{
     {
       try {
         rdd.foreachPartition {
-          rows => ingestToTemporaryTableByWorkers(batchId, cluster, database, table, schema, batchIdIfExists, ingestRowsIntoKusto, rows)
+          rows => {
+            if(rows.isEmpty)
+            {
+              KDSU.logWarn(myName, s"sink to Kusto table '$table' with no rows to write on partition ${TaskContext.getPartitionId}")
+            }
+            else
+            {
+              ingestToTemporaryTableByWorkers(batchId, cluster, database, table, schema, batchIdIfExists, ingestRowsIntoKusto, rows)
+            }
+          }
         }
       }
       catch{
@@ -156,7 +175,7 @@ object KustoWriter{
       }
 
       finalizeIngestionWhenWorkersSucceeded(cluster, database, table, batchIdIfExists, kustoAdminClient, tmpTableName)
-      KDSU.logInfo(myName, s"write operation to Kusto table $table finished successfully")
+      KDSU.logInfo(myName, s"write operation to Kusto table '$table' finished successfully")
     }
   }
 
@@ -176,7 +195,7 @@ object KustoWriter{
       // Protect tmp table from merge/rebuild and move data to the table requested by customer. This operation is atomic.
       kustoAdminClient.execute(database, generateTableAlterMergePolicyCommand(tmpTableName, allowMerge = false, allowRebuild = false))
       kustoAdminClient.execute(database, generateTableMoveExtentsCommand(tmpTableName, table))
-      KDSU.logInfo(myName, s"write to Kusto table $table finished successfully $batchIdIfExists")
+      KDSU.logInfo(myName, s"write to Kusto table '$table' finished successfully $batchIdIfExists")
     }
     catch {
       case exception: Exception =>
@@ -267,20 +286,9 @@ object KustoWriter{
   }
 
   @throws[IOException]
-  private[kusto] def serializeRows(rows: Iterator[InternalRow], schema: StructType, bos: BlobOutputStream): Unit = {
-
-    if(rows == null) {
-      KDSU.logError(myName,"Rows iterator is null")
-      return
-    }
-
-    if(rows.isEmpty) {
-      KDSU.logWarn(myName,s"Rows iterator is empty")
-      return
-    }
-
+  private[kusto] def serializeRows(rows: Iterator[InternalRow], schema: StructType, bos: BlobOutputStream, timeZone: String): Unit = {
     val gzip = new GZIPOutputStream(bos)
-    val csvSerializer = new KustoCsvSerializationUtils(schema)
+    val csvSerializer = new KustoCsvSerializationUtils(schema, timeZone)
 
     val writer = new OutputStreamWriter(gzip, StandardCharsets.UTF_8)
     val buffer:BufferedWriter = new BufferedWriter(writer, GZIP_BUFFER_SIZE)

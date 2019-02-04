@@ -1,20 +1,35 @@
 package com.microsoft.kusto.spark.utils
 
-import org.apache.spark.sql.types.DataType
 import org.apache.spark.sql.types.DataTypes._
+import org.apache.spark.sql.types.{DataType, DataTypes, DecimalType}
 
 object DataTypeMapping {
+
   val kustoTypeToSparkTypeMap: Map[String, DataType] = Map(
     "string" -> StringType,
-    "int64" -> LongType,
-    "datetime" -> DateType,
-    "sbyte" -> BooleanType,
-    "guid" -> StringType,
     "long" -> LongType,
+    "datetime" -> TimestampType,// Kusto datetime is equivalent to TimestampType
+    "timespan" -> StringType,
+    "bool" -> BooleanType,
     "real" -> DoubleType,
-    "decimal" -> IntegerType,
+    // Can be partitioned differently between precision and scale, total must be 34 to match .Net SqlDecimal
+    "decimal" -> DataTypes.createDecimalType(20,14),
+    "guid" -> StringType,
     "int" -> IntegerType,
-    "int32" -> IntegerType
+    "dynamic" -> StringType
+  )
+
+  val kustoJavaTypeToSparkTypeMap: Map[String, DataType] = Map(
+    "string" -> StringType,
+    "int64" -> LongType,
+    "datetime" -> TimestampType,
+    "timespan" -> StringType,
+    "sbyte" -> BooleanType,
+    "double" -> DoubleType,
+    "sqldecimal" -> DataTypes.createDecimalType(20,14),
+    "guid" -> StringType,
+    "int32" -> IntegerType,
+    "object" -> StringType
   )
 
   val sparkTypeToKustoTypeMap: Map[DataType, String] = Map(
@@ -22,7 +37,7 @@ object DataTypeMapping {
     BooleanType -> "bool",
     DateType -> "datetime",
     TimestampType -> "datetime",
-    CalendarIntervalType -> "timespan",
+    DataTypes.createDecimalType() -> "decimal",
     DoubleType -> "real",
     FloatType -> "real",
     ByteType -> "int",
@@ -30,4 +45,8 @@ object DataTypeMapping {
     LongType ->  "long",
     ShortType ->  "int"
   )
+
+  def getSparkTypeToKustoTypeMap(fieldType: DataType): String ={
+      if(fieldType.isInstanceOf[DecimalType]) "decimal" else DataTypeMapping.sparkTypeToKustoTypeMap.getOrElse(fieldType, "string")
+  }
 }

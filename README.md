@@ -51,7 +51,10 @@ In order to use the connector, you need to have:
 
 - Java 1.8 SDK installed
 - [Maven 3.x](https://maven.apache.org/download.cgi) installed
-- Spark version 2.3.2 or higher 
+- Spark version 2.4.0 or higher
+
+    >**Note**: 2.3.x versions are also supported, but require some changes in pom.xml dependencies. 
+      For details, refer to [CHANGELIST](docs/CHANGELIST)
 
 ## Build Commands
    

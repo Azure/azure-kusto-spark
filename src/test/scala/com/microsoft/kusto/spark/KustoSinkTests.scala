@@ -6,7 +6,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import com.microsoft.azure.kusto.ingest.IngestClient
 import com.microsoft.azure.kusto.ingest.result.{IngestionResult, IngestionStatus}
 import com.microsoft.kusto.spark.datasink.KustoSink
-import com.microsoft.kusto.spark.datasource.{KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{SQLContext, SparkSession}
 import org.junit.runner.RunWith
