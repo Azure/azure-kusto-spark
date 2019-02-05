@@ -22,10 +22,11 @@ that is using it. Please verify the following before using Kusto connector:
  
  Kusto connector implements Spark 'Datasource V1' API. 
  Kusto data source identifier is "com.microsoft.kusto.spark.datasource". 
+ Dataframe schema is translated into kusto schema as explained in [DataTypes](Spark-Kusto DataTypes mapping.md).
  
  ### Command Syntax
  ```
- <dataframe-name>
+ <dataframe-object>
  .write
  .format("com.microsoft.kusto.spark.datasource")
  .option(KustoOptions.<option-name-1>, <option-value-1>
@@ -40,6 +41,9 @@ that is using it. Please verify the following before using Kusto connector:
  
 * **KUSTO_CLUSTER**:
  Target Kusto cluster to which the data will be written.
+ Use either cluster profile name for global clusters, or <profile-name.region> for regional clusters.
+ For example: if the cluster URL is 'https://testcluster.eastus.kusto.windows.net', set this property 
+ as 'testcluster.eastus' 
   
  * **KUSTO_DATABASE**: 
  Target Kusto database to which the data will be written. The client must have 'user' and 'ingestor' 
@@ -60,11 +64,11 @@ that is using it. Please verify the following before using Kusto connector:
  AAD application key for the client.
  
  **Optional Parameters:** 
- * **KUSTO_CREATE_TABLE_OPTIONS**: 
+ * **KUSTO_TABLE_CREATE_OPTIONS**: 
  If set to 'FailIfNotExist' (default), the operation will fail if the table is not found 
  in the requested cluster and database.  
  If set to 'CreateIfNotExist' and the table is not found in the requested cluster and database,
- it will be created, with a schema matching the DataFrame that is being written. 
+ it will be created, with a schema matching the DataFrame that is being written.
  
  * **KUSTO_WRITE_ENABLE_ASYNC**:
   If set to 'false' (default), writing to Kusto is done synchronously. This means:
@@ -81,7 +85,8 @@ that is using it. Please verify the following before using Kusto connector:
    * In a failure scenario, error messages are logged on Spark executor nodes, 
  but exceptions will not propagate to the client
  
-   **Note**:
+
+ >**Note**:
  For both synchronous and asynchronous operation, 'write' is an atomic transaction, i.e. 
  either all data is written to Kusto, or no data is written.  
  

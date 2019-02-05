@@ -3,8 +3,8 @@ package com.microsoft.kusto.spark
 import java.security.InvalidParameterException
 
 import com.microsoft.azure.kusto.data.Client
-import com.microsoft.kusto.spark.datasource.KustoDataSourceUtils._
-import com.microsoft.kusto.spark.datasource.{KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
+import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.TimeoutException
@@ -38,7 +38,7 @@ object KustoTestUtils {
 
     if (cleanupAllTables){
       if (tableCleanupPrefix.isEmpty) throw new InvalidParameterException("Tables cleanup prefix must be set if 'cleanupAllTables' is 'true'")
-      dropAllTablesByPrefix(kustoAdminClient, database, tableCleanupPrefix)
+      tryDropAllTablesByPrefix(kustoAdminClient, database, tableCleanupPrefix)
     }
     else {
       kustoAdminClient.execute(database, generateDropTablesCommand(table))
@@ -51,13 +51,17 @@ object KustoTestUtils {
     }
   }
 
-  private[kusto] def dropAllTablesByPrefix(kustoAdminClient: Client, database: String, tablePrefix: String): Unit =
+  private[kusto] def tryDropAllTablesByPrefix(kustoAdminClient: Client, database: String, tablePrefix: String): Unit =
   {
-    val res = kustoAdminClient.execute(database, generateFindCurrentTempTablesCommand(tablePrefix))
-    val tablesToCleanup = res.getValues.asScala.map(row => row.get(0))
+    try{
+      val res = kustoAdminClient.execute(database, generateFindCurrentTempTablesCommand(tablePrefix))
+      val tablesToCleanup = res.getValues.asScala.map(row => row.get(0))
 
-    if (tablesToCleanup.nonEmpty) {
-      kustoAdminClient.execute(database, generateDropTablesCommand(tablesToCleanup.mkString(",")))
+      if (tablesToCleanup.nonEmpty) {
+        kustoAdminClient.execute(database, generateDropTablesCommand(tablesToCleanup.mkString(",")))
+      }
+    }catch {
+      case exception: Exception =>  KDSU.logWarn(myName, s"Failed to delete temporary tables with exception: ${exception.getMessage}")
     }
   }
 }

@@ -21,6 +21,7 @@ that is using it. Please verify the following before using Kusto connector:
  
  Kusto connector implements Spark 'Datasource V1' API. 
  Kusto data source identifier is "com.microsoft.kusto.spark.datasource". 
+ Kusto table schema is translated into a spark as explained in [DataTypes](Spark-Kusto DataTypes mapping.md).
  
  ### Command Syntax
  There are two command flavors for reading from Kusto:
@@ -56,6 +57,9 @@ Where **parameters map** is identical for both syntax flavors.
   
  * **KUSTO_CLUSTER**:
   Kusto cluster from which the data will be read.
+  Use either cluster profile name for global clusters, or <profile-name.region> for regional clusters.
+  For example: if the cluster URL is 'https://testcluster.eastus.kusto.windows.net', set this property 
+  as 'testcluster.eastus' 
    
   * **KUSTO_DATABASE**: 
   Kusto database from which the data will be read. The client must have 'viewer' 

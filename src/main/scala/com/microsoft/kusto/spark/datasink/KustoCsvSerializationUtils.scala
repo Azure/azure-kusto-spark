@@ -9,17 +9,16 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types.DataTypes._
 import org.apache.spark.sql.types.StructType
 
-class KustoCsvSerializationUtils private[kusto](val schema: StructType){
-  private[kusto] val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone("UTC"))
+class KustoCsvSerializationUtils private[kusto](val schema: StructType, timeZone: String){
+  private[kusto] val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone(timeZone))
 
   private[kusto] def convertRow(row: InternalRow) = {
     val values = new Array[String](row.numFields)
-
     for (i <- 0 until row.numFields if !row.isNullAt(i))
     {
       val dataType = schema.fields(i).dataType
       values(i) = dataType match {
-          case DateType => dateFormat.format(DateTimeUtils.toJavaDate(row.getInt(i)))
+          case DateType => DateTimeUtils.toJavaDate(row.getInt(i)).toString
           case TimestampType => dateFormat.format(DateTimeUtils.toJavaTimestamp(row.getLong(i)))
           case _ => row.get(i, dataType).toString
         }

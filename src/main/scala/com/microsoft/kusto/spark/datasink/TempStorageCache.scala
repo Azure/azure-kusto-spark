@@ -3,7 +3,7 @@ package com.microsoft.kusto.spark.datasink
 import java.util
 
 import com.microsoft.azure.kusto.data.{Client, ClientFactory, ConnectionStringBuilder}
-import com.microsoft.kusto.spark.datasource.KustoDataSourceUtils
+import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import org.joda.time.{DateTime, DateTimeZone, Period}
 
 object TempStorageCache{
@@ -27,7 +27,7 @@ object TempStorageCache{
 
       lastRefresh = new DateTime(DateTimeZone.UTC)
 
-      val res = dmClient.execute(KustoDataSourceUtils.generateCreateTmpStorageCommand())
+      val res = dmClient.execute(generateCreateTmpStorageCommand())
       storages = res.getValues.get(0)
     }
 

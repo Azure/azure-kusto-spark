@@ -2,7 +2,8 @@ package com.microsoft.kusto.spark
 
 import java.util.concurrent.atomic.AtomicInteger
 
-import com.microsoft.kusto.spark.datasource.{KustoOptions, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.datasource.KustoOptions
+import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{SQLContext, SparkSession}
 import org.junit.runner.RunWith
