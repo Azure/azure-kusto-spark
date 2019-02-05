@@ -40,7 +40,7 @@ object KustoWriter{
   val inProgressState = "InProgress"
   val stateCol = "State"
   val statusCol = "Status"
-  val timeOut: FiniteDuration = 10 minutes
+  val timeOut: FiniteDuration = 30 minutes
   val delayPeriodBetweenCalls: Int = 1000
   val GZIP_BUFFER_SIZE: Int = 16 * 1024
   private[kusto] def write(
