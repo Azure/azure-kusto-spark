@@ -29,11 +29,12 @@ that is using it. Please verify the following before using Kusto connector:
  **Simplified Command Syntax**: 
   ```
  <dataframe-name> = 
- spark.read.kusto(<cluster-name>, <database-name>, <table-name>, <parameters map>)
+ spark.read.kusto(<cluster-name>, <database-name>, <kusto-query>, <parameters map>)
   ```
  where:
- * **Table name** is provided when reading the whole table. Otherwise, an empty string ("") is provided, and 
- a query must be specified in the parameters map
+ * **Kusto-query** is any valid Kusto query. For details, please refer to [Query statements documentation](https://docs.microsoft.com/en-us/azure/kusto/query/statements). To read the whole table, just provide the table name as query.
+ >Note:
+ Kusto commands  cannot be executed via the connector.
  * **Parameters map** is a set of key-value pairs, where the key is the parameter name. See [Supported Options](#supported-options)
  section for details
  
@@ -45,8 +46,7 @@ sqlContext.read
 .format("com.microsoft.kusto.spark.datasource")
 .option(KustoOptions.KUSTO_CLUSTER, <cluster-name>)
 .option(KustoOptions.KUSTO_DATABASE, <database-name>)
-.option(KustoOptions.KUSTO_TABLE, <table-name>)
-.options(<parameters map>)
+.option(KustoOptions.KUSTO_QUERY, <kusto-query>)
 .load()
 ```
 Where **parameters map** is identical for both syntax flavors.
@@ -65,10 +65,6 @@ Where **parameters map** is identical for both syntax flavors.
   Kusto database from which the data will be read. The client must have 'viewer' 
   privileges on this database, unless it has 'admin' privileges on the table.
   
-  * **KUSTO_TABLE**: 
-   Kusto table that will be fully read. Alternatively, it is possible to run a Kusto query 
-   using **KUSTO_QUERY** optional parameter. 
-  
   * **KUSTO_AAD_CLIENT_ID**: 
   AAD application identifier of the client.
   
@@ -78,11 +74,14 @@ Where **parameters map** is identical for both syntax flavors.
   * **KUSTO_AAD_CLIENT_PASSWORD**: 
   AAD application key for the client.
   
-  **Optional Parameters:** 
+
   
   * **KUSTO_QUERY**: 
-  A flexible Kusto query. The schema of the resulting dataframe will match the schema of the query result. 
-  * **KUSTO_NUM_PARTITIONS**: in current release must be set to one (default).
+ A flexible Kusto query (can simply be a table name). The schema of the resulting dataframe will match the schema of the query result. 
+ 
+ **Optional Parameters:** 
+ 
+    * **KUSTO_NUM_PARTITIONS**: in current release must be set to one (default).
     
  ### Examples
  
@@ -92,11 +91,10 @@ Where **parameters map** is identical for both syntax flavors.
  ```
  val conf: Map[String, String] = Map(
        KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
-       KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
-       KustoOptions.KUSTO_QUERY -> "MyKustoTable | where (ColB % 1000 == 0) | distinct ColA "
+       KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey
      )
      
- val df = spark.read.kusto(cluster, database, "", conf)
+ val df = spark.read.kusto(cluster, database, "MyKustoTable | where (ColB % 1000 == 0) | distinct ColA ", conf)
  ``` 
  
  **Using elaborate syntax**
@@ -106,14 +104,13 @@ Where **parameters map** is identical for both syntax flavors.
  val conf: Map[String, String] = Map(
        KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
        KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
-       KustoOptions.KUSTO_QUERY -> ""
+       KustoOptions.KUSTO_QUERY -> "MyKustoTable"
      )
  
  val df = sqlContext.read
   .format("com.microsoft.kusto.spark.datasource")
   .option(KustoOptions.KUSTO_CLUSTER, "MyCluster")
   .option(KustoOptions.KUSTO_DATABASE, "MyDatabase")
-  .option(KustoOptions.KUSTO_TABLE, "MyKustoTable")
   .options(conf)
   .load()
   ```

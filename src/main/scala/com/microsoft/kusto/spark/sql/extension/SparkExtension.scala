@@ -18,11 +18,11 @@ object SparkExtension {
 
   implicit class DataFrameReaderExtension(dataframeReader: DataFrameReader) {
 
-    def kusto(kustoCluster: String, database: String, defaultTable: String, properties: Map[String, String]): DataFrame = {
+    def kusto(kustoCluster: String, database: String, query: String, properties: Map[String, String]): DataFrame = {
       dataframeReader.format("com.microsoft.kusto.spark.datasource")
         .option(KustoOptions.KUSTO_CLUSTER, kustoCluster)
         .option(KustoOptions.KUSTO_DATABASE, database)
-        .option(KustoOptions.KUSTO_TABLE, defaultTable)
+        .option(KustoOptions.KUSTO_QUERY, query)
         .option(KustoOptions.KUSTO_NUM_PARTITIONS, "1")
         .options(properties)
         .load()
@@ -30,7 +30,7 @@ object SparkExtension {
 
     def kusto(kustoCluster: String,
               database: String,
-              table: String,
+              query: String,
               columnName: String,
               lowerBound: Long,
               upperBound: Long,
@@ -43,8 +43,7 @@ object SparkExtension {
 
       val hashMap = new scala.collection.mutable.HashMap[String, String]
       hashMap ++= connectionProperties.asScala
-      kusto(kustoCluster, database, table, hashMap.toMap)
+      kusto(kustoCluster, database, query, hashMap.toMap)
     }
-
   }
 }

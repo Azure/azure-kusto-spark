@@ -26,7 +26,7 @@ class KustoSourceTests extends FlatSpec with MockFactory with Matchers with Befo
   private var sqlContext: SQLContext = _
   private val cluster: String = "KustoCluster"
   private val database: String = "KustoDatabase"
-  private val table: String = "KustoTable"
+  private val query: String = "KustoTable"
   private val appId: String = "KustoSinkTestApplication"
   private val appKey: String = "KustoSinkTestKey"
   private val appAuthorityId: String = "KustoSinkAuthorityId"
@@ -60,7 +60,7 @@ class KustoSourceTests extends FlatSpec with MockFactory with Matchers with Befo
       .format("com.microsoft.kusto.spark.datasource")
       .option(KustoOptions.KUSTO_CLUSTER, cluster)
       .option(KustoOptions.KUSTO_DATABASE, database)
-      .option(KustoOptions.KUSTO_TABLE, table)
+      .option(KustoOptions.KUSTO_QUERY, query)
       .option(KustoOptions.KUSTO_AAD_CLIENT_ID, appId)
       .option(KustoOptions.KUSTO_AAD_CLIENT_PASSWORD, appKey)
       .option(KustoOptions.KUSTO_AAD_AUTHORITY_ID, appAuthorityId)
