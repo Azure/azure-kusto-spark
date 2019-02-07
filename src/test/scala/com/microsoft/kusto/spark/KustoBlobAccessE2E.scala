@@ -5,13 +5,12 @@ import java.util.UUID
 
 import com.microsoft.azure.kusto.data.{ClientFactory, ConnectionStringBuilder}
 import com.microsoft.kusto.spark.datasource.{KustoOptions, KustoResponseDeserializer}
-import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
-import com.microsoft.kusto.spark.utils.KustoQueryUtils
+import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.spark.SparkContext
-import org.junit.runner.RunWith
-import org.scalatest.{BeforeAndAfterAll, FlatSpec}
-import org.scalatest.junit.JUnitRunner
 import org.apache.spark.sql.{SQLContext, SparkSession}
+import org.junit.runner.RunWith
+import org.scalatest.junit.JUnitRunner
+import org.scalatest.{BeforeAndAfterAll, FlatSpec}
 
 import scala.collection.JavaConverters._
 

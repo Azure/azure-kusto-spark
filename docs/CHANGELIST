@@ -9,3 +9,4 @@ Version 0.2:
 - Add 'KUSTO_WRITE_RESULT_LIMIT' option. When writing to Kusto, limits the number of rows read back as BaseRelation
 - Adjust to Spark 2.4. This is optimized for Azure DataBricks default. In order to use with Spark 2.3, pom.xml
   file must be adjusted: spark.version (to 2.3.x) and json4s-jackson_2.11 (to 3.2.11)
+- KustoOptions.KUSTO_TABLE is no longer used in reading using kusto source

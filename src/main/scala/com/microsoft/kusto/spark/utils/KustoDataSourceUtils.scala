@@ -80,6 +80,11 @@ object KustoDataSourceUtils{
     var tableCreationParam: Option[String] = None
     var isAsync: Boolean = false
     var isAsyncParam : String = ""
+    val table = parameters.get(KustoOptions.KUSTO_TABLE)
+
+    if (table.isEmpty){
+        throw new InvalidParameterException("KUSTO_TABLE parameter is missing. Must provide a destination table name")
+    }
     try {
       isAsyncParam = parameters.getOrElse(KustoOptions.KUSTO_WRITE_ENABLE_ASYNC, "false")
       isAsync =  parameters.getOrElse(KustoOptions.KUSTO_WRITE_ENABLE_ASYNC, "false").trim.toBoolean

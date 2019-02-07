@@ -52,15 +52,14 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
 
   "KustoSource" should "execute a read query on Kusto cluster" taggedAs KustoE2E in {
     val table: String = System.getProperty(KustoOptions.KUSTO_TABLE)
-    var query: String = System.getProperty(KustoOptions.KUSTO_QUERY, s"table : take 10")
+    var query: String = System.getProperty(KustoOptions.KUSTO_QUERY, s"$table | where (toint(ColB) % 1000 == 0) | distinct ColA ")
 
     val conf: Map[String, String] = Map(
       KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
-      KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
-      KustoOptions.KUSTO_QUERY -> s"$table | where (toint(ColB) % 1000 == 0) | distinct ColA "
+      KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey
     )
 
-    val df = spark.read.kusto(cluster, database, "", conf)
+    val df = spark.read.kusto(cluster, database, query, conf)
     df.show()
   }
 

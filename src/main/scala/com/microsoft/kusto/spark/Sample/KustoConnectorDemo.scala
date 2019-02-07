@@ -79,7 +79,7 @@ object KustoConnectorDemo {
 
     // COMMAND ----------
     // BATCH SINK EXAMPLES
-    // Write the data to a Kusto cluster, ASYNCronously
+    // Write the data to a Kusto cluster, ASYNChronously
     // The driver will return quickly, and will complete the operation asynchronously once the workers end ingestion to Kusto.
     // However exceptions are not captured in the driver, and tracking command success/failure status is not straightforward as in synchronous mode
     df.write
@@ -100,7 +100,7 @@ object KustoConnectorDemo {
     /** ************************************************/
     var customSchema = new StructType().add("colA", StringType, nullable = true).add("colB", IntegerType, nullable = true)
 
-    // Read data from file to a stream
+    // Read data from a file to a stream
     val csvDf = spark
       .readStream
       .schema(customSchema)
@@ -112,7 +112,7 @@ object KustoConnectorDemo {
     spark.conf.set("spark.sql.streaming.checkpointLocation", "/FileStore/temp/checkpoint")
     spark.conf.set("spark.sql.codegen.wholeStage", "false")
 
-    // Write to a Kusto table fro streaming source
+    // Write to a Kusto table from a streaming source
     val kustoQ = csvDf
       .writeStream
       .format("com.microsoft.kusto.spark.datasink.KustoSinkProvider")
@@ -156,32 +156,8 @@ object KustoConnectorDemo {
       .format("com.microsoft.kusto.spark.datasource")
       .option(KustoOptions.KUSTO_CLUSTER, cluster)
       .option(KustoOptions.KUSTO_DATABASE, database)
-      .option(KustoOptions.KUSTO_TABLE, "")
       .options(conf2)
       .load()
     // Databricks: display(df3)
-
-    // COMMAND ----------
-    /** ************************************************/
-    /*               SOURCE EXAMPLES                  */
-    /** ************************************************/
-    /* USING KUSTO TABLE */
-    /** *******************/
-
-    // Here we read the whole table. Query parameter is empty
-    val conf3: Map[String, String] = Map(
-      KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
-      KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
-      KustoOptions.KUSTO_QUERY -> ""
-    )
-
-    val df4 =  spark.sqlContext.read
-        .format("com.microsoft.kusto.spark.datasource")
-        .option(KustoOptions.KUSTO_CLUSTER, cluster)
-        .option(KustoOptions.KUSTO_DATABASE, "ExperimentDb")
-        .option(KustoOptions.KUSTO_TABLE, "StringAndIntExpTable")
-        .options(conf3)
-        .load()
-    // Databricks: display(df4)
   }
 }

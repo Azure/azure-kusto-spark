@@ -12,7 +12,6 @@ import sun.reflect.generics.reflectiveObjects.NotImplementedException
 
 case class KustoRelation(cluster: String,
                          database: String,
-                         table: String,
                          appId: String,
                          appKey: String,
                          authorityId: String,
@@ -21,7 +20,6 @@ case class KustoRelation(cluster: String,
                          customSchema: Option[String] = None)
                    (@transient val sparkContext: SQLContext) extends BaseRelation with TableScan with Serializable {
 
-  private val primaryResultTableIndex = 0
   private val normalizedQuery = KustoQueryUtils.normalizeQuery(query)
 
   override def sqlContext: SQLContext = sparkContext
@@ -40,8 +38,7 @@ case class KustoRelation(cluster: String,
 
   def leanBuildScan() : RDD[Row] = {
     val kustoConnectionString = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://$cluster.kusto.windows.net", appId, appKey, authorityId)
-    val queryToPost = if (!table.isEmpty) table else normalizedQuery
-    val kustoResult = ClientFactory.createClient(kustoConnectionString).execute(database, queryToPost)
+    val kustoResult = ClientFactory.createClient(kustoConnectionString).execute(database, normalizedQuery)
     var serializer = KustoResponseDeserializer(kustoResult)
     sparkContext.createDataFrame(serializer.toRows, serializer.getSchema).rdd
   }
@@ -51,13 +48,13 @@ case class KustoRelation(cluster: String,
   }
 
   private def getSchema: StructType = {
-    if (query.isEmpty && table.isEmpty) {
-      throw new InvalidParameterException("Query and table name are both empty")
+    if (query.isEmpty) {
+      throw new InvalidParameterException("Query is empty")
     }
 
-    val getSchemaQuery = if (!table.isEmpty) KustoQueryUtils.getQuerySchemaQuery(table) else if (KustoQueryUtils.isQuery(query)) KustoQueryUtils.getQuerySchemaQuery(normalizedQuery) else ""
+    val getSchemaQuery = if (KustoQueryUtils.isQuery(query)) KustoQueryUtils.getQuerySchemaQuery(normalizedQuery) else ""
     if (getSchemaQuery.isEmpty) {
-      throw new RuntimeException("Cannot get schema. Please provide a valid kusto table name or a valid query.")
+      throw new RuntimeException("Spark connector cannot run Kusto commands. Please provide a valid query")
     }
 
     val kustoConnectionString = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://$cluster.kusto.windows.net", appId, appKey, authorityId)

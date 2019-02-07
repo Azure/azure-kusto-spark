@@ -46,15 +46,11 @@ class DefaultSource extends CreatableRelationProvider
   }
 
   def adjustParametersForBaseRelation(parameters: Map[String, String], limit: Option[Int]): Map[String, String] = {
-    val table = parameters.get(KustoOptions.KUSTO_TABLE)
-
-    if (table.isEmpty) throw new RuntimeException("Cannot read from Kusto: table name is missing")
-
     if (limit.isEmpty) {
       parameters + (KustoOptions.KUSTO_NUM_PARTITIONS -> "1")
     }
     else {
-      parameters + (KustoOptions.KUSTO_TABLE -> KustoQueryUtils.limitQuery(table.get, limit.get)) + (KustoOptions.KUSTO_NUM_PARTITIONS -> "1")
+      parameters + (KustoOptions.KUSTO_QUERY -> KustoQueryUtils.limitQuery(parameters(KustoOptions.KUSTO_TABLE), limit.get)) + (KustoOptions.KUSTO_NUM_PARTITIONS -> "1")
     }
   }
 
@@ -67,11 +63,9 @@ class DefaultSource extends CreatableRelationProvider
       throw new InvalidParameterException(s"Kusto read mode must be one of ${KustoOptions.supportedReadModes.mkString(", ")}")
     }
 
-
     KustoRelation(
       parameters.getOrElse(KustoOptions.KUSTO_CLUSTER, ""),
       parameters.getOrElse(KustoOptions.KUSTO_DATABASE, ""),
-      parameters.getOrElse(KustoOptions.KUSTO_TABLE, ""),
       parameters.getOrElse(KustoOptions.KUSTO_AAD_CLIENT_ID, ""),
       parameters.getOrElse(KustoOptions.KUSTO_AAD_CLIENT_PASSWORD, ""),
       parameters.getOrElse(KustoOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com"),
