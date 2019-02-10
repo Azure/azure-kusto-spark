@@ -16,29 +16,23 @@ class DefaultSource extends CreatableRelationProvider
 
   val timeout: FiniteDuration = 10 minutes
   override def createRelation(sqlContext: SQLContext, mode: SaveMode, parameters: Map[String, String], data: DataFrame): BaseRelation = {
-    val (isAsync,tableCreation) = KustoDataSourceUtils.validateSinkParameters(parameters)
+    val (isAsync,tableCreation, kustoAuthentication) = KustoDataSourceUtils.validateSinkParameters(parameters)
+    val tableCoordinates = KustoTableCoordinates(parameters.getOrElse(KustoOptions.KUSTO_CLUSTER, ""), parameters.getOrElse(KustoOptions.KUSTO_DATABASE, ""),parameters.getOrElse(KustoOptions.KUSTO_TABLE, ""))
+    val writeOptions = KustoSparkWriteOptions(tableCreation, isAsync, parameters.getOrElse(KustoOptions.KUSTO_WRITE_RESULT_LIMIT, "1"), parameters.getOrElse(DateTimeUtils.TIMEZONE_OPTION, "UTC"), mode)
 
     KustoWriter.write(
       None,
       data,
-      parameters.getOrElse(KustoOptions.KUSTO_CLUSTER, ""),
-      parameters.getOrElse(KustoOptions.KUSTO_DATABASE, ""),
-      parameters.getOrElse(KustoOptions.KUSTO_TABLE, ""),
-      parameters.getOrElse(KustoOptions.KUSTO_AAD_CLIENT_ID, ""),
-      parameters.getOrElse(KustoOptions.KUSTO_AAD_CLIENT_PASSWORD, ""),
-      parameters.getOrElse(KustoOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com"),
-      isAsync,
-      tableCreation,
-      mode,
-      parameters.getOrElse(DateTimeUtils.TIMEZONE_OPTION, "UTC"))
+      tableCoordinates,
+      KustoDataSourceUtils.getAadParamsFromKeyVaultIfNeeded(kustoAuthentication),
+      writeOptions)
 
-    val resultLimit = parameters.getOrElse(KustoOptions.KUSTO_WRITE_RESULT_LIMIT, "1")
-    val limit = if (resultLimit.equalsIgnoreCase("none")) None else {
+    val limit = if (writeOptions.writeResultLimit.equalsIgnoreCase(KustoOptions.NONE_RESULT_LIMIT)) None else {
         try{
-          Some(resultLimit.toInt)
+          Some(writeOptions.writeResultLimit.toInt)
         }
         catch {
-          case _: Exception => throw new InvalidParameterException(s"KustoOptions.KUSTO_WRITE_RESULT_LIMIT is set to '$resultLimit'. Must be either 'none' or integer value")
+          case _: Exception => throw new InvalidParameterException(s"KustoOptions.KUSTO_WRITE_RESULT_LIMIT is set to '${writeOptions.writeResultLimit}'. Must be either 'none' or integer value")
         }
       }
 

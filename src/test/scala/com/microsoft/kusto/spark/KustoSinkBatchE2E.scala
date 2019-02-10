@@ -62,7 +62,7 @@ class KustoSinkBatchE2E extends FlatSpec with BeforeAndAfterAll{
   val authority: String = System.getProperty(KustoOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com")
   val cluster: String = System.getProperty(KustoOptions.KUSTO_CLUSTER)
   val database: String = System.getProperty(KustoOptions.KUSTO_DATABASE)
-  val expectedNumberOfRows: Int =  1* 1000
+  val expectedNumberOfRows: Int =  1* 1000 * 1000
   val rows: immutable.IndexedSeq[(String, Int)] = (1 to expectedNumberOfRows).map(v => (newRow(), v))
 
   private val loggingLevel: Option[String] = Option(System.getProperty("logLevel"))
@@ -77,7 +77,7 @@ class KustoSinkBatchE2E extends FlatSpec with BeforeAndAfterAll{
   "KustoBatchSinkDataTypesTest" should "ingest structured data to a Kusto cluster" taggedAs KustoE2E in {
     import spark.implicits._
 
-    val prefix = "KustoStreamingSinkDataTypesTest_Ingest"
+    val prefix = "KustoBatchSinkDataTypesTest_Ingest"
     val table = KustoQueryUtils.simplifyName(s"${prefix}_${UUID.randomUUID()}")
 
     val dataTypesRows: immutable.IndexedSeq[(String, Int, java.sql.Date, Boolean, Short, Byte, Float ,java.sql.Timestamp, Double, java.math.BigDecimal, Long)] = (1 to expectedNumberOfRows).map(v => newAllDataTypesRow(v))
@@ -142,6 +142,7 @@ class KustoSinkBatchE2E extends FlatSpec with BeforeAndAfterAll{
       }
     }
     assert(isEqual)
+    KDSU.logInfo(myName, s"KustoBatchSinkDataTypesTest: Ingestion results validated for table '$table'")
   }
 
     "KustoBatchSinkSync" should "ingest structured data to a Kusto cluster" taggedAs KustoE2E in {
