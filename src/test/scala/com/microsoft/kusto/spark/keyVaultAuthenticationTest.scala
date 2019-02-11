@@ -17,7 +17,7 @@ import org.scalatest.junit.JUnitRunner
 class keyVaultAuthenticationTest extends FlatSpec{
   private val spark: SparkSession = SparkSession.builder()
     .appName("KustoSink")
-    .master(f"local[1]")
+    .master(f"local[2]")
     .getOrCreate()
 
   val cluster: String = System.getProperty(KustoOptions.KUSTO_CLUSTER)

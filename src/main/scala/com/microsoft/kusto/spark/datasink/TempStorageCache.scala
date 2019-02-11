@@ -21,6 +21,7 @@ object TempStorageCache{
   }
 
   private def getNextUri(ingestKcsb: ConnectionStringBuilder, clusterName: String): String = {
+    // Refresh if 120 minutes have passed since last refresh for this cluster as SAS should be valid for at least 120 minutes
     if(storages.size() == 0 || cluster != clusterName || new Period(new DateTime(DateTimeZone.UTC), lastRefresh).getMinutes > storageExpiryMinutes){
       dmClient = ClientFactory.createClient(ingestKcsb)
       cluster = clusterName

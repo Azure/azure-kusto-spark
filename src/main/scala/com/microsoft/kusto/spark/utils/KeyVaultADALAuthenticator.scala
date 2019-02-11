@@ -8,7 +8,6 @@ import com.microsoft.azure.keyvault.KeyVaultClient
 import com.microsoft.azure.keyvault.authentication.KeyVaultCredentials
 import com.microsoft.rest.credentials.ServiceClientCredentials
 
-
 /**
   * Authenticates to Azure Key Vault by providing a callback to authenticate
   * using ADAL.
@@ -33,7 +32,7 @@ class KeyVaultADALAuthenticator(clientId: String, clientKey: String) {
           authResult.getAccessToken
         } catch {
           case e: Exception =>
-            e.printStackTrace()
+            KustoDataSourceUtils.logError("KeyVaultADALAuthenticator", "Exception trying to access Key Vault:" + e.getMessage)
             ""
         }
       }

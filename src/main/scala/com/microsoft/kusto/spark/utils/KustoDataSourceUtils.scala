@@ -112,7 +112,7 @@ object KustoDataSourceUtils{
       else {
         kustoAuthentication = KeyVaultCertificateAuthentication(parameters.getOrElse(KustoOptions.KEY_VAULT_URI, ""),
           parameters.getOrElse(KustoOptions.KEY_VAULT_PEM_FILE_PATH, ""),
-          parameters.getOrElse(KustoOptions.KEY_VAULT_PEM_FILE_PASSWORD, ""))
+          parameters.getOrElse(KustoOptions.KEY_VAULT_CERTIFICATE_KEY, ""))
       }
     }
 
@@ -144,3 +144,4 @@ object KustoDataSourceUtils{
     }
   }
 }
+

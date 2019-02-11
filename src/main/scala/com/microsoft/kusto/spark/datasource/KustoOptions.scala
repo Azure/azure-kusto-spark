@@ -16,7 +16,7 @@ object KustoOptions {
   val KEY_VAULT_URI = "keyVaultUri"
   val KEY_VAULT_CREDENTIALS = "keyVaultCredentials"
   val KEY_VAULT_PEM_FILE_PATH = "keyVaultPemFilePath"
-  val KEY_VAULT_PEM_FILE_PASSWORD = "keyVaultPemFilePassword"
+  val KEY_VAULT_CERTIFICATE_KEY = "keyVaultPemFileKey"
   val KEY_VAULT_APP_ID = "keyVaultAppId"
   val KEY_VAULT_APP_KEY = "keyVaultAppKey"
 
