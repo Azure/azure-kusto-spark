@@ -6,6 +6,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import com.microsoft.azure.kusto.ingest.IngestClient
 import com.microsoft.azure.kusto.ingest.result.{IngestionResult, IngestionStatus}
 import com.microsoft.kusto.spark.datasink.KustoSink
+import com.microsoft.kusto.spark.datasource.{AadApplicationAuthentication, KustoOptions, KustoSparkWriteOptions, KustoTableCoordinates}
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{SQLContext, SparkSession}
@@ -48,7 +49,7 @@ class KustoSinkTests extends FlatSpec with MockFactory with Matchers with Before
   }
 
   private def getSink: KustoSink =
-    new KustoSink(sqlContext, kustoCluster, kustoDatabase, kustoTable, appId, appKey, appAuthorityId)
+    new KustoSink(sqlContext, KustoTableCoordinates(kustoCluster, kustoDatabase, kustoTable), AadApplicationAuthentication(appId,appKey, appAuthorityId), KustoSparkWriteOptions(writeResultLimit = KustoOptions.NONE_RESULT_LIMIT))
 
   private val rowId = new AtomicInteger(1)
   private def newRow(): String = s"row-${rowId.getAndIncrement()}"

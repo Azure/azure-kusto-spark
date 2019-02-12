@@ -2,23 +2,16 @@ package com.microsoft.kusto.spark.datasink
 
 import java.io._
 
-import com.microsoft.kusto.spark.datasource.KustoOptions.SinkTableCreationMode
+import com.microsoft.kusto.spark.datasource.{AadApplicationAuthentication, KustoSparkWriteOptions, KustoTableCoordinates}
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import org.apache.spark.sql.execution.streaming.Sink
-import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode}
+import org.apache.spark.sql.{DataFrame, SQLContext}
 
 class KustoSink(
-   sqlContext: SQLContext,
-   cluster: String,
-   database: String,
-   table: String,
-   appId: String,
-   appKey: String,
-   authorityId: String,
-   enableAsync: Boolean = false,
-   tableCreation: SinkTableCreationMode.Value = SinkTableCreationMode.FailIfNotExist,
-   timeZone: String = "UTC",
-   saveMode: SaveMode = SaveMode.Append) extends Sink with Serializable {
+                 sqlContext: SQLContext,
+                 tableCoordinates: KustoTableCoordinates,
+                 appAuthentication: AadApplicationAuthentication,
+                 kustoSparkWriteOptions:KustoSparkWriteOptions) extends Sink with Serializable {
 
   private val myName = this.getClass.getSimpleName
   val MessageSource = "KustoSink"
@@ -30,7 +23,7 @@ class KustoSink(
     if (batchId <= latestBatchId) {
       KDSU.logInfo(myName, s"Skipping already committed batch $batchId")
     } else {
-      KustoWriter.write(Option(batchId), data, cluster, database, table, appId, appKey, authorityId, enableAsync, tableCreation, saveMode, timeZone)
+      KustoWriter.write(Option(batchId), data, tableCoordinates, appAuthentication, kustoSparkWriteOptions)
       latestBatchId = batchId
     }
   }

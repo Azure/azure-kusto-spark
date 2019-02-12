@@ -4,7 +4,7 @@ import java.security.InvalidParameterException
 import java.util.{NoSuchElementException, StringJoiner}
 
 import com.microsoft.azure.kusto.data.Client
-import com.microsoft.kusto.spark.datasource.KustoOptions
+import com.microsoft.kusto.spark.datasource._
 import com.microsoft.kusto.spark.datasource.KustoOptions.SinkTableCreationMode
 import com.microsoft.kusto.spark.datasource.KustoOptions.SinkTableCreationMode.SinkTableCreationMode
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
@@ -42,17 +42,19 @@ object KustoDataSourceUtils{
   }
 
 
-  def createTmpTableWithSameSchema(kustoAdminClient: Client, table: String, database:String, tmpTableName: String, cluster: String,
-                                   tableCreation: SinkTableCreationMode = SinkTableCreationMode.FailIfNotExist, schema: StructType
-                                  ): Unit = {
-    val schemaShowCommandResult = kustoAdminClient.execute(database, generateTableShowSchemaCommand(table)).getValues
+  def createTmpTableWithSameSchema(kustoAdminClient: Client,
+                                   tableCoordinates: KustoTableCoordinates,
+                                   tmpTableName: String,
+                                   tableCreation: SinkTableCreationMode = SinkTableCreationMode.FailIfNotExist,
+                                   schema: StructType): Unit = {
+    val schemaShowCommandResult = kustoAdminClient.execute(tableCoordinates.database, generateTableShowSchemaCommand(tableCoordinates.table)).getValues
     var tmpTableSchema: String = ""
     val tableSchemaBuilder = new StringJoiner(",")
 
     if (schemaShowCommandResult.size() == 0){
       // Table Does not exist
       if(tableCreation == SinkTableCreationMode.FailIfNotExist){
-        throw new RuntimeException(s"Table '$table' doesn't exist in database '$database', in cluster '$cluster'")
+        throw new RuntimeException(s"Table '${tableCoordinates.table}' doesn't exist in database '$tableCoordinates.database', in cluster '$tableCoordinates.cluster'")
       } else {
         // Parse dataframe schema and create a destination table with that schema
         for(field <- schema){
@@ -60,9 +62,9 @@ object KustoDataSourceUtils{
           tableSchemaBuilder.add(s"${field.name}:$fieldType")
         }
         tmpTableSchema = tableSchemaBuilder.toString
-        kustoAdminClient.execute(database, generateTableCreateCommand(table, tmpTableSchema))
+        kustoAdminClient.execute(tableCoordinates.database, generateTableCreateCommand(tableCoordinates.table, tmpTableSchema))
       }
-   } else {
+    } else {
       // Table exists. Parse kusto table schema and check if it matches the dataframes schema
       val orderedColumns = parse(schemaShowCommandResult.get(0).get(1)) \ "OrderedColumns"
       for (col <- orderedColumns.children) {
@@ -72,10 +74,10 @@ object KustoDataSourceUtils{
     }
 
     //  Create a temporary table with the kusto or dataframe parsed schema
-    kustoAdminClient.execute(database, generateTableCreateCommand(tmpTableName, tmpTableSchema))
+    kustoAdminClient.execute(tableCoordinates.database, generateTableCreateCommand(tmpTableName, tmpTableSchema))
   }
 
-  def validateSinkParameters(parameters: Map[String,String]): (Boolean, SinkTableCreationMode) = {
+  def validateSinkParameters(parameters: Map[String,String]): (Boolean, SinkTableCreationMode, KustoAuthentication) = {
     var tableCreation: SinkTableCreationMode = SinkTableCreationMode.FailIfNotExist
     var tableCreationParam: Option[String] = None
     var isAsync: Boolean = false
@@ -94,7 +96,27 @@ object KustoDataSourceUtils{
       case _ : NoSuchElementException => throw new InvalidParameterException(s"No such SinkTableCreationMode option: '${tableCreationParam.get}'")
       case _ : java.lang.IllegalArgumentException  => throw new InvalidParameterException(s"KUSTO_WRITE_ENABLE_ASYNC is expecting either 'true' or 'false', got: '$isAsyncParam'")
     }
-    (isAsync, tableCreation)
+
+    val applicationId = parameters.getOrElse(KustoOptions.KUSTO_AAD_CLIENT_ID, "")
+    var kustoAuthentication: KustoAuthentication = null
+    if(applicationId != ""){
+      kustoAuthentication = AadApplicationAuthentication(applicationId, parameters.getOrElse(KustoOptions.KUSTO_AAD_CLIENT_PASSWORD, ""), parameters.getOrElse(KustoOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com"))
+    }
+    else {
+      val keyVaultAppId = parameters.getOrElse(KustoOptions.KEY_VAULT_APP_ID, "")
+      if(keyVaultAppId != ""){
+        kustoAuthentication = KeyVaultAppAuthentiaction(parameters.getOrElse(KustoOptions.KEY_VAULT_URI, ""),
+          keyVaultAppId,
+          parameters.getOrElse(KustoOptions.KEY_VAULT_APP_KEY, ""))
+      }
+      else {
+        kustoAuthentication = KeyVaultCertificateAuthentication(parameters.getOrElse(KustoOptions.KEY_VAULT_URI, ""),
+          parameters.getOrElse(KustoOptions.KEY_VAULT_PEM_FILE_PATH, ""),
+          parameters.getOrElse(KustoOptions.KEY_VAULT_CERTIFICATE_KEY, ""))
+      }
+    }
+
+    (isAsync, tableCreation, kustoAuthentication)
   }
 
   private [kusto] def reportExceptionAndThrow(
@@ -113,4 +135,13 @@ object KustoDataSourceUtils{
 
     if (!isLogDontThrow) throw exception
   }
+
+  def getAadParamsFromKeyVaultIfNeeded(kustoAuthentication :KustoAuthentication): AadApplicationAuthentication ={
+    kustoAuthentication match {
+      case app: AadApplicationAuthentication => app
+      case app: KeyVaultAppAuthentiaction => KeyVaultUtils.getAadParamsFromKeyVaultAppAuth(app.keyVaultAppID, app.keyVaultAppKey, app.uri)
+      case app: KeyVaultCertificateAuthentication => KeyVaultUtils.getAadParamsFromKeyVaultCertAuth
+    }
+  }
 }
+
