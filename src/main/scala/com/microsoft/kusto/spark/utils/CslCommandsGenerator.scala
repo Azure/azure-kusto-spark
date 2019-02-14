@@ -45,4 +45,29 @@ object CslCommandsGenerator{
   def generateTableAlterMergePolicyCommand(table: String, allowMerge: Boolean, allowRebuild: Boolean): String ={
     s""".alter table $table policy merge @'{"AllowMerge":"$allowMerge", "AllowRebuild":"$allowRebuild"}'"""
   }
+
+  // Export data to blob
+  def generateExportDataCommand(
+                                 appId: String,
+                                 query: String,
+                                 storageAccountName: String,
+                                 container: String,
+                                 directory: String,
+                                 secret: String,
+                                 useKeyNotSas: Boolean = true,
+                                 partitionId: Int,
+                                 partitionPredicate: Option[String] = None): String = {
+
+    val secretString = if (useKeyNotSas) s""";" h@"$secret"""" else s"""?" h@"$secret""""
+    val blobUri = s"https://$storageAccountName.blob.core.windows.net"
+
+    var command = s""".export to parquet ("$blobUri/$container$secretString)""" +
+      s""" with (namePrefix="${directory}part$partitionId", fileExtension=parquet) <| $query"""
+
+    if (partitionPredicate.nonEmpty)
+    {
+      command += s" | where ${partitionPredicate.get}"
+    }
+    command
+  }
 }

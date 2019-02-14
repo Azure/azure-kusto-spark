@@ -7,17 +7,17 @@ import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils, KustoQueryUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister, RelationProvider}
 import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode}
-import sun.reflect.generics.reflectiveObjects.NotImplementedException
 
 import scala.concurrent.duration._
 
 class DefaultSource extends CreatableRelationProvider
   with RelationProvider with DataSourceRegister {
 
-  val timeout: FiniteDuration = 10 minutes
+  val timeout: FiniteDuration = 60 minutes
+
   override def createRelation(sqlContext: SQLContext, mode: SaveMode, parameters: Map[String, String], data: DataFrame): BaseRelation = {
-    val (isAsync,tableCreation, kustoAuthentication) = KustoDataSourceUtils.validateSinkParameters(parameters)
-    val tableCoordinates = KustoTableCoordinates(parameters.getOrElse(KustoOptions.KUSTO_CLUSTER, ""), parameters.getOrElse(KustoOptions.KUSTO_DATABASE, ""),parameters.getOrElse(KustoOptions.KUSTO_TABLE, ""))
+    val (isAsync, tableCreation, kustoAuthentication) = KustoDataSourceUtils.validateSinkParameters(parameters)
+    val tableCoordinates = KustoTableCoordinates(parameters.getOrElse(KustoOptions.KUSTO_CLUSTER, ""), parameters.getOrElse(KustoOptions.KUSTO_DATABASE, ""), parameters.getOrElse(KustoOptions.KUSTO_TABLE, ""))
     val writeOptions = KustoSparkWriteOptions(tableCreation, isAsync, parameters.getOrElse(KustoOptions.KUSTO_WRITE_RESULT_LIMIT, "1"), parameters.getOrElse(DateTimeUtils.TIMEZONE_OPTION, "UTC"), mode)
 
     KustoWriter.write(
@@ -28,13 +28,13 @@ class DefaultSource extends CreatableRelationProvider
       writeOptions)
 
     val limit = if (writeOptions.writeResultLimit.equalsIgnoreCase(KustoOptions.NONE_RESULT_LIMIT)) None else {
-        try{
-          Some(writeOptions.writeResultLimit.toInt)
-        }
-        catch {
-          case _: Exception => throw new InvalidParameterException(s"KustoOptions.KUSTO_WRITE_RESULT_LIMIT is set to '${writeOptions.writeResultLimit}'. Must be either 'none' or integer value")
-        }
+      try {
+        Some(writeOptions.writeResultLimit.toInt)
       }
+      catch {
+        case _: Exception => throw new InvalidParameterException(s"KustoOptions.KUSTO_WRITE_RESULT_LIMIT is set to '${writeOptions.writeResultLimit}'. Must be either 'none' or integer value")
+      }
+    }
 
     createRelation(sqlContext, adjustParametersForBaseRelation(parameters, limit))
   }
@@ -49,12 +49,24 @@ class DefaultSource extends CreatableRelationProvider
   }
 
   override def createRelation(sqlContext: SQLContext, parameters: Map[String, String]): BaseRelation = {
-    if (!parameters.getOrElse(KustoOptions.KUSTO_NUM_PARTITIONS, "1").equals("1")) {
-      throw new NotImplementedException()
+    val requestedPartitions = parameters.get(KustoOptions.KUSTO_NUM_PARTITIONS)
+    val readMode = parameters.getOrElse(KustoOptions.KUSTO_READ_MODE, "lean")
+    val partitioningMode = parameters.get(KustoOptions.KUSTO_READ_PARTITION_MODE)
+    val numPartitions = setNumPartitionsPerMode(sqlContext, requestedPartitions, readMode, partitioningMode)
+
+    if (!KustoOptions.supportedReadModes.contains(readMode)) {
+      throw new InvalidParameterException(s"Kusto read mode must be one of ${KustoOptions.supportedReadModes.mkString(", ")}")
     }
 
-    if(!KustoOptions.supportedReadModes.contains(parameters.getOrElse(KustoOptions.KUSTO_READ_MODE, "lean").toLowerCase)) {
-      throw new InvalidParameterException(s"Kusto read mode must be one of ${KustoOptions.supportedReadModes.mkString(", ")}")
+    if (numPartitions != 1 && readMode.equals("lean")) {
+      throw new InvalidParameterException(s"Reading in lean mode cannot be done on multiple partitions. Requested number of partitions: $numPartitions")
+    }
+
+    var storageSecreteIsAccountKey = true
+    var storageSecrete = parameters.get(KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_KEY)
+    if (storageSecrete.isEmpty) {
+      storageSecrete = parameters.get(KustoOptions.KUSTO_BLOB_STORAGE_SAS_KEY)
+      if (storageSecrete.isDefined) storageSecreteIsAccountKey = false
     }
 
     KustoRelation(
@@ -64,8 +76,30 @@ class DefaultSource extends CreatableRelationProvider
       parameters.getOrElse(KustoOptions.KUSTO_AAD_CLIENT_PASSWORD, ""),
       parameters.getOrElse(KustoOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com"),
       parameters.getOrElse(KustoOptions.KUSTO_QUERY, ""),
-      parameters.getOrElse(KustoOptions.KUSTO_READ_MODE, "lean").equalsIgnoreCase("lean"),
-      parameters.get(KustoOptions.KUSTO_CUSTOM_DATAFRAME_COLUMN_TYPES))(sqlContext)
+      readMode.equalsIgnoreCase("lean"),
+      numPartitions,
+      parameters.get(KustoOptions.KUSTO_PARTITION_COLUMN),
+      partitioningMode,
+      parameters.get(KustoOptions.KUSTO_CUSTOM_DATAFRAME_COLUMN_TYPES),
+      parameters.get(KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME),
+      parameters.get(KustoOptions.KUSTO_BLOB_CONTAINER),
+      storageSecrete,
+      storageSecreteIsAccountKey
+    )(sqlContext.sparkSession)
+  }
+
+  private def setNumPartitionsPerMode(sqlContext: SQLContext, requestedNumPartitions: Option[String], readMode: String, partitioningMode: Option[String]): Int = {
+    if (requestedNumPartitions.isDefined) requestedNumPartitions.get.toInt else {
+      if (readMode.equals("lean")) 1 else {
+        partitioningMode match {
+          case Some("hash") => sqlContext.getConf("spark.sql.shuffle.partitions", "10").toInt
+          // In "auto" mode we don't explicitly partition the data:
+          // The data is exported and split to multiple files if required by Kusto 'export' command
+          // The data is then read from the base directory for parquet files and partitioned by the parquet data source
+          case _ => 1
+        }
+      }
+    }
   }
 
   override def shortName(): String = "kusto"

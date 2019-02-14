@@ -1,9 +1,7 @@
 package com.microsoft.kusto.spark.datasource
 
 import java.util.Locale
-
 import org.apache.spark.sql.SaveMode
-
 
 object KustoOptions {
   private val kustoOptionNames = collection.mutable.Set[String]()
@@ -35,9 +33,6 @@ object KustoOptions {
   // Target/source Kusto database for writing/reading the data. See KustoSink.md/KustoSource.md for
   // required permissions
   val KUSTO_DATABASE: String = newOption("kustoDatabase")
-  val KUSTO_LOWER_BOUND: String = newOption("lowerBound")
-  val KUSTO_NUM_PARTITIONS: String = newOption("numPartitions")
-  val KUSTO_PARTITION_COLUMN: String = newOption("partitionColumn")
   val KUSTO_QUERY: String = newOption("kustoQuery")
   val KUSTO_QUERY_RETRY_TIMES: String = newOption("kustoQueryRetryTimes")
   // Target/source Kusto table for writing/reading the data. See KustoSink.md/KustoSource.md for
@@ -50,7 +45,6 @@ object KustoOptions {
   // Default: 'FailIfNotExist'
   val KUSTO_TABLE_CREATE_OPTIONS: String = newOption("tableCreateOptions")
   val KUSTO_TRUNCATE: String = newOption("truncate")
-  val KUSTO_UPPER_BOUND: String = newOption("upperBound")
   // When writing to Kusto, allows the driver to complete operation asynchronously.  See KustoSink.md for
   // details and limitations. Default: 'false'
   val KUSTO_WRITE_ENABLE_ASYNC: String = newOption("writeEnableAsync")
@@ -59,13 +53,32 @@ object KustoOptions {
   val KUSTO_WRITE_RESULT_LIMIT: String = newOption("writeResultLimit")
   val KUSTO_READ_MODE: String = newOption("readMode")
 
+  // Partitioning parameters
+  val KUSTO_READ_PARTITION_MODE: String = newOption("partitionMode")
+  val KUSTO_NUM_PARTITIONS: String = newOption("numPartitions")
+  val KUSTO_PARTITION_COLUMN: String = newOption("partitionColumn")
+
   object SinkTableCreationMode extends Enumeration {
     type SinkTableCreationMode = Value
     val CreateIfNotExist, FailIfNotExist = Value
   }
 
+  // Blob Storage access parameters for source connector when working in 'scale' mode (read)
+
+  // Transient storage account when reading from Kusto
+  val KUSTO_BLOB_STORAGE_ACCOUNT_NAME: String = newOption("blobStorageAccountName")
+  // Storage account key. Use either this or SAS key to access the storage account
+  val KUSTO_BLOB_STORAGE_ACCOUNT_KEY: String = newOption("blobStorageAccountKey")
+  // SAS access key: a complete query string of the SAS as a container
+  // Use either this or storage account key to access the storage account
+  val KUSTO_BLOB_STORAGE_SAS_KEY: String = newOption("blobStorageSasKey")
+  // Blob container name
+  val KUSTO_BLOB_CONTAINER: String = newOption("blobContainer")
+
   val NONE_RESULT_LIMIT = "none"
   val supportedReadModes: Set[String] = Set("lean", "scale")
+  // The foll
+  val supportedPartitioningModes: Set[String] = Set("hash", "auto")
 }
 
 abstract class KustoAuthentication

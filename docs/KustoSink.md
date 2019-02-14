@@ -55,10 +55,10 @@ that is using it. Please verify the following before using Kusto connector:
  'admin' privileges on the table.
  
  * **KUSTO_AAD_CLIENT_ID**: 
- AAD application identifier of the client.
- 
- * **KUSTO_AAD_AUTHORITY_ID**: 
- AAD authentication authority.
+  AAD application (client) identifier.
+  
+  * **KUSTO_AAD_AUTHORITY_ID**: 
+  AAD authentication authority. This is the AAD Directory (tenant) ID.
  
  * **KUSTO_AAD_CLIENT_PASSWORD**: 
  AAD application key for the client.

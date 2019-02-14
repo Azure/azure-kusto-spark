@@ -66,10 +66,10 @@ Where **parameters map** is identical for both syntax flavors.
   privileges on this database, unless it has 'admin' privileges on the table.
   
   * **KUSTO_AAD_CLIENT_ID**: 
-  AAD application identifier of the client.
+  AAD application (client) identifier.
   
   * **KUSTO_AAD_AUTHORITY_ID**: 
-  AAD authentication authority.
+  AAD authentication authority. This is the AAD Directory (tenant) ID.
   
   * **KUSTO_AAD_CLIENT_PASSWORD**: 
   AAD application key for the client.
