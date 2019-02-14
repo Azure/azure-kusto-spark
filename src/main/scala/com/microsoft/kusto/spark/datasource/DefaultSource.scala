@@ -4,7 +4,6 @@ import java.security.InvalidParameterException
 
 import com.microsoft.kusto.spark.datasink.KustoWriter
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils, KustoQueryUtils}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister, RelationProvider}
 import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode}
 import sun.reflect.generics.reflectiveObjects.NotImplementedException
@@ -16,15 +15,13 @@ class DefaultSource extends CreatableRelationProvider
 
   val timeout: FiniteDuration = 10 minutes
   override def createRelation(sqlContext: SQLContext, mode: SaveMode, parameters: Map[String, String], data: DataFrame): BaseRelation = {
-    val (isAsync,tableCreation, kustoAuthentication) = KustoDataSourceUtils.validateSinkParameters(parameters)
-    val tableCoordinates = KustoTableCoordinates(parameters.getOrElse(KustoOptions.KUSTO_CLUSTER, ""), parameters.getOrElse(KustoOptions.KUSTO_DATABASE, ""),parameters.getOrElse(KustoOptions.KUSTO_TABLE, ""))
-    val writeOptions = KustoSparkWriteOptions(tableCreation, isAsync, parameters.getOrElse(KustoOptions.KUSTO_WRITE_RESULT_LIMIT, "1"), parameters.getOrElse(DateTimeUtils.TIMEZONE_OPTION, "UTC"), mode)
+    val (writeOptions, kustoAuthentication, tableCoordinates) = KustoDataSourceUtils.parseSinkParameters(parameters, mode)
 
     KustoWriter.write(
       None,
       data,
       tableCoordinates,
-      KustoDataSourceUtils.getAadParamsFromKeyVaultIfNeeded(kustoAuthentication),
+      kustoAuthentication,
       writeOptions)
 
     val limit = if (writeOptions.writeResultLimit.equalsIgnoreCase(KustoOptions.NONE_RESULT_LIMIT)) None else {

@@ -50,6 +50,8 @@ object KustoOptions {
   // Default: 'FailIfNotExist'
   val KUSTO_TABLE_CREATE_OPTIONS: String = newOption("tableCreateOptions")
   val KUSTO_TRUNCATE: String = newOption("truncate")
+  val KUSTO_READ_MODE: String = newOption("readMode")
+  val KUSTO_USER_TOKEN = "kustoUserToken"
   val KUSTO_UPPER_BOUND: String = newOption("upperBound")
   // When writing to Kusto, allows the driver to complete operation asynchronously.  See KustoSink.md for
   // details and limitations. Default: 'false'
@@ -57,7 +59,6 @@ object KustoOptions {
   // When writing to Kusto, limits the number of rows read back as BaseRelation. Default: '1'.
   // To read back all rows, set as 'none' (NONE_RESULT_LIMIT)
   val KUSTO_WRITE_RESULT_LIMIT: String = newOption("writeResultLimit")
-  val KUSTO_READ_MODE: String = newOption("readMode")
 
   object SinkTableCreationMode extends Enumeration {
     type SinkTableCreationMode = Value
@@ -77,3 +78,4 @@ case class KeyVaultAppAuthentiaction(uri: String, keyVaultAppID:String, keyVault
 case class KeyVaultCertificateAuthentication(uri: String, pemFilePath: String, pemFilePassword: String) extends KeyVaultAuthentication(uri)
 case class KustoSparkWriteOptions(tableCreateOptions: KustoOptions.SinkTableCreationMode.SinkTableCreationMode = KustoOptions.SinkTableCreationMode.FailIfNotExist,
                                   isAsync: Boolean = false, writeResultLimit: String, timeZone: String = "UTC", mode: SaveMode = SaveMode.Append)
+case class KustoUserTokenAuthentication(token: String) extends KustoAuthentication
