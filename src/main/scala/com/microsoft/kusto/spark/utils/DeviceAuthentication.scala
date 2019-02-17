@@ -22,7 +22,6 @@ object DeviceAuthentication {
     Executors.newSingleThreadExecutor
     val context: AuthenticationContext =  new AuthenticationContext(aadAuthorityUri, true, service)
 
-    var result: AuthenticationResult = null
     val future: Future[DeviceCode] = context.acquireDeviceCode(CLIENT_ID, clusterUrl, null)
     val deviceCode: DeviceCode = future.get
     val clipboard = Toolkit.getDefaultToolkit.getSystemClipboard
@@ -33,9 +32,9 @@ object DeviceAuthentication {
     }
 
     clipboard.setContents(new StringSelection(deviceCode.getUserCode), null)
-    println(deviceCode.getMessage)
+    println(deviceCode.getMessage + " device code is already copied to clipboard - just press ctrl+v in the web")
     if (Desktop.isDesktopSupported) Desktop.getDesktop.browse(new URI(deviceCode.getVerificationUrl))
-    result = waitAndAcquireTokenByDeviceCode(deviceCode, context)
+    var result = waitAndAcquireTokenByDeviceCode(deviceCode, context)
     clipboard.setContents(new StringSelection(text), null)
 
     if (result == null) throw new ServiceUnavailableException("authentication result was null")
