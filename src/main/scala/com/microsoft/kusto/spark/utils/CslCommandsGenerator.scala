@@ -46,6 +46,10 @@ object CslCommandsGenerator{
     s""".alter table $table policy merge @'{"AllowMerge":"$allowMerge", "AllowRebuild":"$allowRebuild"}'"""
   }
 
+  def generateOperationsShowCommand(operationId: String): String = {
+    s".show operations $operationId"
+  }
+
   // Export data to blob
   def generateExportDataCommand(
                                  appId: String,
@@ -56,12 +60,14 @@ object CslCommandsGenerator{
                                  secret: String,
                                  useKeyNotSas: Boolean = true,
                                  partitionId: Int,
-                                 partitionPredicate: Option[String] = None): String = {
+                                 partitionPredicate: Option[String] = None,
+                                 isAsync: Boolean): String = {
 
     val secretString = if (useKeyNotSas) s""";" h@"$secret"""" else s"""?" h@"$secret""""
     val blobUri = s"https://$storageAccountName.blob.core.windows.net"
+    val async = if (isAsync) "async " else ""
 
-    var command = s""".export to parquet ("$blobUri/$container$secretString)""" +
+    var command = s""".export ${async}to parquet ("$blobUri/$container$secretString)""" +
       s""" with (namePrefix="${directory}part$partitionId", fileExtension=parquet) <| $query"""
 
     if (partitionPredicate.nonEmpty)

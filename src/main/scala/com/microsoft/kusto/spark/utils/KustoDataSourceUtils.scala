@@ -1,9 +1,11 @@
 package com.microsoft.kusto.spark.utils
 
 import java.security.InvalidParameterException
-import java.util.{NoSuchElementException, StringJoiner}
+import java.util
+import java.util.concurrent.{CountDownLatch, TimeUnit, TimeoutException}
+import java.util.{NoSuchElementException, StringJoiner, Timer, TimerTask}
 
-import com.microsoft.azure.kusto.data.Client
+import com.microsoft.azure.kusto.data.{Client, Results}
 import com.microsoft.kusto.spark.datasource._
 import com.microsoft.kusto.spark.datasource.KustoOptions.SinkTableCreationMode
 import com.microsoft.kusto.spark.datasource.KustoOptions.SinkTableCreationMode.SinkTableCreationMode
@@ -11,6 +13,8 @@ import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark.sql.types.StructType
 import org.json4s.jackson.JsonMethods.parse
+
+import scala.concurrent.duration.FiniteDuration
 
 object KustoDataSourceUtils{
   private val klog = Logger.getLogger("KustoConnector")
@@ -141,6 +145,79 @@ object KustoDataSourceUtils{
       case app: AadApplicationAuthentication => app
       case app: KeyVaultAppAuthentiaction => KeyVaultUtils.getAadParamsFromKeyVaultAppAuth(app.keyVaultAppID, app.keyVaultAppKey, app.uri)
       case app: KeyVaultCertificateAuthentication => KeyVaultUtils.getAadParamsFromKeyVaultCertAuth
+    }
+  }
+
+  /**
+    * A function to run sequentially async work on TimerTask using a Timer.
+    * The function passed is scheduled sequentially by the timer, until last calculated returned value by func does not
+    * satisfy the condition of doWhile or a given number of times has passed.
+    * After one of these conditions was held true the finalWork function is called over the last returned value by func.
+    * Returns a CountDownLatch object use to countdown times and await on it synchronously if needed
+    *
+    * @param func - the function to run
+    * @param delay - delay before first job
+    * @param runEvery - delay between jobs
+    * @param numberOfTimesToRun - stop jobs after numberOfTimesToRun.
+    *                            set negative value to run infinitely
+    * @param doWhile - stop jobs if condition holds for the func.apply output
+    * @param finalWork - do final work with the last func.apply output
+    */
+  def runSequentially[A](func: () => A, delay: Int, runEvery: Int, numberOfTimesToRun: Int, doWhile: A => Boolean, finalWork: A => Unit): CountDownLatch = {
+    val latch = new CountDownLatch(if (numberOfTimesToRun > 0) numberOfTimesToRun else 1)
+    val t = new Timer()
+    val task = new TimerTask() {
+      def run(): Unit = {
+        val res = func.apply()
+        if(numberOfTimesToRun > 0){
+          latch.countDown()
+        }
+
+        if (latch.getCount == 0)
+        {
+          throw new TimeoutException(s"runSequentially: Reached maximal allowed repetitions ($numberOfTimesToRun), aborting")
+        }
+
+        if (!doWhile.apply(res)){
+          t.cancel()
+          finalWork.apply(res)
+          while (latch.getCount > 0){
+            latch.countDown()
+          }
+        }
+      }
+    }
+    t.schedule(task, delay, runEvery)
+    latch
+  }
+
+  def verifyAsyncCommandCompletion(client: Client, database: String, samplePeriod: FiniteDuration, timeOut: FiniteDuration, commandResult: Results): Unit = {
+    val operationId = commandResult.getValues.get(0).get(0)
+    val operationsShowCommand = CslCommandsGenerator.generateOperationsShowCommand(operationId)
+    val sampleInMillis = samplePeriod.toMillis.toInt
+    val timeoutInMillis = timeOut.toMillis
+    val delayPeriodBetweenCalls = if (sampleInMillis < 1) 1 else sampleInMillis
+    val timesToRun = (timeoutInMillis/(delayPeriodBetweenCalls) + 5).toInt
+
+    val stateCol = "State"
+    val statusCol = "Status"
+    val showCommandResult = client.execute(database, operationsShowCommand)
+    val stateIdx = showCommandResult.getColumnNameToIndex.get(stateCol)
+    val statusIdx = showCommandResult.getColumnNameToIndex.get(statusCol)
+
+    val success = runSequentially[util.ArrayList[String]](
+      func = () => client.execute(database, operationsShowCommand).getValues.get(0), delay = 0, runEvery = delayPeriodBetweenCalls, numberOfTimesToRun = timesToRun,
+      doWhile = result => {
+        result.get(stateIdx) == "InProgress"
+      },
+      finalWork = result => {
+        if (result.get(stateIdx) != "Completed") {
+          throw new RuntimeException(s"Failed to execute Kusto operation with OperationId '$operationId', State: '${result.get(stateIdx)}', Status: '${result.get(statusIdx)}'")
+        }
+      }).await(timeoutInMillis, TimeUnit.MILLISECONDS)
+
+    if (!success) {
+      throw new RuntimeException(s"Timed out while waiting for operation with OperationId '$operationId'")
     }
   }
 }

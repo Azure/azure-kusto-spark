@@ -1,16 +1,18 @@
 package com.microsoft.kusto.spark.datasource
-
 import java.security.InvalidParameterException
+import java.util
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 
-import com.microsoft.azure.kusto.data.Client
-import com.microsoft.kusto.spark.utils.{CslCommandsGenerator, KustoClient, KustoQueryUtils}
+import scala.collection.JavaConverters._
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration._
+import com.microsoft.azure.kusto.data.{Client, Results}
+import com.microsoft.kusto.spark.utils.{CslCommandsGenerator, KustoClient, KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.spark.Partition
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
-
-import scala.collection.JavaConverters._
 
 private[kusto] case class KustoPartition(predicate: Option[String], idx: Int) extends Partition {
   override def index: Int = idx
@@ -111,10 +113,15 @@ private[kusto] class KustoReader(partitions: Array[Partition], request: KustoRea
       storage.secrete,
       storage.isKeyNotSas,
       partition.idx,
-      partition.predicate
+      partition.predicate,
+      isAsync = true
     )
 
-    client.execute(request.database, exportCommand).getValues.asScala.map(row => row.get(0)).toList
+    val samplePeriod: FiniteDuration = 2 seconds
+    val timeOut: FiniteDuration = 30 minutes
+    val commandResult = client.execute(request.database, exportCommand)
+
+    KDSU.verifyAsyncCommandCompletion(client, request.database, samplePeriod, timeOut, commandResult)
   }
 
   private[kusto] def importPartitionFromBlob(

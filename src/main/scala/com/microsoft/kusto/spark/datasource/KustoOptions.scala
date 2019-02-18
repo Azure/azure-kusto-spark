@@ -77,8 +77,10 @@ object KustoOptions {
 
   val NONE_RESULT_LIMIT = "none"
   val supportedReadModes: Set[String] = Set("lean", "scale")
-  // The foll
-  val supportedPartitioningModes: Set[String] = Set("hash", "auto")
+  // Partitioning modes allow to export data from Kusto to separate folders within the blob container per-partition
+  // In current implementation this is not exploited by Kusto read connector, and is not recommended.
+  // Left for future experimentation
+  val supportedPartitioningModes: Set[String] = Set("hash")
 }
 
 abstract class KustoAuthentication
