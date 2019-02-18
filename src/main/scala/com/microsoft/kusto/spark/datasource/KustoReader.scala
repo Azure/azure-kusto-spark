@@ -114,13 +114,4 @@ private[kusto] class KustoReader(request: KustoReadRequest, storage: KustoStorag
     val commandResult = client.execute(request.database, exportCommand)
     KDSU.verifyAsyncCommandCompletion(client, request.database, commandResult)
   }
-
-  private[kusto] def importPartitionFromBlob(
-                                              request: KustoReadRequest,
-                                              storage: KustoStorageParameters,
-                                              directory: String
-                                            ): DataFrame = {
-
-    request.sparkSession.read.parquet(s"wasbs://${storage.container}@${storage.account}.blob.core.windows.net/$directory")
-  }
 }

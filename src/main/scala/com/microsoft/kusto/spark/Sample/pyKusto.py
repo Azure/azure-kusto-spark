@@ -30,15 +30,16 @@ df.write. \
 
 # COMMAND ----------
 
-# Read the data from the kusto table
+# Read the data from the kusto table in 'lean' mode
 kustoDf  = pyKusto.read. \
             format("com.microsoft.kusto.spark.datasource"). \
-            option("kustoCluster",kustoOptions["kustoCluster"]). \
-            option("kustoDatabase",kustoOptions["kustoDatabase"]). \
+            option("kustoCluster", kustoOptions["kustoCluster"]). \
+            option("kustoDatabase", kustoOptions["kustoDatabase"]). \
             option("kustoTable", kustoOptions["kustoTable"]). \
-            option("kustoAADClientID",kustoOptions["kustoAADClientID"]). \
-            option("kustoClientAADClientPassword",kustoOptions["kustoClientAADClientPassword"]). \
-            option("kustoAADAuthorityID",kustoOptions["kustoAADAuthorityID"]). \
+            option("kustoAADClientID", kustoOptions["kustoAADClientID"]). \
+            option("kustoClientAADClientPassword", kustoOptions["kustoClientAADClientPassword"]). \
+            option("kustoAADAuthorityID", kustoOptions["kustoAADAuthorityID"]). \
+            option("readMode", "lean"). \
             load()
 
 kustoDf.show()

@@ -52,11 +52,10 @@ case class KustoRelation(cluster: String,
     }
   }
 
-  private def getTransientStorageParameters(
-                                             storageAccount: Option[String],
-                                             storageContainer: Option[String],
-                                             storageAccountSecrete: Option[String],
-                                             isKeyNotSas: Boolean): KustoStorageParameters = {
+  private def getTransientStorageParameters(storageAccount: Option[String],
+                                            storageContainer: Option[String],
+                                            storageAccountSecrete: Option[String],
+                                            isKeyNotSas: Boolean): KustoStorageParameters = {
     if (storageAccount.isEmpty) {
       throw new InvalidParameterException("Storage account name is empty. Reading in 'Scale' mode requires a transient blob storage")
     }
@@ -93,7 +92,7 @@ case class KustoRelation(cluster: String,
       val requestedColumn = partitioningColumn.get.toLowerCase(Locale.ROOT)
       if (!schema.contains(requestedColumn)) {
         throw new InvalidParameterException(
-          s"Cannot partition by column '$requestedColumn' since it is not art of the query schema: ${sys.props("line.separator")}${schema.mkString(", ")}")
+          s"Cannot partition by column '$requestedColumn' since it is not part of the query schema: ${sys.props("line.separator")}${schema.mkString(", ")}")
       }
       requestedColumn
     } else schema.head.name

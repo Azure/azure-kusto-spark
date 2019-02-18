@@ -51,6 +51,7 @@ object KustoOptions {
   // When writing to Kusto, limits the number of rows read back as BaseRelation. Default: '1'.
   // To read back all rows, set as 'none' (NONE_RESULT_LIMIT)
   val KUSTO_WRITE_RESULT_LIMIT: String = newOption("writeResultLimit")
+  // Select either 'scale' or 'lean' read mode. Default: 'scale'
   val KUSTO_READ_MODE: String = newOption("readMode")
 
   // Partitioning parameters

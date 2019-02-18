@@ -50,14 +50,14 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
   private val loggingLevel: Option[String] = Option(System.getProperty("logLevel"))
   if (loggingLevel.isDefined) KDSU.setLoggingLevel(loggingLevel.get)
 
-//  "KustoSource"
-  ignore should "execute a read query on Kusto cluster in default (lean) mode" taggedAs KustoE2E in {
+  "KustoSource" should "execute a read query on Kusto cluster in default (lean) mode" taggedAs KustoE2E in {
     val table: String = System.getProperty(KustoOptions.KUSTO_TABLE)
     val query: String = System.getProperty(KustoOptions.KUSTO_QUERY, s"$table | where (toint(ColB) % 1000 == 0) | distinct ColA ")
 
     val conf: Map[String, String] = Map(
       KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
-      KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey
+      KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+      KustoOptions.KUSTO_READ_MODE -> "lean"
     )
 
     val df = spark.read.kusto(cluster, database, query, conf)
@@ -75,7 +75,6 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
     val blobSasConnectionString: String = System.getProperty("blobSasQuery")
 
     val conf: Map[String, String] = Map(
-      KustoOptions.KUSTO_READ_MODE -> "scale",
       KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
       KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
       KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME -> storageAccount,
@@ -86,8 +85,7 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
     spark.read.kusto(cluster, database, query, conf).show(20)
   }
 
-//  "KustoConnector"
-  ignore should "write to a kusto table and read it back in lean mode" taggedAs KustoE2E in {
+  "KustoConnector" should "write to a kusto table and read it back in lean mode" taggedAs KustoE2E in {
     import spark.implicits._
 
     val rowId = new AtomicInteger(1)
@@ -97,7 +95,7 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
     val dfOrig = rows.toDF("name", "value")
     val table = KustoQueryUtils.simplifyName(s"KustoSparkReadWRiteTest_${UUID.randomUUID()}")
 
-    // Create a new table. TODO: This can be replaced by calling sink with "create table if not exists" once available
+    // Create a new table.
     val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://$cluster.kusto.windows.net", appId, appKey, authority)
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
     kustoAdminClient.execute(database, generateTableCreateCommand(table, columnsTypesAndNames = "ColA:string, ColB:int"))
@@ -111,12 +109,12 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
       .option(KustoOptions.KUSTO_AAD_CLIENT_ID, appId)
       .option(KustoOptions.KUSTO_AAD_CLIENT_PASSWORD, appKey)
       .option(KustoOptions.KUSTO_AAD_AUTHORITY_ID, authority)
-      .option(KustoOptions.KUSTO_READ_MODE, "lean")
       .save()
 
     val conf: Map[String, String] = Map(
       KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
-      KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey
+      KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+      KustoOptions.KUSTO_READ_MODE -> "lean"
     )
 
     val dfResult = spark.read.kusto(cluster, database, table, conf)

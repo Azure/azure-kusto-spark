@@ -40,17 +40,33 @@ class DefaultSource extends CreatableRelationProvider
   }
 
   def adjustParametersForBaseRelation(parameters: Map[String, String], limit: Option[Int]): Map[String, String] = {
-    if (limit.isEmpty) {
-      parameters + (KustoOptions.KUSTO_NUM_PARTITIONS -> "1")
+    val readMode = parameters.get(KustoOptions.KUSTO_READ_MODE)
+    val limitIsSmall = limit.isDefined && limit.get <= 200
+    var adjustedParams = parameters
+
+    if (readMode.isEmpty && limitIsSmall) {
+      adjustedParams = parameters + (KustoOptions.KUSTO_READ_MODE -> "lean") + (KustoOptions.KUSTO_NUM_PARTITIONS -> "1")
     }
-    else {
-      parameters + (KustoOptions.KUSTO_QUERY -> KustoQueryUtils.limitQuery(parameters(KustoOptions.KUSTO_TABLE), limit.get)) + (KustoOptions.KUSTO_NUM_PARTITIONS -> "1")
+    else if (parameters.get(KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME).isEmpty ||
+      parameters.get(KustoOptions.KUSTO_BLOB_CONTAINER).isEmpty ||
+      parameters.get(KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_KEY).isEmpty && parameters.get(KustoOptions.KUSTO_BLOB_STORAGE_SAS_KEY).isEmpty
+    ) {
+      if (readMode.isDefined && readMode.get != "lean") {
+        throw new InvalidParameterException(s"Read mode is set to '${readMode.get}', but transient storage parameters are not provided")
+      }
+      adjustedParams = parameters + (KustoOptions.KUSTO_READ_MODE -> "lean") + (KustoOptions.KUSTO_NUM_PARTITIONS -> "1")
+    }
+
+    if (limit.isDefined) {
+      adjustedParams + (KustoOptions.KUSTO_QUERY -> KustoQueryUtils.limitQuery(parameters(KustoOptions.KUSTO_TABLE), limit.get))
+    } else {
+      adjustedParams
     }
   }
 
   override def createRelation(sqlContext: SQLContext, parameters: Map[String, String]): BaseRelation = {
     val requestedPartitions = parameters.get(KustoOptions.KUSTO_NUM_PARTITIONS)
-    val readMode = parameters.getOrElse(KustoOptions.KUSTO_READ_MODE, "lean")
+    val readMode = parameters.getOrElse(KustoOptions.KUSTO_READ_MODE, "scale")
     val partitioningMode = parameters.get(KustoOptions.KUSTO_READ_PARTITION_MODE)
     val numPartitions = setNumPartitionsPerMode(sqlContext, requestedPartitions, readMode, partitioningMode)
 
