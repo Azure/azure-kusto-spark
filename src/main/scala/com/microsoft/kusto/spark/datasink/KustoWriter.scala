@@ -39,8 +39,7 @@ object KustoWriter{
   val inProgressState = "InProgress"
   val stateCol = "State"
   val statusCol = "Status"
-  val timeOut: FiniteDuration = 30 minutes
-  val delayPeriodBetweenCalls: Int = 1000
+  val delayPeriodBetweenCalls: Int = KDSU.DefaultPeriodicSamplePeriod.toMillis.toInt
   val GZIP_BUFFER_SIZE: Int = 16 * 1024
   private[kusto] def write(
                             batchId: Option[Long],
@@ -207,12 +206,13 @@ object KustoWriter{
 
       // We force blocking here, since the driver can only complete the ingestion process
       // once all partitions are ingested into the temporary table
-      val ingestionResult = Await.result(ackIngestion, timeOut)
+      val ingestionResult = Await.result(ackIngestion, KDSU.DefaultTimeoutLongRunning)
+      val timeoutMillis = KDSU.DefaultTimeoutLongRunning.toMillis
 
       // Proceed only on success. Will throw on failure for the driver to handle
       KDSU.runSequentially[IngestionStatus](
         func = () => ingestionResult.GetIngestionStatusCollection().get(0),
-        0, delayPeriodBetweenCalls, (timeOut.toMillis / delayPeriodBetweenCalls + 5).toInt,
+        0, delayPeriodBetweenCalls, (timeoutMillis / delayPeriodBetweenCalls + 5).toInt,
         res => res.status == OperationStatus.Pending,
         res => res.status match {
           case OperationStatus.Pending =>
@@ -222,7 +222,7 @@ object KustoWriter{
           case otherStatus =>
             throw new RuntimeException(s"Ingestion to Kusto failed with status '$otherStatus'." +
               s" Cluster: '$cluster', database: '$database', table: '$table'$batchIdIfExists, partition: '$partitionId'. Ingestion info: '${readIngestionResult(res)}'")
-        }).await(timeOut.toMillis, TimeUnit.MILLISECONDS)
+        }).await(timeoutMillis, TimeUnit.MILLISECONDS)
     }
 
   def All(list: util.ArrayList[Boolean]) : Boolean = {

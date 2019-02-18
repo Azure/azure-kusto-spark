@@ -24,7 +24,7 @@ case class KustoRelation(cluster: String,
                          storageAccount: Option[String] = None,
                          storageContainer: Option[String] = None,
                          storageAccountSecrete: Option[String] = None,
-                         isStrogageSecreteKeyNotSas: Boolean = true)
+                         isStorageSecreteKeyNotSas: Boolean = true)
                         (@transient val sparkSession: SparkSession) extends BaseRelation with TableScan with Serializable {
 
   private val normalizedQuery = KustoQueryUtils.normalizeQuery(query)
@@ -46,7 +46,7 @@ case class KustoRelation(cluster: String,
     } else {
       KustoReader.scaleBuildScan(
         KustoReadRequest(sparkSession, schema, cluster, database, query, appId, appKey, authorityId),
-        getTransientStorageParameters(storageAccount, storageContainer, storageAccountSecrete, isStrogageSecreteKeyNotSas),
+        getTransientStorageParameters(storageAccount, storageContainer, storageAccountSecrete, isStorageSecreteKeyNotSas),
         KustoPartitionInfo(numPartitions, getPartitioningColumn(partitioningColumn, isLeanMode), getPartitioningMode(partitioningMode))
       )
     }

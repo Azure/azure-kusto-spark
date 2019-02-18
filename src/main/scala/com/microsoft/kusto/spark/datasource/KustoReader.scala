@@ -1,18 +1,15 @@
 package com.microsoft.kusto.spark.datasource
 import java.security.InvalidParameterException
-import java.util
 import java.util.UUID
-import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConverters._
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.duration._
-import com.microsoft.azure.kusto.data.{Client, Results}
+import com.microsoft.azure.kusto.data.Client
 import com.microsoft.kusto.spark.utils.{CslCommandsGenerator, KustoClient, KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.spark.Partition
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
+
+import scala.concurrent.duration._
 
 private[kusto] case class KustoPartition(predicate: Option[String], idx: Int) extends Partition {
   override def index: Int = idx
@@ -25,15 +22,14 @@ private[kusto] case class KustoStorageParameters(account: String,
                                                  container: String,
                                                  isKeyNotSas: Boolean)
 
-private[kusto] case class KustoReadRequest(
-                                            sparkSession: SparkSession,
-                                            schema: StructType,
-                                            cluster: String,
-                                            database: String,
-                                            query: String,
-                                            appId: String,
-                                            appKey: String,
-                                            authorityId: String)
+private[kusto] case class KustoReadRequest(sparkSession: SparkSession,
+                                           schema: StructType,
+                                           cluster: String,
+                                           database: String,
+                                           query: String,
+                                           appId: String,
+                                           appKey: String,
+                                           authorityId: String)
 
 private[kusto] object KustoReader {
   private val myName = this.getClass.getSimpleName
@@ -47,10 +43,9 @@ private[kusto] object KustoReader {
   }
 
   private[kusto] def scaleBuildScan(request: KustoReadRequest, storage: KustoStorageParameters, partitionInfo: KustoPartitionInfo): RDD[Row] = {
-
     setupBlobAccess(request, storage)
     val partitions = calculatePartitions(partitionInfo)
-    val reader = new KustoReader(partitions, request, storage)
+    val reader = new KustoReader(request, storage)
     val directory = KustoQueryUtils.simplifyName(s"${request.appId}/dir${UUID.randomUUID()}/")
 
     for (partition <- partitions) {
@@ -75,7 +70,6 @@ private[kusto] object KustoReader {
   private def calculatePartitions(partitionInfo: KustoPartitionInfo): Array[Partition] = {
     partitionInfo.mode match {
       case "hash" => calculateHashPartitions(partitionInfo)
-      case "integral" | "timestamp" | "predicate" => throw new InvalidParameterException(s"Partitioning mode '${partitionInfo.mode}' is not yet supported ")
       case _ => throw new InvalidParameterException(s"Partitioning mode '${partitionInfo.mode}' is not valid")
     }
   }
@@ -93,7 +87,7 @@ private[kusto] object KustoReader {
   }
 }
 
-private[kusto] class KustoReader(partitions: Array[Partition], request: KustoReadRequest, storage: KustoStorageParameters) {
+private[kusto] class KustoReader(request: KustoReadRequest, storage: KustoStorageParameters) {
   private val myName = this.getClass.getSimpleName
   val client: Client = KustoClient.getAdmin(request.cluster, request.appId, request.appKey, request.authorityId)
 
@@ -117,11 +111,8 @@ private[kusto] class KustoReader(partitions: Array[Partition], request: KustoRea
       isAsync = true
     )
 
-    val samplePeriod: FiniteDuration = 2 seconds
-    val timeOut: FiniteDuration = 30 minutes
     val commandResult = client.execute(request.database, exportCommand)
-
-    KDSU.verifyAsyncCommandCompletion(client, request.database, samplePeriod, timeOut, commandResult)
+    KDSU.verifyAsyncCommandCompletion(client, request.database, commandResult)
   }
 
   private[kusto] def importPartitionFromBlob(

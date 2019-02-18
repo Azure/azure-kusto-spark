@@ -98,7 +98,7 @@ object KustoConnectorDemo {
     /** ************************************************/
     /*          STREAMING SINK EXAMPLE                */
     /** ************************************************/
-    var customSchema = new StructType().add("colA", StringType, nullable = true).add("colB", IntegerType, nullable = true)
+    val customSchema = new StructType().add("colA", StringType, nullable = true).add("colB", IntegerType, nullable = true)
 
     // Read data from a file to a stream
     val csvDf = spark

@@ -55,6 +55,9 @@ object KustoOptions {
 
   // Partitioning parameters
   val KUSTO_READ_PARTITION_MODE: String = newOption("partitionMode")
+  // Note: for 'read', this allows to partition export from Kusto to blob (default is '1')
+  // It does not affect the number of partitions created when reading from blob.
+  // Therefore it is not recommended to use this option when reading from Kusto, left here for experimentation
   val KUSTO_NUM_PARTITIONS: String = newOption("numPartitions")
   val KUSTO_PARTITION_COLUMN: String = newOption("partitionColumn")
 
@@ -88,7 +91,7 @@ abstract class KeyVaultAuthentication(uri: String) extends KustoAuthentication
 
 case class KustoTableCoordinates(cluster: String, database: String, table:String)
 case class AadApplicationAuthentication(ID: String, password: String, authority: String) extends KustoAuthentication
-case class KeyVaultAppAuthentiaction(uri: String, keyVaultAppID:String, keyVaultAppKey: String) extends KeyVaultAuthentication(uri)
+case class KeyVaultAppAuthentication(uri: String, keyVaultAppID:String, keyVaultAppKey: String) extends KeyVaultAuthentication(uri)
 case class KeyVaultCertificateAuthentication(uri: String, pemFilePath: String, pemFilePassword: String) extends KeyVaultAuthentication(uri)
 case class KustoSparkWriteOptions(tableCreateOptions: KustoOptions.SinkTableCreationMode.SinkTableCreationMode = KustoOptions.SinkTableCreationMode.FailIfNotExist,
                                   isAsync: Boolean = false, writeResultLimit: String, timeZone: String = "UTC", mode: SaveMode = SaveMode.Append)

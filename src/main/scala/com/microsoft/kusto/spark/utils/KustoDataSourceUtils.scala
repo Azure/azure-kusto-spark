@@ -14,12 +14,14 @@ import org.apache.log4j.{Level, Logger}
 import org.apache.spark.sql.types.StructType
 import org.json4s.jackson.JsonMethods.parse
 
-import scala.concurrent.duration.FiniteDuration
+import scala.concurrent.duration._
 
 object KustoDataSourceUtils{
   private val klog = Logger.getLogger("KustoConnector")
 
   val ClientName = "Kusto.Spark.Connector"
+  val DefaultTimeoutLongRunning: FiniteDuration = 90 minutes
+  val DefaultPeriodicSamplePeriod: FiniteDuration = 2 seconds
 
   def setLoggingLevel(level: String): Unit = {
     setLoggingLevel(Level.toLevel(level))
@@ -109,7 +111,7 @@ object KustoDataSourceUtils{
     else {
       val keyVaultAppId = parameters.getOrElse(KustoOptions.KEY_VAULT_APP_ID, "")
       if(keyVaultAppId != ""){
-        kustoAuthentication = KeyVaultAppAuthentiaction(parameters.getOrElse(KustoOptions.KEY_VAULT_URI, ""),
+        kustoAuthentication = KeyVaultAppAuthentication(parameters.getOrElse(KustoOptions.KEY_VAULT_URI, ""),
           keyVaultAppId,
           parameters.getOrElse(KustoOptions.KEY_VAULT_APP_KEY, ""))
       }
@@ -143,7 +145,7 @@ object KustoDataSourceUtils{
   def getAadParamsFromKeyVaultIfNeeded(kustoAuthentication :KustoAuthentication): AadApplicationAuthentication ={
     kustoAuthentication match {
       case app: AadApplicationAuthentication => app
-      case app: KeyVaultAppAuthentiaction => KeyVaultUtils.getAadParamsFromKeyVaultAppAuth(app.keyVaultAppID, app.keyVaultAppKey, app.uri)
+      case app: KeyVaultAppAuthentication => KeyVaultUtils.getAadParamsFromKeyVaultAppAuth(app.keyVaultAppID, app.keyVaultAppKey, app.uri)
       case app: KeyVaultCertificateAuthentication => KeyVaultUtils.getAadParamsFromKeyVaultCertAuth
     }
   }
@@ -191,13 +193,13 @@ object KustoDataSourceUtils{
     latch
   }
 
-  def verifyAsyncCommandCompletion(client: Client, database: String, samplePeriod: FiniteDuration, timeOut: FiniteDuration, commandResult: Results): Unit = {
+  def verifyAsyncCommandCompletion(client: Client, database: String, commandResult: Results, samplePeriod: FiniteDuration = DefaultPeriodicSamplePeriod, timeOut: FiniteDuration = DefaultTimeoutLongRunning): Unit = {
     val operationId = commandResult.getValues.get(0).get(0)
     val operationsShowCommand = CslCommandsGenerator.generateOperationsShowCommand(operationId)
     val sampleInMillis = samplePeriod.toMillis.toInt
     val timeoutInMillis = timeOut.toMillis
     val delayPeriodBetweenCalls = if (sampleInMillis < 1) 1 else sampleInMillis
-    val timesToRun = (timeoutInMillis/(delayPeriodBetweenCalls) + 5).toInt
+    val timesToRun = (timeoutInMillis/ delayPeriodBetweenCalls + 5).toInt
 
     val stateCol = "State"
     val statusCol = "Status"
