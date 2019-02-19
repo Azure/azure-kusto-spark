@@ -7,9 +7,9 @@ import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
 class KustoQueryUtilsTest extends FlatSpec with MockFactory with Matchers with BeforeAndAfterAll {
 
   "normalizeQuery" should "remove redundant query separator" in {
-    val stardardQuery = "Table | where column1 == 'abc';"
+    val standardQuery = "Table | where column1 == 'abc';"
 
-    KustoQueryUtils.normalizeQuery(stardardQuery) should be ("Table | where column1 == 'abc'")
+    KustoQueryUtils.normalizeQuery(standardQuery) should be ("Table | where column1 == 'abc'")
   }
 
   "getQuerySchemaQuery" should "add suffix" in {

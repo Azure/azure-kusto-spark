@@ -98,7 +98,7 @@ object KustoConnectorDemo {
     /** ************************************************/
     /*          STREAMING SINK EXAMPLE                */
     /** ************************************************/
-    var customSchema = new StructType().add("colA", StringType, nullable = true).add("colB", IntegerType, nullable = true)
+    val customSchema = new StructType().add("colA", StringType, nullable = true).add("colB", IntegerType, nullable = true)
 
     // Read data from a file to a stream
     val csvDf = spark
@@ -131,11 +131,12 @@ object KustoConnectorDemo {
     /** ************************************************/
     /*               SOURCE EXAMPLES                  */
     /** ************************************************/
-    /* USING KUSTO QUERY */
-    /** *******************/
+    /* USING KUSTO QUERY, LEAN MODE */
+    /** *****************************/
     val conf: Map[String, String] = Map(
       KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
       KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+      KustoOptions.KUSTO_READ_MODE -> "lean",
       KustoOptions.KUSTO_QUERY -> s"$table | where (ColB % 1000 == 0) | distinct ColA "
     )
 
@@ -149,6 +150,7 @@ object KustoConnectorDemo {
     val conf2: Map[String, String] = Map(
       KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
       KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+      KustoOptions.KUSTO_READ_MODE -> "lean",
       KustoOptions.KUSTO_QUERY -> s"$table | where (ColB % 1000 == 0) | distinct ColA "
     )
 

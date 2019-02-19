@@ -44,9 +44,6 @@ class KustoSourceTests extends FlatSpec with MockFactory with Matchers with Befo
     sc.stop()
   }
 
-  private val rowId = new AtomicInteger(1)
-  private def newRow(): String = s"row-${rowId.getAndIncrement()}"
-
   "KustoDataSource" should "recognize Kusto and get the correct schema" in {
     val spark: SparkSession = SparkSession.builder()
       .appName("KustoSource")
