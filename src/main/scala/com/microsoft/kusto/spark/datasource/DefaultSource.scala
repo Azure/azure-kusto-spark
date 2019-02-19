@@ -15,13 +15,13 @@ class DefaultSource extends CreatableRelationProvider
 
   val timeout: FiniteDuration = 10 minutes
   override def createRelation(sqlContext: SQLContext, mode: SaveMode, parameters: Map[String, String], data: DataFrame): BaseRelation = {
-    val (writeOptions, kustoAuthentication, tableCoordinates) = KustoDataSourceUtils.parseSinkParameters(parameters, mode)
+    val (writeOptions, authentication, tableCoordinates) = KustoDataSourceUtils.parseSinkParameters(parameters, mode)
 
     KustoWriter.write(
       None,
       data,
       tableCoordinates,
-      kustoAuthentication,
+      authentication,
       writeOptions)
 
     val limit = if (writeOptions.writeResultLimit.equalsIgnoreCase(KustoOptions.NONE_RESULT_LIMIT)) None else {

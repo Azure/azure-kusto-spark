@@ -46,13 +46,14 @@ object DeviceAuthentication {
     var timeout = 15 * 1000
     var result: AuthenticationResult = null
 
+    // Logging is set to Fatal as root
     val prevLevel = Logger.getLogger(classOf[AuthenticationContext]).getLevel
     Logger.getLogger(classOf[AuthenticationContext]).setLevel(Level.FATAL)
     Thread.sleep(5000)
     while ( result == null && timeout > 0) {
       try {
-        val futureResult = context.acquireTokenByDeviceCode(deviceCode, null)
-        result = futureResult.get()
+        result = context.acquireTokenByDeviceCode(deviceCode, null).get
+
       } catch {
         case e: ExecutionException =>
           Thread.sleep(1000)

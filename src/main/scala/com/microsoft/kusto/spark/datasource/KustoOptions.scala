@@ -2,9 +2,6 @@ package com.microsoft.kusto.spark.datasource
 
 import java.util.Locale
 
-import org.apache.spark.sql.SaveMode
-
-
 object KustoOptions {
   private val kustoOptionNames = collection.mutable.Set[String]()
 
@@ -76,6 +73,6 @@ case class KustoTableCoordinates(cluster: String, database: String, table:String
 case class AadApplicationAuthentication(ID: String, password: String, authority: String) extends KustoAuthentication
 case class KeyVaultAppAuthentiaction(uri: String, keyVaultAppID:String, keyVaultAppKey: String) extends KeyVaultAuthentication(uri)
 case class KeyVaultCertificateAuthentication(uri: String, pemFilePath: String, pemFilePassword: String) extends KeyVaultAuthentication(uri)
-case class KustoSparkWriteOptions(tableCreateOptions: KustoOptions.SinkTableCreationMode.SinkTableCreationMode = KustoOptions.SinkTableCreationMode.FailIfNotExist,
-                                  isAsync: Boolean = false, writeResultLimit: String, timeZone: String = "UTC", mode: SaveMode = SaveMode.Append)
+case class WriteOptions(tableCreateOptions: KustoOptions.SinkTableCreationMode.SinkTableCreationMode = KustoOptions.SinkTableCreationMode.FailIfNotExist,
+                        isAsync: Boolean = false, writeResultLimit: String, timeZone: String = "UTC")
 case class KustoUserTokenAuthentication(token: String) extends KustoAuthentication

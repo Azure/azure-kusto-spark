@@ -7,11 +7,10 @@ import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import org.apache.spark.sql.execution.streaming.Sink
 import org.apache.spark.sql.{DataFrame, SQLContext}
 
-class KustoSink(
-                 sqlContext: SQLContext,
-                 tableCoordinates: KustoTableCoordinates,
-                 kustoAuthentication: KustoAuthentication,
-                 kustoSparkWriteOptions:KustoSparkWriteOptions) extends Sink with Serializable {
+class KustoSink(sqlContext: SQLContext,
+                tableCoordinates: KustoTableCoordinates,
+                authentication: KustoAuthentication,
+                writeOptions: WriteOptions) extends Sink with Serializable {
 
   private val myName = this.getClass.getSimpleName
   val MessageSource = "KustoSink"
@@ -23,7 +22,7 @@ class KustoSink(
     if (batchId <= latestBatchId) {
       KDSU.logInfo(myName, s"Skipping already committed batch $batchId")
     } else {
-      KustoWriter.write(Option(batchId), data, tableCoordinates, kustoAuthentication, kustoSparkWriteOptions)
+      KustoWriter.write(Option(batchId), data, tableCoordinates, authentication, writeOptions)
       latestBatchId = batchId
     }
   }

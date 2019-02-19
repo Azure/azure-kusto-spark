@@ -81,7 +81,16 @@ object KustoDataSourceUtils{
     kustoAdminClient.execute(tableCoordinates.database, generateTableCreateCommand(tmpTableName, tmpTableSchema))
   }
 
-  def parseSinkParameters(parameters: Map[String,String], mode : SaveMode = SaveMode.Append): (KustoSparkWriteOptions, KustoAuthentication, KustoTableCoordinates) = {
+  def parseSinkParameters(parameters: Map[String,String], mode : SaveMode = SaveMode.Append): (WriteOptions, KustoAuthentication, KustoTableCoordinates) = {
+    if(mode != SaveMode.Append)
+    {
+      if (mode == SaveMode.ErrorIfExists){
+        logInfo(ClientName, s"Kusto data source supports only append mode. Ignoring 'ErrorIfExists' directive")
+      } else {
+        throw new InvalidParameterException(s"Kusto data source supports only append mode. '$mode' directive is invalid")
+      }
+    }
+
     var tableCreation: SinkTableCreationMode = SinkTableCreationMode.FailIfNotExist
     var tableCreationParam: Option[String] = None
     var isAsync: Boolean = false
@@ -104,7 +113,7 @@ object KustoDataSourceUtils{
       throw new InvalidParameterException("KUSTO_CLUSTER parameter is missing. Must provide a destination cluster name")
     }
 
-    // Parse KustoSparkWriteOptions
+    // Parse WriteOptions
     try {
       isAsyncParam = parameters.getOrElse(KustoOptions.KUSTO_WRITE_ENABLE_ASYNC, "false")
       isAsync =  parameters.getOrElse(KustoOptions.KUSTO_WRITE_ENABLE_ASYNC, "false").trim.toBoolean
@@ -114,18 +123,17 @@ object KustoDataSourceUtils{
       case _ : NoSuchElementException => throw new InvalidParameterException(s"No such SinkTableCreationMode option: '${tableCreationParam.get}'")
       case _ : java.lang.IllegalArgumentException  => throw new InvalidParameterException(s"KUSTO_WRITE_ENABLE_ASYNC is expecting either 'true' or 'false', got: '$isAsyncParam'")
     }
-    val writeOptions = KustoSparkWriteOptions(tableCreation, isAsync, parameters.getOrElse(KustoOptions.KUSTO_WRITE_RESULT_LIMIT, "1"), parameters.getOrElse(DateTimeUtils.TIMEZONE_OPTION, "UTC"), mode)
-
+    val writeOptions = WriteOptions(tableCreation, isAsync, parameters.getOrElse(KustoOptions.KUSTO_WRITE_RESULT_LIMIT, "1"), parameters.getOrElse(DateTimeUtils.TIMEZONE_OPTION, "UTC"))
 
     // Parse KustoAuthentication
     val applicationId = parameters.getOrElse(KustoOptions.KUSTO_AAD_CLIENT_ID, "")
-    var kustoAuthentication: KustoAuthentication = null
+    var authentication: KustoAuthentication = null
     var keyVaultUri: String = null
     var userToken: String = null
     var keyVaultCertFilePath: String = null
 
     if(applicationId != ""){
-      kustoAuthentication = AadApplicationAuthentication(applicationId, parameters.getOrElse(KustoOptions.KUSTO_AAD_CLIENT_PASSWORD, ""), parameters.getOrElse(KustoOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com"))
+      authentication = AadApplicationAuthentication(applicationId, parameters.getOrElse(KustoOptions.KUSTO_AAD_CLIENT_PASSWORD, ""), parameters.getOrElse(KustoOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com"))
     }
     else if({
       keyVaultUri = parameters.getOrElse(KustoOptions.KEY_VAULT_URI, "")
@@ -135,25 +143,25 @@ object KustoDataSourceUtils{
 
       if({keyVaultAppId = parameters.getOrElse(KustoOptions.KEY_VAULT_APP_ID, "")
           keyVaultAppId != ""}){
-          kustoAuthentication = KeyVaultAppAuthentiaction(keyVaultUri,
+          authentication = KeyVaultAppAuthentiaction(keyVaultUri,
            keyVaultAppId,
            parameters.getOrElse(KustoOptions.KEY_VAULT_APP_KEY, ""))
       }
       else {
-        kustoAuthentication = KeyVaultCertificateAuthentication(keyVaultUri,
+        authentication = KeyVaultCertificateAuthentication(keyVaultUri,
           parameters.getOrElse(KustoOptions.KEY_VAULT_PEM_FILE_PATH, ""),
           parameters.getOrElse(KustoOptions.KEY_VAULT_CERTIFICATE_KEY, ""))
         }
       }
     else if ({userToken = parameters.getOrElse(KustoOptions.KUSTO_USER_TOKEN, "")
         userToken != ""}){
-      kustoAuthentication = KustoUserTokenAuthentication(userToken)
+      authentication = KustoUserTokenAuthentication(userToken)
     }
     else {
-      kustoAuthentication = KustoUserTokenAuthentication(DeviceAuthentication.acquireAccessTokenUsingDeviceCodeFlow(cluster.get))
+      authentication = KustoUserTokenAuthentication(DeviceAuthentication.acquireAccessTokenUsingDeviceCodeFlow(cluster.get))
     }
 
-    (writeOptions, kustoAuthentication, KustoTableCoordinates(getClusterNameFromUrlIfNeeded(cluster.get), database.get, table.get))
+    (writeOptions, authentication, KustoTableCoordinates(getClusterNameFromUrlIfNeeded(cluster.get), database.get, table.get))
   }
 
   private [kusto] def reportExceptionAndThrow(
