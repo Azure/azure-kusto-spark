@@ -19,7 +19,7 @@ object KeyVaultUtils {
   @throws[CloudException]
   @throws[IOException]
   def getAadParamsFromKeyVaultAppAuth(clientID: String, clientPassword: String, uri: String): AadApplicationAuthentication = {
-      var client: KeyVaultClient = new KeyVaultADALAuthenticator(clientID, clientPassword).getAuthenticatedClient
+      val client: KeyVaultClient = new KeyVaultADALAuthenticator(clientID, clientPassword).getAuthenticatedClient
       getAadParamsFromClient(client, uri)
   }
 

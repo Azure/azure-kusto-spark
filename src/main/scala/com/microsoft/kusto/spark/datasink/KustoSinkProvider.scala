@@ -8,15 +8,14 @@ import org.apache.spark.sql.execution.streaming.Sink
 import org.apache.spark.sql.sources.{DataSourceRegister, StreamSinkProvider}
 import org.apache.spark.sql.streaming.OutputMode
 
-class KustoSinkProvider extends StreamSinkProvider with DataSourceRegister{
+class KustoSinkProvider extends StreamSinkProvider with DataSourceRegister {
 
   override def shortName(): String = "KustoSink"
 
-  override def createSink(
-                           sqlContext: SQLContext,
-                           parameters: Map[String, String],
-                           partitionColumns: Seq[String],
-                           outputMode: OutputMode): Sink = {
+  override def createSink(sqlContext: SQLContext,
+                          parameters: Map[String, String],
+                          partitionColumns: Seq[String],
+                          outputMode: OutputMode): Sink = {
     val (writeOptions, authentication, tableCoordinates) = KustoDataSourceUtils.parseSinkParameters(parameters)
 
     new KustoSink(

@@ -23,7 +23,6 @@ object SparkExtension {
         .option(KustoOptions.KUSTO_CLUSTER, kustoCluster)
         .option(KustoOptions.KUSTO_DATABASE, database)
         .option(KustoOptions.KUSTO_QUERY, query)
-        .option(KustoOptions.KUSTO_NUM_PARTITIONS, "1")
         .options(properties)
         .load()
     }
@@ -37,8 +36,6 @@ object SparkExtension {
               numPartitions: Int,
               connectionProperties: Properties): DataFrame = {
       dataframeReader.option(KustoOptions.KUSTO_PARTITION_COLUMN, columnName)
-        .option(KustoOptions.KUSTO_LOWER_BOUND, lowerBound)
-        .option(KustoOptions.KUSTO_UPPER_BOUND, upperBound)
         .option(KustoOptions.KUSTO_NUM_PARTITIONS, numPartitions.toString)
 
       val hashMap = new scala.collection.mutable.HashMap[String, String]

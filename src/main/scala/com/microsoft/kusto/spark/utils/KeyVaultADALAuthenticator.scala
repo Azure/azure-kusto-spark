@@ -23,7 +23,7 @@ class KeyVaultADALAuthenticator(clientId: String, clientKey: String) {
     new KeyVaultCredentials() { //Callback that supplies the token type and access token on request.
       override def doAuthenticate(authorization: String, resource: String, scope: String): String = {
         try {
-          var authResult = getAccessToken(authorization, resource)
+          val authResult = getAccessToken(authorization, resource)
           authResult.getAccessToken
         } catch {
           case e: Exception =>

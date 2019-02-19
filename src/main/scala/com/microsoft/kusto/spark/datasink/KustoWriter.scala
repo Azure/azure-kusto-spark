@@ -39,8 +39,7 @@ object KustoWriter{
   val inProgressState = "InProgress"
   val stateCol = "State"
   val statusCol = "Status"
-  val timeOut: FiniteDuration = 30 minutes
-  val delayPeriodBetweenCalls: Int = 1000
+  val delayPeriodBetweenCalls: Int = KDSU.DefaultPeriodicSamplePeriod.toMillis.toInt
   val GZIP_BUFFER_SIZE: Int = 16 * 1024
   private[kusto] def write(batchId: Option[Long],
                            data: DataFrame,
@@ -200,12 +199,13 @@ object KustoWriter{
 
       // We force blocking here, since the driver can only complete the ingestion process
       // once all partitions are ingested into the temporary table
-      val ingestionResult = Await.result(ackIngestion, timeOut)
+      val ingestionResult = Await.result(ackIngestion, KDSU.DefaultTimeoutLongRunning)
+      val timeoutMillis = KDSU.DefaultTimeoutLongRunning.toMillis
 
       // Proceed only on success. Will throw on failure for the driver to handle
-      runSequentially[IngestionStatus](
+      KDSU.runSequentially[IngestionStatus](
         func = () => ingestionResult.GetIngestionStatusCollection().get(0),
-        0, delayPeriodBetweenCalls, (timeOut.toMillis / delayPeriodBetweenCalls + 5).toInt,
+        0, delayPeriodBetweenCalls, (timeoutMillis / delayPeriodBetweenCalls + 5).toInt,
         res => res.status == OperationStatus.Pending,
         res => res.status match {
           case OperationStatus.Pending =>
@@ -215,50 +215,8 @@ object KustoWriter{
           case otherStatus =>
             throw new RuntimeException(s"Ingestion to Kusto failed with status '$otherStatus'." +
               s" Cluster: '$cluster', database: '$database', table: '$table'$batchIdIfExists, partition: '$partitionId'. Ingestion info: '${readIngestionResult(res)}'")
-        }).await(timeOut.toMillis, TimeUnit.MILLISECONDS)
+        }).await(timeoutMillis, TimeUnit.MILLISECONDS)
     }
-
-  /**
-    * A function to run sequentially async work on TimerTask using a Timer.
-    * The function passed is scheduled sequentially by the timer, until last calculated returned value by func does not
-    * satisfy the condition of doWhile or a given number of times has passed.
-    * After one of these conditions was held true the finalWork function is called over the last returned value by func.
-    * Returns a CountDownLatch object use to countdown times and await on it synchronously if needed
-    * @param func - the function to run
-    * @param delay - delay before first job
-    * @param runEvery - delay between jobs
-    * @param numberOfTimesToRun - stop jobs after numberOfTimesToRun.
-    *                            set negative value to run infinitely
-    * @param doWhile - stop jobs if condition holds for the func.apply output
-    * @param finalWork - do final work with the last func.apply output
-    */
-  def runSequentially[A](func: () => A, delay: Int, runEvery: Int, numberOfTimesToRun: Int, doWhile: A => Boolean, finalWork: A => Unit): CountDownLatch = {
-    val latch = new CountDownLatch(if (numberOfTimesToRun > 0) numberOfTimesToRun else 1)
-    val t = new Timer()
-    val task = new TimerTask() {
-      def run(): Unit = {
-        val res = func.apply()
-        if(numberOfTimesToRun > 0){
-          latch.countDown()
-        }
-
-        if (latch.getCount == 0)
-        {
-          throw new TimeoutException(s"runSequentially: Reached maximal allowed repetitions ($numberOfTimesToRun), aborting")
-        }
-
-        if (!doWhile.apply(res)){
-          t.cancel()
-          finalWork.apply(res)
-          while (latch.getCount > 0){
-            latch.countDown()
-          }
-        }
-      }
-    }
-    t.schedule(task, delay, runEvery)
-    latch
-  }
 
   def All(list: util.ArrayList[Boolean]) : Boolean = {
     val it = list.iterator

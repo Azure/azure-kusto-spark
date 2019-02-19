@@ -3,9 +3,9 @@ package com.microsoft.kusto.spark.utils
 object KustoQueryUtils {
 
   def normalizeQuery(query: String): String = {
-    val trimedQuery = query.trim
+    val trimmedQuery = query.trim
     // We don't use concatenation of query statements, so no need in the semicolon separator
-    if (trimedQuery.endsWith(";")) trimedQuery.dropRight(1) else trimedQuery
+    if (trimmedQuery.endsWith(";")) trimmedQuery.dropRight(1) else trimmedQuery
   }
 
   def limitQuery(query: String, limit: Int): String = {
