@@ -262,7 +262,7 @@ object KustoWriter{
         engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://${tableCoordinates.cluster}.kusto.windows.net", app.ID, app.password, app.authority)
       case keyVaultParams: KeyVaultAuthentication =>
         val app = keyVaultParams match {
-          case app: KeyVaultAppAuthentiaction => KeyVaultUtils.getAadParamsFromKeyVaultAppAuth(app.keyVaultAppID, app.keyVaultAppKey, app.uri)
+          case app: KeyVaultAppAuthentication => KeyVaultUtils.getAadParamsFromKeyVaultAppAuth(app.keyVaultAppID, app.keyVaultAppKey, app.uri)
           case cert: KeyVaultCertificateAuthentication => KeyVaultUtils.getAadParamsFromKeyVaultCertAuth
         }
         engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://${tableCoordinates.cluster}.kusto.windows.net", app.ID, app.password, app.authority)
@@ -279,7 +279,7 @@ object KustoWriter{
         ingestKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://ingest-${tableCoordinates.cluster}.kusto.windows.net", app.ID, app.password, app.authority)
       case keyVaultParams: KeyVaultAuthentication =>
         val app = keyVaultParams match {
-          case app: KeyVaultAppAuthentiaction => KeyVaultUtils.getAadParamsFromKeyVaultAppAuth(app.keyVaultAppID, app.keyVaultAppKey, app.uri)
+          case app: KeyVaultAppAuthentication => KeyVaultUtils.getAadParamsFromKeyVaultAppAuth(app.keyVaultAppID, app.keyVaultAppKey, app.uri)
           case cert: KeyVaultCertificateAuthentication => KeyVaultUtils.getAadParamsFromKeyVaultCertAuth
         }
         ingestKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://ingest-${tableCoordinates.cluster}.kusto.windows.net", app.ID, app.password, app.authority)
