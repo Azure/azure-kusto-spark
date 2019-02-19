@@ -13,8 +13,6 @@ import scala.concurrent.duration._
 class DefaultSource extends CreatableRelationProvider
   with RelationProvider with DataSourceRegister {
 
-  val timeout: FiniteDuration = 60 minutes
-
   override def createRelation(sqlContext: SQLContext, mode: SaveMode, parameters: Map[String, String], data: DataFrame): BaseRelation = {
     val (isAsync, tableCreation, kustoAuthentication) = KustoDataSourceUtils.validateSinkParameters(parameters)
     val tableCoordinates = KustoTableCoordinates(parameters.getOrElse(KustoOptions.KUSTO_CLUSTER, ""), parameters.getOrElse(KustoOptions.KUSTO_DATABASE, ""), parameters.getOrElse(KustoOptions.KUSTO_TABLE, ""))

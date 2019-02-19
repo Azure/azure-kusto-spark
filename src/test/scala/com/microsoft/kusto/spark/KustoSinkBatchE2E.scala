@@ -62,7 +62,7 @@ class KustoSinkBatchE2E extends FlatSpec with BeforeAndAfterAll{
   val authority: String = System.getProperty(KustoOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com")
   val cluster: String = System.getProperty(KustoOptions.KUSTO_CLUSTER)
   val database: String = System.getProperty(KustoOptions.KUSTO_DATABASE)
-  val expectedNumberOfRows: Int =  1* 1000 * 1000
+  val expectedNumberOfRows: Int =  1 * 1000
   val rows: immutable.IndexedSeq[(String, Int)] = (1 to expectedNumberOfRows).map(v => (newRow(), v))
 
   private val loggingLevel: Option[String] = Option(System.getProperty("logLevel"))
@@ -98,7 +98,8 @@ class KustoSinkBatchE2E extends FlatSpec with BeforeAndAfterAll{
 
     val conf: Map[String, String] = Map(
       KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
-      KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey
+      KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+      KustoOptions.KUSTO_READ_MODE->"lean"
     )
 
     val dfResult: DataFrame = spark.read.kusto(cluster, database, table, conf)
@@ -145,7 +146,7 @@ class KustoSinkBatchE2E extends FlatSpec with BeforeAndAfterAll{
     KDSU.logInfo(myName, s"KustoBatchSinkDataTypesTest: Ingestion results validated for table '$table'")
   }
 
-    "KustoBatchSinkSync" should "ingest structured data to a Kusto cluster" taggedAs KustoE2E in {
+  "KustoBatchSinkSync" should "also ingest structured data to a Kusto cluster" taggedAs KustoE2E in {
     import spark.implicits._
     val df = rows.toDF("name", "value")
     val prefix = "KustoBatchSinkE2E_Ingest"
@@ -170,7 +171,7 @@ class KustoSinkBatchE2E extends FlatSpec with BeforeAndAfterAll{
     KustoTestUtils.validateResultsAndCleanup(kustoAdminClient, table, database, expectedNumberOfRows, timeoutMs, tableCleanupPrefix = prefix)
   }
 
-  "KustoBatchSinkAsync" should "ingest structured data to a Kusto cluster" taggedAs KustoE2E in {
+  "KustoBatchSinkAsync" should "ingest structured data to a Kusto cluster in async mode" taggedAs KustoE2E in {
     import spark.implicits._
     val df = rows.toDF("name", "value")
     val prefix = "KustoBatchSinkE2EIngestAsync"
