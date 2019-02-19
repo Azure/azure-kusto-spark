@@ -57,7 +57,7 @@ class KustoResponseDeserializer(val kustoResult: Results) {
     val columnInOrder = this.getOrderedColumnName
     val value: util.ArrayList[Row] = new util.ArrayList[Row](kustoResult.getValues.size)
 
-    // Calculate the transfomer function for each column to use later by order
+    // Calculate the transformer function for each column to use later by order
     val valueTransformers: mutable.Seq[String => Any] = columnInOrder.map(col => getValueTransformer(kustoResult.getTypeByColumnName(col)))
     kustoResult.getValues.toArray().foreach(row => {
       val genericRow = row.asInstanceOf[util.ArrayList[String]].toArray().zipWithIndex.map(
