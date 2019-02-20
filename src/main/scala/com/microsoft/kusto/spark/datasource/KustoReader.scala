@@ -7,9 +7,7 @@ import com.microsoft.kusto.spark.utils.{CslCommandsGenerator, KustoClient, Kusto
 import org.apache.spark.Partition
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.{DataFrame, Row, SparkSession}
-
-import scala.concurrent.duration._
+import org.apache.spark.sql.{Row, SparkSession}
 
 private[kusto] case class KustoPartition(predicate: Option[String], idx: Int) extends Partition {
   override def index: Int = idx
@@ -24,8 +22,7 @@ private[kusto] case class KustoStorageParameters(account: String,
 
 private[kusto] case class KustoReadRequest(sparkSession: SparkSession,
                                            schema: StructType,
-                                           cluster: String,
-                                           database: String,
+                                           kustoCoordinates: KustoCoordinates,
                                            query: String,
                                            appId: String,
                                            appKey: String,
@@ -35,9 +32,10 @@ private[kusto] object KustoReader {
   private val myName = this.getClass.getSimpleName
 
   private[kusto] def leanBuildScan(request: KustoReadRequest): RDD[Row] = {
-    val kustoClient = KustoClient.getAdmin(request.cluster, request.appId, request.appKey, request.authorityId)
+    val asd = KustoCoordinates(request.kustoCoordinates.cluster , request.kustoCoordinates.database)
+    val kustoClient = KustoClient.getAdmin(AadApplicationAuthentication(request.appId, request.appKey, request.authorityId), request.kustoCoordinates.cluster)
 
-    val kustoResult = kustoClient.execute(request.database, request.query)
+    val kustoResult = kustoClient.execute(request.kustoCoordinates.database, request.query)
     val serializer = KustoResponseDeserializer(kustoResult)
     request.sparkSession.createDataFrame(serializer.toRows, serializer.getSchema).rdd
   }
@@ -89,7 +87,7 @@ private[kusto] object KustoReader {
 
 private[kusto] class KustoReader(request: KustoReadRequest, storage: KustoStorageParameters) {
   private val myName = this.getClass.getSimpleName
-  val client: Client = KustoClient.getAdmin(request.cluster, request.appId, request.appKey, request.authorityId)
+  val client: Client = KustoClient.getAdmin(AadApplicationAuthentication(request.appId, request.appKey, request.authorityId), request.kustoCoordinates.cluster)
 
   // Export a single partition from Kusto to transient Blob storage.
   // Returns the directory path for these blobs
@@ -111,7 +109,7 @@ private[kusto] class KustoReader(request: KustoReadRequest, storage: KustoStorag
       isAsync = true
     )
 
-    val commandResult = client.execute(request.database, exportCommand)
-    KDSU.verifyAsyncCommandCompletion(client, request.database, commandResult)
+    val commandResult = client.execute(request.kustoCoordinates.database, exportCommand)
+    KDSU.verifyAsyncCommandCompletion(client, request.kustoCoordinates.database, commandResult)
   }
 }

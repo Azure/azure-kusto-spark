@@ -10,8 +10,7 @@ import org.apache.spark.sql.sources.{BaseRelation, TableScan}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{Row, SQLContext, SparkSession}
 
-case class KustoRelation(cluster: String,
-                         database: String,
+case class KustoRelation(kustoCoordinates: KustoCoordinates,
                          appId: String,
                          appKey: String,
                          authorityId: String,
@@ -41,11 +40,11 @@ case class KustoRelation(cluster: String,
   override def buildScan(): RDD[Row] = {
     if (isLeanMode) {
       KustoReader.leanBuildScan(
-        KustoReadRequest(sparkSession, schema, cluster, database, query, appId, appKey, authorityId)
+        KustoReadRequest(sparkSession, schema, kustoCoordinates, query, appId, appKey, authorityId)
       )
     } else {
       KustoReader.scaleBuildScan(
-        KustoReadRequest(sparkSession, schema, cluster, database, query, appId, appKey, authorityId),
+        KustoReadRequest(sparkSession, schema, kustoCoordinates, query, appId, appKey, authorityId),
         getTransientStorageParameters(storageAccount, storageContainer, storageAccountSecrete, isStorageSecreteKeyNotSas),
         KustoPartitionInfo(numPartitions, getPartitioningColumn(partitioningColumn, isLeanMode), getPartitioningMode(partitioningMode))
       )
@@ -81,8 +80,8 @@ case class KustoRelation(cluster: String,
       throw new RuntimeException("Spark connector cannot run Kusto commands. Please provide a valid query")
     }
 
-    val kustoConnectionString = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://$cluster.kusto.windows.net", appId, appKey, authorityId)
-    KustoResponseDeserializer(ClientFactory.createClient(kustoConnectionString).execute(database, getSchemaQuery)).getSchema
+    val kustoConnectionString = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://${kustoCoordinates.cluster}.kusto.windows.net", appId, appKey, authorityId)
+    KustoResponseDeserializer(ClientFactory.createClient(kustoConnectionString).execute(kustoCoordinates.database, getSchemaQuery)).getSchema
   }
 
   private def getPartitioningColumn(partitioningColumn: Option[String], isLean: Boolean): String = {

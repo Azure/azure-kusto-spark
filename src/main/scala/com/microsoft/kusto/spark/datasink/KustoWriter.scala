@@ -4,31 +4,30 @@ import java.io._
 import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.util
-import java.util.concurrent.{CountDownLatch, TimeUnit, TimeoutException}
+import java.util.concurrent.TimeUnit
 import java.util.zip.GZIPOutputStream
-import java.util.{Timer, TimerTask, UUID}
+import java.util.UUID
 
-import com.microsoft.azure.kusto.data.{Client, ClientFactory, ConnectionStringBuilder}
+import com.microsoft.azure.kusto.data.Client
 import com.microsoft.azure.kusto.ingest.IngestionProperties.DATA_FORMAT
 import com.microsoft.azure.kusto.ingest.result.{IngestionResult, IngestionStatus, OperationStatus}
 import com.microsoft.azure.kusto.ingest.source.BlobSourceInfo
-import com.microsoft.azure.kusto.ingest.{IngestClientFactory, IngestionProperties}
+import com.microsoft.azure.kusto.ingest.IngestionProperties
 import com.microsoft.azure.storage.StorageCredentialsSharedAccessSignature
 import com.microsoft.azure.storage.blob.{BlobOutputStream, CloudBlobContainer}
 import com.microsoft.kusto.spark.datasource._
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
-import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.{KustoClient, KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import com.univocity.parsers.csv.{CsvWriter, CsvWriterSettings}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.{DataFrame, SaveMode}
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.{FutureAction, TaskContext}
 import shaded.parquet.org.codehaus.jackson.map.ObjectMapper
 
 import scala.collection.Iterator
 import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 
 object KustoWriter{
@@ -41,26 +40,16 @@ object KustoWriter{
   val statusCol = "Status"
   val delayPeriodBetweenCalls: Int = KDSU.DefaultPeriodicSamplePeriod.toMillis.toInt
   val GZIP_BUFFER_SIZE: Int = 16 * 1024
-  private[kusto] def write(
-                            batchId: Option[Long],
-                            data: DataFrame,
-                            tableCoordinates: KustoTableCoordinates,
-                            appAuthentication: AadApplicationAuthentication,
-                            kustoSparkWriteOptions:KustoSparkWriteOptions): Unit = {
-
-    if(kustoSparkWriteOptions.mode != SaveMode.Append)
-    {
-      KDSU.logWarn(myName, s"Kusto data source supports only append mode. Ignoring '${kustoSparkWriteOptions.mode}' directive")
-    }
+  private[kusto] def write(batchId: Option[Long],
+                           data: DataFrame,
+                           tableCoordinates: KustoCoordinates,
+                           authentication: KustoAuthentication,
+                           writeOptions: WriteOptions): Unit = {
     val schema = data.schema
     var batchIdIfExists = { if (batchId.isEmpty || batchId == Option(0)) { "" } else { s"${batchId.get}"} }
 
-    val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://${tableCoordinates.cluster}.kusto.windows.net", appAuthentication.ID, appAuthentication.password, appAuthentication.authority)
-    engineKcsb.setClientVersionForTracing(KDSU.ClientName)
-    val kustoAdminClient = ClientFactory.createClient(engineKcsb)
+    val kustoAdminClient = KustoClient.getAdmin(authentication, tableCoordinates.cluster)
     val appName = data.sparkSession.sparkContext.appName
-    val ingestKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://ingest-${tableCoordinates.cluster}.kusto.windows.net", appAuthentication.ID, appAuthentication.password, appAuthentication.authority)
-    ingestKcsb.setClientVersionForTracing(KDSU.ClientName)
 
     try {
       // Try delete temporary tablesToCleanup created and not used
@@ -85,24 +74,21 @@ object KustoWriter{
 
     // KustoWriter will create a temporary table ingesting the data to it.
     // Only if all executors succeeded the table will be appended to the original destination table.
-    KDSU.createTmpTableWithSameSchema(kustoAdminClient, tableCoordinates, tmpTableName, kustoSparkWriteOptions.tableCreateOptions, schema)
+    KDSU.createTmpTableWithSameSchema(kustoAdminClient, tableCoordinates, tmpTableName, writeOptions.tableCreateOptions, schema)
 
     KDSU.logInfo(myName, s"Successfully created temporary table $tmpTableName, will be deleted after completing the operation")
 
-    val storageUri = TempStorageCache.getNewTempBlobReference(ingestKcsb, tableCoordinates.cluster)
+    val storageUri = TempStorageCache.getNewTempBlobReference(authentication, tableCoordinates.cluster)
 
     def ingestRowsIntoKusto(schema: StructType, rows: Iterator[InternalRow]): IngestionResult = {
-      val ingestKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://ingest-${tableCoordinates.cluster}.kusto.windows.net", appAuthentication.ID, appAuthentication.password, appAuthentication.authority)
-      ingestKcsb.setClientVersionForTracing(KDSU.ClientName)
-
-      val ingestClient = IngestClientFactory.createClient(ingestKcsb)
+      val ingestClient = KustoClient.getIngest(authentication, tableCoordinates.cluster)
       val ingestionProperties = new IngestionProperties(tableCoordinates.database, tmpTableName)
 
       val blobName = s"${tableCoordinates.database}_${tmpTableName}_${UUID.randomUUID.toString}_SparkStreamUpload.gz"
       val container = new CloudBlobContainer(new URI(storageUri))
       val blob = container.getBlockBlobReference(blobName)
 
-      serializeRows(rows, schema, blob.openOutputStream, kustoSparkWriteOptions.timeZone)
+      serializeRows(rows, schema, blob.openOutputStream, writeOptions.timeZone)
 
       val signature = blob.getServiceClient.getCredentials.asInstanceOf[StorageCredentialsSharedAccessSignature]
       val blobPath = blob.getStorageUri.getPrimaryUri.toString + "?" + signature.getToken
@@ -116,7 +102,7 @@ object KustoWriter{
 
     val rdd = data.queryExecution.toRdd
 
-    if (kustoSparkWriteOptions.isAsync) {
+    if (writeOptions.isAsync) {
       val asyncWork: FutureAction[Unit] = rdd.foreachPartitionAsync {
         rows => {
           if(rows.isEmpty)

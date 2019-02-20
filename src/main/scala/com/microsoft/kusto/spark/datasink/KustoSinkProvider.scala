@@ -16,17 +16,13 @@ class KustoSinkProvider extends StreamSinkProvider with DataSourceRegister {
                           parameters: Map[String, String],
                           partitionColumns: Seq[String],
                           outputMode: OutputMode): Sink = {
-    val (isAsync, tableCreation, kustoAuthentication) = KustoDataSourceUtils.validateSinkParameters(parameters)
-    val tableCoordinates = KustoTableCoordinates(parameters.getOrElse(KustoOptions.KUSTO_CLUSTER, ""), parameters.getOrElse(KustoOptions.KUSTO_DATABASE, ""), parameters.getOrElse(KustoOptions.KUSTO_TABLE, ""))
-    val writeOptions = KustoSparkWriteOptions(tableCreation, isAsync, parameters.getOrElse(KustoOptions.KUSTO_WRITE_RESULT_LIMIT, "1"), parameters.getOrElse(DateTimeUtils.TIMEZONE_OPTION, "UTC"))
+    val (writeOptions, authentication, tableCoordinates) = KustoDataSourceUtils.parseSinkParameters(parameters)
 
     new KustoSink(
       sqlContext,
       tableCoordinates,
-      KustoDataSourceUtils.getAadParamsFromKeyVaultIfNeeded(kustoAuthentication),
+      authentication,
       writeOptions
     )
   }
 }
-
-

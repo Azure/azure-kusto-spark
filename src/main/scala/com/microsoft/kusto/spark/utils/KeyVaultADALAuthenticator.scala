@@ -19,11 +19,6 @@ class KeyVaultADALAuthenticator(clientId: String, clientKey: String) {
     new KeyVaultClient(createCredentials)
   }
 
-  /**
-    * Creates a new KeyVaultCredential based on the access token obtained.
-    *
-    * @return
-    */
   private def createCredentials: ServiceClientCredentials = {
     new KeyVaultCredentials() { //Callback that supplies the token type and access token on request.
       override def doAuthenticate(authorization: String, resource: String, scope: String): String = {
@@ -39,9 +34,6 @@ class KeyVaultADALAuthenticator(clientId: String, clientKey: String) {
     }
   }
 
-  /**
-    * Private helper method that gets the access token for the authorization and resource depending on which variables are supplied in the environment.
-    */
   @throws[InterruptedException]
   @throws[ExecutionException]
   @throws[MalformedURLException]

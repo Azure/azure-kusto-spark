@@ -1,7 +1,6 @@
 package com.microsoft.kusto.spark.datasource
 
 import java.util.Locale
-import org.apache.spark.sql.SaveMode
 
 object KustoOptions {
   private val kustoOptionNames = collection.mutable.Set[String]()
@@ -45,6 +44,7 @@ object KustoOptions {
   // Default: 'FailIfNotExist'
   val KUSTO_TABLE_CREATE_OPTIONS: String = newOption("tableCreateOptions")
   val KUSTO_TRUNCATE: String = newOption("truncate")
+  val KUSTO_USER_TOKEN = newOption("userToken")
   // When writing to Kusto, allows the driver to complete operation asynchronously.  See KustoSink.md for
   // details and limitations. Default: 'false'
   val KUSTO_WRITE_ENABLE_ASYNC: String = newOption("writeEnableAsync")
@@ -90,9 +90,10 @@ object KustoOptions {
 abstract class KustoAuthentication
 abstract class KeyVaultAuthentication(uri: String) extends KustoAuthentication
 
-case class KustoTableCoordinates(cluster: String, database: String, table:String)
+case class KustoCoordinates(cluster: String, database: String, table:String = "")
 case class AadApplicationAuthentication(ID: String, password: String, authority: String) extends KustoAuthentication
-case class KeyVaultAppAuthentication(uri: String, keyVaultAppID:String, keyVaultAppKey: String) extends KeyVaultAuthentication(uri)
+case class KeyVaultAppAuthentication(uri: String, keyVaultAppID: String, keyVaultAppKey: String) extends KeyVaultAuthentication(uri)
 case class KeyVaultCertificateAuthentication(uri: String, pemFilePath: String, pemFilePassword: String) extends KeyVaultAuthentication(uri)
-case class KustoSparkWriteOptions(tableCreateOptions: KustoOptions.SinkTableCreationMode.SinkTableCreationMode = KustoOptions.SinkTableCreationMode.FailIfNotExist,
-                                  isAsync: Boolean = false, writeResultLimit: String, timeZone: String = "UTC", mode: SaveMode = SaveMode.Append)
+case class WriteOptions(tableCreateOptions: KustoOptions.SinkTableCreationMode.SinkTableCreationMode = KustoOptions.SinkTableCreationMode.FailIfNotExist,
+                        isAsync: Boolean = false, writeResultLimit: String, timeZone: String = "UTC")
+case class KustoUserTokenAuthentication(token: String) extends KustoAuthentication

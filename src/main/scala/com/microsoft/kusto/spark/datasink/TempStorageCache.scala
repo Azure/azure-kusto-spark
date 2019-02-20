@@ -2,8 +2,10 @@ package com.microsoft.kusto.spark.datasink
 
 import java.util
 
-import com.microsoft.azure.kusto.data.{Client, ClientFactory, ConnectionStringBuilder}
+import com.microsoft.azure.kusto.data.Client
+import com.microsoft.kusto.spark.datasource.{KustoAuthentication, KustoCoordinates}
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
+import com.microsoft.kusto.spark.utils.KustoClient
 import org.joda.time.{DateTime, DateTimeZone, Period}
 
 object TempStorageCache{
@@ -16,15 +18,15 @@ object TempStorageCache{
 
   val storageExpiryMinutes = 120
 
-  def getNewTempBlobReference(ingestKcsb: ConnectionStringBuilder, clusterName: String): String = {
-    getNextUri(ingestKcsb, clusterName)
+  def getNewTempBlobReference(authentication: KustoAuthentication, clusterAlias: String): String = {
+    getNextUri(authentication, clusterAlias)
   }
 
-  private def getNextUri(ingestKcsb: ConnectionStringBuilder, clusterName: String): String = {
+  private def getNextUri(authentication: KustoAuthentication, clusterAlias: String): String = {
     // Refresh if 120 minutes have passed since last refresh for this cluster as SAS should be valid for at least 120 minutes
-    if(storages.size() == 0 || cluster != clusterName || new Period(new DateTime(DateTimeZone.UTC), lastRefresh).getMinutes > storageExpiryMinutes){
-      dmClient = ClientFactory.createClient(ingestKcsb)
-      cluster = clusterName
+    if(storages.size() == 0 || cluster != clusterAlias || new Period(new DateTime(DateTimeZone.UTC), lastRefresh).getMinutes > storageExpiryMinutes){
+      dmClient = KustoClient.getAdmin(authentication, clusterAlias, isAdminCluster = true)
+      cluster = clusterAlias
 
       lastRefresh = new DateTime(DateTimeZone.UTC)
 
