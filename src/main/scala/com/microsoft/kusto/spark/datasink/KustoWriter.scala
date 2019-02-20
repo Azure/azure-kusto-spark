@@ -4,20 +4,20 @@ import java.io._
 import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.util
-import java.util.concurrent.{CountDownLatch, TimeUnit, TimeoutException}
+import java.util.concurrent.TimeUnit
 import java.util.zip.GZIPOutputStream
-import java.util.{Timer, TimerTask, UUID}
+import java.util.UUID
 
-import com.microsoft.azure.kusto.data.{Client, ClientFactory, ConnectionStringBuilder}
+import com.microsoft.azure.kusto.data.Client
 import com.microsoft.azure.kusto.ingest.IngestionProperties.DATA_FORMAT
 import com.microsoft.azure.kusto.ingest.result.{IngestionResult, IngestionStatus, OperationStatus}
 import com.microsoft.azure.kusto.ingest.source.BlobSourceInfo
-import com.microsoft.azure.kusto.ingest.{IngestClientFactory, IngestionProperties}
+import com.microsoft.azure.kusto.ingest.IngestionProperties
 import com.microsoft.azure.storage.StorageCredentialsSharedAccessSignature
 import com.microsoft.azure.storage.blob.{BlobOutputStream, CloudBlobContainer}
 import com.microsoft.kusto.spark.datasource._
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
-import com.microsoft.kusto.spark.utils.{KeyVaultUtils, KustoQueryUtils, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.{KustoClient, KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import com.univocity.parsers.csv.{CsvWriter, CsvWriterSettings}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types.StructType
@@ -28,7 +28,6 @@ import shaded.parquet.org.codehaus.jackson.map.ObjectMapper
 import scala.collection.Iterator
 import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 
 object KustoWriter{
@@ -43,17 +42,14 @@ object KustoWriter{
   val GZIP_BUFFER_SIZE: Int = 16 * 1024
   private[kusto] def write(batchId: Option[Long],
                            data: DataFrame,
-                           tableCoordinates: KustoTableCoordinates,
-                           kustoAuthentication: KustoAuthentication,
+                           tableCoordinates: KustoCoordinates,
+                           authentication: KustoAuthentication,
                            writeOptions: WriteOptions): Unit = {
     val schema = data.schema
     var batchIdIfExists = { if (batchId.isEmpty || batchId == Option(0)) { "" } else { s"${batchId.get}"} }
-    val (engineKcsb, ingestKcsb) = (getEngineKcsb(kustoAuthentication, tableCoordinates),getIngestKcsb(kustoAuthentication, tableCoordinates))
 
-    engineKcsb.setClientVersionForTracing(KDSU.ClientName)
-    val kustoAdminClient = ClientFactory.createClient(engineKcsb)
+    val kustoAdminClient = KustoClient.getAdmin(authentication, tableCoordinates.cluster)
     val appName = data.sparkSession.sparkContext.appName
-    ingestKcsb.setClientVersionForTracing(KDSU.ClientName)
 
     try {
       // Try delete temporary tablesToCleanup created and not used
@@ -82,13 +78,10 @@ object KustoWriter{
 
     KDSU.logInfo(myName, s"Successfully created temporary table $tmpTableName, will be deleted after completing the operation")
 
-    val storageUri = TempStorageCache.getNewTempBlobReference(ingestKcsb, tableCoordinates.cluster)
+    val storageUri = TempStorageCache.getNewTempBlobReference(authentication, tableCoordinates.cluster)
 
     def ingestRowsIntoKusto(schema: StructType, rows: Iterator[InternalRow]): IngestionResult = {
-      val ingestKcsb = getIngestKcsb(kustoAuthentication, tableCoordinates)
-      ingestKcsb.setClientVersionForTracing(KDSU.ClientName)
-
-      val ingestClient = IngestClientFactory.createClient(ingestKcsb)
+      val ingestClient = KustoClient.getIngest(authentication, tableCoordinates.cluster)
       val ingestionProperties = new IngestionProperties(tableCoordinates.database, tmpTableName)
 
       val blobName = s"${tableCoordinates.database}_${tmpTableName}_${UUID.randomUUID.toString}_SparkStreamUpload.gz"
@@ -253,39 +246,5 @@ object KustoWriter{
     val resultAsJson = objectMapper.writerWithDefaultPrettyPrinter.writeValueAsString (statusRecord)
 
     resultAsJson
-  }
-
-  private def getEngineKcsb(authentication: KustoAuthentication, tableCoordinates: KustoTableCoordinates)={
-    var engineKcsb: ConnectionStringBuilder = null
-    authentication match {
-      case app: AadApplicationAuthentication =>
-        engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://${tableCoordinates.cluster}.kusto.windows.net", app.ID, app.password, app.authority)
-      case keyVaultParams: KeyVaultAuthentication =>
-        val app = keyVaultParams match {
-          case app: KeyVaultAppAuthentication => KeyVaultUtils.getAadParamsFromKeyVaultAppAuth(app.keyVaultAppID, app.keyVaultAppKey, app.uri)
-          case cert: KeyVaultCertificateAuthentication => KeyVaultUtils.getAadParamsFromKeyVaultCertAuth
-        }
-        engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://${tableCoordinates.cluster}.kusto.windows.net", app.ID, app.password, app.authority)
-      case userTokne: KustoUserTokenAuthentication =>
-        engineKcsb = ConnectionStringBuilder.createWithAadUserTokenAuthentication(s"https://${tableCoordinates.cluster}.kusto.windows.net", userTokne.token)
-    }
-    engineKcsb
-  }
-
-  private def getIngestKcsb(authentication: KustoAuthentication, tableCoordinates: KustoTableCoordinates) ={
-    var ingestKcsb: ConnectionStringBuilder = null
-    authentication match {
-      case app: AadApplicationAuthentication =>
-        ingestKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://ingest-${tableCoordinates.cluster}.kusto.windows.net", app.ID, app.password, app.authority)
-      case keyVaultParams: KeyVaultAuthentication =>
-        val app = keyVaultParams match {
-          case app: KeyVaultAppAuthentication => KeyVaultUtils.getAadParamsFromKeyVaultAppAuth(app.keyVaultAppID, app.keyVaultAppKey, app.uri)
-          case cert: KeyVaultCertificateAuthentication => KeyVaultUtils.getAadParamsFromKeyVaultCertAuth
-        }
-        ingestKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://ingest-${tableCoordinates.cluster}.kusto.windows.net", app.ID, app.password, app.authority)
-      case userTokne: KustoUserTokenAuthentication =>
-        ingestKcsb = ConnectionStringBuilder.createWithAadUserTokenAuthentication(s"https://ingest-${tableCoordinates.cluster}.kusto.windows.net", userTokne.token)
-    }
-    ingestKcsb
   }
 }

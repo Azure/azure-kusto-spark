@@ -8,7 +8,7 @@ import org.apache.spark.sql.execution.streaming.Sink
 import org.apache.spark.sql.{DataFrame, SQLContext}
 
 class KustoSink(sqlContext: SQLContext,
-                tableCoordinates: KustoTableCoordinates,
+                tableCoordinates: KustoCoordinates,
                 authentication: KustoAuthentication,
                 writeOptions: WriteOptions) extends Sink with Serializable {
 

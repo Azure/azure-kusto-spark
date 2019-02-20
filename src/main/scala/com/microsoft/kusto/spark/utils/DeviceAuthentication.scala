@@ -2,7 +2,7 @@ package com.microsoft.kusto.spark.utils
 
 import java.awt.Desktop
 import java.net.URI
-import java.util.concurrent.{ExecutionException, ExecutorService, Executors, Future}
+import java.util.concurrent.{ExecutionException, ExecutorService, Executors}
 
 import com.microsoft.aad.adal4j.{AuthenticationContext, AuthenticationResult, DeviceCode}
 import javax.naming.ServiceUnavailableException
@@ -10,6 +10,8 @@ import org.apache.log4j.{Level, Logger}
 import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
 import java.awt.datatransfer.DataFlavor
+
+import scala.util.Try
 
 
 object DeviceAuthentication {
@@ -22,21 +24,24 @@ object DeviceAuthentication {
     Executors.newSingleThreadExecutor
     val context: AuthenticationContext =  new AuthenticationContext(aadAuthorityUri, true, service)
 
-    val future: Future[DeviceCode] = context.acquireDeviceCode(CLIENT_ID, clusterUrl, null)
-    val deviceCode: DeviceCode = future.get
+    val deviceCode =  context.acquireDeviceCode(CLIENT_ID, clusterUrl, null).get
     val clipboard = Toolkit.getDefaultToolkit.getSystemClipboard
     val dataFlavor = DataFlavor.stringFlavor
     var text: String = null
-    if (clipboard.isDataFlavorAvailable(dataFlavor)) {
-      text = clipboard.getData(dataFlavor).asInstanceOf[String]
+    Try {
+      if (clipboard.isDataFlavorAvailable(dataFlavor)) {
+        text = clipboard.getData(dataFlavor).asInstanceOf[String]
+      }
+      clipboard.setContents(new StringSelection(deviceCode.getUserCode), null)
     }
-
-    clipboard.setContents(new StringSelection(deviceCode.getUserCode), null)
     println(deviceCode.getMessage + " device code is already copied to clipboard - just press ctrl+v in the web")
     if (Desktop.isDesktopSupported) Desktop.getDesktop.browse(new URI(deviceCode.getVerificationUrl))
     var result = waitAndAcquireTokenByDeviceCode(deviceCode, context)
-    clipboard.setContents(new StringSelection(text), null)
-
+    if(text != null) {
+      Try {
+        clipboard.setContents(new StringSelection(text), null)
+      }
+    }
     if (result == null) throw new ServiceUnavailableException("authentication result was null")
     result.getAccessToken
   }

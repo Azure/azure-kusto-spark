@@ -53,7 +53,7 @@ object KustoDataSourceUtils{
 
 
   def createTmpTableWithSameSchema(kustoAdminClient: Client,
-                                   tableCoordinates: KustoTableCoordinates,
+                                   tableCoordinates: KustoCoordinates,
                                    tmpTableName: String,
                                    tableCreation: SinkTableCreationMode = SinkTableCreationMode.FailIfNotExist,
                                    schema: StructType): Unit = {
@@ -87,7 +87,7 @@ object KustoDataSourceUtils{
     kustoAdminClient.execute(tableCoordinates.database, generateTableCreateCommand(tmpTableName, tmpTableSchema))
   }
 
-  def parseSinkParameters(parameters: Map[String,String], mode : SaveMode = SaveMode.Append): (WriteOptions, KustoAuthentication, KustoTableCoordinates) = {
+  def parseSinkParameters(parameters: Map[String,String], mode : SaveMode = SaveMode.Append): (WriteOptions, KustoAuthentication, KustoCoordinates) = {
     if(mode != SaveMode.Append)
     {
       if (mode == SaveMode.ErrorIfExists){
@@ -167,7 +167,7 @@ object KustoDataSourceUtils{
       authentication = KustoUserTokenAuthentication(DeviceAuthentication.acquireAccessTokenUsingDeviceCodeFlow(cluster.get))
     }
 
-    (writeOptions, authentication, KustoTableCoordinates(getClusterNameFromUrlIfNeeded(cluster.get), database.get, table.get))
+    (writeOptions, authentication, KustoCoordinates(getClusterNameFromUrlIfNeeded(cluster.get), database.get, table.get))
   }
 
   private [kusto] def reportExceptionAndThrow(

@@ -79,8 +79,7 @@ class DefaultSource extends CreatableRelationProvider
     }
 
     KustoRelation(
-      parameters.getOrElse(KustoOptions.KUSTO_CLUSTER, ""),
-      parameters.getOrElse(KustoOptions.KUSTO_DATABASE, ""),
+      KustoCoordinates(parameters.getOrElse(KustoOptions.KUSTO_CLUSTER, ""), parameters.getOrElse(KustoOptions.KUSTO_DATABASE, "")),
       parameters.getOrElse(KustoOptions.KUSTO_AAD_CLIENT_ID, ""),
       parameters.getOrElse(KustoOptions.KUSTO_AAD_CLIENT_PASSWORD, ""),
       parameters.getOrElse(KustoOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com"),
