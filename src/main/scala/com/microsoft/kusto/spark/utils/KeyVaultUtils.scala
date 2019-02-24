@@ -6,8 +6,6 @@ import com.microsoft.azure.CloudException
 import com.microsoft.azure.keyvault.KeyVaultClient
 import com.microsoft.kusto.spark.datasource._
 
-import scala.util.matching.Regex
-
 object KeyVaultUtils {
   val AppId = "kustoAppId"
   val AppKey = "kustoAppKey"
@@ -84,8 +82,7 @@ object KeyVaultUtils {
         if (container == null) null else container.value(),
         storageSecretIsAccountKey = true)
     } else {
-      val paramsFromSas = KustoDataSourceUtils.parseSas(sasUrl)
-      StorageParameters(paramsFromSas._1, paramsFromSas._3, paramsFromSas._2, storageSecretIsAccountKey = false)
+      KustoDataSourceUtils.parseSas(sasUrl)
     }
   }
 }

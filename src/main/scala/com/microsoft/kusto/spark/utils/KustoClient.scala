@@ -34,7 +34,7 @@ object KustoClient {
       case keyVaultParams: KeyVaultAuthentication =>
         var app = KeyVaultUtils.getAadAppParamsFromKeyVault(keyVaultParams)
         ConnectionStringBuilder.createWithAadApplicationCredentials(clusterUri, app.ID, app.password, app.authority)
-      case userTokne: KustoUserTokenAuthentication =>
+      case userTokne: KustoAccessTokenAuthentication =>
         ConnectionStringBuilder.createWithAadAccessTokenAuthentication(clusterUri, userTokne.token)
     }
   }

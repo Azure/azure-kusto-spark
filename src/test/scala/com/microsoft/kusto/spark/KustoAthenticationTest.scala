@@ -32,8 +32,6 @@ class KustoAthenticationTest extends FlatSpec {
   val keyVaultClientPassword: String = System.getProperty(KustoOptions.KEY_VAULT_APP_KEY)
   val keyVaultUri: String = System.getProperty(KustoOptions.KEY_VAULT_URI)
 
-  val userToken: String = System.getProperty(KustoOptions.KUSTO_USER_TOKEN)
-
   "keyVaultAuthentication" should "use key vault for authentication and retracting kusto app auth params" taggedAs KustoE2E in {
     import spark.implicits._
     val expectedNumberOfRows = 1000

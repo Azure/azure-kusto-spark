@@ -86,10 +86,10 @@ object KustoDataSourceUtils{
     kustoAdminClient.execute(tableCoordinates.database, generateTableCreateCommand(tmpTableName, tmpTableSchema))
   }
 
-  def parseSourceParameters(parameters: Map[String,String]): (KustoAuthentication, KustoCoordinates) = {
+  def parseSourceParameters(parameters: Map[String,String]): (KustoAuthentication, KustoCoordinates, KeyVaultAuthentication) = {
     // Parse KustoTableCoordinates - these are mandatory options
     val database  = parameters.get(KustoOptions.KUSTO_DATABASE)
-    var cluster = parameters.get(KustoOptions.KUSTO_CLUSTER)
+    val cluster = parameters.get(KustoOptions.KUSTO_CLUSTER)
 
     if (database.isEmpty){
       throw new InvalidParameterException("KUSTO_DATABASE parameter is missing. Must provide a destination database name")
@@ -98,45 +98,45 @@ object KustoDataSourceUtils{
     if (cluster.isEmpty){
       throw new InvalidParameterException("KUSTO_CLUSTER parameter is missing. Must provide a destination cluster name")
     }
+
     // Parse KustoAuthentication
     val applicationId = parameters.getOrElse(KustoOptions.KUSTO_AAD_CLIENT_ID, "")
+    val applicationKey = parameters.getOrElse(KustoOptions.KUSTO_AAD_CLIENT_PASSWORD, "")
     var authentication: KustoAuthentication = null
-    var keyVaultUri: String = null
-    var userToken: String = null
-
-    if(applicationId != ""){
-      authentication = AadApplicationAuthentication(applicationId, parameters.getOrElse(KustoOptions.KUSTO_AAD_CLIENT_PASSWORD, ""), parameters.getOrElse(KustoOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com"))
-    }
-    else if({
-      keyVaultUri = parameters.getOrElse(KustoOptions.KEY_VAULT_URI, "")
-      keyVaultUri != ""}){
+    val keyVaultUri: String = parameters.getOrElse(KustoOptions.KEY_VAULT_URI, "")
+    var accessToken: String = null
+    var keyVaultAuthentication: KeyVaultAuthentication = null
+    if(keyVaultUri != ""){
       // KeyVault Authentication
       var keyVaultAppId: String = null
-      var kustoAuthentication: KustoAuthentication = authentication
 
       if({keyVaultAppId = parameters.getOrElse(KustoOptions.KEY_VAULT_APP_ID, "")
         keyVaultAppId != ""}){
-        authentication = KeyVaultAppAuthentication(keyVaultUri,
+        keyVaultAuthentication = KeyVaultAppAuthentication(keyVaultUri,
           keyVaultAppId,
           parameters.getOrElse(KustoOptions.KEY_VAULT_APP_KEY, ""))
       }
       else {
-        authentication = KeyVaultCertificateAuthentication(keyVaultUri,
+        keyVaultAuthentication = KeyVaultCertificateAuthentication(keyVaultUri,
           parameters.getOrElse(KustoOptions.KEY_VAULT_PEM_FILE_PATH, ""),
           parameters.getOrElse(KustoOptions.KEY_VAULT_CERTIFICATE_KEY, ""))
       }
     }
-    else if ({userToken = parameters.getOrElse(KustoOptions.KUSTO_USER_TOKEN, "")
-      userToken != ""}){
-      authentication = KustoUserTokenAuthentication(userToken)
+
+    if(applicationId != "" || applicationKey != ""){
+      authentication = AadApplicationAuthentication(applicationId, applicationKey, parameters.getOrElse(KustoOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com"))
     }
-    else {
-      authentication = KustoUserTokenAuthentication(DeviceAuthentication.acquireAccessTokenUsingDeviceCodeFlow(cluster.get))
+    else if ({accessToken = parameters.getOrElse(KustoOptions.KUSTO_ACCESS_TOKEN, "")
+      accessToken != ""}){
+      authentication = KustoAccessTokenAuthentication(accessToken)
+    } else if (keyVaultUri == ""){
+      authentication = KustoAccessTokenAuthentication(DeviceAuthentication.acquireAccessTokenUsingDeviceCodeFlow(cluster.get))
     }
-    (authentication, KustoCoordinates(getClusterNameFromUrlIfNeeded(cluster.get), database.get))
+
+    (authentication, KustoCoordinates(getClusterNameFromUrlIfNeeded(cluster.get), database.get), keyVaultAuthentication)
   }
 
-  def parseSinkParameters(parameters: Map[String,String], mode : SaveMode = SaveMode.Append): (WriteOptions, KustoAuthentication, KustoCoordinates) = {
+  def parseSinkParameters(parameters: Map[String,String], mode : SaveMode = SaveMode.Append): (WriteOptions, KustoAuthentication, KustoCoordinates, KeyVaultAuthentication) = {
     val table = parameters.get(KustoOptions.KUSTO_TABLE)
 
     if (table.isEmpty){
@@ -169,8 +169,8 @@ object KustoDataSourceUtils{
     }
     val writeOptions = WriteOptions(tableCreation, isAsync, parameters.getOrElse(KustoOptions.KUSTO_WRITE_RESULT_LIMIT, "1"), parameters.getOrElse(DateTimeUtils.TIMEZONE_OPTION, "UTC"))
 
-    val parsedSourceParameters: (KustoAuthentication, KustoCoordinates) = parseSourceParameters(parameters)
-    (writeOptions, parsedSourceParameters._1, KustoCoordinates(parsedSourceParameters._2.cluster, parsedSourceParameters._2.database, table.get))
+    val parsedSourceParameters: (KustoAuthentication, KustoCoordinates, KeyVaultAuthentication) = parseSourceParameters(parameters)
+    (writeOptions, parsedSourceParameters._1, KustoCoordinates(parsedSourceParameters._2.cluster, parsedSourceParameters._2.database, table.get), parsedSourceParameters._3)
   }
 
   private [kusto] def reportExceptionAndThrow(
@@ -271,12 +271,11 @@ object KustoDataSourceUtils{
     }
   }
 
-  private [kusto] def parseSas(url: String): (String, String, String) = {
+  private [kusto] def parseSas(url: String): StorageParameters  = {
     val urlPattern: Regex = raw"(?:https://)?([^.]+).blob.core.windows.net/([^?]+)?(.+)".r
     url match {
-      case urlPattern(storageAccountId, container, sasKey) => (storageAccountId, container, sasKey)
-      case _ => (null, null, url)
+      case urlPattern(storageAccountId, container, sasKey) => StorageParameters(storageAccountId, sasKey, container, storageSecretIsAccountKey = false)
+      case _ => throw new InvalidParameterException("SAS url couldn't be parsed. Should be https://<storage-account>.blob.core.windows.net/<container>?<SAS-Token>")
     }
   }
 }
-

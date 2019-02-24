@@ -16,7 +16,7 @@ class KustoSinkProvider extends StreamSinkProvider with DataSourceRegister {
                           parameters: Map[String, String],
                           partitionColumns: Seq[String],
                           outputMode: OutputMode): Sink = {
-    val (writeOptions, authentication, tableCoordinates) = KustoDataSourceUtils.parseSinkParameters(parameters)
+    val (writeOptions, authentication, tableCoordinates, _) = KustoDataSourceUtils.parseSinkParameters(parameters)
 
     new KustoSink(
       sqlContext,

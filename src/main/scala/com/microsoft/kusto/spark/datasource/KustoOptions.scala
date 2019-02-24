@@ -44,7 +44,7 @@ object KustoOptions {
   // Default: 'FailIfNotExist'
   val KUSTO_TABLE_CREATE_OPTIONS: String = newOption("tableCreateOptions")
   val KUSTO_TRUNCATE: String = newOption("truncate")
-  val KUSTO_USER_TOKEN: String = newOption("userToken")
+  val KUSTO_ACCESS_TOKEN: String = newOption("accessToken")
   // When writing to Kusto, allows the driver to complete operation asynchronously.  See KustoSink.md for
   // details and limitations. Default: 'false'
   val KUSTO_WRITE_ENABLE_ASYNC: String = newOption("writeEnableAsync")
@@ -98,4 +98,4 @@ case class WriteOptions(tableCreateOptions: KustoOptions.SinkTableCreationMode.S
                         isAsync: Boolean = false,
                         writeResultLimit: String,
                         timeZone: String = "UTC")
-case class KustoUserTokenAuthentication(token: String) extends KustoAuthentication
+case class KustoAccessTokenAuthentication(token: String) extends KustoAuthentication
