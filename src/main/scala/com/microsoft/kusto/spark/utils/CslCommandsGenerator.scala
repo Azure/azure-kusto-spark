@@ -52,7 +52,6 @@ object CslCommandsGenerator{
 
   // Export data to blob
   def generateExportDataCommand(
-                                 appId: String,
                                  query: String,
                                  storageAccountName: String,
                                  container: String,
@@ -63,7 +62,7 @@ object CslCommandsGenerator{
                                  partitionPredicate: Option[String] = None,
                                  isAsync: Boolean): String = {
 
-    val secretString = if (useKeyNotSas) s""";" h@"$secret"""" else s"""?" h@"$secret""""
+    val secretString = if (useKeyNotSas) s""";" h@"$secret"""" else if (secret(0) == '?') s"""" h@"$secret"""" else s"""?" h@"$secret""""
     val blobUri = s"https://$storageAccountName.blob.core.windows.net"
     val async = if (isAsync) "async " else ""
 

@@ -8,7 +8,7 @@ import java.util.concurrent.TimeUnit
 import java.util.zip.GZIPOutputStream
 import java.util.UUID
 
-import com.microsoft.azure.kusto.data.Client
+import com.microsoft.azure.kusto.data.{Client, ConnectionStringBuilder}
 import com.microsoft.azure.kusto.ingest.IngestionProperties.DATA_FORMAT
 import com.microsoft.azure.kusto.ingest.result.{IngestionResult, IngestionStatus, OperationStatus}
 import com.microsoft.azure.kusto.ingest.source.BlobSourceInfo
@@ -17,7 +17,7 @@ import com.microsoft.azure.storage.StorageCredentialsSharedAccessSignature
 import com.microsoft.azure.storage.blob.{BlobOutputStream, CloudBlobContainer}
 import com.microsoft.kusto.spark.datasource._
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
-import com.microsoft.kusto.spark.utils.{KustoClient, KustoQueryUtils, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.{KeyVaultUtils, KustoClient, KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import com.univocity.parsers.csv.{CsvWriter, CsvWriterSettings}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types.StructType
@@ -78,8 +78,9 @@ object KustoWriter{
 
     KDSU.logInfo(myName, s"Successfully created temporary table $tmpTableName, will be deleted after completing the operation")
 
-    val storageUri = TempStorageCache.getNewTempBlobReference(authentication, tableCoordinates.cluster)
 
+    val ingestKcsb = KustoClient.getKcsb(authentication, s"https://ingest-${tableCoordinates.cluster}.kusto.windows.net")
+    val storageUri = TempStorageCache.getNewTempBlobReference(tableCoordinates.cluster, ingestKcsb)
     def ingestRowsIntoKusto(schema: StructType, rows: Iterator[InternalRow]): IngestionResult = {
       val ingestClient = KustoClient.getIngest(authentication, tableCoordinates.cluster)
       val ingestionProperties = new IngestionProperties(tableCoordinates.database, tmpTableName)

@@ -51,7 +51,6 @@ object KustoDataSourceUtils{
     klog.fatal(s"$reporter: $message")
   }
 
-
   def createTmpTableWithSameSchema(kustoAdminClient: Client,
                                    tableCoordinates: KustoCoordinates,
                                    tmpTableName: String,
@@ -87,7 +86,63 @@ object KustoDataSourceUtils{
     kustoAdminClient.execute(tableCoordinates.database, generateTableCreateCommand(tmpTableName, tmpTableSchema))
   }
 
+  def parseSourceParameters(parameters: Map[String,String]): (KustoAuthentication, KustoCoordinates) = {
+    // Parse KustoTableCoordinates - these are mandatory options
+    val database  = parameters.get(KustoOptions.KUSTO_DATABASE)
+    var cluster = parameters.get(KustoOptions.KUSTO_CLUSTER)
+
+    if (database.isEmpty){
+      throw new InvalidParameterException("KUSTO_DATABASE parameter is missing. Must provide a destination database name")
+    }
+
+    if (cluster.isEmpty){
+      throw new InvalidParameterException("KUSTO_CLUSTER parameter is missing. Must provide a destination cluster name")
+    }
+    // Parse KustoAuthentication
+    val applicationId = parameters.getOrElse(KustoOptions.KUSTO_AAD_CLIENT_ID, "")
+    var authentication: KustoAuthentication = null
+    var keyVaultUri: String = null
+    var userToken: String = null
+
+    if(applicationId != ""){
+      authentication = AadApplicationAuthentication(applicationId, parameters.getOrElse(KustoOptions.KUSTO_AAD_CLIENT_PASSWORD, ""), parameters.getOrElse(KustoOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com"))
+    }
+    else if({
+      keyVaultUri = parameters.getOrElse(KustoOptions.KEY_VAULT_URI, "")
+      keyVaultUri != ""}){
+      // KeyVault Authentication
+      var keyVaultAppId: String = null
+      var kustoAuthentication: KustoAuthentication = authentication
+
+      if({keyVaultAppId = parameters.getOrElse(KustoOptions.KEY_VAULT_APP_ID, "")
+        keyVaultAppId != ""}){
+        authentication = KeyVaultAppAuthentication(keyVaultUri,
+          keyVaultAppId,
+          parameters.getOrElse(KustoOptions.KEY_VAULT_APP_KEY, ""))
+      }
+      else {
+        authentication = KeyVaultCertificateAuthentication(keyVaultUri,
+          parameters.getOrElse(KustoOptions.KEY_VAULT_PEM_FILE_PATH, ""),
+          parameters.getOrElse(KustoOptions.KEY_VAULT_CERTIFICATE_KEY, ""))
+      }
+    }
+    else if ({userToken = parameters.getOrElse(KustoOptions.KUSTO_USER_TOKEN, "")
+      userToken != ""}){
+      authentication = KustoUserTokenAuthentication(userToken)
+    }
+    else {
+      authentication = KustoUserTokenAuthentication(DeviceAuthentication.acquireAccessTokenUsingDeviceCodeFlow(cluster.get))
+    }
+    (authentication, KustoCoordinates(getClusterNameFromUrlIfNeeded(cluster.get), database.get))
+  }
+
   def parseSinkParameters(parameters: Map[String,String], mode : SaveMode = SaveMode.Append): (WriteOptions, KustoAuthentication, KustoCoordinates) = {
+    val table = parameters.get(KustoOptions.KUSTO_TABLE)
+
+    if (table.isEmpty){
+      throw new InvalidParameterException("KUSTO_TABLE parameter is missing. Must provide a destination table name")
+    }
+
     if(mode != SaveMode.Append)
     {
       if (mode == SaveMode.ErrorIfExists){
@@ -97,29 +152,12 @@ object KustoDataSourceUtils{
       }
     }
 
+    // Parse WriteOptions
     var tableCreation: SinkTableCreationMode = SinkTableCreationMode.FailIfNotExist
     var tableCreationParam: Option[String] = None
     var isAsync: Boolean = false
     var isAsyncParam : String = ""
 
-    // Parse KustoTableCoordinates - these are mandatory options
-    val table = parameters.get(KustoOptions.KUSTO_TABLE)
-    val database  = parameters.get(KustoOptions.KUSTO_DATABASE)
-    var cluster = parameters.get(KustoOptions.KUSTO_CLUSTER)
-
-    if (table.isEmpty){
-        throw new InvalidParameterException("KUSTO_TABLE parameter is missing. Must provide a destination table name")
-    }
-
-    if (database.isEmpty){
-      throw new InvalidParameterException("KUSTO_DATABASE parameter is missing. Must provide a destination database name")
-    }
-
-    if (cluster.isEmpty){
-      throw new InvalidParameterException("KUSTO_CLUSTER parameter is missing. Must provide a destination cluster name")
-    }
-
-    // Parse WriteOptions
     try {
       isAsyncParam = parameters.getOrElse(KustoOptions.KUSTO_WRITE_ENABLE_ASYNC, "false")
       isAsync =  parameters.getOrElse(KustoOptions.KUSTO_WRITE_ENABLE_ASYNC, "false").trim.toBoolean
@@ -131,43 +169,8 @@ object KustoDataSourceUtils{
     }
     val writeOptions = WriteOptions(tableCreation, isAsync, parameters.getOrElse(KustoOptions.KUSTO_WRITE_RESULT_LIMIT, "1"), parameters.getOrElse(DateTimeUtils.TIMEZONE_OPTION, "UTC"))
 
-    // Parse KustoAuthentication
-    val applicationId = parameters.getOrElse(KustoOptions.KUSTO_AAD_CLIENT_ID, "")
-    var authentication: KustoAuthentication = null
-    var keyVaultUri: String = null
-    var userToken: String = null
-    var keyVaultCertFilePath: String = null
-
-    if(applicationId != ""){
-      authentication = AadApplicationAuthentication(applicationId, parameters.getOrElse(KustoOptions.KUSTO_AAD_CLIENT_PASSWORD, ""), parameters.getOrElse(KustoOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com"))
-    }
-    else if({
-      keyVaultUri = parameters.getOrElse(KustoOptions.KEY_VAULT_URI, "")
-      keyVaultUri != ""}){
-      // KeyVault Authentication
-      var keyVaultAppId: String = null
-
-      if({keyVaultAppId = parameters.getOrElse(KustoOptions.KEY_VAULT_APP_ID, "")
-          keyVaultAppId != ""}){
-          authentication = KeyVaultAppAuthentication(keyVaultUri,
-           keyVaultAppId,
-           parameters.getOrElse(KustoOptions.KEY_VAULT_APP_KEY, ""))
-      }
-      else {
-        authentication = KeyVaultCertificateAuthentication(keyVaultUri,
-          parameters.getOrElse(KustoOptions.KEY_VAULT_PEM_FILE_PATH, ""),
-          parameters.getOrElse(KustoOptions.KEY_VAULT_CERTIFICATE_KEY, ""))
-        }
-      }
-    else if ({userToken = parameters.getOrElse(KustoOptions.KUSTO_USER_TOKEN, "")
-        userToken != ""}){
-      authentication = KustoUserTokenAuthentication(userToken)
-    }
-    else {
-      authentication = KustoUserTokenAuthentication(DeviceAuthentication.acquireAccessTokenUsingDeviceCodeFlow(cluster.get))
-    }
-
-    (writeOptions, authentication, KustoCoordinates(getClusterNameFromUrlIfNeeded(cluster.get), database.get, table.get))
+    val parsedSourceParameters: (KustoAuthentication, KustoCoordinates) = parseSourceParameters(parameters)
+    (writeOptions, parsedSourceParameters._1, KustoCoordinates(parsedSourceParameters._2.cluster, parsedSourceParameters._2.database, table.get))
   }
 
   private [kusto] def reportExceptionAndThrow(
@@ -265,6 +268,14 @@ object KustoDataSourceUtils{
 
     if (!success) {
       throw new RuntimeException(s"Timed out while waiting for operation with OperationId '$operationId'")
+    }
+  }
+
+  private [kusto] def parseSas(url: String): (String, String, String) = {
+    val urlPattern: Regex = raw"(?:https://)?([^.]+).blob.core.windows.net/([^?]+)?(.+)".r
+    url match {
+      case urlPattern(storageAccountId, container, sasKey) => (storageAccountId, container, sasKey)
+      case _ => (null, null, url)
     }
   }
 }

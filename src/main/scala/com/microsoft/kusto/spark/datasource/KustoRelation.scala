@@ -3,71 +3,50 @@ package com.microsoft.kusto.spark.datasource
 import java.security.InvalidParameterException
 import java.util.Locale
 
-import com.microsoft.azure.kusto.data.{ClientFactory, ConnectionStringBuilder}
-import com.microsoft.kusto.spark.utils.KustoQueryUtils
+import com.microsoft.kusto.spark.utils.{KustoClient, KustoQueryUtils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{Row, SQLContext, SparkSession}
 
 case class KustoRelation(kustoCoordinates: KustoCoordinates,
-                         appId: String,
-                         appKey: String,
-                         authorityId: String,
+                         authentication: KustoAuthentication,
                          query: String,
                          isLeanMode: Boolean,
                          numPartitions: Int,
                          partitioningColumn: Option[String],
                          partitioningMode: Option[String],
                          customSchema: Option[String] = None,
-                         storageAccount: Option[String] = None,
-                         storageContainer: Option[String] = None,
-                         storageAccountSecrete: Option[String] = None,
-                         isStorageSecreteKeyNotSas: Boolean = true)
+                         storageParameters: StorageParameters)
                         (@transient val sparkSession: SparkSession) extends BaseRelation with TableScan with Serializable {
 
-  private val normalizedQuery = KustoQueryUtils.normalizeQuery(query)
 
+  private val normalizedQuery = KustoQueryUtils.normalizeQuery(query)
+  var cachedSchema: StructType = _
   override def sqlContext: SQLContext = sparkSession.sqlContext
 
   override def schema: StructType = {
-    if (customSchema.isDefined) {
-      StructType.fromDDL(customSchema.get)
+    if(cachedSchema == null){
+      cachedSchema =  if (customSchema.isDefined) {
+        StructType.fromDDL(customSchema.get)
+      }
+      else getSchema
     }
-    else getSchema
+    cachedSchema
   }
 
   override def buildScan(): RDD[Row] = {
     if (isLeanMode) {
       KustoReader.leanBuildScan(
-        KustoReadRequest(sparkSession, schema, kustoCoordinates, query, appId, appKey, authorityId)
+        KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication)
       )
     } else {
       KustoReader.scaleBuildScan(
-        KustoReadRequest(sparkSession, schema, kustoCoordinates, query, appId, appKey, authorityId),
-        getTransientStorageParameters(storageAccount, storageContainer, storageAccountSecrete, isStorageSecreteKeyNotSas),
-        KustoPartitionInfo(numPartitions, getPartitioningColumn(partitioningColumn, isLeanMode), getPartitioningMode(partitioningMode))
+        KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication),
+        storageParameters,
+        KustoPartitionParameters(numPartitions, getPartitioningColumn, getPartitioningMode)
       )
     }
-  }
-
-  private def getTransientStorageParameters(storageAccount: Option[String],
-                                            storageContainer: Option[String],
-                                            storageAccountSecrete: Option[String],
-                                            isKeyNotSas: Boolean): KustoStorageParameters = {
-    if (storageAccount.isEmpty) {
-      throw new InvalidParameterException("Storage account name is empty. Reading in 'Scale' mode requires a transient blob storage")
-    }
-
-    if (storageContainer.isEmpty) {
-      throw new InvalidParameterException("Storage container name is empty.")
-    }
-
-    if (storageAccountSecrete.isEmpty) {
-      throw new InvalidParameterException("Storage account secrete is empty. Please provide a storage account key or a SAS key")
-    }
-
-    KustoStorageParameters(storageAccount.get, storageAccountSecrete.get, storageContainer.get, isKeyNotSas)
   }
 
   private def getSchema: StructType = {
@@ -79,14 +58,10 @@ case class KustoRelation(kustoCoordinates: KustoCoordinates,
     if (getSchemaQuery.isEmpty) {
       throw new RuntimeException("Spark connector cannot run Kusto commands. Please provide a valid query")
     }
-
-    val kustoConnectionString = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://${kustoCoordinates.cluster}.kusto.windows.net", appId, appKey, authorityId)
-    KustoResponseDeserializer(ClientFactory.createClient(kustoConnectionString).execute(kustoCoordinates.database, getSchemaQuery)).getSchema
+    KustoResponseDeserializer(KustoClient.getAdmin(authentication, kustoCoordinates.cluster).execute(kustoCoordinates.database, getSchemaQuery)).getSchema
   }
 
-  private def getPartitioningColumn(partitioningColumn: Option[String], isLean: Boolean): String = {
-    if (isLean) return ""
-
+  private def getPartitioningColumn: String = {
     if (partitioningColumn.isDefined) {
       val requestedColumn = partitioningColumn.get.toLowerCase(Locale.ROOT)
       if (!schema.contains(requestedColumn)) {
@@ -97,7 +72,7 @@ case class KustoRelation(kustoCoordinates: KustoCoordinates,
     } else schema.head.name
   }
 
-  private def getPartitioningMode(partitioningMode: Option[String]): String = {
+  private def getPartitioningMode: String = {
     if (partitioningMode.isDefined) {
       val mode = partitioningMode.get.toLowerCase(Locale.ROOT)
       if (!KustoOptions.supportedPartitioningModes.contains(mode)) {

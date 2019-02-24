@@ -66,7 +66,7 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
 
   "KustoSource" should "execute a read query on Kusto cluster in scale mode" taggedAs KustoE2E in {
     val table: String = System.getProperty(KustoOptions.KUSTO_TABLE)
-    val query: String = System.getProperty(KustoOptions.KUSTO_QUERY, s"$table | where (toint(ColB) % 1 == 0)")
+    val query: String = System.getProperty(KustoOptions.KUSTO_QUERY, s"$table | where (toint(ColB) 5% 1 == 0)")
 
     val storageAccount: String = System.getProperty("storageAccount")
     val container: String = System.getProperty("container")

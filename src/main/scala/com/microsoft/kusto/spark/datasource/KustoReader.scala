@@ -13,38 +13,35 @@ private[kusto] case class KustoPartition(predicate: Option[String], idx: Int) ex
   override def index: Int = idx
 }
 
-private[kusto] case class KustoPartitionInfo(num: Int, column: String, mode: String)
+private[kusto] case class KustoPartitionParameters(num: Int, column: String, mode: String)
 
-private[kusto] case class KustoStorageParameters(account: String,
-                                                 secrete: String,
-                                                 container: String,
-                                                 isKeyNotSas: Boolean)
+private[kusto] case class StorageParameters(account: String,
+                                            secret: String,
+                                            container: String,
+                                            storageSecretIsAccountKey: Boolean)
 
 private[kusto] case class KustoReadRequest(sparkSession: SparkSession,
                                            schema: StructType,
                                            kustoCoordinates: KustoCoordinates,
                                            query: String,
-                                           appId: String,
-                                           appKey: String,
-                                           authorityId: String)
+                                           authentication: KustoAuthentication)
 
 private[kusto] object KustoReader {
   private val myName = this.getClass.getSimpleName
 
   private[kusto] def leanBuildScan(request: KustoReadRequest): RDD[Row] = {
-    val asd = KustoCoordinates(request.kustoCoordinates.cluster , request.kustoCoordinates.database)
-    val kustoClient = KustoClient.getAdmin(AadApplicationAuthentication(request.appId, request.appKey, request.authorityId), request.kustoCoordinates.cluster)
+    val kustoClient = KustoClient.getAdmin(request.authentication, request.kustoCoordinates.cluster)
 
     val kustoResult = kustoClient.execute(request.kustoCoordinates.database, request.query)
     val serializer = KustoResponseDeserializer(kustoResult)
     request.sparkSession.createDataFrame(serializer.toRows, serializer.getSchema).rdd
   }
 
-  private[kusto] def scaleBuildScan(request: KustoReadRequest, storage: KustoStorageParameters, partitionInfo: KustoPartitionInfo): RDD[Row] = {
+  private[kusto] def scaleBuildScan(request: KustoReadRequest, storage: StorageParameters, partitionInfo: KustoPartitionParameters): RDD[Row] = {
     setupBlobAccess(request, storage)
     val partitions = calculatePartitions(partitionInfo)
     val reader = new KustoReader(request, storage)
-    val directory = KustoQueryUtils.simplifyName(s"${request.appId}/dir${UUID.randomUUID()}/")
+    val directory = KustoQueryUtils.simplifyName(s"${request.kustoCoordinates.database}/dir${UUID.randomUUID()}/")
 
     for (partition <- partitions) {
       reader.exportPartitionToBlob(partition.asInstanceOf[KustoPartition], request, storage, directory)
@@ -54,25 +51,25 @@ private[kusto] object KustoReader {
     request.sparkSession.read.parquet(s"$path").rdd
   }
 
-  private[kusto] def setupBlobAccess(request: KustoReadRequest, storage: KustoStorageParameters): Unit = {
+  private[kusto] def setupBlobAccess(request: KustoReadRequest, storage: StorageParameters): Unit = {
     val config = request.sparkSession.conf
-    if (storage.isKeyNotSas) {
-      config.set(s"fs.azure.account.key.${storage.account}.blob.core.windows.net", s"${storage.secrete}")
+    if (storage.storageSecretIsAccountKey) {
+      config.set(s"fs.azure.account.key.${storage.account}.blob.core.windows.net", s"${storage.secret}")
     }
     else {
-      config.set(s"fs.azure.sas.${storage.container}.${storage.account}.blob.core.windows.net", s"${storage.secrete}")
+      config.set(s"fs.azure.sas.${storage.container}.${storage.account}.blob.core.windows.net", s"${storage.secret}")
     }
     config.set("fs.azure", "org.apache.hadoop.fs.azure.NativeAzureFileSystem")
   }
 
-  private def calculatePartitions(partitionInfo: KustoPartitionInfo): Array[Partition] = {
+  private def calculatePartitions(partitionInfo: KustoPartitionParameters): Array[Partition] = {
     partitionInfo.mode match {
       case "hash" => calculateHashPartitions(partitionInfo)
       case _ => throw new InvalidParameterException(s"Partitioning mode '${partitionInfo.mode}' is not valid")
     }
   }
 
-  private def calculateHashPartitions(partitionInfo: KustoPartitionInfo): Array[Partition] = {
+  private def calculateHashPartitions(partitionInfo: KustoPartitionParameters): Array[Partition] = {
     // Single partition
     if (partitionInfo.num <= 1) return Array[Partition](KustoPartition(None, 0))
 
@@ -85,25 +82,24 @@ private[kusto] object KustoReader {
   }
 }
 
-private[kusto] class KustoReader(request: KustoReadRequest, storage: KustoStorageParameters) {
+private[kusto] class KustoReader(request: KustoReadRequest, storage: StorageParameters) {
   private val myName = this.getClass.getSimpleName
-  val client: Client = KustoClient.getAdmin(AadApplicationAuthentication(request.appId, request.appKey, request.authorityId), request.kustoCoordinates.cluster)
+  val client: Client = KustoClient.getAdmin(request.authentication, request.kustoCoordinates.cluster)
 
   // Export a single partition from Kusto to transient Blob storage.
   // Returns the directory path for these blobs
   private[kusto] def exportPartitionToBlob(partition: KustoPartition,
                                            request: KustoReadRequest,
-                                           storage: KustoStorageParameters,
+                                           storage: StorageParameters,
                                            directory: String): Unit = {
 
     val exportCommand = CslCommandsGenerator.generateExportDataCommand(
-      request.appId,
       request.query,
       storage.account,
       storage.container,
       directory,
-      storage.secrete,
-      storage.isKeyNotSas,
+      storage.secret,
+      storage.storageSecretIsAccountKey,
       partition.idx,
       partition.predicate,
       isAsync = true
