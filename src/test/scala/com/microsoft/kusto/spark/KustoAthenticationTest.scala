@@ -45,22 +45,23 @@ class KustoAthenticationTest extends FlatSpec {
 
     val df = rows.toDF("name", "value")
 
-    df.write
-      .format("com.microsoft.kusto.spark.datasource")
-      .partitionBy("value")
-      .option(KustoOptions.KUSTO_CLUSTER, cluster)
-      .option(KustoOptions.KUSTO_DATABASE, database)
-      .option(KustoOptions.KUSTO_TABLE, table)
-      .option(KustoOptions.KEY_VAULT_URI, keyVaultUri)
-      .option(KustoOptions.KEY_VAULT_APP_ID, keyVaultClientID)
-      .option(KustoOptions.KEY_VAULT_APP_KEY, keyVaultClientPassword)
-      .option(KustoOptions.KUSTO_TABLE_CREATE_OPTIONS, SinkTableCreationMode.CreateIfNotExist.toString)
-      .save()
+//    df.write
+//      .format("com.microsoft.kusto.spark.datasource")
+//      .partitionBy("value")
+//      .option(KustoOptions.KUSTO_CLUSTER, cluster)
+//      .option(KustoOptions.KUSTO_DATABASE, database)
+//      .option(KustoOptions.KUSTO_TABLE, table)
+//      .option(KustoOptions.KEY_VAULT_URI, keyVaultUri)
+//      .option(KustoOptions.KEY_VAULT_APP_ID, keyVaultClientID)
+//      .option(KustoOptions.KEY_VAULT_APP_KEY, keyVaultClientPassword)
+//      .option(KustoOptions.KUSTO_TABLE_CREATE_OPTIONS, SinkTableCreationMode.CreateIfNotExist.toString)
+//      .save()
 
     val conf: Map[String, String] = Map(
       KustoOptions.KEY_VAULT_URI -> keyVaultUri,
       KustoOptions.KEY_VAULT_APP_ID -> keyVaultClientID,
-      KustoOptions.KEY_VAULT_APP_KEY -> keyVaultClientPassword
+      KustoOptions.KEY_VAULT_APP_KEY -> keyVaultClientPassword,
+      KustoOptions.KUSTO_AAD_CLIENT_ID ->  "newAppID"
     )
 
     val dfResult = spark.read.kusto(cluster, database, table, conf)

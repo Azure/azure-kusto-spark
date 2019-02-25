@@ -48,15 +48,15 @@ object KeyVaultUtils {
   private def getAadAppParamsFromClient(client: KeyVaultClient, uri: String): AadApplicationAuthentication ={
     val id = client.getSecret(uri, AppId)
     val key = client.getSecret(uri, AppKey)
-//    if(id == null && key == null){
-//      throw new InvalidParameterException("keyVault must contain secrets 'kustoAppId', 'kustoAppKey'.")
-//    }
+
     var authority = client.getSecret(uri, AppAuthority).value()
     if(authority.isEmpty){
       authority = "microsoft.com"
     }
 
-    AadApplicationAuthentication(if (id == null) null else  id.value(), if (key == null) null else  key.value(), authority)
+    AadApplicationAuthentication(if (id == null) null else  id.value(),
+      if (key == null) null else  key.value(),
+      authority)
   }
 
   private def getStorageParamsFromClient(client: KeyVaultClient, uri: String): StorageParameters = {
@@ -67,16 +67,6 @@ object KeyVaultUtils {
     val container = client.getSecret(uri, Container)
 
     if(sasUrl.isEmpty) {
-//      if(accountId == null) {
-//        throw new InvalidParameterException("KeyVault must contain secret blobStorageAccountName if 'blobStorageSasUrl' secret is not used")
-//      }
-//      if(container == null){
-//        throw new InvalidParameterException("KeyVault must contain secret blobStorageAccountName if 'blobStorageSasUrl' secret is not used")
-//      }
-//      if(accountKey == null){
-//        throw new InvalidParameterException("KeyVault must contain secret 'blobContainer' if 'blobStorageSasUrl' secret is not used")
-//      }
-
       StorageParameters(if (accountId == null) null else accountId.value(),
         if (accountKey == null) null else accountKey.value(),
         if (container == null) null else container.value(),

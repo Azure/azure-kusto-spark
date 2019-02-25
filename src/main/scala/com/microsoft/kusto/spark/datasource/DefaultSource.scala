@@ -175,7 +175,7 @@ class DefaultSource extends CreatableRelationProvider
 
   private def combineKeyVaultAndOptionsAuthentication(paramsFromKeyVault: AadApplicationAuthentication): Unit = {
     if(authentication != null){
-      // We have both keyVault and aad application params, take from options first and throw if both are empty
+      // We have both keyVault and AAD application params, take from options first and throw if both are empty
       try{
         val auth = authentication.asInstanceOf[AadApplicationAuthentication]
         authentication = AadApplicationAuthentication(
