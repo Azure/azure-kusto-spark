@@ -105,14 +105,15 @@ class DefaultSource extends CreatableRelationProvider
       // Get params from keyVault
       if(isLeanMode){
         (KeyVaultUtils.getAadAppParamsFromKeyVault(keyVaultAuthentication), null)
+      } else {
+        combineKeyVaultAndOptionsAuthentication(KeyVaultUtils.getAadAppParamsFromKeyVault(keyVaultAuthentication))
+        (authentication, combineKeyVaultAndOptionsStorageParams(
+          parameters.get(KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME),
+          parameters.get(KustoOptions.KUSTO_BLOB_CONTAINER),
+          storageSecret,
+          storageSecretIsAccountKey
+          , keyVaultAuthentication))
       }
-      combineKeyVaultAndOptionsAuthentication(KeyVaultUtils.getAadAppParamsFromKeyVault(keyVaultAuthentication))
-      (authentication, combineKeyVaultAndOptionsStorageParams(
-        parameters.get(KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME),
-        parameters.get(KustoOptions.KUSTO_BLOB_CONTAINER),
-        storageSecret,
-        storageSecretIsAccountKey
-        ,keyVaultAuthentication))
     } else {
       if(isLeanMode) {
         (authentication, null)
@@ -204,14 +205,14 @@ class DefaultSource extends CreatableRelationProvider
                                                      storageSecret: Option[String],
                                                      storageSecretIsAccountKey: Boolean,
                                                      keyVaultAuthentication: KeyVaultAuthentication): StorageParameters = {
-    var keyVaultParameters = KeyVaultUtils.getStorageParamsFromKeyVault(keyVaultAuthentication)
+    val keyVaultParameters = KeyVaultUtils.getStorageParamsFromKeyVault(keyVaultAuthentication)
     if(!storageSecretIsAccountKey){
       // If SAS option defined - take sas
       KustoDataSourceUtils.parseSas(storageSecret.get)
     } else {
       if (storageAccount.isEmpty || storageContainer.isEmpty || storageSecret.isEmpty){
         // If KeyVault contains sas take it
-        if(keyVaultParameters.storageSecretIsAccountKey) {
+        if(!keyVaultParameters.storageSecretIsAccountKey) {
           keyVaultParameters
         } else {
           // Try combine

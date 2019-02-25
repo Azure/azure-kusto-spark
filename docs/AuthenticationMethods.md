@@ -1,9 +1,10 @@
 #Authentication Methods
-Kusto spark connector allows user to authenticate with AAD to the Kusto cluster using either an AAD application,
- a user token or device authentication. The application parameters can also be passed using azure keyVault.
+Kusto Spark connector allows the user to authenticate with AAD to the Kusto cluster using either an AAD application,
+ a user token or device authentication. Alternatively, authentication parameters can be stored in Azure Key Vault.
+  In this case, the user must provide once application credentials in order to access the Key Vault resource.
 
-## AAD application authentication
-This is the easiest way to authenticate using this connector and is explained used in all the documentation examples.
+## AAD Application Authentication
+This authentication method is fairly straightforward, and it is used in most of the examples in this documentation.
 
  * **KUSTO_AAD_CLIENT_ID**: 
   AAD application (client) identifier.
@@ -27,13 +28,17 @@ df.write
   .option(KustoOptions.KUSTO_AAD_AUTHORITY_ID, "AAD Authority Id") // "microsoft.com"
   .save()
 ```
-## KeyVault
-Kusto spark connector allows authentication through keyVault. The keyVault must contain the 
-write/read mandatory parameters if not given in the options. If an option is passed in both,
-the option passed in the command will be taken.
-The connector will look for the following secret names:
+## Key Vault
 
-###Write
+Kusto Spark connector allows authentication using Azure Key Vault. The  Key Vault must contain the 
+mandatory read/write authentication parameters. If a parameter appears in both the Key Vault and passed directly as an option, the direct option will take precedence.
+Although a combination of Key Vault and direct options is supported, for clarity, it is advised to use 
+either key vault or direct options for passing authentication parameters but not both.
+                                               
+                                               
+**The connector will look for the following secret names:**
+
+### Kusto Cluster Authentication 
  * **kustoAppId**
  AAD application (client) identifier.
  
@@ -43,7 +48,8 @@ The connector will look for the following secret names:
  * **kustoAppAuthority**
   AAD authentication authority. This is the AAD Directory (tenant) ID.
 
-###Read
+### Read Parameters
+
  * **blobStorageAccountName**
  Transient storage account name. Either this, or a SAS url, must be provided in order to access the storage account
 
@@ -51,14 +57,14 @@ The connector will look for the following secret names:
  Storage account key. Either this, or a SAS url, must be provided in order to access the storage account
 
 * **blobStorageSasUrl**
-  SAS access url: a complete url of the SAS to the container. Either this, or a storage account name and key, must be provided
-    in order to access the storage account
+ SAS access url: a complete url of the SAS to the container. Either this, or a storage account name and key, 
+ must be provided in order to access the storage account
     
  * **blobContainer**
  Blob container name. This container will be used to store all transient artifacts created every time the corresponding RDD is materialized. 
  Once the RDD is no longer required by the caller application, the container and/or all its contents can be deleted by the caller.  
 
-##Eample
+## Example
 
 ```
 val keyVaultClientID: String = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
@@ -84,8 +90,8 @@ val conf: Map[String, String] = Map(
 val dfResult = spark.read.kusto(cluster, database, table, conf)
  ```
 ## Access token
-User can also use ADAL himself to acquire an AAD access token to access Kusto, in which case he will need to make sure
-is valid for the duration of the reading/writing operation.
+User can also use ADAL directly to acquire an AAD access token to access Kusto. 
+The token must be valid throughout the duration of the read/write operation
 
  * **KUSTO_ACCESS_TOKEN**: 
     The AAD access token
@@ -99,9 +105,9 @@ df.write
   .option(KustoOptions., "MyTable")
   .save()
 ```
-## Device authentication
-If no authentication parameters were passed to the connector - the connector will write a token to the console, 
-which can be used to authenticate at https://login.microsoftonline.com/common/oauth2/deviceauth and will allow
- temporary access. 
+## Device Authentication
+If no authentication parameters were passed. The connector will request for user authentication by writing a token 
+to the console, this token can be used to authenticate at https://login.microsoftonline.com/common/oauth2/deviceauth 
+and will allow temporary access. 
 
 **Note:** This method is not recommended!   

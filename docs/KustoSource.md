@@ -68,15 +68,8 @@ In addition, there are two main reading modes: see **KUSTO_READ_MODE** option be
   Kusto database from which the data will be read. The client must have 'viewer' 
   privileges on this database, unless it has 'admin' privileges on the table.
   
-  * **KUSTO_AAD_CLIENT_ID**: 
-  AAD application (client) identifier.
-  
-  * **KUSTO_AAD_CLIENT_PASSWORD**: 
-  AAD application key for the client.
-  
-  * **KUSTO_AAD_AUTHORITY_ID**: 
-  AAD authentication authority. This is the AAD Directory (tenant) ID.
-  
+  **Authentication Parameters** can be found [AAD Application Authentication](AuthenticationMethods.md). 
+
   * **KUSTO_QUERY**: 
   A flexible Kusto query (can simply be a table name). The schema of the resulting dataframe will match the schema of the query result. 
  
