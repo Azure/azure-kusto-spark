@@ -50,6 +50,7 @@ object KustoWriter{
 
     val kustoAdminClient = KustoClient.getAdmin(authentication, tableCoordinates.cluster)
     val appName = data.sparkSession.sparkContext.appName
+    val table = tableCoordinates.table.get
 
     try {
       // Try delete temporary tablesToCleanup created and not used
@@ -65,10 +66,10 @@ object KustoWriter{
     }
     catch  {
       case ex: Exception =>
-        KDSU.reportExceptionAndThrow(myName, ex, "trying to drop temporary tables", tableCoordinates.cluster, tableCoordinates.database, tableCoordinates.table, isLogDontThrow = true)
+        KDSU.reportExceptionAndThrow(myName, ex, "trying to drop temporary tables", tableCoordinates.cluster, tableCoordinates.database, table, isLogDontThrow = true)
     }
 
-    val tmpTableName = KustoQueryUtils.simplifyName(s"$TempIngestionTablePrefix${appName}_${tableCoordinates.table}${batchIdIfExists}_${UUID.randomUUID().toString}")
+    val tmpTableName = KustoQueryUtils.simplifyName(s"$TempIngestionTablePrefix${appName}_$table${batchIdIfExists}_${UUID.randomUUID().toString}")
 
     if(batchIdIfExists != "") batchIdIfExists = s", batch'$batchIdIfExists'"
 
@@ -108,25 +109,25 @@ object KustoWriter{
         rows => {
           if(rows.isEmpty)
           {
-            KDSU.logWarn(myName, s"sink to Kusto table '${tableCoordinates.table}' with no rows to write on partition ${TaskContext.getPartitionId}")
+            KDSU.logWarn(myName, s"sink to Kusto table '$table' with no rows to write on partition ${TaskContext.getPartitionId}")
           }
           else {
-            ingestToTemporaryTableByWorkers(batchId,tableCoordinates.cluster, tableCoordinates.database, tableCoordinates.table, schema, batchIdIfExists, ingestRowsIntoKusto, rows)
+            ingestToTemporaryTableByWorkers(batchId,tableCoordinates.cluster, tableCoordinates.database, table, schema, batchIdIfExists, ingestRowsIntoKusto, rows)
           }
         }
       }
-      KDSU.logInfo(myName, s"asynchronous write to Kusto table '${tableCoordinates.table}' in progress")
+      KDSU.logInfo(myName, s"asynchronous write to Kusto table '$table' in progress")
 
       // This part runs back on the driver
       asyncWork.onSuccess {
         case _ =>
-          finalizeIngestionWhenWorkersSucceeded(tableCoordinates.cluster, tableCoordinates.database, tableCoordinates.table, batchIdIfExists, kustoAdminClient, tmpTableName, isAsync = true)
+          finalizeIngestionWhenWorkersSucceeded(tableCoordinates.cluster, tableCoordinates.database, table, batchIdIfExists, kustoAdminClient, tmpTableName, isAsync = true)
       }
 
       asyncWork.onFailure {
         case exception: Exception =>
           tryCleanupIngestionByproducts(tableCoordinates.database, kustoAdminClient, tmpTableName)
-          KDSU.reportExceptionAndThrow(myName, exception, "writing data", tableCoordinates.cluster, tableCoordinates.database, tableCoordinates.table, isLogDontThrow = true)
+          KDSU.reportExceptionAndThrow(myName, exception, "writing data", tableCoordinates.cluster, tableCoordinates.database, table, isLogDontThrow = true)
           KDSU.logError(myName, "The exception is not visible in the driver since we're in async mode")
       }
     }
@@ -137,11 +138,11 @@ object KustoWriter{
           rows => {
             if(rows.isEmpty)
             {
-              KDSU.logWarn(myName, s"sink to Kusto table '${tableCoordinates.table}' with no rows to write on partition ${TaskContext.getPartitionId}")
+              KDSU.logWarn(myName, s"sink to Kusto table '$table' with no rows to write on partition ${TaskContext.getPartitionId}")
             }
             else
             {
-              ingestToTemporaryTableByWorkers(batchId, tableCoordinates.cluster, tableCoordinates.database, tableCoordinates.table, schema, batchIdIfExists, ingestRowsIntoKusto, rows)
+              ingestToTemporaryTableByWorkers(batchId, tableCoordinates.cluster, tableCoordinates.database, table, schema, batchIdIfExists, ingestRowsIntoKusto, rows)
             }
           }
         }
@@ -152,8 +153,8 @@ object KustoWriter{
           throw exception.getCause
       }
 
-      finalizeIngestionWhenWorkersSucceeded(tableCoordinates.cluster, tableCoordinates.database, tableCoordinates.table, batchIdIfExists, kustoAdminClient, tmpTableName)
-      KDSU.logInfo(myName, s"write operation to Kusto table '${tableCoordinates.table}' finished successfully")
+      finalizeIngestionWhenWorkersSucceeded(tableCoordinates.cluster, tableCoordinates.database, table, batchIdIfExists, kustoAdminClient, tmpTableName)
+      KDSU.logInfo(myName, s"write operation to Kusto table '$table' finished successfully")
     }
   }
 

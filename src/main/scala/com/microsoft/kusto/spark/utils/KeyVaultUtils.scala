@@ -29,8 +29,8 @@ object KeyVaultUtils {
     keyVaultAuthentication match {
       case app: KeyVaultAppAuthentication =>
         val client = getClient(app.keyVaultAppID, app.keyVaultAppKey)
-        getStorageParamsFromClient(client, app.uri)
-      case cert: KeyVaultCertificateAuthentication => throw new UnsupportedOperationException("does not support cert files yet")
+        getStorageParamsFromKeyVaultImpl(client, app.uri)
+      case certificate: KeyVaultCertificateAuthentication => throw new UnsupportedOperationException("certificates are not yet supported")
     }
   }
 
@@ -40,12 +40,12 @@ object KeyVaultUtils {
     keyVaultAuthentication match {
       case app: KeyVaultAppAuthentication =>
         val client = getClient(app.keyVaultAppID, app.keyVaultAppKey)
-        getAadAppParamsFromClient(client, app.uri)
-      case cert: KeyVaultCertificateAuthentication => throw new UnsupportedOperationException("does not support cert files yet")
+        getAadAppParamsFromKeyVaultImpl(client, app.uri)
+      case certificate: KeyVaultCertificateAuthentication => throw new UnsupportedOperationException("certificates are not yet supported")
     }
   }
 
-  private def getAadAppParamsFromClient(client: KeyVaultClient, uri: String): AadApplicationAuthentication ={
+  private def getAadAppParamsFromKeyVaultImpl(client: KeyVaultClient, uri: String): AadApplicationAuthentication ={
     val id = client.getSecret(uri, AppId)
     val key = client.getSecret(uri, AppKey)
 
@@ -54,12 +54,13 @@ object KeyVaultUtils {
       authority = "microsoft.com"
     }
 
-    AadApplicationAuthentication(if (id == null) null else  id.value(),
-      if (key == null) null else  key.value(),
-      authority)
+    AadApplicationAuthentication(
+      ID = if (id == null) null else id.value(),
+      password = if (key == null) null else key.value(),
+      authority = authority)
   }
 
-  private def getStorageParamsFromClient(client: KeyVaultClient, uri: String): StorageParameters = {
+  private def getStorageParamsFromKeyVaultImpl(client: KeyVaultClient, uri: String): StorageParameters = {
     val sasUrl = client.getSecret(uri, SasUrl).value()
     val accountId = client.getSecret(uri, StorageAccountId)
 
@@ -67,9 +68,10 @@ object KeyVaultUtils {
     val container = client.getSecret(uri, Container)
 
     if(sasUrl.isEmpty) {
-      StorageParameters(if (accountId == null) null else accountId.value(),
-        if (accountKey == null) null else accountKey.value(),
-        if (container == null) null else container.value(),
+      StorageParameters(
+        account = if (accountId == null) null else accountId.value(),
+        secret = if (accountKey == null) null else accountKey.value(),
+        container = if (container == null) null else container.value(),
         storageSecretIsAccountKey = true)
     } else {
       KustoDataSourceUtils.parseSas(sasUrl)

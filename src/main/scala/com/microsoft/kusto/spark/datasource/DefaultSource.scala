@@ -4,20 +4,21 @@ import java.security.InvalidParameterException
 import java.util.Locale
 
 import com.microsoft.kusto.spark.datasink.KustoWriter
-import com.microsoft.kusto.spark.utils.{KeyVaultUtils, KustoDataSourceUtils, KustoQueryUtils, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.{KeyVaultUtils, KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister, RelationProvider}
 import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode}
 
 class DefaultSource extends CreatableRelationProvider
   with RelationProvider with DataSourceRegister {
-  var authenticationParameters: Option[KustoAuthentication] = _
+  var authenticationParameters: Option[KustoAuthentication] = None
   var kustoCoordinates: KustoCoordinates = _
-  var keyVaultAuthentication: Option[KeyVaultAuthentication] = _
+  var keyVaultAuthentication: Option[KeyVaultAuthentication] = None
 
   override def createRelation(sqlContext: SQLContext, mode: SaveMode, parameters: Map[String, String], data: DataFrame): BaseRelation = {
-    var writeOptions: WriteOptions = WriteOptions()
-
-    (writeOptions, authenticationParameters, kustoCoordinates, keyVaultAuthentication) = KustoDataSourceUtils.parseSinkParameters(parameters, mode)
+    val sinkParameters = KDSU.parseSinkParameters(parameters, mode)
+    keyVaultAuthentication = sinkParameters.sourceParametersResults.keyVaultAuth
+    kustoCoordinates = sinkParameters.sourceParametersResults.kustoCoordinates
+    authenticationParameters = Some(sinkParameters.sourceParametersResults.authenticationParameters)
 
     if(keyVaultAuthentication.isDefined){
       val paramsFromKeyVault = KeyVaultUtils.getAadAppParametersFromKeyVault(keyVaultAuthentication.get)
@@ -29,14 +30,14 @@ class DefaultSource extends CreatableRelationProvider
       data,
       kustoCoordinates,
       authenticationParameters.get,
-      writeOptions)
+      sinkParameters.writeOptions)
 
-    val limit = if (writeOptions.writeResultLimit.equalsIgnoreCase(KustoOptions.NONE_RESULT_LIMIT)) None else {
+    val limit = if (sinkParameters.writeOptions.writeResultLimit.equalsIgnoreCase(KustoOptions.NONE_RESULT_LIMIT)) None else {
       try {
-        Some(writeOptions.writeResultLimit.toInt)
+        Some(sinkParameters.writeOptions.writeResultLimit.toInt)
       }
       catch {
-        case _: Exception => throw new InvalidParameterException(s"KustoOptions.KUSTO_WRITE_RESULT_LIMIT is set to '${writeOptions.writeResultLimit}'. Must be either 'none' or an integer value")
+        case _: Exception => throw new InvalidParameterException(s"KustoOptions.KUSTO_WRITE_RESULT_LIMIT is set to '${sinkParameters.writeOptions.writeResultLimit}'. Must be either 'none' or an integer value")
       }
     }
 
@@ -50,11 +51,9 @@ class DefaultSource extends CreatableRelationProvider
 
     if (readMode.isEmpty && limitIsSmall) {
       adjustedParams = parameters + (KustoOptions.KUSTO_READ_MODE -> "lean") + (KustoOptions.KUSTO_NUM_PARTITIONS -> "1")
-    }
-    else if (parameters.get(KustoOptions.KUSTO_BLOB_STORAGE_SAS_URL).isEmpty && (parameters.get(KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME).isEmpty ||
-      parameters.get(KustoOptions.KUSTO_BLOB_CONTAINER).isEmpty ||
-      parameters.get(KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_KEY).isEmpty)
-    ) {
+    } else if (parameters.get(KustoOptions.KUSTO_BLOB_STORAGE_SAS_URL).isEmpty && (parameters.get(KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME).isEmpty ||
+        parameters.get(KustoOptions.KUSTO_BLOB_CONTAINER).isEmpty ||
+        parameters.get(KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_KEY).isEmpty)) {
       if (readMode.isDefined && !readMode.get.equalsIgnoreCase("lean")) {
         throw new InvalidParameterException(s"Read mode is set to '${readMode.get}', but transient storage parameters are not provided")
       }
@@ -67,7 +66,6 @@ class DefaultSource extends CreatableRelationProvider
       adjustedParams
     }
   }
-
 
   override def createRelation(sqlContext: SQLContext, parameters: Map[String, String]): BaseRelation = {
     val requestedPartitions = parameters.get(KustoOptions.KUSTO_NUM_PARTITIONS)
@@ -86,16 +84,20 @@ class DefaultSource extends CreatableRelationProvider
 
     var storageSecretIsAccountKey = true
     var storageSecret = parameters.get(KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_KEY)
+
     if (storageSecret.isEmpty) {
       storageSecret = parameters.get(KustoOptions.KUSTO_BLOB_STORAGE_SAS_URL)
       if (storageSecret.isDefined) storageSecretIsAccountKey = false
     }
 
     if(authenticationParameters.isEmpty){
-      (authenticationParameters, kustoCoordinates, keyVaultAuthentication) = KDSU.parseSourceParameters(parameters)
+      val sourceParameters = KDSU.parseSourceParameters(parameters)
+      authenticationParameters = Some(sourceParameters.authenticationParameters)
+      kustoCoordinates = sourceParameters.kustoCoordinates
+      keyVaultAuthentication = sourceParameters. keyVaultAuth
     }
 
-    val (kustoAuthentication, storageParameters): (KustoAuthentication, Option[StorageParameters]) =
+    val (kustoAuthentication, storageParameters): (Option[KustoAuthentication], Option[StorageParameters]) =
       if (keyVaultAuthentication.isDefined) {
         // Get params from keyVault
         authenticationParameters = Some(KDSU.combineKeyVaultAndOptionsAuthentication(KeyVaultUtils.getAadAppParametersFromKeyVault(keyVaultAuthentication.get), authenticationParameters))
@@ -115,17 +117,17 @@ class DefaultSource extends CreatableRelationProvider
           (authenticationParameters, None)
         } else {
           // Params passed from options
-          (authenticationParameters, KDSU.getAndValidateTransientStorageParameters(
+          (authenticationParameters, Some(KDSU.getAndValidateTransientStorageParameters(
             parameters.get(KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME),
             parameters.get(KustoOptions.KUSTO_BLOB_CONTAINER),
             storageSecret,
-            storageSecretIsAccountKey))
+            storageSecretIsAccountKey)))
         }
     }
 
     KustoRelation(
       kustoCoordinates,
-      kustoAuthentication,
+      kustoAuthentication.get,
       parameters.getOrElse(KustoOptions.KUSTO_QUERY, ""),
       isLeanMode,
       numPartitions,

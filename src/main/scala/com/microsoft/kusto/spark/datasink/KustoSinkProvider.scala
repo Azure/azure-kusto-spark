@@ -14,16 +14,16 @@ class KustoSinkProvider extends StreamSinkProvider with DataSourceRegister {
                           parameters: Map[String, String],
                           partitionColumns: Seq[String],
                           outputMode: OutputMode): Sink = {
-    val (writeOptions, authenticationParameters, tableCoordinates, keyVaultAuthentication) = KustoDataSourceUtils.parseSinkParameters(parameters)
+    val sinkParameters = KustoDataSourceUtils.parseSinkParameters(parameters)
 
     new KustoSink(
       sqlContext,
-      tableCoordinates,
-      if(keyVaultAuthentication.isDefined){
-        val paramsFromKeyVault = KeyVaultUtils.getAadAppParametersFromKeyVault(keyVaultAuthentication.get)
-        KustoDataSourceUtils.combineKeyVaultAndOptionsAuthentication(paramsFromKeyVault, Some(authenticationParameters))
-      } else authenticationParameters,
-      writeOptions
+      sinkParameters.sourceParametersResults.kustoCoordinates,
+      if(sinkParameters.sourceParametersResults.keyVaultAuth.isDefined){
+        val paramsFromKeyVault = KeyVaultUtils.getAadAppParametersFromKeyVault(sinkParameters.sourceParametersResults.keyVaultAuth.get)
+        KustoDataSourceUtils.combineKeyVaultAndOptionsAuthentication(paramsFromKeyVault, Some(sinkParameters.sourceParametersResults.authenticationParameters))
+      } else sinkParameters.sourceParametersResults.authenticationParameters,
+      sinkParameters.writeOptions
     )
   }
 }
