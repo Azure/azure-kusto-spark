@@ -22,7 +22,7 @@ class DefaultSource extends CreatableRelationProvider
 
     if(keyVaultAuthentication.isDefined){
       val paramsFromKeyVault = KeyVaultUtils.getAadAppParametersFromKeyVault(keyVaultAuthentication.get)
-      authenticationParameters = Some(KDSU.combineKeyVaultAndOptionsAuthentication(paramsFromKeyVault, authenticationParameters))
+      authenticationParameters = Some(KDSU.mergeKeyVaultAndOptionsAuthentication(paramsFromKeyVault, authenticationParameters))
     }
 
     KustoWriter.write(
@@ -100,12 +100,12 @@ class DefaultSource extends CreatableRelationProvider
     val (kustoAuthentication, storageParameters): (Option[KustoAuthentication], Option[StorageParameters]) =
       if (keyVaultAuthentication.isDefined) {
         // Get params from keyVault
-        authenticationParameters = Some(KDSU.combineKeyVaultAndOptionsAuthentication(KeyVaultUtils.getAadAppParametersFromKeyVault(keyVaultAuthentication.get), authenticationParameters))
+        authenticationParameters = Some(KDSU.mergeKeyVaultAndOptionsAuthentication(KeyVaultUtils.getAadAppParametersFromKeyVault(keyVaultAuthentication.get), authenticationParameters))
 
         if(isLeanMode){
           (authenticationParameters, None)
         } else {
-          (authenticationParameters, Some(KDSU.combineKeyVaultAndOptionsStorageParams(
+          (authenticationParameters, Some(KDSU.mergeKeyVaultAndOptionsStorageParams(
             parameters.get(KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME),
             parameters.get(KustoOptions.KUSTO_BLOB_CONTAINER),
             storageSecret,

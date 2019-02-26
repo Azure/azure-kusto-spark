@@ -6,7 +6,7 @@ import com.microsoft.azure.kusto.data.{ClientFactory, ConnectionStringBuilder}
 import com.microsoft.kusto.spark.datasource.KustoOptions
 import com.microsoft.kusto.spark.datasource.KustoOptions.SinkTableCreationMode
 import com.microsoft.kusto.spark.utils.KustoQueryUtils
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{Row, SparkSession}
 
 import scala.collection.immutable
 import org.junit.runner.RunWith
@@ -54,7 +54,6 @@ class KustoAthenticationTest extends FlatSpec {
       .option(KustoOptions.KEY_VAULT_URI, keyVaultUri)
       .option(KustoOptions.KEY_VAULT_APP_ID, keyVaultClientID)
       .option(KustoOptions.KEY_VAULT_APP_KEY, keyVaultClientPassword)
-      .option(KustoOptions.KUSTO_AAD_CLIENT_ID, "appID")
       .option(KustoOptions.KUSTO_TABLE_CREATE_OPTIONS, SinkTableCreationMode.CreateIfNotExist.toString)
       .save()
 
@@ -63,9 +62,11 @@ class KustoAthenticationTest extends FlatSpec {
       KustoOptions.KEY_VAULT_APP_ID -> keyVaultClientID,
       KustoOptions.KEY_VAULT_APP_KEY -> keyVaultClientPassword
     )
+    val dfResult = spark.read.kusto(cluster, database, table, conf)
+    val result = dfResult.select("name", "value").rdd.collect().sortBy(x => x.getInt(1))
+    val orig = df.select("name", "value").rdd.collect().sortBy(x => x.getInt(1))
 
-//    val dfResult = spark.read.kusto(cluster, database, table, conf)
-    // should compare
+    assert(result.diff(orig).isEmpty)
   }
 
   "deviceAuthentication" should "use aad device authentication" taggedAs KustoE2E in {

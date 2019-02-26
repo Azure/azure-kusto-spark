@@ -139,11 +139,7 @@ object KustoDataSourceUtils{
 
   case class SourceParameters(authenticationParameters: KustoAuthentication, kustoCoordinates: KustoCoordinates, keyVaultAuth: Option[KeyVaultAuthentication])
 
-  def parseSinkParameters(parameters: Map[String,String], mode : SaveMode = SaveMode.Append):SinkParameters = {
-
-
-
-
+  def parseSinkParameters(parameters: Map[String,String], mode: SaveMode = SaveMode.Append): SinkParameters = {
     if(mode != SaveMode.Append)
     {
       if (mode == SaveMode.ErrorIfExists){
@@ -283,7 +279,7 @@ object KustoDataSourceUtils{
     }
   }
 
-  private [kusto] def combineKeyVaultAndOptionsAuthentication(paramsFromKeyVault: AadApplicationAuthentication, authenticationParameters: Option[KustoAuthentication]): KustoAuthentication = {
+  private [kusto] def mergeKeyVaultAndOptionsAuthentication(paramsFromKeyVault: AadApplicationAuthentication, authenticationParameters: Option[KustoAuthentication]): KustoAuthentication = {
     if(authenticationParameters.isEmpty){
       // We have both keyVault and AAD application params, take from options first and throw if both are empty
       try{
@@ -309,11 +305,11 @@ object KustoDataSourceUtils{
     }
   }
 
-  private [kusto] def combineKeyVaultAndOptionsStorageParams(storageAccount: Option[String],
-                                                     storageContainer: Option[String],
-                                                     storageSecret: Option[String],
-                                                     storageSecretIsAccountKey: Boolean,
-                                                     keyVaultAuthentication: KeyVaultAuthentication): StorageParameters = {
+  private [kusto] def mergeKeyVaultAndOptionsStorageParams(storageAccount: Option[String],
+                                                           storageContainer: Option[String],
+                                                           storageSecret: Option[String],
+                                                           storageSecretIsAccountKey: Boolean,
+                                                           keyVaultAuthentication: KeyVaultAuthentication): StorageParameters = {
     if(!storageSecretIsAccountKey){
       // If SAS option defined - take sas
       KustoDataSourceUtils.parseSas(storageSecret.get)

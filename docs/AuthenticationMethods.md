@@ -50,6 +50,7 @@ either key vault or direct options for passing authentication parameters but not
 
 ### Read Parameters
 
+>**Note**: this hese parameters are only required when working in "scale" reading mode. For details, refer to [Kusto Sink](KustoSource.md/#Transient-Storage-Parameters).
  * **blobStorageAccountName**
  Transient storage account name. Either this, or a SAS url, must be provided in order to access the storage account
 
@@ -64,7 +65,7 @@ either key vault or direct options for passing authentication parameters but not
  Blob container name. This container will be used to store all transient artifacts created every time the corresponding RDD is materialized. 
  Once the RDD is no longer required by the caller application, the container and/or all its contents can be deleted by the caller.  
 
-## Example
+### Key Vault Authentication Example
 
 ```
 val keyVaultClientID: String = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
@@ -108,6 +109,6 @@ df.write
 ## Device Authentication
 If no authentication parameters were passed. The connector will request for user authentication by writing a token 
 to the console, this token can be used to authenticate at https://login.microsoftonline.com/common/oauth2/deviceauth 
-and will allow temporary access. The user needs appropriate privileges for the Kusto cluster as explained in [Kusto Sink](KustoSink.md). 
+and will allow temporary access. The user needs appropriate privileges for the Kusto cluster as explained in [Kusto Sink](KustoSink.md/#Authentication). 
 
-**Note:** This method is not recommended for production!   
+>**Note**: This method is not recommended for production!   
