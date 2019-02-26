@@ -5,7 +5,7 @@ in the specified Kusto cluster and database
 
 ## Authentication
 
-Kusto connector uses  **Azure Active Directory (AAD)** to authenticate the client application 
+Kusto connector uses **Azure Active Directory (AAD)** to authenticate the client application 
 that is using it. Please verify the following before using Kusto connector:
  * Client application is registered in AAD
  * Client application has 'user' privileges or above on the target database
@@ -54,14 +54,7 @@ that is using it. Please verify the following before using Kusto connector:
  set to "FailIfNotExist" (default), the table must already exist, and the client must have 
  'admin' privileges on the table.
  
- * **KUSTO_AAD_CLIENT_ID**: 
-  AAD application (client) identifier.
-  
-  * **KUSTO_AAD_AUTHORITY_ID**: 
-  AAD authentication authority. This is the AAD Directory (tenant) ID.
- 
- * **KUSTO_AAD_CLIENT_PASSWORD**: 
- AAD application key for the client.
+ **Authentication Parameters** can be found here - [AAD Application Authentication](AuthenticationMethods.md). 
  
  **Optional Parameters:** 
  * **KUSTO_TABLE_CREATE_OPTIONS**: 

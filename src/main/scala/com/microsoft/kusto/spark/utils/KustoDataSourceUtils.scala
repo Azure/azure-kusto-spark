@@ -6,7 +6,7 @@ import java.util.concurrent.{CountDownLatch, TimeUnit, TimeoutException}
 import java.util.{NoSuchElementException, StringJoiner, Timer, TimerTask}
 
 import com.microsoft.azure.kusto.data.{Client, Results}
-import com.microsoft.kusto.spark.datasource._
+import com.microsoft.kusto.spark.datasource.{KeyVaultAuthentication, KustoAuthentication, KustoCoordinates, WriteOptions, _}
 import com.microsoft.kusto.spark.datasource.KustoOptions.SinkTableCreationMode
 import com.microsoft.kusto.spark.datasource.KustoOptions.SinkTableCreationMode.SinkTableCreationMode
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
@@ -17,7 +17,6 @@ import org.apache.spark.sql.types.StructType
 import org.json4s.jackson.JsonMethods.parse
 
 import scala.util.matching.Regex
-
 import scala.concurrent.duration._
 
 object KustoDataSourceUtils{
@@ -51,13 +50,12 @@ object KustoDataSourceUtils{
     klog.fatal(s"$reporter: $message")
   }
 
-
   def createTmpTableWithSameSchema(kustoAdminClient: Client,
                                    tableCoordinates: KustoCoordinates,
                                    tmpTableName: String,
                                    tableCreation: SinkTableCreationMode = SinkTableCreationMode.FailIfNotExist,
                                    schema: StructType): Unit = {
-    val schemaShowCommandResult = kustoAdminClient.execute(tableCoordinates.database, generateTableShowSchemaCommand(tableCoordinates.table)).getValues
+    val schemaShowCommandResult = kustoAdminClient.execute(tableCoordinates.database, generateTableShowSchemaCommand(tableCoordinates.table.get)).getValues
     var tmpTableSchema: String = ""
     val tableSchemaBuilder = new StringJoiner(",")
 
@@ -72,7 +70,7 @@ object KustoDataSourceUtils{
           tableSchemaBuilder.add(s"${field.name}:$fieldType")
         }
         tmpTableSchema = tableSchemaBuilder.toString
-        kustoAdminClient.execute(tableCoordinates.database, generateTableCreateCommand(tableCoordinates.table, tmpTableSchema))
+        kustoAdminClient.execute(tableCoordinates.database, generateTableCreateCommand(tableCoordinates.table.get, tmpTableSchema))
       }
     } else {
       // Table exists. Parse kusto table schema and check if it matches the dataframes schema
@@ -87,29 +85,10 @@ object KustoDataSourceUtils{
     kustoAdminClient.execute(tableCoordinates.database, generateTableCreateCommand(tmpTableName, tmpTableSchema))
   }
 
-  def parseSinkParameters(parameters: Map[String,String], mode : SaveMode = SaveMode.Append): (WriteOptions, KustoAuthentication, KustoCoordinates) = {
-    if(mode != SaveMode.Append)
-    {
-      if (mode == SaveMode.ErrorIfExists){
-        logInfo(ClientName, s"Kusto data source supports only append mode. Ignoring 'ErrorIfExists' directive")
-      } else {
-        throw new InvalidParameterException(s"Kusto data source supports only append mode. '$mode' directive is invalid")
-      }
-    }
-
-    var tableCreation: SinkTableCreationMode = SinkTableCreationMode.FailIfNotExist
-    var tableCreationParam: Option[String] = None
-    var isAsync: Boolean = false
-    var isAsyncParam : String = ""
-
+  def parseSourceParameters(parameters: Map[String,String]): SourceParameters = {
     // Parse KustoTableCoordinates - these are mandatory options
-    val table = parameters.get(KustoOptions.KUSTO_TABLE)
     val database  = parameters.get(KustoOptions.KUSTO_DATABASE)
-    var cluster = parameters.get(KustoOptions.KUSTO_CLUSTER)
-
-    if (table.isEmpty){
-        throw new InvalidParameterException("KUSTO_TABLE parameter is missing. Must provide a destination table name")
-    }
+    val cluster = parameters.get(KustoOptions.KUSTO_CLUSTER)
 
     if (database.isEmpty){
       throw new InvalidParameterException("KUSTO_DATABASE parameter is missing. Must provide a destination database name")
@@ -119,7 +98,63 @@ object KustoDataSourceUtils{
       throw new InvalidParameterException("KUSTO_CLUSTER parameter is missing. Must provide a destination cluster name")
     }
 
+    val table = parameters.get(KustoOptions.KUSTO_TABLE)
+
+    // Parse KustoAuthentication
+    val applicationId = parameters.getOrElse(KustoOptions.KUSTO_AAD_CLIENT_ID, "")
+    val applicationKey = parameters.getOrElse(KustoOptions.KUSTO_AAD_CLIENT_PASSWORD, "")
+    var authentication: KustoAuthentication = null
+    val keyVaultUri: String = parameters.getOrElse(KustoOptions.KEY_VAULT_URI, "")
+    var accessToken: String = ""
+    var keyVaultAuthentication: Option[KeyVaultAuthentication] = None
+    if(keyVaultUri != ""){
+      // KeyVault Authentication
+      val keyVaultAppId: String = parameters.getOrElse(KustoOptions.KEY_VAULT_APP_ID, "")
+
+      if(!keyVaultAppId.isEmpty){
+        keyVaultAuthentication = Some(KeyVaultAppAuthentication(keyVaultUri,
+          keyVaultAppId,
+          parameters.getOrElse(KustoOptions.KEY_VAULT_APP_KEY, "")))
+      } else {
+        keyVaultAuthentication = Some(KeyVaultCertificateAuthentication(keyVaultUri,
+          parameters.getOrElse(KustoOptions.KEY_VAULT_PEM_FILE_PATH, ""),
+          parameters.getOrElse(KustoOptions.KEY_VAULT_CERTIFICATE_KEY, "")))
+      }
+    }
+
+    if(!applicationId.isEmpty || !applicationKey.isEmpty){
+      authentication = AadApplicationAuthentication(applicationId, applicationKey, parameters.getOrElse(KustoOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com"))
+    }
+    else if ({accessToken = parameters.getOrElse(KustoOptions.KUSTO_ACCESS_TOKEN, "")
+      !accessToken.isEmpty}){
+      authentication = KustoAccessTokenAuthentication(accessToken)
+    } else if (keyVaultUri.isEmpty){
+      authentication = KustoAccessTokenAuthentication(DeviceAuthentication.acquireAccessTokenUsingDeviceCodeFlow(cluster.get))
+    }
+
+    SourceParameters(authentication, KustoCoordinates(getClusterNameFromUrlIfNeeded(cluster.get), database.get, table), keyVaultAuthentication)
+  }
+
+  case class SinkParameters(writeOptions: WriteOptions, sourceParametersResults: SourceParameters)
+
+  case class SourceParameters(authenticationParameters: KustoAuthentication, kustoCoordinates: KustoCoordinates, keyVaultAuth: Option[KeyVaultAuthentication])
+
+  def parseSinkParameters(parameters: Map[String,String], mode: SaveMode = SaveMode.Append): SinkParameters = {
+    if(mode != SaveMode.Append)
+    {
+      if (mode == SaveMode.ErrorIfExists){
+        logInfo(ClientName, s"Kusto data source supports only append mode. Ignoring 'ErrorIfExists' directive")
+      } else {
+        throw new InvalidParameterException(s"Kusto data source supports only append mode. '$mode' directive is invalid")
+      }
+    }
+
     // Parse WriteOptions
+    var tableCreation: SinkTableCreationMode = SinkTableCreationMode.FailIfNotExist
+    var tableCreationParam: Option[String] = None
+    var isAsync: Boolean = false
+    var isAsyncParam : String = ""
+
     try {
       isAsyncParam = parameters.getOrElse(KustoOptions.KUSTO_WRITE_ENABLE_ASYNC, "false")
       isAsync =  parameters.getOrElse(KustoOptions.KUSTO_WRITE_ENABLE_ASYNC, "false").trim.toBoolean
@@ -130,44 +165,12 @@ object KustoDataSourceUtils{
       case _ : java.lang.IllegalArgumentException  => throw new InvalidParameterException(s"KUSTO_WRITE_ENABLE_ASYNC is expecting either 'true' or 'false', got: '$isAsyncParam'")
     }
     val writeOptions = WriteOptions(tableCreation, isAsync, parameters.getOrElse(KustoOptions.KUSTO_WRITE_RESULT_LIMIT, "1"), parameters.getOrElse(DateTimeUtils.TIMEZONE_OPTION, "UTC"))
+    val sourceParameters = parseSourceParameters(parameters)
 
-    // Parse KustoAuthentication
-    val applicationId = parameters.getOrElse(KustoOptions.KUSTO_AAD_CLIENT_ID, "")
-    var authentication: KustoAuthentication = null
-    var keyVaultUri: String = null
-    var userToken: String = null
-    var keyVaultCertFilePath: String = null
-
-    if(applicationId != ""){
-      authentication = AadApplicationAuthentication(applicationId, parameters.getOrElse(KustoOptions.KUSTO_AAD_CLIENT_PASSWORD, ""), parameters.getOrElse(KustoOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com"))
+    if (sourceParameters.kustoCoordinates.table.isEmpty){
+      throw new InvalidParameterException("KUSTO_TABLE parameter is missing. Must provide a destination table name")
     }
-    else if({
-      keyVaultUri = parameters.getOrElse(KustoOptions.KEY_VAULT_URI, "")
-      keyVaultUri != ""}){
-      // KeyVault Authentication
-      var keyVaultAppId: String = null
-
-      if({keyVaultAppId = parameters.getOrElse(KustoOptions.KEY_VAULT_APP_ID, "")
-          keyVaultAppId != ""}){
-          authentication = KeyVaultAppAuthentication(keyVaultUri,
-           keyVaultAppId,
-           parameters.getOrElse(KustoOptions.KEY_VAULT_APP_KEY, ""))
-      }
-      else {
-        authentication = KeyVaultCertificateAuthentication(keyVaultUri,
-          parameters.getOrElse(KustoOptions.KEY_VAULT_PEM_FILE_PATH, ""),
-          parameters.getOrElse(KustoOptions.KEY_VAULT_CERTIFICATE_KEY, ""))
-        }
-      }
-    else if ({userToken = parameters.getOrElse(KustoOptions.KUSTO_USER_TOKEN, "")
-        userToken != ""}){
-      authentication = KustoUserTokenAuthentication(userToken)
-    }
-    else {
-      authentication = KustoUserTokenAuthentication(DeviceAuthentication.acquireAccessTokenUsingDeviceCodeFlow(cluster.get))
-    }
-
-    (writeOptions, authentication, KustoCoordinates(getClusterNameFromUrlIfNeeded(cluster.get), database.get, table.get))
+    SinkParameters(writeOptions, sourceParameters)
   }
 
   private [kusto] def reportExceptionAndThrow(
@@ -267,5 +270,92 @@ object KustoDataSourceUtils{
       throw new RuntimeException(s"Timed out while waiting for operation with OperationId '$operationId'")
     }
   }
-}
 
+  private [kusto] def parseSas(url: String): StorageParameters  = {
+    val urlPattern: Regex = raw"(?:https://)?([^.]+).blob.core.windows.net/([^?]+)?(.+)".r
+    url match {
+      case urlPattern(storageAccountId, container, sasKey) => StorageParameters(storageAccountId, sasKey, container, storageSecretIsAccountKey = false)
+      case _ => throw new InvalidParameterException("SAS url couldn't be parsed. Should be https://<storage-account>.blob.core.windows.net/<container>?<SAS-Token>")
+    }
+  }
+
+  private [kusto] def mergeKeyVaultAndOptionsAuthentication(paramsFromKeyVault: AadApplicationAuthentication, authenticationParameters: Option[KustoAuthentication]): KustoAuthentication = {
+    if(authenticationParameters.isEmpty){
+      // We have both keyVault and AAD application params, take from options first and throw if both are empty
+      try{
+        val app = authenticationParameters.asInstanceOf[AadApplicationAuthentication]
+        AadApplicationAuthentication(
+          ID = if (app.ID == "") {
+            if (paramsFromKeyVault.ID == "")
+              throw new InvalidParameterException("AADApplication ID is empty. Please pass it in keyVault or options")
+            paramsFromKeyVault.ID
+          } else app.ID,
+          password = if (app.password == "") {
+            if (paramsFromKeyVault.password == "AADApplication key is empty. Please pass it in keyVault or options")
+              throw new InvalidParameterException("")
+            paramsFromKeyVault.password
+          } else app.password,
+          authority = if (app.authority == "microsoft.com") paramsFromKeyVault.authority else app.authority
+        )
+      } catch {
+        case _: ClassCastException => throw new UnsupportedOperationException("keyVault authentication can be combined only with AADAplicationAuthentication")
+      }
+    } else {
+      paramsFromKeyVault
+    }
+  }
+
+  private [kusto] def mergeKeyVaultAndOptionsStorageParams(storageAccount: Option[String],
+                                                           storageContainer: Option[String],
+                                                           storageSecret: Option[String],
+                                                           storageSecretIsAccountKey: Boolean,
+                                                           keyVaultAuthentication: KeyVaultAuthentication): StorageParameters = {
+    if(!storageSecretIsAccountKey){
+      // If SAS option defined - take sas
+      KustoDataSourceUtils.parseSas(storageSecret.get)
+    } else {
+      if (storageAccount.isEmpty || storageContainer.isEmpty || storageSecret.isEmpty){
+        val keyVaultParameters = KeyVaultUtils.getStorageParamsFromKeyVault(keyVaultAuthentication)
+        // If KeyVault contains sas take it
+        if(!keyVaultParameters.storageSecretIsAccountKey) {
+          keyVaultParameters
+        } else {
+          // Try combine
+
+          val account = if(storageAccount.isEmpty){
+            Some(keyVaultParameters.account)
+          } else storageAccount
+          val secret = if(storageSecret.isEmpty){
+            Some(keyVaultParameters.secret)
+          } else storageSecret
+          val container = if(storageContainer.isEmpty){
+            Some(keyVaultParameters.container)
+          } else storageContainer
+
+          getAndValidateTransientStorageParameters(account, secret, container, storageSecretIsAccountKey = true)
+        }
+      } else {
+        StorageParameters(storageAccount.get, storageSecret.get, storageContainer.get, storageSecretIsAccountKey)
+      }
+    }
+  }
+
+  private [kusto] def getAndValidateTransientStorageParameters(storageAccount: Option[String],
+                                                       storageContainer: Option[String],
+                                                       storageAccountSecret: Option[String],
+                                                       storageSecretIsAccountKey: Boolean): StorageParameters = {
+    if (storageAccount.isEmpty) {
+      throw new InvalidParameterException("Storage account name is empty. Reading in 'Scale' mode requires a transient blob storage")
+    }
+
+    if (storageContainer.isEmpty) {
+      throw new InvalidParameterException("Storage container name is empty.")
+    }
+
+    if (storageAccountSecret.isEmpty) {
+      throw new InvalidParameterException("Storage account secret is empty. Please provide a storage account key or a SAS key")
+    }
+
+    StorageParameters(storageAccount.get, storageAccountSecret.get, storageContainer.get, storageSecretIsAccountKey)
+  }
+}

@@ -5,33 +5,37 @@ import com.microsoft.kusto.spark.datasource._
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 
 object KustoClient {
-  private[kusto] def getAdmin(authentication: KustoAuthentication, clusterAlias: String, isAdminCluster: Boolean = false): Client = {
-    val clusterUri = s"https://${if(isAdminCluster) "ingest"}$clusterAlias.kusto.windows.net"
-    val kcsb = getKcsbHelper(authentication,clusterUri)
+  def getAdmin(authentication: KustoAuthentication, clusterAlias: String, isIngestCluster: Boolean = false): Client = {
+    val clusterUri = s"https://${if(isIngestCluster) "ingest" else ""}$clusterAlias.kusto.windows.net"
+    val kcsb = getKcsb(authentication,clusterUri)
     kcsb.setClientVersionForTracing(KDSU.ClientName)
     ClientFactory.createClient(kcsb)
   }
 
-  private[kusto] def getIngest(authentication: KustoAuthentication, clusterAlias: String): IngestClient = {
-    val ingestKcsb = getKcsbHelper(authentication, s"https://ingest-$clusterAlias.kusto.windows.net")
+  def getAdmin(kcsb: ConnectionStringBuilder): Client = {
+    ClientFactory.createClient(kcsb)
+  }
+
+  def getIngest(authentication: KustoAuthentication, clusterAlias: String): IngestClient = {
+    val ingestKcsb = getKcsb(authentication, s"https://ingest-$clusterAlias.kusto.windows.net")
     ingestKcsb.setClientVersionForTracing(KDSU.ClientName)
     IngestClientFactory.createClient(ingestKcsb)
   }
 
-  private def getKcsbHelper(authentication: KustoAuthentication, clusterUri: String) ={
-    var kcsb: ConnectionStringBuilder = null
+  def getIngest(ingestKcsb: ConnectionStringBuilder): IngestClient = {
+    IngestClientFactory.createClient(ingestKcsb)
+  }
+
+  def getKcsb(authentication: KustoAuthentication, clusterUri: String): ConnectionStringBuilder = {
     authentication match {
+      case null => throw new MatchError("Can't create ConnectionStringBuilder with null authentication params")
       case app: AadApplicationAuthentication =>
-        kcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(clusterUri, app.ID, app.password, app.authority)
+        ConnectionStringBuilder.createWithAadApplicationCredentials(clusterUri, app.ID, app.password, app.authority)
       case keyVaultParams: KeyVaultAuthentication =>
-        val app = keyVaultParams match {
-          case app: KeyVaultAppAuthentication => KeyVaultUtils.getAadParamsFromKeyVaultAppAuth(app.keyVaultAppID, app.keyVaultAppKey, app.uri)
-          case cert: KeyVaultCertificateAuthentication => KeyVaultUtils.getAadParamsFromKeyVaultCertAuth
-        }
-        kcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(clusterUri, app.ID, app.password, app.authority)
-      case userTokne: KustoUserTokenAuthentication =>
-        kcsb = ConnectionStringBuilder.createWithAadUserTokenAuthentication(clusterUri, userTokne.token)
+        var app = KeyVaultUtils.getAadAppParametersFromKeyVault(keyVaultParams)
+        ConnectionStringBuilder.createWithAadApplicationCredentials(clusterUri, app.ID, app.password, app.authority)
+      case userTokne: KustoAccessTokenAuthentication =>
+        ConnectionStringBuilder.createWithAadAccessTokenAuthentication(clusterUri, userTokne.token)
     }
-    kcsb
   }
 }

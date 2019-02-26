@@ -62,6 +62,7 @@ class KustoSourceTests extends FlatSpec with MockFactory with Matchers with Befo
       .option(KustoOptions.KUSTO_AAD_CLIENT_PASSWORD, appKey)
       .option(KustoOptions.KUSTO_AAD_AUTHORITY_ID, appAuthorityId)
       .option(KustoOptions.KUSTO_CUSTOM_DATAFRAME_COLUMN_TYPES, customSchema)
+      .option(KustoOptions.KUSTO_READ_MODE, "lean")
       .load("src/test/resources/")
 
     df.printSchema()

@@ -44,7 +44,7 @@ object KustoOptions {
   // Default: 'FailIfNotExist'
   val KUSTO_TABLE_CREATE_OPTIONS: String = newOption("tableCreateOptions")
   val KUSTO_TRUNCATE: String = newOption("truncate")
-  val KUSTO_USER_TOKEN = newOption("userToken")
+  val KUSTO_ACCESS_TOKEN: String = newOption("accessToken")
   // When writing to Kusto, allows the driver to complete operation asynchronously.  See KustoSink.md for
   // details and limitations. Default: 'false'
   val KUSTO_WRITE_ENABLE_ASYNC: String = newOption("writeEnableAsync")
@@ -75,7 +75,7 @@ object KustoOptions {
   val KUSTO_BLOB_STORAGE_ACCOUNT_KEY: String = newOption("blobStorageAccountKey")
   // SAS access key: a complete query string of the SAS as a container
   // Use either this or storage account key to access the storage account
-  val KUSTO_BLOB_STORAGE_SAS_KEY: String = newOption("blobStorageSasKey")
+  val KUSTO_BLOB_STORAGE_SAS_URL: String = newOption("blobStorageSasUrl")
   // Blob container name
   val KUSTO_BLOB_CONTAINER: String = newOption("blobContainer")
 
@@ -90,10 +90,12 @@ object KustoOptions {
 abstract class KustoAuthentication
 abstract class KeyVaultAuthentication(uri: String) extends KustoAuthentication
 
-case class KustoCoordinates(cluster: String, database: String, table:String = "")
+case class KustoCoordinates(cluster: String, database: String, table: Option[String] = None)
 case class AadApplicationAuthentication(ID: String, password: String, authority: String) extends KustoAuthentication
 case class KeyVaultAppAuthentication(uri: String, keyVaultAppID: String, keyVaultAppKey: String) extends KeyVaultAuthentication(uri)
 case class KeyVaultCertificateAuthentication(uri: String, pemFilePath: String, pemFilePassword: String) extends KeyVaultAuthentication(uri)
 case class WriteOptions(tableCreateOptions: KustoOptions.SinkTableCreationMode.SinkTableCreationMode = KustoOptions.SinkTableCreationMode.FailIfNotExist,
-                        isAsync: Boolean = false, writeResultLimit: String, timeZone: String = "UTC")
-case class KustoUserTokenAuthentication(token: String) extends KustoAuthentication
+                        isAsync: Boolean = false,
+                        writeResultLimit: String = KustoOptions.NONE_RESULT_LIMIT,
+                        timeZone: String = "UTC")
+case class KustoAccessTokenAuthentication(token: String) extends KustoAuthentication

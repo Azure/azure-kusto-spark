@@ -68,17 +68,10 @@ In addition, there are two main reading modes: see **KUSTO_READ_MODE** option be
   Kusto database from which the data will be read. The client must have 'viewer' 
   privileges on this database, unless it has 'admin' privileges on the table.
   
-  * **KUSTO_AAD_CLIENT_ID**: 
-  AAD application (client) identifier.
-  
-  * **KUSTO_AAD_AUTHORITY_ID**: 
-  AAD authentication authority. This is the AAD Directory (tenant) ID.
-  
-  * **KUSTO_AAD_CLIENT_PASSWORD**: 
-  AAD application key for the client.
-  
+  **Authentication Parameters** can be found [AAD Application Authentication](AuthenticationMethods.md). 
+
   * **KUSTO_QUERY**: 
- A flexible Kusto query (can simply be a table name). The schema of the resulting dataframe will match the schema of the query result. 
+  A flexible Kusto query (can simply be a table name). The schema of the resulting dataframe will match the schema of the query result. 
  
  
  **Optional Parameters:** 
@@ -99,13 +92,13 @@ In order to allow working in 'scale' mode, storage parameters must be provided b
 deleting transient artifacts etc.
 
 * **KUSTO_BLOB_STORAGE_ACCOUNT_NAME**
-Transient storage account name
+Transient storage account name. Either this, or a SAS url, must be provided in order to access the storage account
 
 * **KUSTO_BLOB_STORAGE_ACCOUNT_KEY**
-Storage account key. Either this, or a SAS key, must be provided in order to access the storage account
+Storage account key. Either this, or a SAS url, must be provided in order to access the storage account
 
-* **KUSTO_BLOB_STORAGE_SAS_KEY**
-SAS access key: a complete query string of the SAS as a container. Either this, or a storage account key, must be provided
+* **KUSTO_BLOB_STORAGE_SAS_URL**
+SAS access url: a complete url of the SAS to the container. Either this, or a storage account name and key, must be provided
   in order to access the storage account
   
 * **KUSTO_BLOB_CONTAINER**
