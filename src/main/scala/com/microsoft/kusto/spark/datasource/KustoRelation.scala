@@ -17,7 +17,7 @@ case class KustoRelation(kustoCoordinates: KustoCoordinates,
                          partitioningColumn: Option[String],
                          partitioningMode: Option[String],
                          customSchema: Option[String] = None,
-                         storageParameters: StorageParameters)
+                         storageParameters: Option[StorageParameters])
                         (@transient val sparkSession: SparkSession) extends BaseRelation with TableScan with Serializable {
 
 
@@ -43,7 +43,7 @@ case class KustoRelation(kustoCoordinates: KustoCoordinates,
     } else {
       KustoReader.scaleBuildScan(
         KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication),
-        storageParameters,
+        storageParameters.get,
         KustoPartitionParameters(numPartitions, getPartitioningColumn, getPartitioningMode)
       )
     }

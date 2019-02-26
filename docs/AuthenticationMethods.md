@@ -108,6 +108,6 @@ df.write
 ## Device Authentication
 If no authentication parameters were passed. The connector will request for user authentication by writing a token 
 to the console, this token can be used to authenticate at https://login.microsoftonline.com/common/oauth2/deviceauth 
-and will allow temporary access. 
+and will allow temporary access. The user needs appropriate privileges for the Kusto cluster as explained in [Kusto Sink](asd). 
 
 **Note:** This method is not recommended!   

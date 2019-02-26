@@ -1,9 +1,7 @@
 package com.microsoft.kusto.spark.datasink
 
-import com.microsoft.kusto.spark.datasource._
-import com.microsoft.kusto.spark.utils.KustoDataSourceUtils
+import com.microsoft.kusto.spark.utils.{KeyVaultUtils, KustoDataSourceUtils}
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.streaming.Sink
 import org.apache.spark.sql.sources.{DataSourceRegister, StreamSinkProvider}
 import org.apache.spark.sql.streaming.OutputMode
@@ -16,12 +14,15 @@ class KustoSinkProvider extends StreamSinkProvider with DataSourceRegister {
                           parameters: Map[String, String],
                           partitionColumns: Seq[String],
                           outputMode: OutputMode): Sink = {
-    val (writeOptions, authentication, tableCoordinates, _) = KustoDataSourceUtils.parseSinkParameters(parameters)
+    val (writeOptions, authenticationParameters, tableCoordinates, keyVaultAuthentication) = KustoDataSourceUtils.parseSinkParameters(parameters)
 
     new KustoSink(
       sqlContext,
       tableCoordinates,
-      authentication,
+      if(keyVaultAuthentication.isDefined){
+        val paramsFromKeyVault = KeyVaultUtils.getAadAppParametersFromKeyVault(keyVaultAuthentication.get)
+        KustoDataSourceUtils.combineKeyVaultAndOptionsAuthentication(paramsFromKeyVault, Some(authenticationParameters))
+      } else authenticationParameters,
       writeOptions
     )
   }

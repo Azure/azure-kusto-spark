@@ -4,34 +4,31 @@ import java.security.InvalidParameterException
 import java.util.Locale
 
 import com.microsoft.kusto.spark.datasink.KustoWriter
-import com.microsoft.kusto.spark.utils.{KeyVaultUtils, KustoDataSourceUtils, KustoQueryUtils}
+import com.microsoft.kusto.spark.utils.{KeyVaultUtils, KustoDataSourceUtils, KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister, RelationProvider}
 import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode}
 
 class DefaultSource extends CreatableRelationProvider
   with RelationProvider with DataSourceRegister {
-  var authentication: KustoAuthentication = _
+  var authenticationParameters: Option[KustoAuthentication] = _
   var kustoCoordinates: KustoCoordinates = _
-//  var writeAuthentication: KustoAuthentication = _
-  var keyVaultAuthentication: KeyVaultAuthentication = _
+  var keyVaultAuthentication: Option[KeyVaultAuthentication] = _
 
   override def createRelation(sqlContext: SQLContext, mode: SaveMode, parameters: Map[String, String], data: DataFrame): BaseRelation = {
-    val parsedParams: (WriteOptions, KustoAuthentication, KustoCoordinates, KeyVaultAuthentication) = KustoDataSourceUtils.parseSinkParameters(parameters, mode)
+    var writeOptions: WriteOptions = WriteOptions()
 
-    val writeOptions = parsedParams._1
-    authentication = parsedParams._2
-    kustoCoordinates = parsedParams._3
-    keyVaultAuthentication = parsedParams._4
-    if(keyVaultAuthentication != null){
-      val paramsFromKeyVault = KeyVaultUtils.getAadAppParamsFromKeyVault(keyVaultAuthentication)
-      combineKeyVaultAndOptionsAuthentication(paramsFromKeyVault)
+    (writeOptions, authenticationParameters, kustoCoordinates, keyVaultAuthentication) = KustoDataSourceUtils.parseSinkParameters(parameters, mode)
+
+    if(keyVaultAuthentication.isDefined){
+      val paramsFromKeyVault = KeyVaultUtils.getAadAppParametersFromKeyVault(keyVaultAuthentication.get)
+      authenticationParameters = Some(KDSU.combineKeyVaultAndOptionsAuthentication(paramsFromKeyVault, authenticationParameters))
     }
 
     KustoWriter.write(
       None,
       data,
       kustoCoordinates,
-      authentication,
+      authenticationParameters.get,
       writeOptions)
 
     val limit = if (writeOptions.writeResultLimit.equalsIgnoreCase(KustoOptions.NONE_RESULT_LIMIT)) None else {
@@ -94,36 +91,36 @@ class DefaultSource extends CreatableRelationProvider
       if (storageSecret.isDefined) storageSecretIsAccountKey = false
     }
 
-    if(authentication == null){
-      val parsedParams: (KustoAuthentication, KustoCoordinates, KeyVaultAuthentication) = KustoDataSourceUtils.parseSourceParameters(parameters)
-      authentication = parsedParams._1
-      kustoCoordinates = parsedParams._2
-      keyVaultAuthentication = parsedParams._3
+    if(authenticationParameters.isEmpty){
+      (authenticationParameters, kustoCoordinates, keyVaultAuthentication) = KDSU.parseSourceParameters(parameters)
     }
 
-    val (kustoAuthentication, storageParameters): (KustoAuthentication, StorageParameters) = if (keyVaultAuthentication != null) {
-      // Get params from keyVault
-      if(isLeanMode){
-        (KeyVaultUtils.getAadAppParamsFromKeyVault(keyVaultAuthentication), null)
+    val (kustoAuthentication, storageParameters): (KustoAuthentication, Option[StorageParameters]) =
+      if (keyVaultAuthentication.isDefined) {
+        // Get params from keyVault
+        authenticationParameters = Some(KDSU.combineKeyVaultAndOptionsAuthentication(KeyVaultUtils.getAadAppParametersFromKeyVault(keyVaultAuthentication.get), authenticationParameters))
+
+        if(isLeanMode){
+          (authenticationParameters, None)
+        } else {
+          (authenticationParameters, Some(KDSU.combineKeyVaultAndOptionsStorageParams(
+            parameters.get(KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME),
+            parameters.get(KustoOptions.KUSTO_BLOB_CONTAINER),
+            storageSecret,
+            storageSecretIsAccountKey,
+            keyVaultAuthentication.get)))
+        }
       } else {
-        combineKeyVaultAndOptionsAuthentication(KeyVaultUtils.getAadAppParamsFromKeyVault(keyVaultAuthentication))
-        (authentication, combineKeyVaultAndOptionsStorageParams(
-          parameters.get(KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME),
-          parameters.get(KustoOptions.KUSTO_BLOB_CONTAINER),
-          storageSecret,
-          storageSecretIsAccountKey
-          , keyVaultAuthentication))
-      }
-    } else {
-      if(isLeanMode) {
-        (authentication, null)
-      } else {
-        // Params passed from options
-        (authentication, getTransientStorageParameters(parameters.get(KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME),
-          parameters.get(KustoOptions.KUSTO_BLOB_CONTAINER),
-          storageSecret,
-          storageSecretIsAccountKey))
-      }
+        if(isLeanMode) {
+          (authenticationParameters, None)
+        } else {
+          // Params passed from options
+          (authenticationParameters, KDSU.getAndValidateTransientStorageParameters(
+            parameters.get(KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME),
+            parameters.get(KustoOptions.KUSTO_BLOB_CONTAINER),
+            storageSecret,
+            storageSecretIsAccountKey))
+        }
     }
 
     KustoRelation(
@@ -153,93 +150,5 @@ class DefaultSource extends CreatableRelationProvider
     }
   }
 
-  private def getTransientStorageParameters(storageAccount: Option[String],
-                                            storageContainer: Option[String],
-                                            storageAccountSecret: Option[String],
-                                            storageSecretIsAccountKey: Boolean): StorageParameters = {
-    if (storageAccount.isEmpty) {
-      throw new InvalidParameterException("Storage account name is empty. Reading in 'Scale' mode requires a transient blob storage")
-    }
-
-    if (storageContainer.isEmpty) {
-      throw new InvalidParameterException("Storage container name is empty.")
-    }
-
-    if (storageAccountSecret.isEmpty) {
-      throw new InvalidParameterException("Storage account secret is empty. Please provide a storage account key or a SAS key")
-    }
-
-    StorageParameters(storageAccount.get, storageAccountSecret.get, storageContainer.get, storageSecretIsAccountKey)
-  }
-
   override def shortName(): String = "kusto"
-
-  private def combineKeyVaultAndOptionsAuthentication(paramsFromKeyVault: AadApplicationAuthentication): Unit = {
-    if(authentication != null){
-      // We have both keyVault and AAD application params, take from options first and throw if both are empty
-      try{
-        val auth = authentication.asInstanceOf[AadApplicationAuthentication]
-        authentication = AadApplicationAuthentication(
-          if(auth.ID == "") {
-            if(paramsFromKeyVault.ID == "")
-              throw new InvalidParameterException("")
-            paramsFromKeyVault.ID
-          } else auth.ID,
-          if(auth.password == "") {
-            if (paramsFromKeyVault.password == "AADApplication key is empty. Please pass it in keyVault or options")
-              throw new InvalidParameterException("")
-            paramsFromKeyVault.password
-          } else auth.password,
-          if(auth.authority == "microsoft.com") paramsFromKeyVault.authority else auth.authority
-        )}
-      catch {
-        case _: ClassCastException => throw new UnsupportedOperationException("keyVault authentication can be combined only with AADAplicationAuthentication")
-      }
-    } else {
-      authentication = paramsFromKeyVault
-    }
-  }
-
-  private def combineKeyVaultAndOptionsStorageParams(storageAccount: Option[String],
-                                                     storageContainer: Option[String],
-                                                     storageSecret: Option[String],
-                                                     storageSecretIsAccountKey: Boolean,
-                                                     keyVaultAuthentication: KeyVaultAuthentication): StorageParameters = {
-    val keyVaultParameters = KeyVaultUtils.getStorageParamsFromKeyVault(keyVaultAuthentication)
-    if(!storageSecretIsAccountKey){
-      // If SAS option defined - take sas
-      KustoDataSourceUtils.parseSas(storageSecret.get)
-    } else {
-      if (storageAccount.isEmpty || storageContainer.isEmpty || storageSecret.isEmpty){
-        // If KeyVault contains sas take it
-        if(!keyVaultParameters.storageSecretIsAccountKey) {
-          keyVaultParameters
-        } else {
-          // Try combine
-          val combined = StorageParameters(if(storageAccount.isEmpty){
-              keyVaultParameters.account
-            } else storageAccount.get,
-              if(storageSecret.isEmpty){
-                keyVaultParameters.secret
-              } else storageSecret.get,
-              if(storageContainer.isEmpty){
-                keyVaultParameters.container
-              } else storageContainer.get, storageSecretIsAccountKey = true)
-          if(combined.container == null){
-            throw new InvalidParameterException("Storage container name is empty.")
-          }
-          if(combined.secret == null){
-            throw new InvalidParameterException("Storage account secret is empty.")
-          }
-          if(combined.account == null){
-            throw new InvalidParameterException("Storage account name is empty.")
-          }
-          combined
-        }
-      } else {
-        StorageParameters(storageAccount.get, storageSecret.get, storageContainer.get, storageSecretIsAccountKey)
-      }
-    }
-  }
-
 }

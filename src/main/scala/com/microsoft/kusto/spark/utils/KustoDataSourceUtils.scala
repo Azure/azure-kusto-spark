@@ -86,7 +86,7 @@ object KustoDataSourceUtils{
     kustoAdminClient.execute(tableCoordinates.database, generateTableCreateCommand(tmpTableName, tmpTableSchema))
   }
 
-  def parseSourceParameters(parameters: Map[String,String]): (KustoAuthentication, KustoCoordinates, KeyVaultAuthentication) = {
+  def parseSourceParameters(parameters: Map[String,String]): (KustoAuthentication, KustoCoordinates, Option[KeyVaultAuthentication]) = {
     // Parse KustoTableCoordinates - these are mandatory options
     val database  = parameters.get(KustoOptions.KUSTO_DATABASE)
     val cluster = parameters.get(KustoOptions.KUSTO_CLUSTER)
@@ -104,22 +104,22 @@ object KustoDataSourceUtils{
     val applicationKey = parameters.getOrElse(KustoOptions.KUSTO_AAD_CLIENT_PASSWORD, "")
     var authentication: KustoAuthentication = null
     val keyVaultUri: String = parameters.getOrElse(KustoOptions.KEY_VAULT_URI, "")
-    var accessToken: String = null
-    var keyVaultAuthentication: KeyVaultAuthentication = null
+    var accessToken: String = ""
+    var keyVaultAuthentication: Option[KeyVaultAuthentication] = None
     if(keyVaultUri != ""){
       // KeyVault Authentication
-      var keyVaultAppId: String = null
+      var keyVaultAppId: String = ""
 
       if({keyVaultAppId = parameters.getOrElse(KustoOptions.KEY_VAULT_APP_ID, "")
         keyVaultAppId != ""}){
-        keyVaultAuthentication = KeyVaultAppAuthentication(keyVaultUri,
+        keyVaultAuthentication = Some(KeyVaultAppAuthentication(keyVaultUri,
           keyVaultAppId,
-          parameters.getOrElse(KustoOptions.KEY_VAULT_APP_KEY, ""))
+          parameters.getOrElse(KustoOptions.KEY_VAULT_APP_KEY, "")))
       }
       else {
-        keyVaultAuthentication = KeyVaultCertificateAuthentication(keyVaultUri,
+        keyVaultAuthentication = Some(KeyVaultCertificateAuthentication(keyVaultUri,
           parameters.getOrElse(KustoOptions.KEY_VAULT_PEM_FILE_PATH, ""),
-          parameters.getOrElse(KustoOptions.KEY_VAULT_CERTIFICATE_KEY, ""))
+          parameters.getOrElse(KustoOptions.KEY_VAULT_CERTIFICATE_KEY, "")))
       }
     }
 
@@ -136,7 +136,7 @@ object KustoDataSourceUtils{
     (authentication, KustoCoordinates(getClusterNameFromUrlIfNeeded(cluster.get), database.get), keyVaultAuthentication)
   }
 
-  def parseSinkParameters(parameters: Map[String,String], mode : SaveMode = SaveMode.Append): (WriteOptions, KustoAuthentication, KustoCoordinates, KeyVaultAuthentication) = {
+  def parseSinkParameters(parameters: Map[String,String], mode : SaveMode = SaveMode.Append): (WriteOptions, KustoAuthentication, KustoCoordinates, Option[KeyVaultAuthentication]) = {
     val table = parameters.get(KustoOptions.KUSTO_TABLE)
 
     if (table.isEmpty){
@@ -169,7 +169,7 @@ object KustoDataSourceUtils{
     }
     val writeOptions = WriteOptions(tableCreation, isAsync, parameters.getOrElse(KustoOptions.KUSTO_WRITE_RESULT_LIMIT, "1"), parameters.getOrElse(DateTimeUtils.TIMEZONE_OPTION, "UTC"))
 
-    val parsedSourceParameters: (KustoAuthentication, KustoCoordinates, KeyVaultAuthentication) = parseSourceParameters(parameters)
+    val parsedSourceParameters: (KustoAuthentication, KustoCoordinates, Option[KeyVaultAuthentication]) = parseSourceParameters(parameters)
     (writeOptions, parsedSourceParameters._1, KustoCoordinates(parsedSourceParameters._2.cluster, parsedSourceParameters._2.database, table.get), parsedSourceParameters._3)
   }
 
@@ -277,5 +277,85 @@ object KustoDataSourceUtils{
       case urlPattern(storageAccountId, container, sasKey) => StorageParameters(storageAccountId, sasKey, container, storageSecretIsAccountKey = false)
       case _ => throw new InvalidParameterException("SAS url couldn't be parsed. Should be https://<storage-account>.blob.core.windows.net/<container>?<SAS-Token>")
     }
+  }
+
+  private [kusto] def combineKeyVaultAndOptionsAuthentication(paramsFromKeyVault: AadApplicationAuthentication, authenticationParameters: Option[KustoAuthentication]): KustoAuthentication = {
+    if(authenticationParameters.isEmpty){
+      // We have both keyVault and AAD application params, take from options first and throw if both are empty
+      try{
+        val app = authenticationParameters.asInstanceOf[AadApplicationAuthentication]
+        AadApplicationAuthentication(
+          ID = if (app.ID == "") {
+            if (paramsFromKeyVault.ID == "")
+              throw new InvalidParameterException("AADApplication ID is empty. Please pass it in keyVault or options")
+            paramsFromKeyVault.ID
+          } else app.ID,
+          password = if (app.password == "") {
+            if (paramsFromKeyVault.password == "AADApplication key is empty. Please pass it in keyVault or options")
+              throw new InvalidParameterException("")
+            paramsFromKeyVault.password
+          } else app.password,
+          authority = if (app.authority == "microsoft.com") paramsFromKeyVault.authority else app.authority
+        )
+      } catch {
+        case _: ClassCastException => throw new UnsupportedOperationException("keyVault authentication can be combined only with AADAplicationAuthentication")
+      }
+    } else {
+      paramsFromKeyVault
+    }
+  }
+
+  private [kusto] def combineKeyVaultAndOptionsStorageParams(storageAccount: Option[String],
+                                                     storageContainer: Option[String],
+                                                     storageSecret: Option[String],
+                                                     storageSecretIsAccountKey: Boolean,
+                                                     keyVaultAuthentication: KeyVaultAuthentication): StorageParameters = {
+    if(!storageSecretIsAccountKey){
+      // If SAS option defined - take sas
+      KustoDataSourceUtils.parseSas(storageSecret.get)
+    } else {
+      if (storageAccount.isEmpty || storageContainer.isEmpty || storageSecret.isEmpty){
+        val keyVaultParameters = KeyVaultUtils.getStorageParamsFromKeyVault(keyVaultAuthentication)
+        // If KeyVault contains sas take it
+        if(!keyVaultParameters.storageSecretIsAccountKey) {
+          keyVaultParameters
+        } else {
+          // Try combine
+
+          val account = if(storageAccount.isEmpty){
+            Some(keyVaultParameters.account)
+          } else storageAccount
+          val secret = if(storageSecret.isEmpty){
+            Some(keyVaultParameters.secret)
+          } else storageSecret
+          val container = if(storageContainer.isEmpty){
+            Some(keyVaultParameters.container)
+          } else storageContainer
+
+          getAndValidateTransientStorageParameters(account, secret, container, storageSecretIsAccountKey = true)
+        }
+      } else {
+        StorageParameters(storageAccount.get, storageSecret.get, storageContainer.get, storageSecretIsAccountKey)
+      }
+    }
+  }
+
+  private [kusto] def getAndValidateTransientStorageParameters(storageAccount: Option[String],
+                                                       storageContainer: Option[String],
+                                                       storageAccountSecret: Option[String],
+                                                       storageSecretIsAccountKey: Boolean): StorageParameters = {
+    if (storageAccount.isEmpty) {
+      throw new InvalidParameterException("Storage account name is empty. Reading in 'Scale' mode requires a transient blob storage")
+    }
+
+    if (storageContainer.isEmpty) {
+      throw new InvalidParameterException("Storage container name is empty.")
+    }
+
+    if (storageAccountSecret.isEmpty) {
+      throw new InvalidParameterException("Storage account secret is empty. Please provide a storage account key or a SAS key")
+    }
+
+    StorageParameters(storageAccount.get, storageAccountSecret.get, storageContainer.get, storageSecretIsAccountKey)
   }
 }

@@ -54,6 +54,7 @@ class KustoAthenticationTest extends FlatSpec {
       .option(KustoOptions.KEY_VAULT_URI, keyVaultUri)
       .option(KustoOptions.KEY_VAULT_APP_ID, keyVaultClientID)
       .option(KustoOptions.KEY_VAULT_APP_KEY, keyVaultClientPassword)
+      .option(KustoOptions.KUSTO_AAD_CLIENT_ID, "appID")
       .option(KustoOptions.KUSTO_TABLE_CREATE_OPTIONS, SinkTableCreationMode.CreateIfNotExist.toString)
       .save()
 
@@ -63,7 +64,7 @@ class KustoAthenticationTest extends FlatSpec {
       KustoOptions.KEY_VAULT_APP_KEY -> keyVaultClientPassword
     )
 
-    val dfResult = spark.read.kusto(cluster, database, table, conf)
+//    val dfResult = spark.read.kusto(cluster, database, table, conf)
     // should compare
   }
 

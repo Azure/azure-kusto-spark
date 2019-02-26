@@ -36,7 +36,7 @@ object KeyVaultUtils {
 
   @throws[CloudException]
   @throws[IOException]
-  def getAadAppParamsFromKeyVault(keyVaultAuthentication: KeyVaultAuthentication): AadApplicationAuthentication={
+  def getAadAppParametersFromKeyVault(keyVaultAuthentication: KeyVaultAuthentication): AadApplicationAuthentication={
     keyVaultAuthentication match {
       case app: KeyVaultAppAuthentication =>
         val client = getClient(app.keyVaultAppID, app.keyVaultAppKey)

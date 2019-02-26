@@ -96,6 +96,6 @@ case class KeyVaultAppAuthentication(uri: String, keyVaultAppID: String, keyVaul
 case class KeyVaultCertificateAuthentication(uri: String, pemFilePath: String, pemFilePassword: String) extends KeyVaultAuthentication(uri)
 case class WriteOptions(tableCreateOptions: KustoOptions.SinkTableCreationMode.SinkTableCreationMode = KustoOptions.SinkTableCreationMode.FailIfNotExist,
                         isAsync: Boolean = false,
-                        writeResultLimit: String,
+                        writeResultLimit: String = KustoOptions.NONE_RESULT_LIMIT,
                         timeZone: String = "UTC")
 case class KustoAccessTokenAuthentication(token: String) extends KustoAuthentication
