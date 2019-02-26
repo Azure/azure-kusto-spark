@@ -10,12 +10,15 @@ import org.apache.spark.sql.sources.{BaseRelation, TableScan}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{Row, SQLContext, SparkSession}
 
+import scala.concurrent.duration.FiniteDuration
+
 case class KustoRelation(kustoCoordinates: KustoCoordinates,
                          appId: String,
                          appKey: String,
                          authorityId: String,
                          query: String,
                          isLeanMode: Boolean,
+                         timeout: FiniteDuration,
                          numPartitions: Int,
                          partitioningColumn: Option[String],
                          partitioningMode: Option[String],
@@ -40,11 +43,11 @@ case class KustoRelation(kustoCoordinates: KustoCoordinates,
   override def buildScan(): RDD[Row] = {
     if (isLeanMode) {
       KustoReader.leanBuildScan(
-        KustoReadRequest(sparkSession, schema, kustoCoordinates, query, appId, appKey, authorityId)
+        KustoReadRequest(sparkSession, schema, kustoCoordinates, query, appId, appKey, authorityId, timeout)
       )
     } else {
       KustoReader.scaleBuildScan(
-        KustoReadRequest(sparkSession, schema, kustoCoordinates, query, appId, appKey, authorityId),
+        KustoReadRequest(sparkSession, schema, kustoCoordinates, query, appId, appKey, authorityId, timeout),
         getTransientStorageParameters(storageAccount, storageContainer, storageAccountSecrete, isStorageSecreteKeyNotSas),
         KustoPartitionInfo(numPartitions, getPartitioningColumn(partitioningColumn, isLeanMode), getPartitioningMode(partitioningMode))
       )

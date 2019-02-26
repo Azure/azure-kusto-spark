@@ -17,15 +17,12 @@ import org.apache.spark.sql.types.StructType
 import org.json4s.jackson.JsonMethods.parse
 
 import scala.util.matching.Regex
-
 import scala.concurrent.duration._
+
+import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
 
 object KustoDataSourceUtils{
   private val klog = Logger.getLogger("KustoConnector")
-
-  val ClientName = "Kusto.Spark.Connector"
-  val DefaultTimeoutLongRunning: FiniteDuration = 90 minutes
-  val DefaultPeriodicSamplePeriod: FiniteDuration = 2 seconds
 
   def setLoggingLevel(level: String): Unit = {
     setLoggingLevel(Level.toLevel(level))
@@ -50,7 +47,6 @@ object KustoDataSourceUtils{
   private[kusto] def logFatal(reporter: String, message: String): Unit = {
     klog.fatal(s"$reporter: $message")
   }
-
 
   def createTmpTableWithSameSchema(kustoAdminClient: Client,
                                    tableCoordinates: KustoCoordinates,
@@ -91,7 +87,7 @@ object KustoDataSourceUtils{
     if(mode != SaveMode.Append)
     {
       if (mode == SaveMode.ErrorIfExists){
-        logInfo(ClientName, s"Kusto data source supports only append mode. Ignoring 'ErrorIfExists' directive")
+        logInfo(KCONST.ClientName, s"Kusto data source supports only append mode. Ignoring 'ErrorIfExists' directive")
       } else {
         throw new InvalidParameterException(s"Kusto data source supports only append mode. '$mode' directive is invalid")
       }
@@ -129,7 +125,15 @@ object KustoDataSourceUtils{
       case _ : NoSuchElementException => throw new InvalidParameterException(s"No such SinkTableCreationMode option: '${tableCreationParam.get}'")
       case _ : java.lang.IllegalArgumentException  => throw new InvalidParameterException(s"KUSTO_WRITE_ENABLE_ASYNC is expecting either 'true' or 'false', got: '$isAsyncParam'")
     }
-    val writeOptions = WriteOptions(tableCreation, isAsync, parameters.getOrElse(KustoOptions.KUSTO_WRITE_RESULT_LIMIT, "1"), parameters.getOrElse(DateTimeUtils.TIMEZONE_OPTION, "UTC"))
+
+    val timeout = new FiniteDuration(parameters.getOrElse(KustoOptions.KUSTO_TIMEOUT_LIMIT, KCONST.DefaultTimeoutAsString).toLong, TimeUnit.SECONDS)
+
+    val writeOptions = WriteOptions(
+      tableCreation,
+      isAsync,
+      parameters.getOrElse(KustoOptions.KUSTO_WRITE_RESULT_LIMIT, "1"),
+      parameters.getOrElse(DateTimeUtils.TIMEZONE_OPTION, "UTC"),
+      timeout)
 
     // Parse KustoAuthentication
     val applicationId = parameters.getOrElse(KustoOptions.KUSTO_AAD_CLIENT_ID, "")
@@ -238,7 +242,7 @@ object KustoDataSourceUtils{
     latch
   }
 
-  def verifyAsyncCommandCompletion(client: Client, database: String, commandResult: Results, samplePeriod: FiniteDuration = DefaultPeriodicSamplePeriod, timeOut: FiniteDuration = DefaultTimeoutLongRunning): Unit = {
+  def verifyAsyncCommandCompletion(client: Client, database: String, commandResult: Results, samplePeriod: FiniteDuration = KCONST.DefaultPeriodicSamplePeriod, timeOut: FiniteDuration): Unit = {
     val operationId = commandResult.getValues.get(0).get(0)
     val operationsShowCommand = CslCommandsGenerator.generateOperationsShowCommand(operationId)
     val sampleInMillis = samplePeriod.toMillis.toInt

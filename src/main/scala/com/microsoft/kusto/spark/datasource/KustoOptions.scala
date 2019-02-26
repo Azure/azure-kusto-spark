@@ -2,6 +2,9 @@ package com.microsoft.kusto.spark.datasource
 
 import java.util.Locale
 
+import scala.concurrent.duration.FiniteDuration
+import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
+
 object KustoOptions {
   private val kustoOptionNames = collection.mutable.Set[String]()
 
@@ -44,7 +47,7 @@ object KustoOptions {
   // Default: 'FailIfNotExist'
   val KUSTO_TABLE_CREATE_OPTIONS: String = newOption("tableCreateOptions")
   val KUSTO_TRUNCATE: String = newOption("truncate")
-  val KUSTO_USER_TOKEN = newOption("userToken")
+  val KUSTO_USER_TOKEN: String = newOption("userToken")
   // When writing to Kusto, allows the driver to complete operation asynchronously.  See KustoSink.md for
   // details and limitations. Default: 'false'
   val KUSTO_WRITE_ENABLE_ASYNC: String = newOption("writeEnableAsync")
@@ -53,6 +56,8 @@ object KustoOptions {
   val KUSTO_WRITE_RESULT_LIMIT: String = newOption("writeResultLimit")
   // Select either 'scale' or 'lean' read mode. Default: 'scale'
   val KUSTO_READ_MODE: String = newOption("readMode")
+  // An integer number corresponding to the period in seconds after which the operation will timeout. Default: '5400' (90 minutes)
+  val KUSTO_TIMEOUT_LIMIT: String = newOption("timeoutLimit")
 
   // Partitioning parameters
   val KUSTO_READ_PARTITION_MODE: String = newOption("partitionMode")
@@ -95,5 +100,5 @@ case class AadApplicationAuthentication(ID: String, password: String, authority:
 case class KeyVaultAppAuthentication(uri: String, keyVaultAppID: String, keyVaultAppKey: String) extends KeyVaultAuthentication(uri)
 case class KeyVaultCertificateAuthentication(uri: String, pemFilePath: String, pemFilePassword: String) extends KeyVaultAuthentication(uri)
 case class WriteOptions(tableCreateOptions: KustoOptions.SinkTableCreationMode.SinkTableCreationMode = KustoOptions.SinkTableCreationMode.FailIfNotExist,
-                        isAsync: Boolean = false, writeResultLimit: String, timeZone: String = "UTC")
+                        isAsync: Boolean = false, writeResultLimit: String, timeZone: String = "UTC", timeout: FiniteDuration)
 case class KustoUserTokenAuthentication(token: String) extends KustoAuthentication

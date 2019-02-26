@@ -1,17 +1,20 @@
 package com.microsoft.kusto.spark.datasource
 
 import java.security.InvalidParameterException
+import java.util.concurrent.TimeUnit
 
 import com.microsoft.kusto.spark.datasink.KustoWriter
-import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils, KustoQueryUtils}
+import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU, KustoConstants => KCONST, KustoQueryUtils}
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister, RelationProvider}
 import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode}
+
+import scala.concurrent.duration.FiniteDuration
 
 class DefaultSource extends CreatableRelationProvider
   with RelationProvider with DataSourceRegister {
 
   override def createRelation(sqlContext: SQLContext, mode: SaveMode, parameters: Map[String, String], data: DataFrame): BaseRelation = {
-    val (writeOptions, authentication, tableCoordinates) = KustoDataSourceUtils.parseSinkParameters(parameters, mode)
+    val (writeOptions, authentication, tableCoordinates) = KDSU.parseSinkParameters(parameters, mode)
 
     KustoWriter.write(
       None,
@@ -78,6 +81,8 @@ class DefaultSource extends CreatableRelationProvider
       if (storageSecrete.isDefined) storageSecreteIsAccountKey = false
     }
 
+    val timeout = new FiniteDuration(parameters.getOrElse(KustoOptions.KUSTO_TIMEOUT_LIMIT, KCONST.DefaultTimeoutAsString).toLong, TimeUnit.SECONDS)
+
     KustoRelation(
       KustoCoordinates(parameters.getOrElse(KustoOptions.KUSTO_CLUSTER, ""), parameters.getOrElse(KustoOptions.KUSTO_DATABASE, "")),
       parameters.getOrElse(KustoOptions.KUSTO_AAD_CLIENT_ID, ""),
@@ -85,6 +90,7 @@ class DefaultSource extends CreatableRelationProvider
       parameters.getOrElse(KustoOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com"),
       parameters.getOrElse(KustoOptions.KUSTO_QUERY, ""),
       readMode.equalsIgnoreCase("lean"),
+      timeout,
       numPartitions,
       parameters.get(KustoOptions.KUSTO_PARTITION_COLUMN),
       partitioningMode,
