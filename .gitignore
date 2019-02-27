@@ -230,13 +230,12 @@ _Pvt_Extensions
 *.script.orig
 .gitignore
 
-spark-kusto-connector/target/*
-spark-kusto-connector/.idea/libraries
-spark-kusto-connector.idea
-spark-kusto-connector/OinkSpark.iml
-spark-kusto-connector/dependency-reduced-pom.xml
-
 # ignore IntelliJ project and ouput files
-target/
-.idea/
+connector/OinkSpark.iml
+connector/dependency-reduced-pom.xml
+connector/.idea/*
+connector/target/*
+samples/.idea/*
+samples/target/*
+.idea
 *.iml

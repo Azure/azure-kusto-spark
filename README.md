@@ -73,7 +73,7 @@ can be found [here](lib)
 	
 ## Documentation
 Detailed documentation can be found [here](docs).
-Usage examples can be found [here](src/main/scala/com/microsoft/kusto/spark/Sample)
+Usage examples can be found [here](samples)
 	
 ## Contributing 
 
