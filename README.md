@@ -71,11 +71,11 @@ In order to facilitate ramp-up on platforms such as Azure Databricks, pre-compil
 can be found [here](lib) 
 
 	
-# Documentation
+## Documentation
 
 Detailed documentation can be found [here](docs).
 
-# Samples
+## Samples
 
 Usage examples can be found [here](samples/src/main/scala)
 
