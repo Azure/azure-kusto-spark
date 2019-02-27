@@ -1,5 +1,3 @@
-package com.microsoft.kusto.spark.Sample
-
 import com.microsoft.kusto.spark.datasource.KustoOptions
 import com.microsoft.kusto.spark.sql.extension.SparkExtension._
 import org.apache.spark.SparkConf

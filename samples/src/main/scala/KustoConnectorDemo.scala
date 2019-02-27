@@ -1,5 +1,3 @@
-package com.microsoft.kusto.spark.Sample
-
 /***************************************************************************************/
 /*   This code is intended for reference only.                                         */
 /*   It was tested on an Azure DataBricks cluster using Databricks Runtime Version 5.0 */
@@ -93,39 +91,6 @@ object KustoConnectorDemo {
       .option(KustoOptions.KUSTO_AAD_AUTHORITY_ID, authorityId)
       .option(KustoOptions.KUSTO_WRITE_ENABLE_ASYNC, value = true)
       .save()
-
-    // COMMAND ----------
-    /** ************************************************/
-    /*          STREAMING SINK EXAMPLE                */
-    /** ************************************************/
-    val customSchema = new StructType().add("colA", StringType, nullable = true).add("colB", IntegerType, nullable = true)
-
-    // Read data from a file to a stream
-    val csvDf = spark
-      .readStream
-      .schema(customSchema)
-      .csv("/FileStore/tables")
-
-    // COMMAND ----------
-    // STREAMING SINK EXAMPLE
-    // Set up a checkpoint and disable codeGen
-    spark.conf.set("spark.sql.streaming.checkpointLocation", "/FileStore/temp/checkpoint")
-    spark.conf.set("spark.sql.codegen.wholeStage", "false")
-
-    // Write to a Kusto table from a streaming source
-    val kustoQ = csvDf
-      .writeStream
-      .format("com.microsoft.kusto.spark.datasink.KustoSinkProvider")
-      .options(Map(
-        KustoOptions.KUSTO_CLUSTER -> cluster,
-        KustoOptions.KUSTO_TABLE -> table,
-        KustoOptions.KUSTO_DATABASE -> database,
-        KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
-        KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
-        KustoOptions.KUSTO_AAD_AUTHORITY_ID -> authorityId))
-      .trigger(Trigger.Once)
-
-    kustoQ.start().awaitTermination(TimeUnit.MINUTES.toMillis(8))
 
     // COMMAND ----------
     /** ************************************************/
