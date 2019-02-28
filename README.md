@@ -79,8 +79,9 @@ Detailed documentation can be found [here](docs).
 
 Usage examples can be found [here](samples/src/main/scala)
 
-# Looking for SDKs for other languages/platforms?
+# Available Kusto client libraries:
 
+Here is a list of currently available client libraries for Kusto:
 - [Node](https://github.com/azure/azure-kusto-node)
 - [Python](https://github.com/azure/azure-kusto-python)
 - [.NET](https://docs.microsoft.com/en-us/azure/kusto/api/netfx/about-the-sdk)
