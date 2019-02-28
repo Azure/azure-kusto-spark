@@ -5,20 +5,21 @@ import java.util.Locale
 
 import com.microsoft.kusto.spark.utils.{KustoClient, KustoQueryUtils}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.sources.{BaseRelation, TableScan}
+import org.apache.spark.sql.sources.{BaseRelation, Filter, PrunedFilteredScan, TableScan}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{Row, SQLContext, SparkSession}
 
-case class KustoRelation(kustoCoordinates: KustoCoordinates,
-                         authentication: KustoAuthentication,
-                         query: String,
-                         isLeanMode: Boolean,
-                         numPartitions: Int,
-                         partitioningColumn: Option[String],
-                         partitioningMode: Option[String],
-                         customSchema: Option[String] = None,
-                         storageParameters: Option[StorageParameters])
-                        (@transient val sparkSession: SparkSession) extends BaseRelation with TableScan with Serializable {
+private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
+   authentication: KustoAuthentication,
+   query: String,
+   isLeanMode: Boolean,
+   numPartitions: Int,
+   partitioningColumn: Option[String],
+   partitioningMode: Option[String],
+   customSchema: Option[String] = None,
+   storageParameters: Option[KustoStorageParameters])
+  (@transient val sparkSession: SparkSession)
+  extends BaseRelation with TableScan with PrunedFilteredScan with Serializable {
 
 
   private val normalizedQuery = KustoQueryUtils.normalizeQuery(query)
@@ -47,6 +48,40 @@ case class KustoRelation(kustoCoordinates: KustoCoordinates,
         KustoPartitionParameters(numPartitions, getPartitioningColumn, getPartitioningMode)
       )
     }
+  }
+
+  override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] =
+    if (isLeanMode) {
+      KustoReader.leanBuildScan(
+        KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication),
+        KustoFiltering(requiredColumns, filters)
+      )
+    } else {
+      KustoReader.scaleBuildScan(
+        KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication),
+        storageParameters.get,
+        KustoPartitionParameters(numPartitions, getPartitioningColumn, getPartitioningMode),
+        KustoFiltering(requiredColumns, filters)
+      )
+    }
+
+  private def getTransientStorageParameters(storageAccount: Option[String],
+                                            storageContainer: Option[String],
+                                            storageAccountSecrete: Option[String],
+                                            isKeyNotSas: Boolean): KustoStorageParameters = {
+    if (storageAccount.isEmpty) {
+      throw new InvalidParameterException("Storage account name is empty. Reading in 'Scale' mode requires a transient blob storage")
+    }
+
+    if (storageContainer.isEmpty) {
+      throw new InvalidParameterException("Storage container name is empty.")
+    }
+
+    if (storageAccountSecrete.isEmpty) {
+      throw new InvalidParameterException("Storage account secrete is empty. Please provide a storage account key or a SAS key")
+    }
+
+    KustoStorageParameters(storageAccount.get, storageAccountSecrete.get, storageContainer.get, isKeyNotSas)
   }
 
   private def getSchema: StructType = {

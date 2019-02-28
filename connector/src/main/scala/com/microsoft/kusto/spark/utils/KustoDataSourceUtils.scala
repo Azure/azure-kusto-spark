@@ -271,10 +271,10 @@ object KustoDataSourceUtils{
     }
   }
 
-  private [kusto] def parseSas(url: String): StorageParameters  = {
+  private [kusto] def parseSas(url: String): KustoStorageParameters  = {
     val urlPattern: Regex = raw"(?:https://)?([^.]+).blob.core.windows.net/([^?]+)?(.+)".r
     url match {
-      case urlPattern(storageAccountId, container, sasKey) => StorageParameters(storageAccountId, sasKey, container, storageSecretIsAccountKey = false)
+      case urlPattern(storageAccountId, container, sasKey) => KustoStorageParameters(storageAccountId, sasKey, container, storageSecretIsAccountKey = false)
       case _ => throw new InvalidParameterException("SAS url couldn't be parsed. Should be https://<storage-account>.blob.core.windows.net/<container>?<SAS-Token>")
     }
   }
@@ -309,7 +309,7 @@ object KustoDataSourceUtils{
                                                            storageContainer: Option[String],
                                                            storageSecret: Option[String],
                                                            storageSecretIsAccountKey: Boolean,
-                                                           keyVaultAuthentication: KeyVaultAuthentication): StorageParameters = {
+                                                           keyVaultAuthentication: KeyVaultAuthentication): KustoStorageParameters = {
     if(!storageSecretIsAccountKey){
       // If SAS option defined - take sas
       KustoDataSourceUtils.parseSas(storageSecret.get)
@@ -335,15 +335,15 @@ object KustoDataSourceUtils{
           getAndValidateTransientStorageParameters(account, secret, container, storageSecretIsAccountKey = true)
         }
       } else {
-        StorageParameters(storageAccount.get, storageSecret.get, storageContainer.get, storageSecretIsAccountKey)
+        KustoStorageParameters(storageAccount.get, storageSecret.get, storageContainer.get, storageSecretIsAccountKey)
       }
     }
   }
 
-  private [kusto] def getAndValidateTransientStorageParameters(storageAccount: Option[String],
+  private[kusto] def getAndValidateTransientStorageParameters(storageAccount: Option[String],
                                                        storageContainer: Option[String],
                                                        storageAccountSecret: Option[String],
-                                                       storageSecretIsAccountKey: Boolean): StorageParameters = {
+                                                       storageSecretIsAccountKey: Boolean): KustoStorageParameters = {
     if (storageAccount.isEmpty) {
       throw new InvalidParameterException("Storage account name is empty. Reading in 'Scale' mode requires a transient blob storage")
     }
@@ -356,6 +356,10 @@ object KustoDataSourceUtils{
       throw new InvalidParameterException("Storage account secret is empty. Please provide a storage account key or a SAS key")
     }
 
-    StorageParameters(storageAccount.get, storageAccountSecret.get, storageContainer.get, storageSecretIsAccountKey)
+    KustoStorageParameters(storageAccount.get, storageAccountSecret.get, storageContainer.get, storageSecretIsAccountKey)
+  }
+
+  private[kusto] def countRows(client: Client, query: String, database: String): Int = {
+    client.execute(database, generateCountQuery(query)).getValues.get(0).get(0).toInt
   }
 }

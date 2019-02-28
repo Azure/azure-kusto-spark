@@ -93,7 +93,7 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
     val expectedNumberOfRows: Int =  100
     val rows: immutable.IndexedSeq[(String, Int)] = (1 to expectedNumberOfRows).map(v => (newRow(), v))
     val dfOrig = rows.toDF("name", "value")
-    val table = KustoQueryUtils.simplifyName(s"KustoSparkReadWRiteTest_${UUID.randomUUID()}")
+    val table = KustoQueryUtils.simplifyName(s"KustoSparkReadWriteTest_${UUID.randomUUID()}")
 
     // Create a new table.
     val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://$cluster.kusto.windows.net", appId, appKey, authority)
@@ -122,11 +122,9 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
     val orig = dfOrig.select("name", "value").rdd.map(x => (x.getString(0), x.getInt(1))).collect().sortBy(_._2)
     val result = dfResult.select("ColA", "ColB").rdd.map(x => (x.getString(0), x.getInt(1))).collect().sortBy(_._2)
 
-    for(idx <- orig.indices) {
-      assert(orig(idx) == result(idx))
-    }
+    assert(orig.deep == result.deep)
 
     // Cleanup
-    KustoTestUtils.tryDropAllTablesByPrefix(kustoAdminClient, database, "KustoSparkReadWRiteTest")
+    KustoTestUtils.tryDropAllTablesByPrefix(kustoAdminClient, database, "KustoSparkReadWriteTest")
   }
 }

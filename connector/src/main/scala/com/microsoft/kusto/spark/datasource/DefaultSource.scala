@@ -97,7 +97,7 @@ class DefaultSource extends CreatableRelationProvider
       keyVaultAuthentication = sourceParameters. keyVaultAuth
     }
 
-    val (kustoAuthentication, storageParameters): (Option[KustoAuthentication], Option[StorageParameters]) =
+    val (kustoAuthentication, storageParameters): (Option[KustoAuthentication], Option[KustoStorageParameters]) =
       if (keyVaultAuthentication.isDefined) {
         // Get params from keyVault
         authenticationParameters = Some(KDSU.mergeKeyVaultAndOptionsAuthentication(KeyVaultUtils.getAadAppParametersFromKeyVault(keyVaultAuthentication.get), authenticationParameters))
