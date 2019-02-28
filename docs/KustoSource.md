@@ -82,7 +82,12 @@ In addition, there are two main reading modes: see **KUSTO_READ_MODE** option be
    This option doesn't involve partitioning the data in any way, and is therefore limited to queries resulting in small amount of data 
    (typically in the order of KiloBytes up to few MegaBytes).
    * When set to "scale" (**default**), uses a scalable method to export data from Kusto nodes, and convert this data to an RDD.
-   The data is exported to a transient blob storage account provided by the caller, as specified [below](#transient-storage-parameters)    
+   The data is exported to a transient blob storage account provided by the caller, as specified [below](#transient-storage-parameters)
+
+ * **KUSTO_TIMEOUT_LIMIT**:
+ An integer number corresponding to the period in seconds after which the operation will timeout.
+ This is an upper limit that may coexist with addition timeout limits as configured on Spark or Kusto clusters.
+ Default: '5400' (90 minutes)    
     
 #### Transient Storage Parameters
 When reading data from Kusto in 'scale' mode, the data is exported from Kusto into a blob storage every time the corresponding RDD is materialized.

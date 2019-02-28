@@ -9,6 +9,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{Row, SparkSession}
 
+import scala.concurrent.duration.FiniteDuration
+
 private[kusto] case class KustoPartition(predicate: Option[String], idx: Int) extends Partition {
   override def index: Int = idx
 }
@@ -24,7 +26,8 @@ private[kusto] case class KustoReadRequest(sparkSession: SparkSession,
                                            schema: StructType,
                                            kustoCoordinates: KustoCoordinates,
                                            query: String,
-                                           authentication: KustoAuthentication)
+                                           authentication: KustoAuthentication,
+                                           timeout: FiniteDuration)
 
 private[kusto] object KustoReader {
   private val myName = this.getClass.getSimpleName
@@ -106,6 +109,6 @@ private[kusto] class KustoReader(request: KustoReadRequest, storage: StoragePara
     )
 
     val commandResult = client.execute(request.kustoCoordinates.database, exportCommand)
-    KDSU.verifyAsyncCommandCompletion(client, request.kustoCoordinates.database, commandResult)
+    KDSU.verifyAsyncCommandCompletion(client, request.kustoCoordinates.database, commandResult, timeOut = request.timeout)
   }
 }
