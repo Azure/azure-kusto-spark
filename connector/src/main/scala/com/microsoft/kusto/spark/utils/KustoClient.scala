@@ -1,7 +1,7 @@
 package com.microsoft.kusto.spark.utils
 import com.microsoft.azure.kusto.data.{Client, ClientFactory, ConnectionStringBuilder}
 import com.microsoft.azure.kusto.ingest.{IngestClient, IngestClientFactory}
-import com.microsoft.kusto.spark.datasource._
+import com.microsoft.kusto.spark.datasource.{AadApplicationAuthentication, KeyVaultAuthentication, KustoAccessTokenAuthentication, KustoAuthentication}
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 
 object KustoClient {
@@ -28,14 +28,16 @@ object KustoClient {
 
   def getKcsb(authentication: KustoAuthentication, clusterUri: String): ConnectionStringBuilder = {
     authentication match {
-      case null => throw new MatchError("Can't create ConnectionStringBuilder with null authentication params")
       case app: AadApplicationAuthentication =>
         ConnectionStringBuilder.createWithAadApplicationCredentials(clusterUri, app.ID, app.password, app.authority)
       case keyVaultParams: KeyVaultAuthentication =>
-        var app = KeyVaultUtils.getAadAppParametersFromKeyVault(keyVaultParams)
+        val app = KeyVaultUtils.getAadAppParametersFromKeyVault(keyVaultParams)
         ConnectionStringBuilder.createWithAadApplicationCredentials(clusterUri, app.ID, app.password, app.authority)
-      case userTokne: KustoAccessTokenAuthentication =>
-        ConnectionStringBuilder.createWithAadAccessTokenAuthentication(clusterUri, userTokne.token)
+      case userToken: KustoAccessTokenAuthentication =>
+        ConnectionStringBuilder.createWithAadAccessTokenAuthentication(clusterUri, userToken
+          .token)
+      case default => throw new MatchError("Can't create ConnectionStringBuilder with null " +
+        "authentication params")
     }
   }
 }

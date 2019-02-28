@@ -1,9 +1,12 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
   <modelVersion>4.0.0</modelVersion>
-  <groupId>com.microsoft.kusto</groupId>
+  <parent>
+    <artifactId>azure-kusto-spark</artifactId>
+    <groupId>com.microsoft.azure.kusto</groupId>
+    <version>1.0.0-BETA-02</version>
+  </parent>
+
   <artifactId>spark-kusto-connector</artifactId>
-  <version>1.0.0-Beta-01</version>
-  <name>${project.artifactId}</name>
   <description>Kusto data connector</description>
   <inceptionYear>2018</inceptionYear>
   <licenses>
@@ -26,15 +29,6 @@
     <lift-webkit.version>3.0-M8</lift-webkit.version>
   </properties>
 
-  <packaging>jar</packaging>
-
-  <repositories>
-    <repository>
-      <id>jitpack.io</id>
-      <url>https://jitpack.io</url>
-    </repository>
-  </repositories>
-
   <dependencies>
     <!-- https://mvnrepository.com/artifact/com.google.errorprone/error_prone_annotations -->
     <dependency>
@@ -45,23 +39,13 @@
     <dependency>
         <groupId>com.microsoft.azure.kusto</groupId>
         <artifactId>kusto-data</artifactId>
-        <version>1.0.0-BETA-01</version>
-        <scope>system</scope>
-        <systemPath>${basedir}/../lib/kusto-data-1.0.0-BETA-01-jar-with-dependencies.jar</systemPath>
+        <version>${kusto-sdk.version}</version>
     </dependency>
     <dependency>
       <groupId>com.microsoft.azure.kusto</groupId>
       <artifactId>kusto-ingest</artifactId>
-      <version>1.0.0-BETA-01</version>
-      <scope>system</scope>
-      <systemPath>${basedir}/../lib/kusto-ingest-1.0.0-BETA-01-jar-with-dependencies.jar</systemPath>
+      <version>${kusto-sdk.version}</version>
     </dependency>
-    <!--<dependency>-->
-      <!--<groupId>com.github.Azure</groupId>-->
-      <!--<artifactId>azure-kusto-java</artifactId>-->
-      <!--<version>1.0.0-BETA-01</version>-->
-    <!--</dependency>-->
-    <!-- https://mvnrepository.com/artifact/com.microsoft.azure/azure-storage -->
     <dependency>
       <groupId>com.microsoft.azure</groupId>
       <artifactId>azure-storage</artifactId>
@@ -123,7 +107,7 @@
     <dependency>
       <groupId>com.microsoft.azure</groupId>
       <artifactId>adal4j</artifactId>
-      <version>1.2.0</version>
+      <version>1.6.3</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>

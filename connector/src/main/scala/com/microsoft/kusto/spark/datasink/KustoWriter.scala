@@ -199,7 +199,7 @@ object KustoWriter{
 
       // Proceed only on success. Will throw on failure for the driver to handle
       KDSU.runSequentially[IngestionStatus](
-        func = () => ingestionResult.GetIngestionStatusCollection().get(0),
+        func = () => ingestionResult.getIngestionStatusCollection().get(0),
         0, delayPeriodBetweenCalls, (timeoutMillis / delayPeriodBetweenCalls + 5).toInt,
         res => res.status == OperationStatus.Pending,
         res => res.status match {
