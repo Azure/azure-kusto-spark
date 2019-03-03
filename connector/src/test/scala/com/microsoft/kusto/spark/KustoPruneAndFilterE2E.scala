@@ -51,40 +51,40 @@ class KustoPruneAndFilterE2E extends FlatSpec with BeforeAndAfterAll {
   private val loggingLevel: Option[String] = Option(System.getProperty("logLevel"))
   if (loggingLevel.isDefined) KDSU.setLoggingLevel(loggingLevel.get)
 
-//  "KustoSource" should "apply pruning and filtering when reading in lean mode" taggedAs KustoE2E in {
-//    val table: String = System.getProperty(KustoOptions.KUSTO_TABLE)
-//    val query: String = System.getProperty(KustoOptions.KUSTO_QUERY, s"$table | where (toint(ColB) % 1000 == 0) ")
-//
-//    val conf: Map[String, String] = Map(
-//      KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
-//      KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
-//      KustoOptions.KUSTO_READ_MODE -> "lean"
-//    )
-//
-//    val df = spark.read.kusto(cluster, database, query, conf).select("ColA")
-//    df.show()
-//  }
-//
-//  "KustoSource" should "apply pruning and filtering when reading in scale mode" taggedAs KustoE2E in {
-//    val table: String = System.getProperty(KustoOptions.KUSTO_TABLE)
-//    val query: String = System.getProperty(KustoOptions.KUSTO_QUERY, s"$table | where (toint(ColB) % 1 == 0)")
-//
-//    val storageAccount: String = System.getProperty("storageAccount")
-//    val container: String = System.getProperty("container")
-//    val blobKey: String = System.getProperty("blobKey")
-//    val blobSas: String = System.getProperty("blobSas")
-//    val blobSasConnectionString: String = System.getProperty("blobSasQuery")
-//
-//    val conf: Map[String, String] = Map(
-//      KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
-//      KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
-//      KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME -> storageAccount,
-//      KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_KEY -> blobKey,
-//      KustoOptions.KUSTO_BLOB_CONTAINER -> container
-//    )
-//
-//    spark.read.kusto(cluster, database, query, conf).show(20)
-//  }
+  "KustoSource" should "apply pruning and filtering when reading in lean mode" taggedAs KustoE2E in {
+    val table: String = System.getProperty(KustoOptions.KUSTO_TABLE)
+    val query: String = System.getProperty(KustoOptions.KUSTO_QUERY, s"$table | where (toint(ColB) % 1000 == 0) ")
+
+    val conf: Map[String, String] = Map(
+      KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
+      KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+      KustoOptions.KUSTO_READ_MODE -> "lean"
+    )
+
+    val df = spark.read.kusto(cluster, database, query, conf).select("ColA")
+    df.show()
+  }
+
+  "KustoSource" should "apply pruning and filtering when reading in scale mode" taggedAs KustoE2E in {
+    val table: String = System.getProperty(KustoOptions.KUSTO_TABLE)
+    val query: String = System.getProperty(KustoOptions.KUSTO_QUERY, s"$table | where (toint(ColB) % 1 == 0)")
+
+    val storageAccount: String = System.getProperty("storageAccount")
+    val container: String = System.getProperty("container")
+    val blobKey: String = System.getProperty("blobKey")
+    val blobSas: String = System.getProperty("blobSas")
+    val blobSasConnectionString: String = System.getProperty("blobSasQuery")
+
+    val conf: Map[String, String] = Map(
+      KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
+      KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+      KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME -> storageAccount,
+      KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_KEY -> blobKey,
+      KustoOptions.KUSTO_BLOB_CONTAINER -> container
+    )
+
+    spark.read.kusto(cluster, database, query, conf).show(20)
+  }
 
   "KustoConnector" should "write to a kusto table and read it back in scale mode with pruning and filtering" taggedAs KustoE2E in {
     import spark.implicits._
