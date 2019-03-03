@@ -132,7 +132,7 @@ object KustoDataSourceUtils{
       authentication = KustoAccessTokenAuthentication(DeviceAuthentication.acquireAccessTokenUsingDeviceCodeFlow(cluster.get))
     }
 
-    SourceParameters(authentication, KustoCoordinates(getClusterNameFromUrlIfNeeded(cluster.get), database.get, table), keyVaultAuthentication)
+    SourceParameters(authentication, KustoCoordinates(getClusterNameFromUrlIfNeeded(cluster.get).toLowerCase(), database.get, table), keyVaultAuthentication)
   }
 
   case class SinkParameters(writeOptions: WriteOptions, sourceParametersResults: SourceParameters)
