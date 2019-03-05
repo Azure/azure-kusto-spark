@@ -8,21 +8,11 @@ import org.apache.spark.sql.types._
 private[kusto] object KustoFilter {
   // Augment the original query to include column pruning and filtering
   def pruneAndFilter(originalSchema: StructType, originalQuery: String, filtering: KustoFiltering): String = {
-    var query = originalQuery
-
-    if (!filtering.filters.isEmpty) {
-      query += KustoFilter.buildFiltersClause(originalSchema, filtering.filters)
-    }
-
-    if (!filtering.columns.isEmpty) {
-      query += KustoFilter.buildColumnsClause(filtering.columns)
-    }
-
-    query
+    originalQuery + KustoFilter.buildFiltersClause(originalSchema, filtering.filters) + KustoFilter.buildColumnsClause(filtering.columns)
   }
 
   def pruneSchema(schema: StructType, columns: Array[String]): StructType = {
-    val fieldMap = Map(schema.fields.map(x => x.name -> x): _*)
+    val fieldMap = schema.fields.map(x => x.name -> x).toMap
     new StructType(columns.map(name => fieldMap(name)))
   }
 
@@ -80,11 +70,7 @@ private[kusto] object KustoFilter {
   }
 
   private def unaryLogicalOperatorFilter(schema: StructType, childFilter: Filter, operator: String): Option[String] = {
-    val child = buildFilterExpression(schema, childFilter)
-
-    if (child.isEmpty) None else {
-      Some(s"$operator(${child.get})")
-    }
+    buildFilterExpression(schema, childFilter).map(_ => s"$operator(${_})")
   }
 
   private  def stringOperatorFilter(schema: StructType, attr: String, value: String, operator: String): Option[String] = {
@@ -95,8 +81,7 @@ private[kusto] object KustoFilter {
   }
 
   private def toStringList(values: Array[Any], dataType: DataType): String = {
-    val combined = values.map(value => format(value, dataType)).mkString(", ")
-    if (combined.isEmpty) "" else combined
+    values.map(value => format(value, dataType)).mkString(", ")
   }
 
   private def unaryOperatorOnValueSetFilter(schema: StructType, attr: String, value: Array[Any], operator: String): Option[String] = {

@@ -29,6 +29,8 @@ private[kusto] case class KustoReadRequest(sparkSession: SparkSession,
                                            query: String,
                                            authentication: KustoAuthentication)
 
+private[kusto] case class KustoReadOptions(isLeanMode: Boolean, isConfigureFileSystem: Boolean = true, isCompressOnExport: Boolean = true)
+
 private[kusto] object KustoReader {
   private val myName = this.getClass.getSimpleName
 
@@ -47,15 +49,17 @@ private[kusto] object KustoReader {
      request: KustoReadRequest,
      storage: KustoStorageParameters,
      partitionInfo: KustoPartitionParameters,
+     isFsSetupNeeded: Boolean = false,
+     isCompressOnExport: Boolean = true,
      filtering: KustoFiltering = KustoFiltering.apply()): RDD[Row] = {
 
-    setupBlobAccess(request, storage)
+    if (isFsSetupNeeded) setupBlobAccess(request, storage)
     val partitions = calculatePartitions(partitionInfo)
     val reader = new KustoReader(request, storage)
     val directory = KustoQueryUtils.simplifyName(s"${request.kustoCoordinates.database}/dir${UUID.randomUUID()}/")
 
     for (partition <- partitions) {
-      reader.exportPartitionToBlob(partition.asInstanceOf[KustoPartition], request, storage, directory, filtering)
+      reader.exportPartitionToBlob(partition.asInstanceOf[KustoPartition], request, storage, directory, isCompressOnExport, filtering)
     }
 
     val path = s"wasbs://${storage.container}@${storage.account}.blob.core.windows.net/$directory"
@@ -117,6 +121,7 @@ private[kusto] class KustoReader(request: KustoReadRequest, storage: KustoStorag
     request: KustoReadRequest,
     storage: KustoStorageParameters,
     directory: String,
+    isCompressed: Boolean,
     filtering: KustoFiltering): Unit = {
 
     val exportCommand = CslCommandsGenerator.generateExportDataCommand(
@@ -128,7 +133,8 @@ private[kusto] class KustoReader(request: KustoReadRequest, storage: KustoStorag
       storage.storageSecretIsAccountKey,
       partition.idx,
       partition.predicate,
-      isAsync = true
+      Some(1 * 1024 * 1024 * 1024), // 1GB, maximal allowed. TODO: move to KustoConsts once the relevant (timeout) PR is merged
+      isCompressed = isCompressed
     )
 
     val commandResult = client.execute(request.kustoCoordinates.database, exportCommand)

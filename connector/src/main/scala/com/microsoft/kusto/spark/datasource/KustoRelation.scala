@@ -12,7 +12,7 @@ import org.apache.spark.sql.{Row, SQLContext, SparkSession}
 private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
    authentication: KustoAuthentication,
    query: String,
-   isLeanMode: Boolean,
+   readOptions: KustoReadOptions,
    numPartitions: Int,
    partitioningColumn: Option[String],
    partitioningMode: Option[String],
@@ -37,7 +37,7 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
   }
 
   override def buildScan(): RDD[Row] = {
-    if (isLeanMode) {
+    if (readOptions.isLeanMode) {
       KustoReader.leanBuildScan(
         KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication)
       )
@@ -51,7 +51,7 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
   }
 
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] =
-    if (isLeanMode) {
+    if (readOptions.isLeanMode) {
       KustoReader.leanBuildScan(
         KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication),
         KustoFiltering(requiredColumns, filters)
@@ -61,28 +61,11 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
         KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication),
         storageParameters.get,
         KustoPartitionParameters(numPartitions, getPartitioningColumn, getPartitioningMode),
+        readOptions.isConfigureFileSystem,
+        readOptions.isCompressOnExport,
         KustoFiltering(requiredColumns, filters)
       )
     }
-
-  private def getTransientStorageParameters(storageAccount: Option[String],
-                                            storageContainer: Option[String],
-                                            storageAccountSecrete: Option[String],
-                                            isKeyNotSas: Boolean): KustoStorageParameters = {
-    if (storageAccount.isEmpty) {
-      throw new InvalidParameterException("Storage account name is empty. Reading in 'Scale' mode requires a transient blob storage")
-    }
-
-    if (storageContainer.isEmpty) {
-      throw new InvalidParameterException("Storage container name is empty.")
-    }
-
-    if (storageAccountSecrete.isEmpty) {
-      throw new InvalidParameterException("Storage account secrete is empty. Please provide a storage account key or a SAS key")
-    }
-
-    KustoStorageParameters(storageAccount.get, storageAccountSecrete.get, storageContainer.get, isKeyNotSas)
-  }
 
   private def getSchema: StructType = {
     if (query.isEmpty) {

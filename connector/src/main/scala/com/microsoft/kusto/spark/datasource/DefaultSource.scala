@@ -72,6 +72,8 @@ class DefaultSource extends CreatableRelationProvider
     val readMode = parameters.getOrElse(KustoOptions.KUSTO_READ_MODE, "scale").toLowerCase(Locale.ROOT)
     val partitioningMode = parameters.get(KustoOptions.KUSTO_READ_PARTITION_MODE)
     val isLeanMode = readMode.equals("lean")
+    val isSetFsConfiguration =  parameters.getOrElse(KustoOptions.KUSTO_BLOB_SET_FS_CONFIG, "false").trim.toBoolean
+    val isCompressOnExport =  parameters.getOrElse(KustoOptions.KUSTO_BLOB_COMPRESS_ON_EXPORT, "true").trim.toBoolean
 
     val numPartitions = setNumPartitionsPerMode(sqlContext, requestedPartitions, isLeanMode, partitioningMode)
     if (!KustoOptions.supportedReadModes.contains(readMode)) {
@@ -129,7 +131,7 @@ class DefaultSource extends CreatableRelationProvider
       kustoCoordinates,
       kustoAuthentication.get,
       parameters.getOrElse(KustoOptions.KUSTO_QUERY, ""),
-      isLeanMode,
+      KustoReadOptions(isLeanMode, isSetFsConfiguration, isCompressOnExport),
       numPartitions,
       parameters.get(KustoOptions.KUSTO_PARTITION_COLUMN),
       partitioningMode,

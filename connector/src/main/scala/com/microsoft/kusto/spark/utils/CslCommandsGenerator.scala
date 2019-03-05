@@ -60,14 +60,18 @@ object CslCommandsGenerator{
      useKeyNotSas: Boolean = true,
      partitionId: Int,
      partitionPredicate: Option[String] = None,
-     isAsync: Boolean): String = {
+     sizeLimit: Option[Long],
+     isAsync: Boolean = true,
+     isCompressed: Boolean = false): String = {
 
     val secretString = if (useKeyNotSas) s""";" h@"$secret"""" else if (secret(0) == '?') s"""" h@"$secret"""" else s"""?" h@"$secret""""
     val blobUri = s"https://$storageAccountName.blob.core.windows.net"
     val async = if (isAsync) "async " else ""
+    val compress = if (isCompressed) "compressed " else ""
+    val sizeLimitIfDefined = if (sizeLimit.isDefined) s"sizeLimit=${sizeLimit.get}, " else ""
 
-    var command = s""".export ${async}to parquet ("$blobUri/$container$secretString)""" +
-      s""" with (namePrefix="${directory}part$partitionId", fileExtension=parquet) <| $query"""
+    var command = s""".export ${async}${compress}to parquet ("$blobUri/$container$secretString)""" +
+      s""" with (${sizeLimitIfDefined}namePrefix="${directory}part$partitionId", fileExtension=parquet) <| $query"""
 
     if (partitionPredicate.nonEmpty)
     {
