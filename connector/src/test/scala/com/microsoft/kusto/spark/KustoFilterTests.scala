@@ -133,6 +133,13 @@ class KustoFilterTests extends FlatSpec with MockFactory with Matchers{
     filter shouldBe Some("""not(isnotnull(byte))""")
   }
 
+  "Not expression with empty child" should "return None" in {
+    val childFilter = unknownFilter
+
+    val filter = KustoFilter.buildFilterExpression(schema, Not(childFilter))
+    filter shouldBe None
+  }
+
   "StringStartsWith expression" should "construct the correct expression" in {
     val filter = KustoFilter.buildFilterExpression(schema, StringStartsWith("string", "StartingString"))
     filter shouldBe Some("""string startswith_cs 'StartingString'""")

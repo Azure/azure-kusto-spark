@@ -70,7 +70,7 @@ private[kusto] object KustoFilter {
   }
 
   private def unaryLogicalOperatorFilter(schema: StructType, childFilter: Filter, operator: String): Option[String] = {
-    buildFilterExpression(schema, childFilter).map(_ => s"$operator(${_})")
+    buildFilterExpression(schema, childFilter).map(child => s"$operator(${child})")
   }
 
   private  def stringOperatorFilter(schema: StructType, attr: String, value: String, operator: String): Option[String] = {
