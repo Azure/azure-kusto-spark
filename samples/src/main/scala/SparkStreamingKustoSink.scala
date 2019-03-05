@@ -47,7 +47,7 @@ object SparkStreamingKustoSink {
       .option(KustoOptions.KUSTO_TABLE, "Your Kusto Destination Table")
       .option(KustoOptions.KUSTO_AAD_CLIENT_ID, "Your Client ID")
       .option(KustoOptions.KUSTO_AAD_CLIENT_PASSWORD, "Your secret")
-      .option(KustoOptions.KUSTO_WRITE_ENABLE_ASYNC, "true")
+      .option(KustoOptions.KUSTO_WRITE_ENABLE_ASYNC, "false")
       .trigger(Trigger.ProcessingTime(0))
       .start()
 

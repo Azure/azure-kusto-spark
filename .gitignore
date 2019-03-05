@@ -235,7 +235,9 @@ connector/OinkSpark.iml
 connector/dependency-reduced-pom.xml
 connector/.idea/*
 connector/target/*
+connector/scalastyle-output.xml
 samples/.idea/*
 samples/target/*
 .idea
 *.iml
+target
