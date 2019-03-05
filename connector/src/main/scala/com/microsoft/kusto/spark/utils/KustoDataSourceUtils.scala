@@ -19,6 +19,8 @@ import org.json4s.jackson.JsonMethods.parse
 import scala.util.matching.Regex
 import scala.concurrent.duration._
 
+import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
+
 object KustoDataSourceUtils{
   private val klog = Logger.getLogger("KustoConnector")
 
@@ -143,7 +145,7 @@ object KustoDataSourceUtils{
     if(mode != SaveMode.Append)
     {
       if (mode == SaveMode.ErrorIfExists){
-        logInfo(ClientName, s"Kusto data source supports only append mode. Ignoring 'ErrorIfExists' directive")
+        logInfo(KCONST.ClientName, s"Kusto data source supports only append mode. Ignoring 'ErrorIfExists' directive")
       } else {
         throw new InvalidParameterException(s"Kusto data source supports only append mode. '$mode' directive is invalid")
       }
@@ -164,7 +166,16 @@ object KustoDataSourceUtils{
       case _ : NoSuchElementException => throw new InvalidParameterException(s"No such SinkTableCreationMode option: '${tableCreationParam.get}'")
       case _ : java.lang.IllegalArgumentException  => throw new InvalidParameterException(s"KUSTO_WRITE_ENABLE_ASYNC is expecting either 'true' or 'false', got: '$isAsyncParam'")
     }
-    val writeOptions = WriteOptions(tableCreation, isAsync, parameters.getOrElse(KustoOptions.KUSTO_WRITE_RESULT_LIMIT, "1"), parameters.getOrElse(DateTimeUtils.TIMEZONE_OPTION, "UTC"))
+
+    val timeout = new FiniteDuration(parameters.getOrElse(KustoOptions.KUSTO_TIMEOUT_LIMIT, KCONST.DefaultTimeoutAsString).toLong, TimeUnit.SECONDS)
+
+    val writeOptions = WriteOptions(
+      tableCreation,
+      isAsync,
+      parameters.getOrElse(KustoOptions.KUSTO_WRITE_RESULT_LIMIT, "1"),
+      parameters.getOrElse(DateTimeUtils.TIMEZONE_OPTION, "UTC"),
+      timeout)
+
     val sourceParameters = parseSourceParameters(parameters)
 
     if (sourceParameters.kustoCoordinates.table.isEmpty){
@@ -225,7 +236,7 @@ object KustoDataSourceUtils{
 
         if (latch.getCount == 0)
         {
-          throw new TimeoutException(s"runSequentially: Reached maximal allowed repetitions ($numberOfTimesToRun), aborting")
+          throw new TimeoutException(s"runSequentially: timed out based on maximal allowed repetitions ($numberOfTimesToRun), aborting")
         }
 
         if (!doWhile.apply(res)){
@@ -246,7 +257,7 @@ object KustoDataSourceUtils{
     latch
   }
 
-  def verifyAsyncCommandCompletion(client: Client, database: String, commandResult: Results, samplePeriod: FiniteDuration = DefaultPeriodicSamplePeriod, timeOut: FiniteDuration = DefaultTimeoutLongRunning): Unit = {
+  def verifyAsyncCommandCompletion(client: Client, database: String, commandResult: Results, samplePeriod: FiniteDuration = KCONST.DefaultPeriodicSamplePeriod, timeOut: FiniteDuration): Unit = {
     val operationId = commandResult.getValues.get(0).get(0)
     val operationsShowCommand = CslCommandsGenerator.generateOperationsShowCommand(operationId)
     val sampleInMillis = samplePeriod.toMillis.toInt
