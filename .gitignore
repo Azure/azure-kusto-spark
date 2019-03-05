@@ -238,3 +238,4 @@ samples/.idea/*
 samples/target/*
 .idea
 *.iml
+connector/scalastyle-output.xml
