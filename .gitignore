@@ -229,7 +229,7 @@ _Pvt_Extensions
 
 *.script.orig
 
-# Ignore IntelliJ project and ouput files
+# ignore IntelliJ project and ouput files
 connector/OinkSpark.iml
 connector/dependency-reduced-pom.xml
 connector/.idea/*
@@ -238,6 +238,4 @@ samples/.idea/*
 samples/target/*
 .idea
 *.iml
-
-# Ignore tools output files
-scalastyle-output.xml
+connector/scalastyle-output.xml
