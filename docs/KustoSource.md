@@ -68,7 +68,7 @@ In addition, there are two main reading modes: see **KUSTO_READ_MODE** option be
   Kusto database from which the data will be read. The client must have 'viewer' 
   privileges on this database, unless it has 'admin' privileges on the table.
   
-  **Authentication Parameters** can be found [AAD Application Authentication](AuthenticationMethods.md). 
+  **Authentication Parameters** can be found [AAD Application Authentication](Authentication.md). 
 
   * **KUSTO_QUERY**: 
   A flexible Kusto query (can simply be a table name). The schema of the resulting dataframe will match the schema of the query result. 
@@ -139,5 +139,5 @@ Once the RDD is no longer required by the caller application, the container and/
   ```
   
   For more reference code examples please see 
-  [SimpleKustoDataSource](../src/main/scala/com/microsoft/kusto/spark/Sample/SimpleKustoDataSource.scala) and 
-  [KustoConnectorDemo](../src/main/scala/com/microsoft/kusto/spark/Sample/KustoConnectorDemo.scala).
+  [SimpleKustoDataSource](../samples/src/main/scala/SimpleKustoDataSource.scala) and 
+  [KustoConnectorDemo](../samples/src/main/scala/KustoConnectorDemo.scala).
