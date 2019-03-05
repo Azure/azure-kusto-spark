@@ -349,19 +349,34 @@ object KustoDataSourceUtils{
                                                        storageContainer: Option[String],
                                                        storageAccountSecret: Option[String],
                                                        storageSecretIsAccountKey: Boolean): KustoStorageParameters = {
-    if (storageAccount.isEmpty) {
-      throw new InvalidParameterException("Storage account name is empty. Reading in 'Scale' mode requires a transient blob storage")
-    }
 
-    if (storageContainer.isEmpty) {
-      throw new InvalidParameterException("Storage container name is empty.")
-    }
+    if (!storageSecretIsAccountKey) {
+      val paramsFromSas = parseSas(storageAccountSecret.get)
 
-    if (storageAccountSecret.isEmpty) {
-      throw new InvalidParameterException("Storage account secret is empty. Please provide a storage account key or a SAS key")
-    }
+      if (storageAccount.isDefined && !storageAccount.get.equals(paramsFromSas.account)) {
+        throw new InvalidParameterException("Storage account name does not match the name in storage access SAS key.")
+      }
 
-    KustoStorageParameters(storageAccount.get, storageAccountSecret.get, storageContainer.get, storageSecretIsAccountKey)
+      if (storageContainer.isDefined && !storageContainer.get.equals(paramsFromSas.container)) {
+        throw new InvalidParameterException("Storage container name does not match the name in storage access SAS key.")
+      }
+
+      paramsFromSas
+    } else {
+      if (storageAccount.isEmpty) {
+        throw new InvalidParameterException("Storage account name is empty. Reading in 'Scale' mode requires a transient blob storage")
+      }
+
+      if (storageContainer.isEmpty) {
+        throw new InvalidParameterException("Storage container name is empty.")
+      }
+
+      if (storageAccountSecret.isEmpty) {
+        throw new InvalidParameterException("Storage account secret is empty. Please provide a storage account key or a SAS key")
+      }
+
+      KustoStorageParameters(storageAccount.get, storageAccountSecret.get, storageContainer.get, storageSecretIsAccountKey)
+    }
   }
 
   private[kusto] def countRows(client: Client, query: String, database: String): Int = {

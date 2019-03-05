@@ -55,7 +55,7 @@ class KustoPruneAndFilterE2E extends FlatSpec with BeforeAndAfterAll {
     val table: String = System.getProperty(KustoOptions.KUSTO_TABLE)
     val query: String = System.getProperty(KustoOptions.KUSTO_QUERY, s"$table | where (toint(ColB) % 1000 == 0) ")
 
-    val conf: Map[String, String] = Map(
+    val conf = Map(
       KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
       KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
       KustoOptions.KUSTO_READ_MODE -> "lean"
@@ -74,8 +74,7 @@ class KustoPruneAndFilterE2E extends FlatSpec with BeforeAndAfterAll {
     val blobKey: String = System.getProperty("blobKey")
     val blobSas: String = System.getProperty("blobSas")
 
-    val conf: Map[String, String] =
-      if (blobSas.isEmpty) {
+    val conf = if (blobSas.isEmpty) {
           Map(KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
               KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
               KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME -> storageAccount,
@@ -86,17 +85,14 @@ class KustoPruneAndFilterE2E extends FlatSpec with BeforeAndAfterAll {
       else {
         Map(KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
           KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
-          KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME -> storageAccount,
           KustoOptions.KUSTO_BLOB_STORAGE_SAS_URL -> blobSas,
-          KustoOptions.KUSTO_BLOB_CONTAINER -> container,
           KustoOptions.KUSTO_BLOB_SET_FS_CONFIG -> "true")
       }
 
     spark.read.kusto(cluster, database, query, conf).show(20)
   }
 
-//  "KustoConnector"
-  ignore should "write to a kusto table and read it back in scale mode with pruning and filtering" taggedAs KustoE2E in {
+"KustoConnector"should "write to a kusto table and read it back in scale mode with pruning and filtering" taggedAs KustoE2E in {
     import spark.implicits._
 
     val rowId = new AtomicInteger(1)
@@ -128,15 +124,22 @@ class KustoPruneAndFilterE2E extends FlatSpec with BeforeAndAfterAll {
       .option(KustoOptions.KUSTO_AAD_AUTHORITY_ID, authority)
       .save()
 
-    val conf: Map[String, String] = Map(
-      KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
-      KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
-      KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME -> storageAccount,
-      KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_KEY -> blobKey,
-      KustoOptions.KUSTO_BLOB_CONTAINER -> container,
-      KustoOptions.KUSTO_BLOB_SET_FS_CONFIG -> "true",
-      KustoOptions.KUSTO_BLOB_COMPRESS_ON_EXPORT -> "false"
-    )
+    val conf = if (blobSas.isEmpty) {
+      Map(KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
+        KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+        KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME -> storageAccount,
+        KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_KEY -> blobKey,
+        KustoOptions.KUSTO_BLOB_CONTAINER -> container,
+        KustoOptions.KUSTO_BLOB_SET_FS_CONFIG -> "true",
+        KustoOptions.KUSTO_BLOB_COMPRESS_ON_EXPORT -> "false") // Just to test this option
+    }
+    else {
+      Map(KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
+        KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+        KustoOptions.KUSTO_BLOB_STORAGE_SAS_URL -> blobSas,
+        KustoOptions.KUSTO_BLOB_SET_FS_CONFIG -> "true",
+        KustoOptions.KUSTO_BLOB_COMPRESS_ON_EXPORT -> "false") // Just to test this option
+    }
 
     val dfResult = spark.read.kusto(cluster, database, query, conf)
 
@@ -162,8 +165,7 @@ class KustoPruneAndFilterE2E extends FlatSpec with BeforeAndAfterAll {
     KustoTestUtils.tryDropAllTablesByPrefix(kustoAdminClient, database, "KustoSparkReadWriteWithFiltersTest")
   }
 
-//  "KustoConnector"
-  ignore should "write to a kusto table and read it back in scale mode with filtering" taggedAs KustoE2E in {
+  "KustoConnector" should "write to a kusto table and read it back in scale mode with filtering" taggedAs KustoE2E in {
     import spark.implicits._
 
     val rowId = new AtomicInteger(1)
@@ -178,7 +180,6 @@ class KustoPruneAndFilterE2E extends FlatSpec with BeforeAndAfterAll {
     val container: String = System.getProperty("container")
     val blobKey: String = System.getProperty("blobKey")
     val blobSas: String = System.getProperty("blobSas")
-    val blobSasConnectionString: String = System.getProperty("blobSasQuery")
 
     // Create a new table.
     val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://$cluster.kusto.windows.net", appId, appKey, authority)
@@ -196,14 +197,21 @@ class KustoPruneAndFilterE2E extends FlatSpec with BeforeAndAfterAll {
       .option(KustoOptions.KUSTO_AAD_AUTHORITY_ID, authority)
       .save()
 
-    val conf: Map[String, String] = Map(
-      KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
-      KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
-      KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME -> storageAccount,
-      KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_KEY -> blobKey,
-      KustoOptions.KUSTO_BLOB_CONTAINER -> container,
-      KustoOptions.KUSTO_BLOB_SET_FS_CONFIG -> "true"
-    )
+    val conf = if (blobSas.isEmpty) {
+      Map(KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
+        KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+        KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME -> storageAccount,
+        KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_KEY -> blobKey,
+        KustoOptions.KUSTO_BLOB_CONTAINER -> container,
+        KustoOptions.KUSTO_BLOB_SET_FS_CONFIG -> "true"
+      )
+    }
+    else {
+      Map(KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
+        KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+        KustoOptions.KUSTO_BLOB_STORAGE_SAS_URL -> blobSas,
+        KustoOptions.KUSTO_BLOB_SET_FS_CONFIG -> "true")
+    }
 
     val dfResult = spark.read.kusto(cluster, database, query, conf)
     val dfFiltered = dfResult

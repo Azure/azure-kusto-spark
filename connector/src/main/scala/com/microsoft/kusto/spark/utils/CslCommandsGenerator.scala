@@ -2,22 +2,22 @@ package com.microsoft.kusto.spark.utils
 
 import com.microsoft.kusto.spark.datasink.KustoWriter.TempIngestionTablePrefix
 
-object CslCommandsGenerator{
+private[kusto] object CslCommandsGenerator{
 
   // Not used. Here in case we prefer this approach
-  private[kusto] def generateFindOldTemporaryTablesCommand2(database: String): String = {
+  def generateFindOldTemporaryTablesCommand2(database: String): String = {
     s""".show database $database extents metadata | where TableName startswith '$TempIngestionTablePrefix' | project TableName, maxDate = todynamic(ExtentMetadata).MaxDateTime | where maxDate > ago(1h)"""
   }
 
-  private[kusto] def generateFindOldTempTablesCommand(database: String): String = {
+  def generateFindOldTempTablesCommand(database: String): String = {
     s""".show journal | where Event == 'CREATE-TABLE' | where Database == '$database' | where EntityName startswith '$TempIngestionTablePrefix' | where EventTimestamp < ago(1h) and EventTimestamp > ago(3d) | project EntityName """
   }
 
-  private[kusto] def generateFindCurrentTempTablesCommand(prefix: String): String = {
+  def generateFindCurrentTempTablesCommand(prefix: String): String = {
     s""".show tables | where TableName startswith '$prefix' | project TableName """
   }
 
-  private[kusto] def generateDropTablesCommand(tables: String): String = {
+  def generateDropTablesCommand(tables: String): String = {
     s".drop tables ($tables) ifexists"
   }
 
@@ -26,7 +26,7 @@ object CslCommandsGenerator{
     s".create table $tableName ($columnsTypesAndNames)"
   }
 
-  private[kusto] def generateTableShowSchemaCommand(table: String): String = {
+  def generateTableShowSchemaCommand(table: String): String = {
     s".show table $table schema as json"
   }
 
@@ -34,24 +34,24 @@ object CslCommandsGenerator{
     s".drop table $table ifexists"
   }
 
-  private[kusto] def generateCreateTmpStorageCommand(): String = {
+  def generateCreateTmpStorageCommand(): String = {
     s".create tempstorage"
   }
 
-  private[kusto] def generateTableMoveExtentsCommand(sourceTableName:String, destinationTableName: String): String ={
+  def generateTableMoveExtentsCommand(sourceTableName:String, destinationTableName: String): String ={
     s".move extents all from table $sourceTableName to table $destinationTableName"
   }
 
-  private[kusto] def generateTableAlterMergePolicyCommand(table: String, allowMerge: Boolean, allowRebuild: Boolean): String ={
+  def generateTableAlterMergePolicyCommand(table: String, allowMerge: Boolean, allowRebuild: Boolean): String ={
     s""".alter table $table policy merge @'{"AllowMerge":"$allowMerge", "AllowRebuild":"$allowRebuild"}'"""
   }
 
-  private[kusto] def generateOperationsShowCommand(operationId: String): String = {
+  def generateOperationsShowCommand(operationId: String): String = {
     s".show operations $operationId"
   }
 
   // Export data to blob
-  private[kusto] def generateExportDataCommand(
+  def generateExportDataCommand(
      query: String,
      storageAccountName: String,
      container: String,
@@ -80,7 +80,7 @@ object CslCommandsGenerator{
     command
   }
 
-  private[kusto]  def generateCountQuery(query: String): String = {
+  def generateCountQuery(query: String): String = {
     query + "| count"
   }
 }

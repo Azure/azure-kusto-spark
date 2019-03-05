@@ -96,7 +96,7 @@ class DefaultSource extends CreatableRelationProvider
       val sourceParameters = KDSU.parseSourceParameters(parameters)
       authenticationParameters = Some(sourceParameters.authenticationParameters)
       kustoCoordinates = sourceParameters.kustoCoordinates
-      keyVaultAuthentication = sourceParameters. keyVaultAuth
+      keyVaultAuthentication = sourceParameters.keyVaultAuth
     }
 
     val (kustoAuthentication, storageParameters): (Option[KustoAuthentication], Option[KustoStorageParameters]) =
