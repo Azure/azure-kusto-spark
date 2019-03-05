@@ -230,10 +230,15 @@ object KustoDataSourceUtils{
 
         if (!doWhile.apply(res)){
           t.cancel()
-          finalWork.apply(res)
-          while (latch.getCount > 0){
-            latch.countDown()
+          try {
+            finalWork.apply(res)
           }
+          catch {
+            case exception: Exception =>
+              while (latch.getCount > 0) latch.countDown()
+              throw exception
+          }
+          while (latch.getCount > 0) latch.countDown()
         }
       }
     }
