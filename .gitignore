@@ -228,7 +228,6 @@ _Pvt_Extensions
 *~
 
 *.script.orig
-.gitignore
 
 # Ignore IntelliJ project and ouput files
 connector/OinkSpark.iml
