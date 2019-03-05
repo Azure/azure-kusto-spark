@@ -25,7 +25,7 @@ object KeyVaultUtils {
 
   @throws[CloudException]
   @throws[IOException]
-  def getStorageParamsFromKeyVault(keyVaultAuthentication: KeyVaultAuthentication): StorageParameters = {
+  def getStorageParamsFromKeyVault(keyVaultAuthentication: KeyVaultAuthentication): KustoStorageParameters = {
     keyVaultAuthentication match {
       case app: KeyVaultAppAuthentication =>
         val client = getClient(app.keyVaultAppID, app.keyVaultAppKey)
@@ -60,7 +60,7 @@ object KeyVaultUtils {
       authority = authority)
   }
 
-  private def getStorageParamsFromKeyVaultImpl(client: KeyVaultClient, uri: String): StorageParameters = {
+  private def getStorageParamsFromKeyVaultImpl(client: KeyVaultClient, uri: String): KustoStorageParameters = {
     val sasUrl = client.getSecret(uri, SasUrl).value()
     val accountId = client.getSecret(uri, StorageAccountId)
 
@@ -68,7 +68,7 @@ object KeyVaultUtils {
     val container = client.getSecret(uri, Container)
 
     if(sasUrl.isEmpty) {
-      StorageParameters(
+      KustoStorageParameters(
         account = if (accountId == null) null else accountId.value(),
         secret = if (accountKey == null) null else accountKey.value(),
         container = if (container == null) null else container.value(),
