@@ -61,11 +61,10 @@ private[kusto] object KustoFilter {
   }
 
   private def binaryLogicalOperatorFilter(schema: StructType, leftFilter: Filter, rightFilter: Filter, operator: String): Option[String] = {
-    val left = buildFilterExpression(schema, leftFilter)
-    val right = if(left.isEmpty) None else buildFilterExpression(schema, rightFilter)
-
-    if (left.isEmpty || right.isEmpty) None else {
-      Some(s"(${left.get}) $operator (${right.get})")
+    buildFilterExpression(schema, leftFilter).flatMap { left =>
+      buildFilterExpression(schema, rightFilter).map { right =>
+        s"($left) $operator ($right)"
+      }
     }
   }
 
