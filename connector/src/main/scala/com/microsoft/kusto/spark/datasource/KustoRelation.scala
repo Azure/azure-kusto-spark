@@ -5,20 +5,21 @@ import java.util.Locale
 
 import com.microsoft.kusto.spark.utils.{KustoClient, KustoQueryUtils}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.sources.{BaseRelation, TableScan}
+import org.apache.spark.sql.sources.{BaseRelation, Filter, PrunedFilteredScan, TableScan}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{Row, SQLContext, SparkSession}
 
-case class KustoRelation(kustoCoordinates: KustoCoordinates,
-                         authentication: KustoAuthentication,
-                         query: String,
-                         isLeanMode: Boolean,
-                         numPartitions: Int,
-                         partitioningColumn: Option[String],
-                         partitioningMode: Option[String],
-                         customSchema: Option[String] = None,
-                         storageParameters: Option[StorageParameters])
-                        (@transient val sparkSession: SparkSession) extends BaseRelation with TableScan with Serializable {
+private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
+   authentication: KustoAuthentication,
+   query: String,
+   readOptions: KustoReadOptions,
+   numPartitions: Int,
+   partitioningColumn: Option[String],
+   partitioningMode: Option[String],
+   customSchema: Option[String] = None,
+   storageParameters: Option[KustoStorageParameters])
+  (@transient val sparkSession: SparkSession)
+  extends BaseRelation with TableScan with PrunedFilteredScan with Serializable {
 
 
   private val normalizedQuery = KustoQueryUtils.normalizeQuery(query)
@@ -36,7 +37,7 @@ case class KustoRelation(kustoCoordinates: KustoCoordinates,
   }
 
   override def buildScan(): RDD[Row] = {
-    if (isLeanMode) {
+    if (readOptions.isLeanMode) {
       KustoReader.leanBuildScan(
         KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication)
       )
@@ -48,6 +49,23 @@ case class KustoRelation(kustoCoordinates: KustoCoordinates,
       )
     }
   }
+
+  override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] =
+    if (readOptions.isLeanMode) {
+      KustoReader.leanBuildScan(
+        KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication),
+        KustoFiltering(requiredColumns, filters)
+      )
+    } else {
+      KustoReader.scaleBuildScan(
+        KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication),
+        storageParameters.get,
+        KustoPartitionParameters(numPartitions, getPartitioningColumn, getPartitioningMode),
+        readOptions.isConfigureFileSystem,
+        readOptions.isCompressOnExport,
+        KustoFiltering(requiredColumns, filters)
+      )
+    }
 
   private def getSchema: StructType = {
     if (query.isEmpty) {
