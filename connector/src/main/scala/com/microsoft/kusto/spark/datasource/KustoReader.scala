@@ -116,6 +116,7 @@ private[kusto] object KustoReader {
 private[kusto] class KustoReader(request: KustoReadRequest, storage: KustoStorageParameters) {
   private val myName = this.getClass.getSimpleName
   val client: Client = KustoClient.getAdmin(request.authentication, request.kustoCoordinates.cluster)
+  val blobFileSizeSplitLimit = 1 * 1024 * 1024 * 1024 // 1GB, maximal allowed for 'export' command
 
   // Export a single partition from Kusto to transient Blob storage.
   // Returns the directory path for these blobs
@@ -136,7 +137,7 @@ private[kusto] class KustoReader(request: KustoReadRequest, storage: KustoStorag
       storage.storageSecretIsAccountKey,
       partition.idx,
       partition.predicate,
-      Some(1 * 1024 * 1024 * 1024), // 1GB, maximal allowed. TODO: move to KustoConsts once the relevant (timeout) PR is merged
+      Some(blobFileSizeSplitLimit),
       isCompressed = isCompressed
     )
 
