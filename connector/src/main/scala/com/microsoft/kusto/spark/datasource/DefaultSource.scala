@@ -75,6 +75,8 @@ class DefaultSource extends CreatableRelationProvider
     val readMode = parameters.getOrElse(KustoOptions.KUSTO_READ_MODE, "scale").toLowerCase(Locale.ROOT)
     val partitioningMode = parameters.get(KustoOptions.KUSTO_READ_PARTITION_MODE)
     val isLeanMode = readMode.equals("lean")
+    val isSetFsConfiguration =  parameters.getOrElse(KustoOptions.KUSTO_BLOB_SET_FS_CONFIG, "false").trim.toBoolean
+    val isCompressOnExport =  parameters.getOrElse(KustoOptions.KUSTO_BLOB_COMPRESS_ON_EXPORT, "true").trim.toBoolean
 
     val numPartitions = setNumPartitionsPerMode(sqlContext, requestedPartitions, isLeanMode, partitioningMode)
     if (!KustoOptions.supportedReadModes.contains(readMode)) {
@@ -97,10 +99,10 @@ class DefaultSource extends CreatableRelationProvider
       val sourceParameters = KDSU.parseSourceParameters(parameters)
       authenticationParameters = Some(sourceParameters.authenticationParameters)
       kustoCoordinates = sourceParameters.kustoCoordinates
-      keyVaultAuthentication = sourceParameters. keyVaultAuth
+      keyVaultAuthentication = sourceParameters.keyVaultAuth
     }
 
-    val (kustoAuthentication, storageParameters): (Option[KustoAuthentication], Option[StorageParameters]) =
+    val (kustoAuthentication, storageParameters): (Option[KustoAuthentication], Option[KustoStorageParameters]) =
       if (keyVaultAuthentication.isDefined) {
         // Get params from keyVault
         authenticationParameters = Some(KDSU.mergeKeyVaultAndOptionsAuthentication(KeyVaultUtils.getAadAppParametersFromKeyVault(keyVaultAuthentication.get), authenticationParameters))
@@ -134,7 +136,7 @@ class DefaultSource extends CreatableRelationProvider
       kustoCoordinates,
       kustoAuthentication.get,
       parameters.getOrElse(KustoOptions.KUSTO_QUERY, ""),
-      isLeanMode,
+      KustoReadOptions(isLeanMode, isSetFsConfiguration, isCompressOnExport),
       timeout,
       numPartitions,
       parameters.get(KustoOptions.KUSTO_PARTITION_COLUMN),

@@ -54,7 +54,7 @@ that is using it. Please verify the following before using Kusto connector:
  set to "FailIfNotExist" (default), the table must already exist, and the client must have 
  'admin' privileges on the table.
  
- **Authentication Parameters** can be found here - [AAD Application Authentication](AuthenticationMethods.md). 
+ **Authentication Parameters** can be found here - [AAD Application Authentication](Authentication.md). 
  
  **Optional Parameters:** 
  * **KUSTO_TABLE_CREATE_OPTIONS**: 
@@ -163,5 +163,5 @@ df.write
  ```
  
   For more reference code examples please see 
-   [SimpleKustoDataSink](../src/main/scala/com/microsoft/kusto/spark/Sample/SimpleKustoDataSink.scala) and 
-   [KustoConnectorDemo](../src/main/scala/com/microsoft/kusto/spark/Sample/KustoConnectorDemo.scala).
+   [SimpleKustoDataSink](../samples/src/main/scala/SimpleKustoDataSink.scala) and 
+   [KustoConnectorDemo](../samples/src/main/scala/KustoConnectorDemo.scala).
