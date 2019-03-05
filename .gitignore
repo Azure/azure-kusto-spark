@@ -228,7 +228,6 @@ _Pvt_Extensions
 *~
 
 *.script.orig
-.gitignore
 
 # ignore IntelliJ project and ouput files
 connector/OinkSpark.iml
@@ -239,3 +238,4 @@ samples/.idea/*
 samples/target/*
 .idea
 *.iml
+connector/scalastyle-output.xml
