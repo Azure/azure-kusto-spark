@@ -78,6 +78,10 @@ that is using it. Please verify the following before using Kusto connector:
    * In a failure scenario, error messages are logged on Spark executor nodes, 
  but exceptions will not propagate to the client
  
+ * **KUSTO_TIMEOUT_LIMIT**:
+   An integer number corresponding to the period in seconds after which the operation will timeout.
+   This is an upper limit that may coexist with addition timeout limits as configured on Spark or Kusto clusters.  
+   Default: '5400' (90 minutes)
 
  >**Note**:
  For both synchronous and asynchronous operation, 'write' is an atomic transaction, i.e. 

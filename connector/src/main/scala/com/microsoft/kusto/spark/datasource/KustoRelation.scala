@@ -9,10 +9,13 @@ import org.apache.spark.sql.sources.{BaseRelation, Filter, PrunedFilteredScan, T
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{Row, SQLContext, SparkSession}
 
+import scala.concurrent.duration.FiniteDuration
+
 private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
    authentication: KustoAuthentication,
    query: String,
    readOptions: KustoReadOptions,
+   timeout: FiniteDuration,
    numPartitions: Int,
    partitioningColumn: Option[String],
    partitioningMode: Option[String],
@@ -39,11 +42,11 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
   override def buildScan(): RDD[Row] = {
     if (readOptions.isLeanMode) {
       KustoReader.leanBuildScan(
-        KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication)
+        KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication, timeout)
       )
     } else {
       KustoReader.scaleBuildScan(
-        KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication),
+        KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication, timeout),
         storageParameters.get,
         KustoPartitionParameters(numPartitions, getPartitioningColumn, getPartitioningMode)
       )
@@ -53,12 +56,12 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] =
     if (readOptions.isLeanMode) {
       KustoReader.leanBuildScan(
-        KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication),
+        KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication, timeout),
         KustoFiltering(requiredColumns, filters)
       )
     } else {
       KustoReader.scaleBuildScan(
-        KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication),
+        KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication, timeout),
         storageParameters.get,
         KustoPartitionParameters(numPartitions, getPartitioningColumn, getPartitioningMode),
         readOptions.isConfigureFileSystem,

@@ -10,6 +10,8 @@ import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{Row, SparkSession}
 
+import scala.concurrent.duration.FiniteDuration
+
 private[kusto] case class KustoPartition(predicate: Option[String], idx: Int) extends Partition {
   override def index: Int = idx
 }
@@ -27,7 +29,8 @@ private[kusto] case class KustoReadRequest(sparkSession: SparkSession,
                                            schema: StructType,
                                            kustoCoordinates: KustoCoordinates,
                                            query: String,
-                                           authentication: KustoAuthentication)
+                                           authentication: KustoAuthentication,
+                                           timeout: FiniteDuration)
 
 private[kusto] case class KustoReadOptions(isLeanMode: Boolean, isConfigureFileSystem: Boolean = true, isCompressOnExport: Boolean = true)
 
@@ -113,6 +116,7 @@ private[kusto] object KustoReader {
 private[kusto] class KustoReader(request: KustoReadRequest, storage: KustoStorageParameters) {
   private val myName = this.getClass.getSimpleName
   val client: Client = KustoClient.getAdmin(request.authentication, request.kustoCoordinates.cluster)
+  val blobFileSizeSplitLimit = 1 * 1024 * 1024 * 1024 // 1GB, maximal allowed for 'export' command
 
   // Export a single partition from Kusto to transient Blob storage.
   // Returns the directory path for these blobs
@@ -133,11 +137,11 @@ private[kusto] class KustoReader(request: KustoReadRequest, storage: KustoStorag
       storage.storageSecretIsAccountKey,
       partition.idx,
       partition.predicate,
-      Some(1 * 1024 * 1024 * 1024), // 1GB, maximal allowed. TODO: move to KustoConsts once the relevant (timeout) PR is merged
+      Some(blobFileSizeSplitLimit),
       isCompressed = isCompressed
     )
 
     val commandResult = client.execute(request.kustoCoordinates.database, exportCommand)
-    KDSU.verifyAsyncCommandCompletion(client, request.kustoCoordinates.database, commandResult)
+    KDSU.verifyAsyncCommandCompletion(client, request.kustoCoordinates.database, commandResult, timeOut = request.timeout)
   }
 }

@@ -164,6 +164,7 @@ class KustoSinkBatchE2E extends FlatSpec with BeforeAndAfterAll{
       .option(KustoOptions.KUSTO_AAD_CLIENT_ID, appId)
       .option(KustoOptions.KUSTO_AAD_CLIENT_PASSWORD, appKey)
       .option(KustoOptions.KUSTO_AAD_AUTHORITY_ID, authority)
+      .option(KustoOptions.KUSTO_TIMEOUT_LIMIT, (8 * 60).toString)
       .save()
 
     val timeoutMs: Int = 8 * 60 * 1000 // 8 minutes
@@ -179,6 +180,7 @@ class KustoSinkBatchE2E extends FlatSpec with BeforeAndAfterAll{
     val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://$cluster.kusto.windows.net", appId, appKey, authority)
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
     kustoAdminClient.execute(database, generateTableCreateCommand(table, columnsTypesAndNames = "ColA:string, ColB:int"))
+
     df.write
       .format("com.microsoft.kusto.spark.datasource")
       .partitionBy("value")
