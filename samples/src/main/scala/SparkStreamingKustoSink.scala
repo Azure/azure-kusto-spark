@@ -9,6 +9,10 @@ import org.apache.spark.sql.functions._
 /** ************************************************/
 /*          STREAMING SINK EXAMPLE                */
 /** ************************************************/
+
+// To enable faster ingestion into kusto, set a  minimal value for the batching ingestion policy:
+// .alter table <table name> policy ingestionbatching @'{"MaximumBatchingTimeSpan": "00:00:10",}'
+
 object SparkStreamingKustoSink {
   def main(args: Array[String]): Unit = {
     // COMMAND ----------
