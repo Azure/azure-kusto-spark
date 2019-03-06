@@ -51,10 +51,10 @@ object KustoWriter{
     val kustoAdminClient = KustoClient.getAdmin(authentication, tableCoordinates.cluster)
     val appName = data.sparkSession.sparkContext.appName
     val table = tableCoordinates.table.get
+    val tempTablesOld = kustoAdminClient.execute(generateFindOldTempTablesCommand(tableCoordinates.database)).getValues.asScala
 
     Future {
       // Try delete temporary tablesToCleanup created and not used
-      val tempTablesOld = kustoAdminClient.execute(generateFindOldTempTablesCommand(tableCoordinates.database)).getValues.asScala
       val res = kustoAdminClient.execute(tableCoordinates.database, generateFindCurrentTempTablesCommand(TempIngestionTablePrefix))
       val tempTablesCurr = res.getValues.asScala
 
