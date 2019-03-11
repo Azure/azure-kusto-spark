@@ -237,6 +237,7 @@ connector/target/*
 samples/.idea/*
 samples/target/*
 .idea
+.idea/*
 *.iml
 
 # Ignore tools output files

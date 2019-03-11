@@ -21,7 +21,7 @@ import scala.concurrent.duration._
 
 import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
 
-object KustoDataSourceUtils{
+object KustoDataSourceUtils {
   private val klog = Logger.getLogger("KustoConnector")
 
   val ClientName = "Kusto.Spark.Connector"
@@ -61,14 +61,15 @@ object KustoDataSourceUtils{
     var tmpTableSchema: String = ""
     val tableSchemaBuilder = new StringJoiner(",")
 
-    if (schemaShowCommandResult.size() == 0){
+    if (schemaShowCommandResult.size() == 0) {
       // Table Does not exist
-      if(tableCreation == SinkTableCreationMode.FailIfNotExist){
-        throw new RuntimeException(s"Table '${tableCoordinates.table}' doesn't exist in database '$tableCoordinates.database', in cluster '$tableCoordinates.cluster'")
+      if (tableCreation == SinkTableCreationMode.FailIfNotExist) {
+        throw new RuntimeException(s"Table '${tableCoordinates.table}' doesn't exist in database " +
+          s"'$tableCoordinates.database', in cluster '$tableCoordinates.cluster'")
       } else {
         // Parse dataframe schema and create a destination table with that schema
-        for(field <- schema){
-          val fieldType =  DataTypeMapping.getSparkTypeToKustoTypeMap(field.dataType)
+        schema.fields.foreach { field =>
+          val fieldType = DataTypeMapping.getSparkTypeToKustoTypeMap(field.dataType)
           tableSchemaBuilder.add(s"${field.name}:$fieldType")
         }
         tmpTableSchema = tableSchemaBuilder.toString
@@ -77,7 +78,7 @@ object KustoDataSourceUtils{
     } else {
       // Table exists. Parse kusto table schema and check if it matches the dataframes schema
       val orderedColumns = parse(schemaShowCommandResult.get(0).get(1)) \ "OrderedColumns"
-      for (col <- orderedColumns.children) {
+      orderedColumns.children.foreach { col =>
         tableSchemaBuilder.add(s"${(col \ "Name").values}:${(col \ "CslType").values}")
       }
       tmpTableSchema = tableSchemaBuilder.toString
@@ -87,16 +88,16 @@ object KustoDataSourceUtils{
     kustoAdminClient.execute(tableCoordinates.database, generateTableCreateCommand(tmpTableName, tmpTableSchema))
   }
 
-  def parseSourceParameters(parameters: Map[String,String]): SourceParameters = {
+  def parseSourceParameters(parameters: Map[String, String]): SourceParameters = {
     // Parse KustoTableCoordinates - these are mandatory options
-    val database  = parameters.get(KustoOptions.KUSTO_DATABASE)
+    val database = parameters.get(KustoOptions.KUSTO_DATABASE)
     val cluster = parameters.get(KustoOptions.KUSTO_CLUSTER)
 
-    if (database.isEmpty){
+    if (database.isEmpty) {
       throw new InvalidParameterException("KUSTO_DATABASE parameter is missing. Must provide a destination database name")
     }
 
-    if (cluster.isEmpty){
+    if (cluster.isEmpty) {
       throw new InvalidParameterException("KUSTO_CLUSTER parameter is missing. Must provide a destination cluster name")
     }
 
@@ -109,11 +110,11 @@ object KustoDataSourceUtils{
     val keyVaultUri: String = parameters.getOrElse(KustoOptions.KEY_VAULT_URI, "")
     var accessToken: String = ""
     var keyVaultAuthentication: Option[KeyVaultAuthentication] = None
-    if(keyVaultUri != ""){
+    if (keyVaultUri != "") {
       // KeyVault Authentication
       val keyVaultAppId: String = parameters.getOrElse(KustoOptions.KEY_VAULT_APP_ID, "")
 
-      if(!keyVaultAppId.isEmpty){
+      if (!keyVaultAppId.isEmpty) {
         keyVaultAuthentication = Some(KeyVaultAppAuthentication(keyVaultUri,
           keyVaultAppId,
           parameters.getOrElse(KustoOptions.KEY_VAULT_APP_KEY, "")))
@@ -124,13 +125,15 @@ object KustoDataSourceUtils{
       }
     }
 
-    if(!applicationId.isEmpty || !applicationKey.isEmpty){
+    if (!applicationId.isEmpty || !applicationKey.isEmpty) {
       authentication = AadApplicationAuthentication(applicationId, applicationKey, parameters.getOrElse(KustoOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com"))
     }
-    else if ({accessToken = parameters.getOrElse(KustoOptions.KUSTO_ACCESS_TOKEN, "")
-      !accessToken.isEmpty}){
+    else if ( {
+      accessToken = parameters.getOrElse(KustoOptions.KUSTO_ACCESS_TOKEN, "")
+      !accessToken.isEmpty
+    }) {
       authentication = KustoAccessTokenAuthentication(accessToken)
-    } else if (keyVaultUri.isEmpty){
+    } else if (keyVaultUri.isEmpty) {
       authentication = KustoAccessTokenAuthentication(DeviceAuthentication.acquireAccessTokenUsingDeviceCodeFlow(cluster.get))
     }
 
@@ -141,11 +144,10 @@ object KustoDataSourceUtils{
 
   case class SourceParameters(authenticationParameters: KustoAuthentication, kustoCoordinates: KustoCoordinates, keyVaultAuth: Option[KeyVaultAuthentication])
 
-  def parseSinkParameters(parameters: Map[String,String], mode: SaveMode = SaveMode.Append): SinkParameters = {
-    if(mode != SaveMode.Append)
-    {
-      if (mode == SaveMode.ErrorIfExists){
-        logInfo(KCONST.ClientName, s"Kusto data source supports only append mode. Ignoring 'ErrorIfExists' directive")
+  def parseSinkParameters(parameters: Map[String, String], mode: SaveMode = SaveMode.Append): SinkParameters = {
+    if (mode != SaveMode.Append) {
+      if (mode == SaveMode.ErrorIfExists) {
+        logInfo(KCONST.ClientName, "Kusto data source supports only append mode. Ignoring 'ErrorIfExists' directive")
       } else {
         throw new InvalidParameterException(s"Kusto data source supports only append mode. '$mode' directive is invalid")
       }
@@ -155,16 +157,16 @@ object KustoDataSourceUtils{
     var tableCreation: SinkTableCreationMode = SinkTableCreationMode.FailIfNotExist
     var tableCreationParam: Option[String] = None
     var isAsync: Boolean = false
-    var isAsyncParam : String = ""
+    var isAsyncParam: String = ""
 
     try {
       isAsyncParam = parameters.getOrElse(KustoOptions.KUSTO_WRITE_ENABLE_ASYNC, "false")
-      isAsync =  parameters.getOrElse(KustoOptions.KUSTO_WRITE_ENABLE_ASYNC, "false").trim.toBoolean
+      isAsync = parameters.getOrElse(KustoOptions.KUSTO_WRITE_ENABLE_ASYNC, "false").trim.toBoolean
       tableCreationParam = parameters.get(KustoOptions.KUSTO_TABLE_CREATE_OPTIONS)
-      tableCreation = if(tableCreationParam.isEmpty) SinkTableCreationMode.FailIfNotExist else SinkTableCreationMode.withName(tableCreationParam.get)
+      tableCreation = if (tableCreationParam.isEmpty) SinkTableCreationMode.FailIfNotExist else SinkTableCreationMode.withName(tableCreationParam.get)
     } catch {
-      case _ : NoSuchElementException => throw new InvalidParameterException(s"No such SinkTableCreationMode option: '${tableCreationParam.get}'")
-      case _ : java.lang.IllegalArgumentException  => throw new InvalidParameterException(s"KUSTO_WRITE_ENABLE_ASYNC is expecting either 'true' or 'false', got: '$isAsyncParam'")
+      case _: NoSuchElementException => throw new InvalidParameterException(s"No such SinkTableCreationMode option: '${tableCreationParam.get}'")
+      case _: java.lang.IllegalArgumentException => throw new InvalidParameterException(s"KUSTO_WRITE_ENABLE_ASYNC is expecting either 'true' or 'false', got: '$isAsyncParam'")
     }
 
     val timeout = new FiniteDuration(parameters.getOrElse(KustoOptions.KUSTO_TIMEOUT_LIMIT, KCONST.DefaultTimeoutAsString).toLong, TimeUnit.SECONDS)
@@ -178,25 +180,25 @@ object KustoDataSourceUtils{
 
     val sourceParameters = parseSourceParameters(parameters)
 
-    if (sourceParameters.kustoCoordinates.table.isEmpty){
+    if (sourceParameters.kustoCoordinates.table.isEmpty) {
       throw new InvalidParameterException("KUSTO_TABLE parameter is missing. Must provide a destination table name")
     }
     SinkParameters(writeOptions, sourceParameters)
   }
 
-  private [kusto] def reportExceptionAndThrow(
-    reporter: String,
-    exception: Exception,
-    doingWhat: String = "",
-    cluster: String = "",
-    database: String = "",
-    table: String = "",
-    isLogDontThrow: Boolean = false) : Unit = {
+  private[kusto] def reportExceptionAndThrow(
+                                              reporter: String,
+                                              exception: Exception,
+                                              doingWhat: String = "",
+                                              cluster: String = "",
+                                              database: String = "",
+                                              table: String = "",
+                                              isLogDontThrow: Boolean = false): Unit = {
     val whatFailed = if (doingWhat.isEmpty) "" else s"when $doingWhat"
     val clusterDesc = if (cluster.isEmpty) "" else s", cluster: '$cluster' "
     val databaseDesc = if (database.isEmpty) "" else s", database: '$database'"
     val tableDesc = if (table.isEmpty) "" else s", table: '$table'"
-    logError(reporter,s"caught exception $whatFailed$clusterDesc$databaseDesc$tableDesc. Exception: ${exception.getMessage}")
+    logError(reporter, s"caught exception $whatFailed$clusterDesc$databaseDesc$tableDesc. Exception: ${exception.getMessage}")
 
     if (!isLogDontThrow) throw exception
   }
@@ -216,13 +218,13 @@ object KustoDataSourceUtils{
     * After one of these conditions was held true the finalWork function is called over the last returned value by func.
     * Returns a CountDownLatch object use to countdown times and await on it synchronously if needed
     *
-    * @param func - the function to run
-    * @param delay - delay before first job
-    * @param runEvery - delay between jobs
+    * @param func               - the function to run
+    * @param delay              - delay before first job
+    * @param runEvery           - delay between jobs
     * @param numberOfTimesToRun - stop jobs after numberOfTimesToRun.
-    *                            set negative value to run infinitely
-    * @param doWhile - stop jobs if condition holds for the func.apply output
-    * @param finalWork - do final work with the last func.apply output
+    *                           set negative value to run infinitely
+    * @param doWhile            - stop jobs if condition holds for the func.apply output
+    * @param finalWork          - do final work with the last func.apply output
     */
   def runSequentially[A](func: () => A, delay: Int, runEvery: Int, numberOfTimesToRun: Int, doWhile: A => Boolean, finalWork: A => Unit): CountDownLatch = {
     val latch = new CountDownLatch(if (numberOfTimesToRun > 0) numberOfTimesToRun else 1)
@@ -230,16 +232,15 @@ object KustoDataSourceUtils{
     val task = new TimerTask() {
       def run(): Unit = {
         val res = func.apply()
-        if(numberOfTimesToRun > 0){
+        if (numberOfTimesToRun > 0) {
           latch.countDown()
         }
 
-        if (latch.getCount == 0)
-        {
+        if (latch.getCount == 0) {
           throw new TimeoutException(s"runSequentially: timed out based on maximal allowed repetitions ($numberOfTimesToRun), aborting")
         }
 
-        if (!doWhile.apply(res)){
+        if (!doWhile.apply(res)) {
           t.cancel()
           try {
             finalWork.apply(res)
@@ -257,13 +258,17 @@ object KustoDataSourceUtils{
     latch
   }
 
-  def verifyAsyncCommandCompletion(client: Client, database: String, commandResult: Results, samplePeriod: FiniteDuration = KCONST.DefaultPeriodicSamplePeriod, timeOut: FiniteDuration): Unit = {
+  def verifyAsyncCommandCompletion(client: Client,
+                                   database: String,
+                                   commandResult: Results,
+                                   samplePeriod: FiniteDuration = KCONST.DefaultPeriodicSamplePeriod,
+                                   timeOut: FiniteDuration): Unit = {
     val operationId = commandResult.getValues.get(0).get(0)
     val operationsShowCommand = CslCommandsGenerator.generateOperationsShowCommand(operationId)
     val sampleInMillis = samplePeriod.toMillis.toInt
     val timeoutInMillis = timeOut.toMillis
     val delayPeriodBetweenCalls = if (sampleInMillis < 1) 1 else sampleInMillis
-    val timesToRun = (timeoutInMillis/ delayPeriodBetweenCalls + 5).toInt
+    val timesToRun = (timeoutInMillis / delayPeriodBetweenCalls + 5).toInt
 
     val stateCol = "State"
     val statusCol = "Status"
@@ -272,13 +277,16 @@ object KustoDataSourceUtils{
     val statusIdx = showCommandResult.getColumnNameToIndex.get(statusCol)
 
     val success = runSequentially[util.ArrayList[String]](
-      func = () => client.execute(database, operationsShowCommand).getValues.get(0), delay = 0, runEvery = delayPeriodBetweenCalls, numberOfTimesToRun = timesToRun,
+      func = () => client.execute(database, operationsShowCommand).getValues.get(0),
+      delay = 0, runEvery = delayPeriodBetweenCalls, numberOfTimesToRun = timesToRun,
       doWhile = result => {
         result.get(stateIdx) == "InProgress"
       },
       finalWork = result => {
         if (result.get(stateIdx) != "Completed") {
-          throw new RuntimeException(s"Failed to execute Kusto operation with OperationId '$operationId', State: '${result.get(stateIdx)}', Status: '${result.get(statusIdx)}'")
+          throw new RuntimeException(
+            s"Failed to execute Kusto operation with OperationId '$operationId', State: '${result.get(stateIdx)}', Status: '${result.get(statusIdx)}'"
+          )
         }
       }).await(timeoutInMillis, TimeUnit.MILLISECONDS)
 
@@ -287,30 +295,39 @@ object KustoDataSourceUtils{
     }
   }
 
-  private [kusto] def parseSas(url: String): KustoStorageParameters  = {
+  private[kusto] def parseSas(url: String): KustoStorageParameters = {
     val urlPattern: Regex = raw"(?:https://)?([^.]+).blob.core.windows.net/([^?]+)?(.+)".r
     url match {
       case urlPattern(storageAccountId, container, sasKey) => KustoStorageParameters(storageAccountId, sasKey, container, storageSecretIsAccountKey = false)
-      case _ => throw new InvalidParameterException("SAS url couldn't be parsed. Should be https://<storage-account>.blob.core.windows.net/<container>?<SAS-Token>")
+      case _ => throw new InvalidParameterException(
+        "SAS url couldn't be parsed. Should be https://<storage-account>.blob.core.windows.net/<container>?<SAS-Token>"
+      )
     }
   }
 
-  private [kusto] def mergeKeyVaultAndOptionsAuthentication(paramsFromKeyVault: AadApplicationAuthentication, authenticationParameters: Option[KustoAuthentication]): KustoAuthentication = {
-    if(authenticationParameters.isEmpty){
+  private[kusto] def mergeKeyVaultAndOptionsAuthentication(paramsFromKeyVault: AadApplicationAuthentication,
+                                                           authenticationParameters: Option[KustoAuthentication]): KustoAuthentication = {
+    if (authenticationParameters.isEmpty) {
       // We have both keyVault and AAD application params, take from options first and throw if both are empty
-      try{
+      try {
         val app = authenticationParameters.asInstanceOf[AadApplicationAuthentication]
         AadApplicationAuthentication(
           ID = if (app.ID == "") {
-            if (paramsFromKeyVault.ID == "")
+            if (paramsFromKeyVault.ID == "") {
               throw new InvalidParameterException("AADApplication ID is empty. Please pass it in keyVault or options")
+            }
             paramsFromKeyVault.ID
-          } else app.ID,
+          } else {
+            app.ID
+          },
           password = if (app.password == "") {
-            if (paramsFromKeyVault.password == "AADApplication key is empty. Please pass it in keyVault or options")
+            if (paramsFromKeyVault.password == "AADApplication key is empty. Please pass it in keyVault or options") {
               throw new InvalidParameterException("")
+            }
             paramsFromKeyVault.password
-          } else app.password,
+          } else {
+            app.password
+          },
           authority = if (app.authority == "microsoft.com") paramsFromKeyVault.authority else app.authority
         )
       } catch {
@@ -321,32 +338,38 @@ object KustoDataSourceUtils{
     }
   }
 
-  private [kusto] def mergeKeyVaultAndOptionsStorageParams(storageAccount: Option[String],
-                                                           storageContainer: Option[String],
-                                                           storageSecret: Option[String],
-                                                           storageSecretIsAccountKey: Boolean,
-                                                           keyVaultAuthentication: KeyVaultAuthentication): KustoStorageParameters = {
-    if(!storageSecretIsAccountKey){
+  private[kusto] def mergeKeyVaultAndOptionsStorageParams(storageAccount: Option[String],
+                                                          storageContainer: Option[String],
+                                                          storageSecret: Option[String],
+                                                          storageSecretIsAccountKey: Boolean,
+                                                          keyVaultAuthentication: KeyVaultAuthentication): KustoStorageParameters = {
+    if (!storageSecretIsAccountKey) {
       // If SAS option defined - take sas
       KustoDataSourceUtils.parseSas(storageSecret.get)
     } else {
-      if (storageAccount.isEmpty || storageContainer.isEmpty || storageSecret.isEmpty){
+      if (storageAccount.isEmpty || storageContainer.isEmpty || storageSecret.isEmpty) {
         val keyVaultParameters = KeyVaultUtils.getStorageParamsFromKeyVault(keyVaultAuthentication)
         // If KeyVault contains sas take it
-        if(!keyVaultParameters.storageSecretIsAccountKey) {
+        if (!keyVaultParameters.storageSecretIsAccountKey) {
           keyVaultParameters
         } else {
           // Try combine
 
-          val account = if(storageAccount.isEmpty){
+          val account = if (storageAccount.isEmpty) {
             Some(keyVaultParameters.account)
-          } else storageAccount
-          val secret = if(storageSecret.isEmpty){
+          } else {
+            storageAccount
+          }
+          val secret = if (storageSecret.isEmpty) {
             Some(keyVaultParameters.secret)
-          } else storageSecret
-          val container = if(storageContainer.isEmpty){
+          } else {
+            storageSecret
+          }
+          val container = if (storageContainer.isEmpty) {
             Some(keyVaultParameters.container)
-          } else storageContainer
+          } else {
+            storageContainer
+          }
 
           getAndValidateTransientStorageParameters(account, secret, container, storageSecretIsAccountKey = true)
         }
@@ -357,9 +380,9 @@ object KustoDataSourceUtils{
   }
 
   private[kusto] def getAndValidateTransientStorageParameters(storageAccount: Option[String],
-                                                       storageContainer: Option[String],
-                                                       storageAccountSecret: Option[String],
-                                                       storageSecretIsAccountKey: Boolean): KustoStorageParameters = {
+                                                              storageContainer: Option[String],
+                                                              storageAccountSecret: Option[String],
+                                                              storageSecretIsAccountKey: Boolean): KustoStorageParameters = {
 
     if (!storageSecretIsAccountKey) {
       val paramsFromSas = parseSas(storageAccountSecret.get)
