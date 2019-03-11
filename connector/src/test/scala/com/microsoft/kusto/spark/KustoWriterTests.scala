@@ -1,7 +1,9 @@
 package com.microsoft.kusto.spark
 
 import java.io.BufferedWriter
+import java.nio.charset.StandardCharsets
 import java.util.zip.GZIPOutputStream
+
 import com.microsoft.kusto.spark.datasink.{FileWriteResource, KustoWriter}
 import com.univocity.parsers.csv.{CsvWriter, CsvWriterSettings}
 import org.apache.spark.SparkConf
@@ -14,7 +16,6 @@ import org.scalatest.{FunSpec, Matchers}
 class KustoWriterTests extends FunSpec with Matchers {
 
   def getDF(): DataFrame = {
-    System.setProperty("hadoop.home.dir", "/usr/local/hadoop")
     val sparkConf = new SparkConf().set("spark.testing", "true")
       .set("spark.ui.enabled", "false")
       .setAppName("SimpleKustoDataSink")
@@ -32,8 +33,8 @@ class KustoWriterTests extends FunSpec with Matchers {
     it("should calculate row size as expected") {
       val df: DataFrame = getDF()
       val dfRow: InternalRow = getDF().queryExecution.toRdd.collect().head
-      val expectedSize = "John Doe,1\n".getBytes("utf-8")
-      KustoWriter.convertRowToCSV(dfRow, df.schema, "UTC").formattedRow shouldEqual expectedSize
+      val expectedSize = "John Doe,1\n".getBytes(StandardCharsets.UTF_8).length
+      KustoWriter.convertRowToCSV(dfRow, df.schema, "UTC").rowByteSize shouldEqual expectedSize
     }
   }
 

@@ -260,7 +260,7 @@ object KustoWriter {
 
     val (_, _, blobs) = rows.foldLeft[(Long, FileWriteResource, Seq[CloudBlockBlob])]((0, fileWriter, Seq())) { case ((size, fileWriter, blobsCreated), row) =>
       val formattedRow: CsvRowResult = convertRowToCSV(row, schema, writeOptions.timeZone)
-      val newTotalSize = size + formattedRow.size
+      val newTotalSize = size + formattedRow.rowByteSize
       if (newTotalSize < GIGA_SIZE) {
         fileWriter.csvWriter.writeRow(formattedRow.formattedRow)
         (newTotalSize, fileWriter, blobsCreated)
@@ -299,7 +299,7 @@ object KustoWriter {
       (res._1 :+ formattedField, res._2 + formattedField.getBytes(StandardCharsets.UTF_8).length)
     }
 
-    CsvRowResult(fields.toArray, size)
+    CsvRowResult(fields.toArray, size + fields.size)
   }
 
 
@@ -310,7 +310,7 @@ object KustoWriter {
   }
 }
 
-case class CsvRowResult(formattedRow: Array[String], size: Long)
+case class CsvRowResult(formattedRow: Array[String], rowByteSize: Long)
 
 case class FileWriteResource(buffer: BufferedWriter, gzip: GZIPOutputStream, csvWriter: CsvWriter, blob: CloudBlockBlob)
 
