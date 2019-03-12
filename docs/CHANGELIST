@@ -20,3 +20,4 @@ Version 1.0.0-Beta-01 update 1:
 - Added support for Key-vault based authentication, when authentication parameters are stored in KeyVault
 - Allow writing large data sets. Partitions that exceed Kusto ingest policy guidelines are split into several smaller
   ingestion operations
+- Organize samples and connector as separate modules to reduce dependencies
