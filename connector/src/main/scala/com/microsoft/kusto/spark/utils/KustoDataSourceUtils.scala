@@ -19,6 +19,8 @@ import org.json4s.jackson.JsonMethods.parse
 import scala.util.matching.Regex
 import scala.concurrent.duration._
 
+import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
+
 object KustoDataSourceUtils{
   private val klog = Logger.getLogger("KustoConnector")
 
@@ -143,7 +145,7 @@ object KustoDataSourceUtils{
     if(mode != SaveMode.Append)
     {
       if (mode == SaveMode.ErrorIfExists){
-        logInfo(ClientName, s"Kusto data source supports only append mode. Ignoring 'ErrorIfExists' directive")
+        logInfo(KCONST.ClientName, s"Kusto data source supports only append mode. Ignoring 'ErrorIfExists' directive")
       } else {
         throw new InvalidParameterException(s"Kusto data source supports only append mode. '$mode' directive is invalid")
       }
@@ -164,7 +166,16 @@ object KustoDataSourceUtils{
       case _ : NoSuchElementException => throw new InvalidParameterException(s"No such SinkTableCreationMode option: '${tableCreationParam.get}'")
       case _ : java.lang.IllegalArgumentException  => throw new InvalidParameterException(s"KUSTO_WRITE_ENABLE_ASYNC is expecting either 'true' or 'false', got: '$isAsyncParam'")
     }
-    val writeOptions = WriteOptions(tableCreation, isAsync, parameters.getOrElse(KustoOptions.KUSTO_WRITE_RESULT_LIMIT, "1"), parameters.getOrElse(DateTimeUtils.TIMEZONE_OPTION, "UTC"))
+
+    val timeout = new FiniteDuration(parameters.getOrElse(KustoOptions.KUSTO_TIMEOUT_LIMIT, KCONST.DefaultTimeoutAsString).toLong, TimeUnit.SECONDS)
+
+    val writeOptions = WriteOptions(
+      tableCreation,
+      isAsync,
+      parameters.getOrElse(KustoOptions.KUSTO_WRITE_RESULT_LIMIT, "1"),
+      parameters.getOrElse(DateTimeUtils.TIMEZONE_OPTION, "UTC"),
+      timeout)
+
     val sourceParameters = parseSourceParameters(parameters)
 
     if (sourceParameters.kustoCoordinates.table.isEmpty){
@@ -225,15 +236,20 @@ object KustoDataSourceUtils{
 
         if (latch.getCount == 0)
         {
-          throw new TimeoutException(s"runSequentially: Reached maximal allowed repetitions ($numberOfTimesToRun), aborting")
+          throw new TimeoutException(s"runSequentially: timed out based on maximal allowed repetitions ($numberOfTimesToRun), aborting")
         }
 
         if (!doWhile.apply(res)){
           t.cancel()
-          finalWork.apply(res)
-          while (latch.getCount > 0){
-            latch.countDown()
+          try {
+            finalWork.apply(res)
           }
+          catch {
+            case exception: Exception =>
+              while (latch.getCount > 0) latch.countDown()
+              throw exception
+          }
+          while (latch.getCount > 0) latch.countDown()
         }
       }
     }
@@ -241,7 +257,7 @@ object KustoDataSourceUtils{
     latch
   }
 
-  def verifyAsyncCommandCompletion(client: Client, database: String, commandResult: Results, samplePeriod: FiniteDuration = DefaultPeriodicSamplePeriod, timeOut: FiniteDuration = DefaultTimeoutLongRunning): Unit = {
+  def verifyAsyncCommandCompletion(client: Client, database: String, commandResult: Results, samplePeriod: FiniteDuration = KCONST.DefaultPeriodicSamplePeriod, timeOut: FiniteDuration): Unit = {
     val operationId = commandResult.getValues.get(0).get(0)
     val operationsShowCommand = CslCommandsGenerator.generateOperationsShowCommand(operationId)
     val sampleInMillis = samplePeriod.toMillis.toInt
@@ -271,10 +287,10 @@ object KustoDataSourceUtils{
     }
   }
 
-  private [kusto] def parseSas(url: String): StorageParameters  = {
+  private [kusto] def parseSas(url: String): KustoStorageParameters  = {
     val urlPattern: Regex = raw"(?:https://)?([^.]+).blob.core.windows.net/([^?]+)?(.+)".r
     url match {
-      case urlPattern(storageAccountId, container, sasKey) => StorageParameters(storageAccountId, sasKey, container, storageSecretIsAccountKey = false)
+      case urlPattern(storageAccountId, container, sasKey) => KustoStorageParameters(storageAccountId, sasKey, container, storageSecretIsAccountKey = false)
       case _ => throw new InvalidParameterException("SAS url couldn't be parsed. Should be https://<storage-account>.blob.core.windows.net/<container>?<SAS-Token>")
     }
   }
@@ -309,7 +325,7 @@ object KustoDataSourceUtils{
                                                            storageContainer: Option[String],
                                                            storageSecret: Option[String],
                                                            storageSecretIsAccountKey: Boolean,
-                                                           keyVaultAuthentication: KeyVaultAuthentication): StorageParameters = {
+                                                           keyVaultAuthentication: KeyVaultAuthentication): KustoStorageParameters = {
     if(!storageSecretIsAccountKey){
       // If SAS option defined - take sas
       KustoDataSourceUtils.parseSas(storageSecret.get)
@@ -335,27 +351,46 @@ object KustoDataSourceUtils{
           getAndValidateTransientStorageParameters(account, secret, container, storageSecretIsAccountKey = true)
         }
       } else {
-        StorageParameters(storageAccount.get, storageSecret.get, storageContainer.get, storageSecretIsAccountKey)
+        KustoStorageParameters(storageAccount.get, storageSecret.get, storageContainer.get, storageSecretIsAccountKey)
       }
     }
   }
 
-  private [kusto] def getAndValidateTransientStorageParameters(storageAccount: Option[String],
+  private[kusto] def getAndValidateTransientStorageParameters(storageAccount: Option[String],
                                                        storageContainer: Option[String],
                                                        storageAccountSecret: Option[String],
-                                                       storageSecretIsAccountKey: Boolean): StorageParameters = {
-    if (storageAccount.isEmpty) {
-      throw new InvalidParameterException("Storage account name is empty. Reading in 'Scale' mode requires a transient blob storage")
-    }
+                                                       storageSecretIsAccountKey: Boolean): KustoStorageParameters = {
 
-    if (storageContainer.isEmpty) {
-      throw new InvalidParameterException("Storage container name is empty.")
-    }
+    if (!storageSecretIsAccountKey) {
+      val paramsFromSas = parseSas(storageAccountSecret.get)
 
-    if (storageAccountSecret.isEmpty) {
-      throw new InvalidParameterException("Storage account secret is empty. Please provide a storage account key or a SAS key")
-    }
+      if (storageAccount.isDefined && !storageAccount.get.equals(paramsFromSas.account)) {
+        throw new InvalidParameterException("Storage account name does not match the name in storage access SAS key.")
+      }
 
-    StorageParameters(storageAccount.get, storageAccountSecret.get, storageContainer.get, storageSecretIsAccountKey)
+      if (storageContainer.isDefined && !storageContainer.get.equals(paramsFromSas.container)) {
+        throw new InvalidParameterException("Storage container name does not match the name in storage access SAS key.")
+      }
+
+      paramsFromSas
+    } else {
+      if (storageAccount.isEmpty) {
+        throw new InvalidParameterException("Storage account name is empty. Reading in 'Scale' mode requires a transient blob storage")
+      }
+
+      if (storageContainer.isEmpty) {
+        throw new InvalidParameterException("Storage container name is empty.")
+      }
+
+      if (storageAccountSecret.isEmpty) {
+        throw new InvalidParameterException("Storage account secret is empty. Please provide a storage account key or a SAS key")
+      }
+
+      KustoStorageParameters(storageAccount.get, storageAccountSecret.get, storageContainer.get, storageSecretIsAccountKey)
+    }
+  }
+
+  private[kusto] def countRows(client: Client, query: String, database: String): Int = {
+    client.execute(database, generateCountQuery(query)).getValues.get(0).get(0).toInt
   }
 }

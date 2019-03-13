@@ -50,7 +50,8 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
   private val loggingLevel: Option[String] = Option(System.getProperty("logLevel"))
   if (loggingLevel.isDefined) KDSU.setLoggingLevel(loggingLevel.get)
 
-  "KustoSource" should "execute a read query on Kusto cluster in default (lean) mode" taggedAs KustoE2E in {
+//  "KustoSource"
+  ignore should "execute a read query on Kusto cluster in default (lean) mode" taggedAs KustoE2E in {
     val table: String = System.getProperty(KustoOptions.KUSTO_TABLE)
     val query: String = System.getProperty(KustoOptions.KUSTO_QUERY, s"$table | where (toint(ColB) % 1000 == 0) | distinct ColA ")
 
@@ -79,13 +80,15 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
       KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
       KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME -> storageAccount,
       KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_KEY -> blobKey,
-      KustoOptions.KUSTO_BLOB_CONTAINER -> container
+      KustoOptions.KUSTO_BLOB_CONTAINER -> container,
+      KustoOptions.KUSTO_BLOB_SET_FS_CONFIG -> "true"
     )
 
     spark.read.kusto(cluster, database, query, conf).show(20)
   }
 
-  "KustoConnector" should "write to a kusto table and read it back in lean mode" taggedAs KustoE2E in {
+//  "KustoConnector"
+  ignore should "write to a kusto table and read it back in lean mode" taggedAs KustoE2E in {
     import spark.implicits._
 
     val rowId = new AtomicInteger(1)
@@ -93,7 +96,7 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
     val expectedNumberOfRows: Int =  100
     val rows: immutable.IndexedSeq[(String, Int)] = (1 to expectedNumberOfRows).map(v => (newRow(), v))
     val dfOrig = rows.toDF("name", "value")
-    val table = KustoQueryUtils.simplifyName(s"KustoSparkReadWRiteTest_${UUID.randomUUID()}")
+    val table = KustoQueryUtils.simplifyName(s"KustoSparkReadWriteTest_${UUID.randomUUID()}")
 
     // Create a new table.
     val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://$cluster.kusto.windows.net", appId, appKey, authority)
@@ -122,11 +125,9 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
     val orig = dfOrig.select("name", "value").rdd.map(x => (x.getString(0), x.getInt(1))).collect().sortBy(_._2)
     val result = dfResult.select("ColA", "ColB").rdd.map(x => (x.getString(0), x.getInt(1))).collect().sortBy(_._2)
 
-    for(idx <- orig.indices) {
-      assert(orig(idx) == result(idx))
-    }
+    assert(orig.deep == result.deep)
 
     // Cleanup
-    KustoTestUtils.tryDropAllTablesByPrefix(kustoAdminClient, database, "KustoSparkReadWRiteTest")
+    KustoTestUtils.tryDropAllTablesByPrefix(kustoAdminClient, database, "KustoSparkReadWriteTest")
   }
 }

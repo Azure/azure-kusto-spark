@@ -68,7 +68,7 @@ In addition, there are two main reading modes: see **KUSTO_READ_MODE** option be
   Kusto database from which the data will be read. The client must have 'viewer' 
   privileges on this database, unless it has 'admin' privileges on the table.
   
-  **Authentication Parameters** can be found [AAD Application Authentication](AuthenticationMethods.md). 
+  **Authentication Parameters** can be found [AAD Application Authentication](Authentication.md). 
 
   * **KUSTO_QUERY**: 
   A flexible Kusto query (can simply be a table name). The schema of the resulting dataframe will match the schema of the query result. 
@@ -82,7 +82,12 @@ In addition, there are two main reading modes: see **KUSTO_READ_MODE** option be
    This option doesn't involve partitioning the data in any way, and is therefore limited to queries resulting in small amount of data 
    (typically in the order of KiloBytes up to few MegaBytes).
    * When set to "scale" (**default**), uses a scalable method to export data from Kusto nodes, and convert this data to an RDD.
-   The data is exported to a transient blob storage account provided by the caller, as specified [below](#transient-storage-parameters)    
+   The data is exported to a transient blob storage account provided by the caller, as specified [below](#transient-storage-parameters)
+
+ * **KUSTO_TIMEOUT_LIMIT**:
+ An integer number corresponding to the period in seconds after which the operation will timeout.
+ This is an upper limit that may coexist with addition timeout limits as configured on Spark or Kusto clusters.
+ Default: '5400' (90 minutes)    
     
 #### Transient Storage Parameters
 When reading data from Kusto in 'scale' mode, the data is exported from Kusto into a blob storage every time the corresponding RDD is materialized.
@@ -139,5 +144,5 @@ Once the RDD is no longer required by the caller application, the container and/
   ```
   
   For more reference code examples please see 
-  [SimpleKustoDataSource](../src/main/scala/com/microsoft/kusto/spark/Sample/SimpleKustoDataSource.scala) and 
-  [KustoConnectorDemo](../src/main/scala/com/microsoft/kusto/spark/Sample/KustoConnectorDemo.scala).
+  [SimpleKustoDataSource](../samples/src/main/scala/SimpleKustoDataSource.scala) and 
+  [KustoConnectorDemo](../samples/src/main/scala/KustoConnectorDemo.scala).

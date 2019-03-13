@@ -48,9 +48,11 @@ either key vault or direct options for passing authentication parameters but not
  * **kustoAppAuthority**
   AAD authentication authority. This is the AAD Directory (tenant) ID.
 
-### Read Parameters
+### Transient Storage Parameters
 
->**Note**: this hese parameters are only required when working in "scale" reading mode. For details, refer to [Kusto Sink](KustoSource.md/#Transient-Storage-Parameters).
+>**Note**: these parameters are only required when working in "scale" reading mode. For details, refer to [Kusto Source](KustoSource.md#supported-options) documentation on
+_KUSTO_READ_MODE_.
+
  * **blobStorageAccountName**
  Transient storage account name. Either this, or a SAS url, must be provided in order to access the storage account
 
@@ -107,8 +109,9 @@ df.write
   .save()
 ```
 ## Device Authentication
-If no authentication parameters were passed. The connector will request for user authentication by writing a token 
-to the console, this token can be used to authenticate at https://login.microsoftonline.com/common/oauth2/deviceauth 
-and will allow temporary access. The user needs appropriate privileges for the Kusto cluster as explained in [Kusto Sink](KustoSink.md/#Authentication). 
+If no authentication parameters were passed, the connector will request for user authentication by writing a token 
+to the console. This token can be used to authenticate at https://login.microsoftonline.com/common/oauth2/deviceauth 
+and will allow temporary access. 
+The user needs appropriate privileges for the Kusto cluster as explained in [Kusto Sink authentication section](KustoSink.md#authentication). 
 
 >**Note**: This method is not recommended for production!   
