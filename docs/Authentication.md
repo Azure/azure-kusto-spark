@@ -1,6 +1,6 @@
 #Authentication Methods
-Kusto Spark connector allows the user to authenticate with AAD to the Kusto cluster using either an AAD application,
- a user token or device authentication. Alternatively, authentication parameters can be stored in Azure Key Vault.
+Kusto Spark connector allows the user to authenticate with AAD using an AAD application,
+ user token or device authentication. Alternatively, authentication parameters can be stored in Azure Key Vault.
   In this case, the user must provide once application credentials in order to access the Key Vault resource.
 
 ## AAD Application Authentication

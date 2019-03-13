@@ -53,10 +53,10 @@ object KustoWriter{
     val kustoAdminClient = KustoClient.getAdmin(authentication, tableCoordinates.cluster)
     val appName = data.sparkSession.sparkContext.appName
     val table = tableCoordinates.table.get
+    val tempTablesOld = kustoAdminClient.execute(generateFindOldTempTablesCommand(tableCoordinates.database)).getValues.asScala
 
-    try {
+    Future {
       // Try delete temporary tablesToCleanup created and not used
-      val tempTablesOld = kustoAdminClient.execute(generateFindOldTempTablesCommand(tableCoordinates.database)).getValues.asScala
       val res = kustoAdminClient.execute(tableCoordinates.database, generateFindCurrentTempTablesCommand(TempIngestionTablePrefix))
       val tempTablesCurr = res.getValues.asScala
 
@@ -65,8 +65,7 @@ object KustoWriter{
       if (tablesToCleanup.nonEmpty) {
         kustoAdminClient.execute(tableCoordinates.database, generateDropTablesCommand(tablesToCleanup.mkString(",")))
       }
-    }
-    catch  {
+    } onFailure {
       case ex: Exception =>
         KDSU.reportExceptionAndThrow(myName, ex, "trying to drop temporary tables", tableCoordinates.cluster, tableCoordinates.database, table, isLogDontThrow = true)
     }
@@ -83,8 +82,7 @@ object KustoWriter{
 
 
     val ingestKcsb = KustoClient.getKcsb(authentication, s"https://ingest-${tableCoordinates.cluster}.kusto.windows.net")
-    val storageUri = TempStorageCache.getNewTempBlobReference(tableCoordinates.cluster, ingestKcsb)
-
+    val storageUri = KustoTempIngestStorageCache.getNewTempBlobReference(tableCoordinates.cluster, ingestKcsb)
     def ingestRowsIntoKusto(schema: StructType, rows: Iterator[InternalRow]): IngestionResult = {
       val ingestClient = KustoClient.getIngest(authentication, tableCoordinates.cluster)
       val ingestionProperties = new IngestionProperties(tableCoordinates.database, tmpTableName)

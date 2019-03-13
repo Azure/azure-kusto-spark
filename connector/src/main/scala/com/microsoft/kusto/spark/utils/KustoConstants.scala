@@ -6,5 +6,6 @@ object KustoConstants {
   val DefaultTimeoutLongRunning: FiniteDuration = 90 minutes
   val DefaultTimeoutAsString: String = DefaultTimeoutLongRunning.toSeconds.toString
   val DefaultPeriodicSamplePeriod: FiniteDuration = 2 seconds
-  val ClientName = "Kusto.Spark.Connector"
+  val ClientName: String = "Kusto.Spark.Connector"
+  val StorageExpiryMinutes: Int = 120
 }
