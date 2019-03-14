@@ -72,7 +72,7 @@ object KeyVaultUtils {
         account = if (accountId == null) null else accountId.value(),
         secret = if (accountKey == null) null else accountKey.value(),
         container = if (container == null) null else container.value(),
-        storageSecretIsAccountKey = true)
+        secretIsAccountKey = true)
     } else {
       KustoDataSourceUtils.parseSas(sasUrl)
     }

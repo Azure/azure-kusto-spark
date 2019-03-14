@@ -5,7 +5,7 @@ import java.util.UUID
 
 import com.microsoft.azure.kusto.data.{ClientFactory, ConnectionStringBuilder}
 import com.microsoft.kusto.spark.datasource.{KustoOptions, KustoResponseDeserializer}
-import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.{KustoBlobStorageUtils, CslCommandsGenerator, KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{SQLContext, SparkSession}
 import org.junit.runner.RunWith
@@ -13,7 +13,6 @@ import org.scalatest.junit.JUnitRunner
 import org.scalatest.{BeforeAndAfterAll, FlatSpec}
 
 import scala.collection.JavaConverters._
-
 
 @RunWith(classOf[JUnitRunner])
 class KustoBlobAccessE2E extends FlatSpec with BeforeAndAfterAll {
@@ -41,7 +40,6 @@ class KustoBlobAccessE2E extends FlatSpec with BeforeAndAfterAll {
     sc.stop()
   }
 
-
   val appId: String = System.getProperty(KustoOptions.KUSTO_AAD_CLIENT_ID)
   val appKey: String = System.getProperty(KustoOptions.KUSTO_AAD_CLIENT_PASSWORD)
   val authority: String = System.getProperty(KustoOptions.KUSTO_AAD_AUTHORITY_ID)
@@ -52,7 +50,6 @@ class KustoBlobAccessE2E extends FlatSpec with BeforeAndAfterAll {
   val container: String = System.getProperty("container", "CONTAINER")
   val blobKey: String = System.getProperty("blobKey", "KEY")
   val blobSas: String = System.getProperty("blobSas")
-  val blobSasConnectionString: String = System.getProperty("blobSasQuery")
 
   private val loggingLevel: Option[String] = Option(System.getProperty("logLevel"))
   if (loggingLevel.isDefined) KDSU.setLoggingLevel(loggingLevel.get)
@@ -105,21 +102,34 @@ class KustoBlobAccessE2E extends FlatSpec with BeforeAndAfterAll {
       throw new RuntimeException(s"Failed to read schema for myTable $myTable in cluster $cluster, database $database")
     }
 
-    val secret = if (blobSas != null) blobSas else blobKey
+    var secret = ""
+
+    if (blobSas != null) {
+      val storageParams = KDSU.parseSas(blobSas)
+      secret = storageParams.secret
+    }
+    else {
+      secret = if (blobSas != null) blobSas else blobKey
+    }
 
     val numberOfPartitions = 10
     val partitionId = 0
     val partitionPredicate = s" hash($firstColumn, $numberOfPartitions) == $partitionId"
     val useKeyNotSas = blobSas == null
 
-    val (exportCommand, directory) = generateExportDataCommand(
+    val (blobContainerUri, directory: String, secreteString: String) = getBlobCoordinates(storageAccount, container, secret, useKeyNotSas)
+
+    val (exportCommand) = CslCommandsGenerator.generateExportDataCommand(
       myTable,
       storageAccount,
       container,
+      directory,
       secret,
       useKeyNotSas,
       partitionId,
-      partitionPredicate)
+      Some(partitionPredicate),
+      None
+    )
 
     val blobs = kustoAdminClient.execute(database, exportCommand)
       .getValues.asScala
@@ -130,10 +140,10 @@ class KustoBlobAccessE2E extends FlatSpec with BeforeAndAfterAll {
       spark.conf.set(s"fs.azure.account.key.$storageAccount.blob.core.windows.net", s"$secret")
     }
     else {
-      if (blobSasConnectionString.isEmpty) {
+      if (blobSas.isEmpty) {
         throw new InvalidParameterException("Please provide a complete query string of your SaS as a container when accessing blob storage with SaS key")
       }
-      spark.conf.set(s"fs.azure.sas.$container.$storageAccount.blob.core.windows.net", s"$blobSasConnectionString")
+      spark.conf.set(s"fs.azure.sas.$container.$storageAccount.blob.core.windows.net", s"$secret")
     }
     spark.conf.set("fs.azure", "org.apache.hadoop.fs.azure.NativeAzureFileSystem")
 
@@ -148,31 +158,16 @@ class KustoBlobAccessE2E extends FlatSpec with BeforeAndAfterAll {
       val pattern(rowInt, int) = rowAsString
       assert(rowInt == int)
     })
+
+    KustoBlobStorageUtils.deleteFromBlob(storageAccount, directory, container, secret, !useKeyNotSas)
   }
 
-  def generateExportDataCommand(
-                                 tableName: String,
-                                 storageAccountName: String,
-                                 container: String,
-                                 secret: String,
-                                 useKeyNotSas: Boolean = true,
-                                 partitionId: Int,
-                                 partitionPredicate: String = ""): (String, String) = {
-
-    val secretString = if (useKeyNotSas) s""";" h@"$secret"""" else s"""?" h@"$secret""""
+  private def getBlobCoordinates(storageAccountName: String, container: String, secret: String, useKeyNotSas: Boolean): (String, String, String) = {
+    val secretString = if (useKeyNotSas) s""";" h@"$secret"""" else if (secret(0) == '?') s"""" h@"$secret"""" else s"""?" h@"$secret""""
     val subDir = "dir" + UUID.randomUUID()
     val directory = KustoQueryUtils.simplifyName(s"$appId/$subDir/")
-    val blobUri = s"https://$storageAccountName.blob.core.windows.net"
+    val blobContainerUri = s"https://$storageAccountName.blob.core.windows.net/" + container
 
-    var command = s""".export to parquet ("$blobUri/$container$secretString)""" +
-    s""" with (namePrefix="${directory}part$partitionId", fileExtension=parquet) <| $tableName"""
-
-    if (partitionPredicate.nonEmpty)
-    {
-      command += s" | where $partitionPredicate"
-    }
-
-    (command, directory)
+    (blobContainerUri, directory, secretString)
   }
-
 }

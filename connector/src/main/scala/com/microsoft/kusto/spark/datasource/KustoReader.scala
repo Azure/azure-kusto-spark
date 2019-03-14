@@ -3,7 +3,7 @@ import java.security.InvalidParameterException
 import java.util.UUID
 
 import com.microsoft.azure.kusto.data.Client
-import com.microsoft.kusto.spark.utils.{CslCommandsGenerator, KustoClient, KustoQueryUtils, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.{KustoBlobStorageUtils, CslCommandsGenerator, KustoClient, KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.spark.Partition
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.sources.Filter
@@ -19,9 +19,9 @@ private[kusto] case class KustoPartition(predicate: Option[String], idx: Int) ex
 private[kusto] case class KustoPartitionParameters(num: Int, column: String, mode: String)
 
 private[kusto] case class KustoStorageParameters(account: String,
-                                            secret: String,
-                                            container: String,
-                                            storageSecretIsAccountKey: Boolean)
+                                                 secret: String,
+                                                 container: String,
+                                                 secretIsAccountKey: Boolean)
 
 private[kusto] case class KustoFiltering(columns: Array[String] = Array.empty, filters: Array[Filter] = Array.empty)
 
@@ -32,7 +32,10 @@ private[kusto] case class KustoReadRequest(sparkSession: SparkSession,
                                            authentication: KustoAuthentication,
                                            timeout: FiniteDuration)
 
-private[kusto] case class KustoReadOptions(isLeanMode: Boolean, isConfigureFileSystem: Boolean = true, isCompressOnExport: Boolean = true)
+private[kusto] case class KustoReadOptions(isLeanMode: Boolean = false,
+                                           isConfigureFileSystem: Boolean = true,
+                                           isCompressOnExport: Boolean = true,
+                                           exportSplitLimitMb: Long = 1024)
 
 private[kusto] object KustoReader {
   private val myName = this.getClass.getSimpleName
@@ -52,21 +55,26 @@ private[kusto] object KustoReader {
      request: KustoReadRequest,
      storage: KustoStorageParameters,
      partitionInfo: KustoPartitionParameters,
-     isFsSetupNeeded: Boolean = false,
-     isCompressOnExport: Boolean = true,
+     options: KustoReadOptions = KustoReadOptions.apply(),
      filtering: KustoFiltering = KustoFiltering.apply()): RDD[Row] = {
 
-    if (isFsSetupNeeded) setupBlobAccess(request, storage)
+    if (options.isConfigureFileSystem) setupBlobAccess(request, storage)
     val partitions = calculatePartitions(partitionInfo)
     val reader = new KustoReader(request, storage)
     val directory = KustoQueryUtils.simplifyName(s"${request.kustoCoordinates.database}/dir${UUID.randomUUID()}/")
 
     for (partition <- partitions) {
-      reader.exportPartitionToBlob(partition.asInstanceOf[KustoPartition], request, storage, directory, isCompressOnExport, filtering)
+      reader.exportPartitionToBlob(
+        partition.asInstanceOf[KustoPartition],
+        request,
+        storage,
+        directory,
+        options,
+        filtering)
     }
 
     val path = s"wasbs://${storage.container}@${storage.account}.blob.core.windows.net/$directory"
-    try {
+    val rdd = try {
       request.sparkSession.read.parquet(s"$path").rdd
     }
     catch {
@@ -80,11 +88,26 @@ private[kusto] object KustoReader {
           request.sparkSession.emptyDataFrame.rdd
         } else { throw ex }
     }
+
+    KDSU.logInfo(myName, "Transaction data written to blob storage account " +
+      storage.account + ", container " + storage.container + ", directory " + directory)
+
+    rdd
+  }
+
+  private[kusto] def deleteTransactionBlobsSafe(storage: KustoStorageParameters, directory: String): Unit = {
+    try {
+      KustoBlobStorageUtils.deleteFromBlob(storage.account, directory, storage.container, storage.secret, !storage.secretIsAccountKey)
+    }
+    catch {
+      case ex: Exception =>
+        KDSU.reportExceptionAndThrow(myName, ex, "trying to delete transient blobs from azure storage", isLogDontThrow = true)
+    }
   }
 
   private[kusto] def setupBlobAccess(request: KustoReadRequest, storage: KustoStorageParameters): Unit = {
     val config = request.sparkSession.conf
-    if (storage.storageSecretIsAccountKey) {
+    if (storage.secretIsAccountKey) {
       config.set(s"fs.azure.account.key.${storage.account}.blob.core.windows.net", s"${storage.secret}")
     }
     else {
@@ -116,7 +139,6 @@ private[kusto] object KustoReader {
 private[kusto] class KustoReader(request: KustoReadRequest, storage: KustoStorageParameters) {
   private val myName = this.getClass.getSimpleName
   val client: Client = KustoClient.getAdmin(request.authentication, request.kustoCoordinates.cluster)
-  val blobFileSizeSplitLimit = 1 * 1024 * 1024 * 1024 // 1GB, maximal allowed for 'export' command
 
   // Export a single partition from Kusto to transient Blob storage.
   // Returns the directory path for these blobs
@@ -125,8 +147,10 @@ private[kusto] class KustoReader(request: KustoReadRequest, storage: KustoStorag
     request: KustoReadRequest,
     storage: KustoStorageParameters,
     directory: String,
-    isCompressed: Boolean,
+    options: KustoReadOptions,
     filtering: KustoFiltering): Unit = {
+
+    val limit = if (options.exportSplitLimitMb <= 0) None else Some(options.exportSplitLimitMb)
 
     val exportCommand = CslCommandsGenerator.generateExportDataCommand(
       KustoFilter.pruneAndFilter(request.schema, request.query, filtering),
@@ -134,11 +158,11 @@ private[kusto] class KustoReader(request: KustoReadRequest, storage: KustoStorag
       storage.container,
       directory,
       storage.secret,
-      storage.storageSecretIsAccountKey,
+      storage.secretIsAccountKey,
       partition.idx,
       partition.predicate,
-      Some(blobFileSizeSplitLimit),
-      isCompressed = isCompressed
+      limit,
+      isCompressed = options.isCompressOnExport
     )
 
     val commandResult = client.execute(request.kustoCoordinates.database, exportCommand)
