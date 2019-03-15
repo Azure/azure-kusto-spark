@@ -17,7 +17,7 @@ import com.microsoft.azure.storage.StorageCredentialsSharedAccessSignature
 import com.microsoft.azure.storage.blob.{BlobOutputStream, CloudBlobContainer}
 import com.microsoft.kusto.spark.datasource._
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
-import com.microsoft.kusto.spark.utils.{KeyVaultUtils, KustoClient, KustoQueryUtils, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.{KeyVaultUtils, KustoClient, KustoQueryUtils, KustoDataSourceUtils => KDSU, KustoConstants => KCONST}
 import com.univocity.parsers.csv.{CsvWriter, CsvWriterSettings}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types.StructType
@@ -28,6 +28,7 @@ import shaded.parquet.org.codehaus.jackson.map.ObjectMapper
 import scala.collection.Iterator
 import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{Await, Future}
 
 object KustoWriter{
@@ -38,8 +39,9 @@ object KustoWriter{
   val inProgressState = "InProgress"
   val stateCol = "State"
   val statusCol = "Status"
-  val delayPeriodBetweenCalls: Int = KDSU.DefaultPeriodicSamplePeriod.toMillis.toInt
+  val delayPeriodBetweenCalls: Int = KCONST.DefaultPeriodicSamplePeriod.toMillis.toInt
   val GZIP_BUFFER_SIZE: Int = 16 * 1024
+
   private[kusto] def write(batchId: Option[Long],
                            data: DataFrame,
                            tableCoordinates: KustoCoordinates,
@@ -51,10 +53,10 @@ object KustoWriter{
     val kustoAdminClient = KustoClient.getAdmin(authentication, tableCoordinates.cluster)
     val appName = data.sparkSession.sparkContext.appName
     val table = tableCoordinates.table.get
+    val tempTablesOld = kustoAdminClient.execute(generateFindOldTempTablesCommand(tableCoordinates.database)).getValues.asScala
 
-    try {
+    Future {
       // Try delete temporary tablesToCleanup created and not used
-      val tempTablesOld = kustoAdminClient.execute(generateFindOldTempTablesCommand(tableCoordinates.database)).getValues.asScala
       val res = kustoAdminClient.execute(tableCoordinates.database, generateFindCurrentTempTablesCommand(TempIngestionTablePrefix))
       val tempTablesCurr = res.getValues.asScala
 
@@ -63,8 +65,7 @@ object KustoWriter{
       if (tablesToCleanup.nonEmpty) {
         kustoAdminClient.execute(tableCoordinates.database, generateDropTablesCommand(tablesToCleanup.mkString(",")))
       }
-    }
-    catch  {
+    } onFailure {
       case ex: Exception =>
         KDSU.reportExceptionAndThrow(myName, ex, "trying to drop temporary tables", tableCoordinates.cluster, tableCoordinates.database, table, isLogDontThrow = true)
     }
@@ -81,7 +82,7 @@ object KustoWriter{
 
 
     val ingestKcsb = KustoClient.getKcsb(authentication, s"https://ingest-${tableCoordinates.cluster}.kusto.windows.net")
-    val storageUri = TempStorageCache.getNewTempBlobReference(tableCoordinates.cluster, ingestKcsb)
+    val storageUri = KustoTempIngestStorageCache.getNewTempBlobReference(tableCoordinates.cluster, ingestKcsb)
     def ingestRowsIntoKusto(schema: StructType, rows: Iterator[InternalRow]): IngestionResult = {
       val ingestClient = KustoClient.getIngest(authentication, tableCoordinates.cluster)
       val ingestionProperties = new IngestionProperties(tableCoordinates.database, tmpTableName)
@@ -112,7 +113,16 @@ object KustoWriter{
             KDSU.logWarn(myName, s"sink to Kusto table '$table' with no rows to write on partition ${TaskContext.getPartitionId}")
           }
           else {
-            ingestToTemporaryTableByWorkers(batchId,tableCoordinates.cluster, tableCoordinates.database, table, schema, batchIdIfExists, ingestRowsIntoKusto, rows)
+            ingestToTemporaryTableByWorkers(
+              batchId,
+              tableCoordinates.cluster,
+              tableCoordinates.database,
+              table,
+              schema,
+              batchIdIfExists,
+              writeOptions.timeout,
+              ingestRowsIntoKusto,
+              rows)
           }
         }
       }
@@ -142,7 +152,16 @@ object KustoWriter{
             }
             else
             {
-              ingestToTemporaryTableByWorkers(batchId, tableCoordinates.cluster, tableCoordinates.database, table, schema, batchIdIfExists, ingestRowsIntoKusto, rows)
+              ingestToTemporaryTableByWorkers(
+                batchId,
+                tableCoordinates.cluster,
+                tableCoordinates.database,
+                table,
+                schema,
+                batchIdIfExists,
+                writeOptions.timeout,
+                ingestRowsIntoKusto,
+                rows)
             }
           }
         }
@@ -184,7 +203,16 @@ object KustoWriter{
     }
   }
 
-  private def ingestToTemporaryTableByWorkers(batchId: Option[Long], cluster: String, database: String, table: String, schema: StructType, batchIdIfExists: String, ingestRowsIntoKusto: (StructType, Iterator[InternalRow]) => IngestionResult, rows: Iterator[InternalRow]) = {
+  private def ingestToTemporaryTableByWorkers(
+    batchId: Option[Long],
+    cluster: String,
+    database: String,
+    table: String,
+    schema: StructType,
+    batchIdIfExists: String,
+    timeout: FiniteDuration,
+    ingestRowsIntoKusto: (StructType, Iterator[InternalRow]) => IngestionResult, rows: Iterator[InternalRow]) = {
+
     val partitionId = TaskContext.getPartitionId
     KDSU.logInfo(myName, s"Ingesting partition '$partitionId'")
 
@@ -194,8 +222,8 @@ object KustoWriter{
 
       // We force blocking here, since the driver can only complete the ingestion process
       // once all partitions are ingested into the temporary table
-      val ingestionResult = Await.result(ackIngestion, KDSU.DefaultTimeoutLongRunning)
-      val timeoutMillis = KDSU.DefaultTimeoutLongRunning.toMillis
+      val ingestionResult = Await.result(ackIngestion, timeout)
+      val timeoutMillis = timeout.toMillis
 
       // Proceed only on success. Will throw on failure for the driver to handle
       KDSU.runSequentially[IngestionStatus](

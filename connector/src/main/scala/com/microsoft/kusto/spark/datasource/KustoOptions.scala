@@ -2,6 +2,9 @@ package com.microsoft.kusto.spark.datasource
 
 import java.util.Locale
 
+import scala.concurrent.duration.FiniteDuration
+import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
+
 object KustoOptions {
   private val kustoOptionNames = collection.mutable.Set[String]()
 
@@ -53,6 +56,8 @@ object KustoOptions {
   val KUSTO_WRITE_RESULT_LIMIT: String = newOption("writeResultLimit")
   // Select either 'scale' or 'lean' read mode. Default: 'scale'
   val KUSTO_READ_MODE: String = newOption("readMode")
+  // An integer number corresponding to the period in seconds after which the operation will timeout. Default: '5400' (90 minutes)
+  val KUSTO_TIMEOUT_LIMIT: String = newOption("timeoutLimit")
 
   // Partitioning parameters
   val KUSTO_READ_PARTITION_MODE: String = newOption("partitionMode")
@@ -79,10 +84,29 @@ object KustoOptions {
   // Blob container name
   val KUSTO_BLOB_CONTAINER: String = newOption("blobContainer")
 
+  // When reading in 'scale' mode, sets Spark configuration to read from Azure blob.
+  // The following configuration parameters are set:
+  // 1. Blob access secrete:
+  //    a. If storage account key is provided, the following parameter is set:
+  //       fs.azure.account.key.<storage-account-name>.blob.core.windows.net, <storage-account-key>
+  //    b. If SAS key is provided, the following parameter is set:
+  //       fs.azure.sas.<blob-container-name>.<storage-account-name>.blob.core.windows.net, <sas-key>
+  // 2. File system specifier property is set as follows:
+  //     "fs.azure", "org.apache.hadoop.fs.azure.NativeAzureFileSystem"
+  // If set to 'false' (default), the user must set up these values prior to using read connector in "scale" mode.
+  // If set to 'true', the connector will update these parameters on every 'read' operation
+  // Default: 'false'
+  val KUSTO_BLOB_SET_FS_CONFIG: String = newOption("blobSetFsConfig")
+
+  // When reading in 'scale' mode, compresses the data upon export from Kusto to Blob
+  // This feature is experimental, in order to measure performance impact w/wo compression
+  // Default: 'true'
+  val KUSTO_BLOB_COMPRESS_ON_EXPORT: String = newOption("blobCompressOnExport")
+
   val NONE_RESULT_LIMIT = "none"
   val supportedReadModes: Set[String] = Set("lean", "scale")
   // Partitioning modes allow to export data from Kusto to separate folders within the blob container per-partition
-  // In current implementation this is not exploited by Kusto read connector, and is not recommended.
+  // Note! In current implementation this is not exploited by Kusto read connector, and is not recommended.
   // Left for future experimentation
   val supportedPartitioningModes: Set[String] = Set("hash")
 }
@@ -95,7 +119,5 @@ case class AadApplicationAuthentication(ID: String, password: String, authority:
 case class KeyVaultAppAuthentication(uri: String, keyVaultAppID: String, keyVaultAppKey: String) extends KeyVaultAuthentication(uri)
 case class KeyVaultCertificateAuthentication(uri: String, pemFilePath: String, pemFilePassword: String) extends KeyVaultAuthentication(uri)
 case class WriteOptions(tableCreateOptions: KustoOptions.SinkTableCreationMode.SinkTableCreationMode = KustoOptions.SinkTableCreationMode.FailIfNotExist,
-                        isAsync: Boolean = false,
-                        writeResultLimit: String = KustoOptions.NONE_RESULT_LIMIT,
-                        timeZone: String = "UTC")
+                        isAsync: Boolean = false, writeResultLimit: String = KustoOptions.NONE_RESULT_LIMIT, timeZone: String = "UTC", timeout: FiniteDuration)
 case class KustoAccessTokenAuthentication(token: String) extends KustoAuthentication

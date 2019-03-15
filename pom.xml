@@ -18,6 +18,7 @@
         <url>scm:git:https://github.com/Azure/azure-kusto-spark</url>
         <connection>scm:git:https://github.com/Azure/azure-kusto-spark</connection>
     </scm>
+    <url>https://github.com/Azure/azure-kusto-spark</url>
     <licenses>
         <license>
             <name>Apache 2.0 License</name>

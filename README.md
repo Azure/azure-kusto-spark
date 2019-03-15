@@ -33,7 +33,7 @@ For Scala/Java applications using Maven project definitions, link your applicati
 ```
 groupId = com.microsoft.azure
 artifactId = spark-kusto-connector
-version = 1.0.0-Beta-01 
+version = 1.0.0-Beta-02 
 ```
 
 **In Maven**:
@@ -41,7 +41,7 @@ version = 1.0.0-Beta-01
    <dependency>
      <groupId>com.microsoft.azure</groupId>
      <artifactId>spark-kusto-connector</artifactId>
-     <version>1.0.0-Beta-01</version>
+     <version>1.0.0-Beta-02</version>
    </dependency>
 ```
 
@@ -72,10 +72,38 @@ can be found [here](lib)
 
 	
 ## Documentation
-Detailed documentation can be found [here](docs).
-Usage examples can be found [here](samples)
-	
-## Contributing 
 
-Contributions and suggestions to this product will be possible, and most welcome, 
-starting with next release
+Detailed documentation can be found [here](docs).
+
+## Samples
+
+Usage examples can be found [here](samples/src/main/scala)
+
+# Available Kusto client libraries:
+
+Here is a list of currently available client libraries for Kusto:
+- [Node](https://github.com/azure/azure-kusto-node)
+- [Python](https://github.com/azure/azure-kusto-python)
+- [.NET](https://docs.microsoft.com/en-us/azure/kusto/api/netfx/about-the-sdk)
+- [Java](https://github.com/azure/azure-kusto-java)
+
+# Need Support?
+
+- **Have a feature request for SDKs?** Please post it on [User Voice](https://feedback.azure.com/forums/915733-azure-data-explorer) to help us prioritize
+- **Have a technical question?** Ask on [Stack Overflow with tag "azure-data-explorer"](https://stackoverflow.com/questions/tagged/azure-data-explorer)
+- **Need Support?** Every customer with an active Azure subscription has access to [support](https://docs.microsoft.com/en-us/azure/azure-supportability/how-to-create-azure-support-request) with guaranteed response time.  Consider submitting a ticket and get assistance from Microsoft support team
+- **Found a bug?** Please help us fix it by thoroughly documenting it and [filing an issue](https://github.com/Azure/azure-kusto-spark/issues/new).
+
+# Contributing
+
+This project welcomes contributions and suggestions.  Most contributions require you to agree to a
+Contributor License Agreement (CLA) declaring that you have the right to, and actually do, grant us
+the rights to use your contribution. For details, visit https://cla.microsoft.com.
+
+When you submit a pull request, a CLA-bot will automatically determine whether you need to provide
+a CLA and decorate the PR appropriately (e.g., label, comment). Simply follow the instructions
+provided by the bot. You will only need to do this once across all repos using our CLA.
+
+This project has adopted the [Microsoft Open Source Code of Conduct](https://opensource.microsoft.com/codeofconduct/).
+For more information see the [Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/) or
+contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additional questions or comments.

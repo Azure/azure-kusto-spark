@@ -7,7 +7,7 @@ import com.microsoft.azure.kusto.ingest.IngestClient
 import com.microsoft.azure.kusto.ingest.result.{IngestionResult, IngestionStatus}
 import com.microsoft.kusto.spark.datasink.KustoSink
 import com.microsoft.kusto.spark.datasource.{AadApplicationAuthentication, KustoOptions, WriteOptions, KustoCoordinates}
-import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU, KustoConstants => KCONST}
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{SQLContext, SparkSession}
 import org.junit.runner.RunWith
@@ -49,7 +49,11 @@ class KustoSinkTests extends FlatSpec with MockFactory with Matchers with Before
   }
 
   private def getSink: KustoSink =
-    new KustoSink(sqlContext, KustoCoordinates(kustoCluster, kustoDatabase, Some(kustoTable)), AadApplicationAuthentication(appId,appKey, appAuthorityId), WriteOptions(writeResultLimit = KustoOptions.NONE_RESULT_LIMIT))
+    new KustoSink(
+    sqlContext, 
+    KustoCoordinates(kustoCluster, kustoDatabase, Some(kustoTable)), 
+    AadApplicationAuthentication(appId,appKey, appAuthorityId), 
+    WriteOptions(writeResultLimit = KustoOptions.NONE_RESULT_LIMIT, timeout = KCONST.DefaultTimeoutLongRunning))
 
   private val rowId = new AtomicInteger(1)
   private def newRow(): String = s"row-${rowId.getAndIncrement()}"
@@ -65,8 +69,11 @@ class KustoSinkTests extends FlatSpec with MockFactory with Matchers with Before
 
     val kustoIngestionClient = stub[IngestClient]
     val result = new IngestionResult {
-      override def GetIngestionStatusCollection(): util.List[IngestionStatus] = {
+      override def getIngestionStatusCollection: util.List[IngestionStatus] = {
         null
+      }
+      override def getIngestionStatusesLength: Int = {
+        0
       }
     }
 

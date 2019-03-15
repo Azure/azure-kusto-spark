@@ -6,7 +6,6 @@ import java.util.concurrent.{ExecutionException, ExecutorService, Executors, Fut
 import com.microsoft.aad.adal4j.{AuthenticationContext, AuthenticationResult, ClientCredential}
 import com.microsoft.azure.keyvault.KeyVaultClient
 import com.microsoft.azure.keyvault.authentication.KeyVaultCredentials
-import com.microsoft.rest.credentials.ServiceClientCredentials
 
 /**
   * Authenticates to Azure Key Vault by providing a callback to authenticate
@@ -19,7 +18,7 @@ class KeyVaultADALAuthenticator(clientId: String, clientKey: String) {
     new KeyVaultClient(createCredentials)
   }
 
-  private def createCredentials: ServiceClientCredentials = {
+  private def createCredentials: KeyVaultCredentials = {
     new KeyVaultCredentials() { //Callback that supplies the token type and access token on request.
       override def doAuthenticate(authorization: String, resource: String, scope: String): String = {
         try {

@@ -23,6 +23,7 @@ out/
 .project
 # JDT-specific (Eclipse Java Development Tools)
 .classpath
+scalastyle-output.xml
 
 # Maven
 target/
