@@ -83,7 +83,7 @@ that is using it. Please verify the following before using Kusto connector:
    This is an upper limit that may coexist with addition timeout limits as configured on Spark or Kusto clusters.  
    Default: '5400' (90 minutes)
 
- >**Note**:
+ >**Note:**
  For both synchronous and asynchronous operation, 'write' is an atomic transaction, i.e. 
  either all data is written to Kusto, or no data is written.  
  

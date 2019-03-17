@@ -46,7 +46,6 @@ object KustoOptions {
   // it will be created, with a schema matching the DataFrame that is being written.
   // Default: 'FailIfNotExist'
   val KUSTO_TABLE_CREATE_OPTIONS: String = newOption("tableCreateOptions")
-  val KUSTO_TRUNCATE: String = newOption("truncate")
   val KUSTO_ACCESS_TOKEN: String = newOption("accessToken")
   // When writing to Kusto, allows the driver to complete operation asynchronously.  See KustoSink.md for
   // details and limitations. Default: 'false'
@@ -63,8 +62,10 @@ object KustoOptions {
   val KUSTO_READ_PARTITION_MODE: String = newOption("partitionMode")
   // Note: for 'read', this allows to partition export from Kusto to blob (default is '1')
   // It does not affect the number of partitions created when reading from blob.
-  // Therefore it is not recommended to use this option when reading from Kusto, left here for experimentation
+  // Therefore it is not recommended to use this option when reading from Kusto
+  // CURRENTLY NOT USED, left here for experimentation
   val KUSTO_NUM_PARTITIONS: String = newOption("numPartitions")
+  // CURRENTLY NOT USED, left here for experimentation
   val KUSTO_PARTITION_COLUMN: String = newOption("partitionColumn")
 
   object SinkTableCreationMode extends Enumeration {
@@ -83,7 +84,6 @@ object KustoOptions {
   val KUSTO_BLOB_STORAGE_SAS_URL: String = newOption("blobStorageSasUrl")
   // Blob container name
   val KUSTO_BLOB_CONTAINER: String = newOption("blobContainer")
-
   // When reading in 'scale' mode, sets Spark configuration to read from Azure blob.
   // The following configuration parameters are set:
   // 1. Blob access secrete:
@@ -97,7 +97,6 @@ object KustoOptions {
   // If set to 'true', the connector will update these parameters on every 'read' operation
   // Default: 'false'
   val KUSTO_BLOB_SET_FS_CONFIG: String = newOption("blobSetFsConfig")
-
   // When reading in 'scale' mode, compresses the data upon export from Kusto to Blob
   // This feature is experimental, in order to measure performance impact w/wo compression
   // Default: 'true'
