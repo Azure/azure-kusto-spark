@@ -3,6 +3,9 @@
 </p>
 
 # Kusto Connector for Apache Spark
+
+master: [![Build status](https://msazure.visualstudio.com/One/_apis/build/status/Custom/Kusto/azure-kusto-spark%20ci?branchName=master)](https://msazure.visualstudio.com/One/_build/latest?definitionId=58677)
+dev: [![Build status](https://msazure.visualstudio.com/One/_apis/build/status/Custom/Kusto/azure-kusto-spark%20ci?branchName=dev)](https://msazure.visualstudio.com/One/_build/latest?definitionId=58677)
  
 This library contains the source code for Kusto Data Source and Data Sink Connector for Apache Spark.
 
@@ -14,21 +17,17 @@ Making Kusto and Spark work together enables our users to build fast and scalabl
  
 ## About This Release
 
-This is a beta release, serving as the baseline version of Kusto connector for Spark. It exposes Kusto as a valid Data Store 
+This is a beta release of Kusto connector for Spark. It exposes Kusto as a valid Data Store 
 for standard Spark source and sink operations such as write, read and writeStream.
-It can be used for experimentation, and for applications where the size of data read from Kusto is fairly small.
 
-Future releases will extend Kusto connector capabilities in the following areas:
-
-* Allow large-scale data transport to and from Kusto
-* Add capabilities: will be specified in the version [CHANGELIST](docs/CHANGELIST) 
-* Improve fault tolerance and resilience 
+For main changes from previous releases and known issues please refer to [CHANGELIST](docs/CHANGELIST) 
 
 ## Usage
 
 ### Linking 
 
-For Scala/Java applications using Maven project definitions, link your application with the artifact below. 
+For Scala/Java applications using Maven project definitions, 
+link your application with the artifact below in order to use Spark Kusto connector. 
 
 ```
 groupId = com.microsoft.azure
@@ -39,12 +38,27 @@ version = 1.0.0-Beta-02
 **In Maven**:
 
 > Note that the jar is in beta and not available yet in public maven. clone this repository and build it localy to add it to your local maven repository, or use the [pre-built jars](lib/)
- ```
+
+ ```xml
    <dependency>
      <groupId>com.microsoft.azure</groupId>
      <artifactId>spark-kusto-connector</artifactId>
      <version>1.0.0-Beta-02</version>
    </dependency>
+```
+
+#### Building Samples Module
+Samples are packaged as a separate module with the following artifact
+
+```xml
+<artifactId>connector-samples</artifactId>
+```    
+
+In order to build the whole project comprised of the connector module and the samples module, 
+use the following artifact:
+
+```xml
+<artifactId>azure-kusto-spark</artifactId>
 ```
 
 ## Build Prerequisites
@@ -76,7 +90,6 @@ These libraries include:
 * Kusto Java data and ingestion client libraries (kusto-data and kusto-ingest). 
 When working with Databricks, Kusto connector requires both these libraries to be installed.
 
-	
 ## Documentation
 
 Detailed documentation can be found [here](docs).

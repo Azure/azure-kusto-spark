@@ -21,3 +21,9 @@ Version 1.0.0-Beta-01 update 1:
 - Allow writing large data sets. Partitions that exceed Kusto ingest policy guidelines are split into several smaller
   ingestion operations
 - Organize samples and connector as separate modules to reduce dependencies
+
+KNOWN ISSUES
+1. When running with spark 'wholestage codegen' enabled, a mismatch between schema 'nullable' definition and actual data containing
+null values can lead to a NullPointerException to be thrown by org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter.
+If you encounter this error and cannot identify and fix the mismatch, consider disabling 'wholestage codegen' by setting (databricks):
+ - spark.conf.set("spark.sql.codegen.wholeStage","false")
