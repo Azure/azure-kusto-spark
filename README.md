@@ -37,6 +37,8 @@ version = 1.0.0-Beta-02
 ```
 
 **In Maven**:
+
+> Note that the jar is in beta and not available yet in public maven. clone this repository and build it localy to add it to your local maven repository, or use the [pre-built jars](lib/)
  ```
    <dependency>
      <groupId>com.microsoft.azure</groupId>
