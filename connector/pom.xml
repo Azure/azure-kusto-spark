@@ -2,7 +2,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>com.microsoft.kusto</groupId>
   <artifactId>spark-kusto-connector</artifactId>
-  <version>1.0.0-Beta-01</version>
+  <version>1.0.0-Beta-02</version>
   <name>${project.artifactId}</name>
   <description>Kusto data connector</description>
   <inceptionYear>2018</inceptionYear>

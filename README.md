@@ -33,7 +33,7 @@ For Scala/Java applications using Maven project definitions, link your applicati
 ```
 groupId = com.microsoft.azure
 artifactId = spark-kusto-connector
-version = 1.0.0-Beta-01 
+version = 1.0.0-Beta-02 
 ```
 
 **In Maven**:
@@ -43,7 +43,7 @@ version = 1.0.0-Beta-01
    <dependency>
      <groupId>com.microsoft.azure</groupId>
      <artifactId>spark-kusto-connector</artifactId>
-     <version>1.0.0-Beta-01</version>
+     <version>1.0.0-Beta-02</version>
    </dependency>
 ```
 
