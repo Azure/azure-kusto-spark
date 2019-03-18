@@ -68,7 +68,11 @@ mvn clean install
 
 ## Pre-Compiled Libraries
 In order to facilitate ramp-up on platforms such as Azure Databricks, pre-compiled libraries
-can be found [here](lib) 
+are published under [GitHub Release Tags](https://github.com/Azure/azure-kusto-spark/releases/tag/v1.0.0-Beta-01).
+These libraries include:
+* Spark Kusto connector library
+* Kusto Java data and ingestion client libraries (kusto-data and kusto-ingest). 
+When working with Databricks, Kusto connector requires both these libraries to be installed.
 
 	
 ## Documentation
