@@ -130,7 +130,7 @@ class DefaultSource extends CreatableRelationProvider
         }
     }
 
-    val timeout = new FiniteDuration(parameters.getOrElse(KustoOptions.KUSTO_TIMEOUT_LIMIT, KCONST.DefaultTimeoutAsString).toLong, TimeUnit.SECONDS)
+    val timeout = new FiniteDuration(parameters.getOrElse(KustoOptions.KUSTO_TIMEOUT_LIMIT, KCONST.defaultTimeoutAsString).toLong, TimeUnit.SECONDS)
 
     KustoRelation(
       kustoCoordinates,

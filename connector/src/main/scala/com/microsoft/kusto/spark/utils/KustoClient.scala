@@ -8,7 +8,7 @@ object KustoClient {
     private[kusto] def getAdmin(authentication: KustoAuthentication, clusterAlias: String, isIngestCluster: Boolean = false): Client = {
     val clusterUri = s"https://${if(isIngestCluster) "ingest" else ""}$clusterAlias.kusto.windows.net"
     val kcsb = getKcsb(authentication,clusterUri)
-    kcsb.setClientVersionForTracing(KCONST.ClientName)
+    kcsb.setClientVersionForTracing(KCONST.clientName)
     ClientFactory.createClient(kcsb)
   }
 
@@ -18,7 +18,7 @@ object KustoClient {
 
   def getIngest(authentication: KustoAuthentication, clusterAlias: String): IngestClient = {
     val ingestKcsb = getKcsb(authentication, s"https://ingest-$clusterAlias.kusto.windows.net")
-    ingestKcsb.setClientVersionForTracing(KCONST.ClientName)
+    ingestKcsb.setClientVersionForTracing(KCONST.clientName)
     IngestClientFactory.createClient(ingestKcsb)
   }
 

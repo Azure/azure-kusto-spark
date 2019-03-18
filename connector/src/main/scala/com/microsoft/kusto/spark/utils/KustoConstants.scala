@@ -3,8 +3,9 @@ package com.microsoft.kusto.spark.utils
 import scala.concurrent.duration._
 
 object KustoConstants {
-  val DefaultTimeoutLongRunning: FiniteDuration = 90 minutes
-  val DefaultTimeoutAsString: String = DefaultTimeoutLongRunning.toSeconds.toString
-  val DefaultPeriodicSamplePeriod: FiniteDuration = 2 seconds
-  val ClientName = "Kusto.Spark.Connector"
+  val defaultTimeoutLongRunning: FiniteDuration = 90 minutes
+  val defaultTimeoutAsString: String = defaultTimeoutLongRunning.toSeconds.toString
+  val defaultPeriodicSamplePeriod: FiniteDuration = 2 seconds
+  val clientName = "Kusto.Spark.Connector"
+  val defaultBufferSize: Int = 16 * 1024
 }

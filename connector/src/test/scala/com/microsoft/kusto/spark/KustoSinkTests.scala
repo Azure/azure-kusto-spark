@@ -53,7 +53,7 @@ class KustoSinkTests extends FlatSpec with MockFactory with Matchers with Before
     sqlContext, 
     KustoCoordinates(kustoCluster, kustoDatabase, Some(kustoTable)), 
     AadApplicationAuthentication(appId,appKey, appAuthorityId), 
-    WriteOptions(writeResultLimit = KustoOptions.NONE_RESULT_LIMIT, timeout = KCONST.DefaultTimeoutLongRunning))
+    WriteOptions(writeResultLimit = KustoOptions.NONE_RESULT_LIMIT, timeout = KCONST.defaultTimeoutLongRunning))
 
   private val rowId = new AtomicInteger(1)
   private def newRow(): String = s"row-${rowId.getAndIncrement()}"

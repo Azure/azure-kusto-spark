@@ -147,7 +147,7 @@ object KustoDataSourceUtils {
   def parseSinkParameters(parameters: Map[String, String], mode: SaveMode = SaveMode.Append): SinkParameters = {
     if (mode != SaveMode.Append) {
       if (mode == SaveMode.ErrorIfExists) {
-        logInfo(KCONST.ClientName, "Kusto data source supports only append mode. Ignoring 'ErrorIfExists' directive")
+        logInfo(KCONST.clientName, "Kusto data source supports only append mode. Ignoring 'ErrorIfExists' directive")
       } else {
         throw new InvalidParameterException(s"Kusto data source supports only append mode. '$mode' directive is invalid")
       }
@@ -169,7 +169,7 @@ object KustoDataSourceUtils {
       case _: java.lang.IllegalArgumentException => throw new InvalidParameterException(s"KUSTO_WRITE_ENABLE_ASYNC is expecting either 'true' or 'false', got: '$isAsyncParam'")
     }
 
-    val timeout = new FiniteDuration(parameters.getOrElse(KustoOptions.KUSTO_TIMEOUT_LIMIT, KCONST.DefaultTimeoutAsString).toLong, TimeUnit.SECONDS)
+    val timeout = new FiniteDuration(parameters.getOrElse(KustoOptions.KUSTO_TIMEOUT_LIMIT, KCONST.defaultTimeoutAsString).toLong, TimeUnit.SECONDS)
 
     val writeOptions = WriteOptions(
       tableCreation,
@@ -261,7 +261,7 @@ object KustoDataSourceUtils {
   def verifyAsyncCommandCompletion(client: Client,
                                    database: String,
                                    commandResult: Results,
-                                   samplePeriod: FiniteDuration = KCONST.DefaultPeriodicSamplePeriod,
+                                   samplePeriod: FiniteDuration = KCONST.defaultPeriodicSamplePeriod,
                                    timeOut: FiniteDuration): Unit = {
     val operationId = commandResult.getValues.get(0).get(0)
     val operationsShowCommand = CslCommandsGenerator.generateOperationsShowCommand(operationId)

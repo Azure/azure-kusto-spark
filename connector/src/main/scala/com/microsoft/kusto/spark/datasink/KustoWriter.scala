@@ -43,14 +43,14 @@ object KustoWriter {
   val inProgressState = "InProgress"
   val stateCol = "State"
   val statusCol = "Status"
-  val delayPeriodBetweenCalls: Int = KCONST.DefaultPeriodicSamplePeriod.toMillis.toInt
-  val GZIP_BUFFER_SIZE: Int = 16 * 1024
+  val delayPeriodBetweenCalls: Int = KCONST.defaultPeriodicSamplePeriod.toMillis.toInt
+  val GZIP_BUFFER_SIZE: Int = KCONST.defaultBufferSize
   val GIGA_SIZE: Int = 1024 * 1024 * 1024
 
   private[kusto] def write(batchId: Option[Long], data: DataFrame,
                            tableCoordinates: KustoCoordinates, authentication: KustoAuthentication, writeOptions: WriteOptions): Unit = {
 
-    val batchIdIfExists = batchId.map(_.toString).getOrElse("")
+    val batchIdIfExists = batchId.filter(_ != 0 ).map(_.toString).getOrElse("")
     val kustoAdminClient = KustoClient.getAdmin(authentication, tableCoordinates.cluster)
     val table = tableCoordinates.table.get
     val tmpTableName: String = KustoQueryUtils.simplifyName(TempIngestionTablePrefix +
@@ -233,21 +233,20 @@ object KustoWriter {
     res
   }
 
-  def createFileWriter(schema: StructType,
+  def createBlobWriter(schema: StructType,
                        timeZone: String,
                        tableCoordinates: KustoCoordinates,
                        tmpTableName: String,
                        storageUri: String,
-                       container: CloudBlobContainer): FileWriteResource = {
+                       container: CloudBlobContainer): BlobWriteResource = {
     val blobName = s"${tableCoordinates.database}_${tmpTableName}_${UUID.randomUUID.toString}_SparkStreamUpload.gz"
     val blob: CloudBlockBlob = container.getBlockBlobReference(blobName)
     val gzip: GZIPOutputStream = new GZIPOutputStream(blob.openOutputStream())
-    val csvSerializer = new KustoCsvSerializationUtils(schema, timeZone)
 
     val writer = new OutputStreamWriter(gzip, StandardCharsets.UTF_8)
     val buffer: BufferedWriter = new BufferedWriter(writer, GZIP_BUFFER_SIZE)
     val csvWriter: CsvWriter = new CsvWriter(buffer, new CsvWriterSettings)
-    datasink.FileWriteResource(buffer, gzip, csvWriter, blob)
+    datasink.BlobWriteResource(buffer, gzip, csvWriter, blob)
   }
 
   @throws[IOException]
@@ -256,48 +255,56 @@ object KustoWriter {
                                    parameters: KustoWriteResource): Seq[CloudBlockBlob] = {
     import parameters._
     val container: CloudBlobContainer = new CloudBlobContainer(new URI(storageUri))
-    val fileWriter: FileWriteResource = createFileWriter(schema, writeOptions.timeZone, coordinates, tmpTableName, storageUri, container)
+    val blobWriter: BlobWriteResource = createBlobWriter(schema, writeOptions.timeZone, coordinates, tmpTableName, storageUri, container)
 
-    val (_, _, blobs) = rows.foldLeft[(Long, FileWriteResource, Seq[CloudBlockBlob])]((0, fileWriter, Seq())) { case ((size, fileWriter, blobsCreated), row) =>
+    // The first two values stand for last file size and the blob writer used to create it
+
+    val (_, _, blobs) = rows.foldLeft[(Long, BlobWriteResource, Seq[CloudBlockBlob])]((0, blobWriter, Seq())) { case ((size, blobWriter, blobsCreated), row) =>
       val formattedRow: CsvRowResult = convertRowToCSV(row, schema, writeOptions.timeZone)
       val newTotalSize = size + formattedRow.rowByteSize
       if (newTotalSize < GIGA_SIZE) {
-        fileWriter.csvWriter.writeRow(formattedRow.formattedRow)
-        (newTotalSize, fileWriter, blobsCreated)
+        blobWriter.csvWriter.writeRow(formattedRow.formattedRow)
+        (newTotalSize, blobWriter, blobsCreated)
       } else {
-        finalizeFileWrite(fileWriter)
-        (0, createFileWriter(schema, writeOptions.timeZone, coordinates, tmpTableName, storageUri, container), blobsCreated :+ fileWriter.blob)
+        finalizeBlobWrite(blobWriter)
+        (0, createBlobWriter(schema, writeOptions.timeZone, coordinates, tmpTableName, storageUri, container), blobsCreated :+ blobWriter.blob)
       }
     }
 
     if (blobs.isEmpty) {
-      finalizeFileWrite(fileWriter)
-      Seq(fileWriter.blob)
+      finalizeBlobWrite(blobWriter)
+      Seq(blobWriter.blob)
     } else {
       blobs
     }
   }
 
-  def finalizeFileWrite(fileWriteResource: FileWriteResource): Unit = {
-    fileWriteResource.buffer.flush()
-    fileWriteResource.gzip.flush()
-    fileWriteResource.buffer.close()
-    fileWriteResource.gzip.close()
+  def finalizeBlobWrite(blobWriteResource: BlobWriteResource): Unit = {
+    blobWriteResource.buffer.flush()
+    blobWriteResource.gzip.flush()
+    blobWriteResource.buffer.close()
+    blobWriteResource.gzip.close()
   }
 
   def convertRowToCSV(row: InternalRow, schema: StructType, timeZone: String): CsvRowResult = {
     val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone(timeZone))
     val schemaFields: Array[StructField] = schema.fields
 
-    val (fields, size) = row.toSeq(schema).foldLeft[(Seq[String], Int)](Seq[String](), 0) { (res, curr) =>
+    val (fields, size) = row.toSeq(schema).foldLeft[(List[String], Int)](List[String](), 0) { (res, curr) =>
+      val fieldIndexInRow = res._1.size
       val formattedField: String = curr match {
-        case DateType => DateTimeUtils.toJavaDate(row.getInt(res._1.size)).toString
-        case TimestampType => dateFormat.format(DateTimeUtils.toJavaTimestamp(row.getLong(res._1.size)))
-        case _ => row.get(res._1.size, schemaFields(res._1.size).dataType).toString
+        case DateType => DateTimeUtils.toJavaDate(row.getInt(fieldIndexInRow)).toString
+        case TimestampType => dateFormat.format(DateTimeUtils.toJavaTimestamp(row.getLong(fieldIndexInRow)))
+        case _ => row.get(res._1.size, schemaFields(fieldIndexInRow).dataType).toString
 
       }
-      (res._1 :+ formattedField, res._2 + formattedField.getBytes(StandardCharsets.UTF_8).length)
+
+
+      (formattedField ::  res._1 , res._2 + formattedField.getBytes(StandardCharsets.UTF_8).length)
     }
+
+    //
+    val totalSize = size + fields.size
 
     CsvRowResult(fields.toArray, size + fields.size)
   }
@@ -312,7 +319,7 @@ object KustoWriter {
 
 case class CsvRowResult(formattedRow: Array[String], rowByteSize: Long)
 
-case class FileWriteResource(buffer: BufferedWriter, gzip: GZIPOutputStream, csvWriter: CsvWriter, blob: CloudBlockBlob)
+case class BlobWriteResource(buffer: BufferedWriter, gzip: GZIPOutputStream, csvWriter: CsvWriter, blob: CloudBlockBlob)
 
 case class KustoWriteResource(authentication: KustoAuthentication,
                               coordinates: KustoCoordinates,
