@@ -61,20 +61,20 @@ object KeyVaultUtils {
   }
 
   private def getStorageParamsFromKeyVaultImpl(client: KeyVaultClient, uri: String): KustoStorageParameters = {
-    val sasUrl = client.getSecret(uri, SasUrl).value()
-    val accountId = client.getSecret(uri, StorageAccountId)
+    val sasUrl = Option(client.getSecret(uri, SasUrl))
 
-    val accountKey = client.getSecret(uri, StorageAccountKey)
-    val container = client.getSecret(uri, Container)
+    val accountId =  Option(client.getSecret(uri, StorageAccountId))
+    val accountKey = Option(client.getSecret(uri, StorageAccountKey))
+    val container = Option(client.getSecret(uri, Container))
 
     if(sasUrl.isEmpty) {
       KustoStorageParameters(
-        account = if (accountId == null) null else accountId.value(),
-        secret = if (accountKey == null) null else accountKey.value(),
-        container = if (container == null) null else container.value(),
+        account = if(accountId.isDefined) accountId.get.value else "",
+        secret = if (accountKey.isDefined) accountKey.get.value else "",
+        container = if (container.isDefined) container.get.value else "",
         secretIsAccountKey = true)
     } else {
-      KustoDataSourceUtils.parseSas(sasUrl)
+      KustoDataSourceUtils.parseSas(sasUrl.get.value)
     }
   }
 }

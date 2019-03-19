@@ -62,7 +62,7 @@ In addition, there are two main reading modes: see **KUSTO_READ_MODE** option be
   Kusto cluster from which the data will be read.
   Use either cluster profile name for global clusters, or <profile-name.region> for regional clusters.
   For example: if the cluster URL is 'https://testcluster.eastus.kusto.windows.net', set this property 
-  as 'testcluster.eastus' 
+  as either 'testcluster.eastus', or  'https://testcluster.eastus.kusto.windows.net'.
    
   * **KUSTO_DATABASE**: 
   Kusto database from which the data will be read. The client must have 'viewer' 

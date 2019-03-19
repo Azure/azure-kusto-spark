@@ -349,7 +349,7 @@ object KustoDataSourceUtils{
             Some(keyVaultParameters.container)
           } else storageContainer
 
-          getAndValidateTransientStorageParameters(account, secret, container, storageSecretIsAccountKey = true)
+          getAndValidateTransientStorageParameters(account, container, secret, storageSecretIsAccountKey = true)
         }
       } else {
         KustoStorageParameters(storageAccount.get, storageSecret.get, storageContainer.get, storageSecretIsAccountKey)

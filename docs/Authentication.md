@@ -34,6 +34,9 @@ Kusto Spark connector allows authentication using Azure Key Vault. The  Key Vaul
 mandatory read/write authentication parameters. If a parameter appears in both the Key Vault and passed directly as an option, the direct option will take precedence.
 Although a combination of Key Vault and direct options is supported, for clarity, it is advised to use 
 either key vault or direct options for passing authentication parameters but not both.
+
+>**Note:** when working with a Databricks notebook, azure-keyvault package must be installed.
+For details, refer to [Databricks documentation](https://docs.databricks.com/user-guide/libraries.html#maven-or-spark-package). 
                                                
                                                
 **The connector will look for the following secret names:**
@@ -50,7 +53,7 @@ either key vault or direct options for passing authentication parameters but not
 
 ### Transient Storage Parameters
 
->**Note**: these parameters are only required when working in "scale" reading mode. For details, refer to [Kusto Source](KustoSource.md#supported-options) documentation on
+>**Note:** these parameters are only required when working in "scale" reading mode. For details, refer to [Kusto Source](KustoSource.md#supported-options) documentation on
 _KUSTO_READ_MODE_.
 
  * **blobStorageAccountName**
@@ -92,7 +95,7 @@ val conf: Map[String, String] = Map(
 
 val dfResult = spark.read.kusto(cluster, database, table, conf)
  ```
-## Access token
+## Direct Authentication with Access Token
 User can also use ADAL directly to acquire an AAD access token to access Kusto. 
 The token must be valid throughout the duration of the read/write operation
 
@@ -114,4 +117,4 @@ to the console. This token can be used to authenticate at https://login.microsof
 and will allow temporary access. 
 The user needs appropriate privileges for the Kusto cluster as explained in [Kusto Sink authentication section](KustoSink.md#authentication). 
 
->**Note**: This method is not recommended for production!   
+>**Note:** This method is not recommended for production!   

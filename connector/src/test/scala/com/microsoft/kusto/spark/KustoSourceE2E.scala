@@ -86,8 +86,7 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
     spark.read.kusto(cluster, database, query, conf).show(20)
   }
 
-//  "KustoConnector"
-  ignore should "write to a kusto table and read it back in lean mode" taggedAs KustoE2E in {
+  "KustoConnector" should "write to a kusto table and read it back in lean mode" taggedAs KustoE2E in {
     import spark.implicits._
 
     val rowId = new AtomicInteger(1)
