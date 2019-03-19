@@ -143,7 +143,7 @@ object KustoConnectorDemo {
     // Note: alternatively, ask the connector to setup FS configuration on every read access by setting:
     // KustoOptions.KUSTO_BLOB_SET_FS_CONFIG -> "true"
 
-    // when using storage account key
+    // When using storage account key
     spark.conf.set(s"fs.azure.account.key.$storageAccountName.blob.core.windows.net", s"$storageAccountKey")
     // when using SAS
     // spark.conf.set(s"fs.azure.sas.$container.$storageAccountName.blob.core.windows.net", s"$storageSas")
