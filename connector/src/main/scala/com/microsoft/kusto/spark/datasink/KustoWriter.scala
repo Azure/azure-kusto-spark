@@ -107,7 +107,11 @@ object KustoWriter {
 
   def cleanupTempTables(kustoAdminClient: Client, coordinates: KustoCoordinates): Unit = {
 
-    val tempTablesOld: Seq[String] = kustoAdminClient.execute(generateFindOldTempTablesCommand(coordinates.database)).getValues.get(0).asScala
+    val tempTablesOld: Seq[String] =
+      kustoAdminClient.execute(generateFindOldTempTablesCommand(coordinates.database))
+        .getValues.asScala
+        .headOption.map(_.asScala)
+        .getOrElse(Seq())
 
     Future {
       // Try delete temporary tablesToCleanup created and not used
