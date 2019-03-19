@@ -3,48 +3,20 @@
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
-
-    <groupId>com.microsoft.kusto</groupId>
     <artifactId>connector-samples</artifactId>
-    <version>1.0.0-Beta-02</version>
-
-    <properties>
-        <maven.compiler.source>1.8</maven.compiler.source>
-        <maven.compiler.target>1.8</maven.compiler.target>
-        <encoding>UTF-8</encoding>
-        <scala.version>2.11</scala.version>
-        <specs2.version>3.6.5</specs2.version>
-        <scala.compat.version>2.11</scala.compat.version>
-        <spec2.version>4.2.0</spec2.version>
-        <spark.version>2.4.0</spark.version>
-        <lift-webkit.version>3.0-M8</lift-webkit.version>
-    </properties>
+    <parent>
+        <artifactId>azure-kusto-spark</artifactId>
+        <groupId>com.microsoft.azure.kusto</groupId>
+        <!--suppress MavenPropertyInParent -->
+        <version>${revision}</version>
+    </parent>
 
     <dependencies>
-        <!-- https://mvnrepository.com/artifact/com.google.errorprone/error_prone_annotations -->
-        <dependency>
-            <groupId>com.google.errorprone</groupId>
-            <artifactId>error_prone_annotations</artifactId>
-            <version>2.0.2</version>
-        </dependency>
         <dependency>
             <groupId>com.microsoft.azure.kusto</groupId>
-            <artifactId>kusto-data</artifactId>
-            <version>1.0.0-BETA-01</version>
-            <scope>system</scope>
-            <systemPath>${basedir}/../lib/kusto-data-1.0.0-BETA-01-jar-with-dependencies.jar</systemPath>
-        </dependency>
-        <dependency>
-            <groupId>com.microsoft.azure.kusto</groupId>
-            <artifactId>kusto-ingest</artifactId>
-            <version>1.0.0-BETA-01</version>
-            <scope>system</scope>
-            <systemPath>${basedir}/../lib/kusto-ingest-1.0.0-BETA-01-jar-with-dependencies.jar</systemPath>
-        </dependency>
-        <dependency>
-            <groupId>com.microsoft.kusto</groupId>
             <artifactId>spark-kusto-connector</artifactId>
-            <version>1.0.0-Beta-02</version>
+            <!--suppress MavenPropertyInParent -->
+            <version>${revision}</version>
         </dependency>
         <!-- https://mvnrepository.com/artifact/com.microsoft.azure/azure-eventhubs-spark -->
         <dependency>
@@ -52,7 +24,6 @@
             <artifactId>azure-eventhubs-spark_2.11</artifactId>
             <version>2.3.9</version>
         </dependency>
-
     </dependencies>
 
     <build>
