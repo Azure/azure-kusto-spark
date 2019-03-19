@@ -9,4 +9,5 @@ object KustoConstants {
   val clientName = "Kusto.Spark.Connector"
   val defaultBufferSize: Int = 16 * 1024
   val storageExpiryMinutes: Int = 120
+  val defaultMaxBlobSize: Int = 1024 * 1024 * 1024
 }

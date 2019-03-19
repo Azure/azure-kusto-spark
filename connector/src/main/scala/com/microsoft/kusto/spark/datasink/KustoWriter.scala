@@ -45,7 +45,7 @@ object KustoWriter {
   val statusCol = "Status"
   val delayPeriodBetweenCalls: Int = KCONST.defaultPeriodicSamplePeriod.toMillis.toInt
   val GZIP_BUFFER_SIZE: Int = KCONST.defaultBufferSize
-  val GIGA_SIZE: Int = 1024 * 1024 * 1024
+  val maxBlobSize: Int = KCONST.defaultMaxBlobSize
 
   private[kusto] def write(batchId: Option[Long],
                            data: DataFrame,
@@ -263,6 +263,7 @@ object KustoWriter {
                                    parameters: KustoWriteResource): Seq[CloudBlockBlob] = {
     import parameters._
     val container: CloudBlobContainer = new CloudBlobContainer(new URI(storageUri))
+    //This blobWriter will be used later to write the rows to blob storage, if the limit exceeds
     val blobWriter: BlobWriteResource = createBlobWriter(schema, writeOptions.timeZone, coordinates, tmpTableName, storageUri, container)
 
     // The first two values stand for last file size and the blob writer used to create it
@@ -270,7 +271,7 @@ object KustoWriter {
     val (_, _, blobs) = rows.foldLeft[(Long, BlobWriteResource, Seq[CloudBlockBlob])]((0, blobWriter, Seq())) { case ((size, blobWriter, blobsCreated), row) =>
       val formattedRow: CsvRowResult = convertRowToCSV(row, schema, writeOptions.timeZone)
       val newTotalSize = size + formattedRow.rowByteSize
-      if (newTotalSize < GIGA_SIZE) {
+      if (newTotalSize < maxBlobSize) {
         blobWriter.csvWriter.writeRow(formattedRow.formattedRow)
         (newTotalSize, blobWriter, blobsCreated)
       } else {
