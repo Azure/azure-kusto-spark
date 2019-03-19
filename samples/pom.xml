@@ -12,6 +12,7 @@
     </parent>
 
     <dependencies>
+        <!-- Compile Scope -->
         <dependency>
             <groupId>com.microsoft.azure.kusto</groupId>
             <artifactId>spark-kusto-connector</artifactId>
@@ -21,8 +22,22 @@
         <!-- https://mvnrepository.com/artifact/com.microsoft.azure/azure-eventhubs-spark -->
         <dependency>
             <groupId>com.microsoft.azure</groupId>
-            <artifactId>azure-eventhubs-spark_2.11</artifactId>
+            <artifactId>azure-eventhubs-spark_${scala.version}</artifactId>
             <version>2.3.9</version>
+        </dependency>
+
+        <!-- Provided Scope -->
+        <dependency>
+            <groupId>org.apache.spark</groupId>
+            <artifactId>spark-core_${scala.version}</artifactId>
+            <version>${spark.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.spark</groupId>
+            <artifactId>spark-sql_${scala.version}</artifactId>
+            <version>${spark.version}</version>
+            <scope>provided</scope>
         </dependency>
     </dependencies>
 
