@@ -52,7 +52,7 @@ object KustoWriter {
                            tableCoordinates: KustoCoordinates,
                            authentication: KustoAuthentication, writeOptions: WriteOptions): Unit = {
 
-    val batchIdIfExists = batchId.filter(_ != 0 ).map(_.toString).getOrElse("")
+    val batchIdIfExists = batchId.filter(_ != 0).map(_.toString).getOrElse("")
     val kustoAdminClient = KustoClient.getAdmin(authentication, tableCoordinates.cluster)
     val table = tableCoordinates.table.get
     val tmpTableName: String = KustoQueryUtils.simplifyName(TempIngestionTablePrefix +
@@ -304,7 +304,7 @@ object KustoWriter {
       }
 
 
-      (formattedField ::  res._1 , res._2 + formattedField.getBytes(StandardCharsets.UTF_8).length)
+      (formattedField :: res._1, res._2 + (formattedField.length / 2))
     }
 
     //

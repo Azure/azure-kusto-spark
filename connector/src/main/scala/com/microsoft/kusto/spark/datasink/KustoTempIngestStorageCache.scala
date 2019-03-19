@@ -8,7 +8,7 @@ import org.joda.time.{DateTime, DateTimeZone, Period}
 import scala.collection.JavaConverters._
 import scala.collection.immutable.HashMap
 
-object KustoTempIngestStorageCache{
+object KustoTempIngestStorageCache {
 
   var roundRubinIdx = 0
   var storagesMap = new HashMap[String, Array[String]]
@@ -21,7 +21,9 @@ object KustoTempIngestStorageCache{
   private def getNextUri(clusterAlias: String, kcsb: ConnectionStringBuilder): String = {
     var storageCached = storagesMap.get(clusterAlias)
     // Refresh if storageExpiryMinutes have passed since last refresh for this cluster as SAS should be valid for at least 120 minutes
-    if(storageCached.isEmpty || storageCached.get.length == 0 || new Period(new DateTime(DateTimeZone.UTC), lastRefresh).getMinutes > KustoConstants.StorageExpiryMinutes){
+    if (storageCached.isEmpty ||
+      storageCached.get.length == 0 ||
+      new Period(new DateTime(DateTimeZone.UTC), lastRefresh).getMinutes > KustoConstants.storageExpiryMinutes) {
       val dmClient = KustoClient.getAdmin(kcsb, clusterAlias, isIngestCluster = true)
 
       lastRefresh = new DateTime(DateTimeZone.UTC)
