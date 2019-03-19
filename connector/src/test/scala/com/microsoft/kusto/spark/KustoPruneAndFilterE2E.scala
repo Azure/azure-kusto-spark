@@ -4,7 +4,7 @@ import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 
 import com.microsoft.azure.kusto.data.{ClientFactory, ConnectionStringBuilder}
-import com.microsoft.kusto.spark.datasource.KustoOptions
+import com.microsoft.kusto.spark.datasource.{KustoDebugOptions, KustoOptions}
 import com.microsoft.kusto.spark.sql.extension.SparkExtension._
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils => KDSU}
@@ -86,13 +86,17 @@ class KustoPruneAndFilterE2E extends FlatSpec with BeforeAndAfterAll {
         Map(KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
           KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
           KustoOptions.KUSTO_BLOB_STORAGE_SAS_URL -> blobSas,
-          KustoOptions.KUSTO_BLOB_SET_FS_CONFIG -> "true")
+          KustoOptions.KUSTO_BLOB_SET_FS_CONFIG -> "true"
+//          , KustoDebugOptions.KUSTO_DBG_BLOB_FORCE_KEEP -> "true"
+        )
       }
 
-    spark.read.kusto(cluster, database, query, conf).show(20)
+    val df = spark.read.kusto(cluster, database, query, conf)
+
+    df.show(20)
   }
 
-"KustoConnector"should "write to a kusto table and read it back in scale mode with pruning and filtering" taggedAs KustoE2E in {
+"KustoConnector" should "write to a kusto table and read it back in scale mode with pruning and filtering" taggedAs KustoE2E in {
     import spark.implicits._
 
     val rowId = new AtomicInteger(1)
@@ -131,14 +135,14 @@ class KustoPruneAndFilterE2E extends FlatSpec with BeforeAndAfterAll {
         KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_KEY -> blobKey,
         KustoOptions.KUSTO_BLOB_CONTAINER -> container,
         KustoOptions.KUSTO_BLOB_SET_FS_CONFIG -> "true",
-        KustoOptions.KUSTO_BLOB_COMPRESS_ON_EXPORT -> "false") // Just to test this option
+        KustoDebugOptions.KUSTO_DBG_BLOB_COMPRESS_ON_EXPORT -> "false") // Just to test this option
     }
     else {
       Map(KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
         KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
         KustoOptions.KUSTO_BLOB_STORAGE_SAS_URL -> blobSas,
         KustoOptions.KUSTO_BLOB_SET_FS_CONFIG -> "true",
-        KustoOptions.KUSTO_BLOB_COMPRESS_ON_EXPORT -> "false") // Just to test this option
+        KustoDebugOptions.KUSTO_DBG_BLOB_COMPRESS_ON_EXPORT -> "false") // Just to test this option
     }
 
     val dfResult = spark.read.kusto(cluster, database, query, conf)

@@ -50,7 +50,7 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
   private val loggingLevel: Option[String] = Option(System.getProperty("logLevel"))
   if (loggingLevel.isDefined) KDSU.setLoggingLevel(loggingLevel.get)
 
-  "KustoSource" should "execute a read query on Kusto cluster in default (lean) mode" taggedAs KustoE2E in {
+  "KustoSource"should "execute a read query on Kusto cluster in lean mode" taggedAs KustoE2E in {
     val table: String = System.getProperty(KustoOptions.KUSTO_TABLE)
     val query: String = System.getProperty(KustoOptions.KUSTO_QUERY, s"$table | where (toint(ColB) % 1000 == 0) | distinct ColA ")
 
