@@ -33,15 +33,17 @@ For Scala/Java applications using Maven project definitions, link your applicati
 ```
 groupId = com.microsoft.azure
 artifactId = spark-kusto-connector
-version = 1.0.0-Beta-01 
+version = 1.0.0-Beta-02 
 ```
 
 **In Maven**:
+
+> Note that the jar is in beta and not available yet in public maven. clone this repository and build it localy to add it to your local maven repository, or use the [pre-built jars](lib/)
  ```
    <dependency>
      <groupId>com.microsoft.azure</groupId>
      <artifactId>spark-kusto-connector</artifactId>
-     <version>1.0.0-Beta-01</version>
+     <version>1.0.0-Beta-02</version>
    </dependency>
 ```
 

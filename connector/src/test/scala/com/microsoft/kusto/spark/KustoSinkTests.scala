@@ -69,8 +69,11 @@ class KustoSinkTests extends FlatSpec with MockFactory with Matchers with Before
 
     val kustoIngestionClient = stub[IngestClient]
     val result = new IngestionResult {
-      override def GetIngestionStatusCollection(): util.List[IngestionStatus] = {
+      override def getIngestionStatusCollection: util.List[IngestionStatus] = {
         null
+      }
+      override def getIngestionStatusesLength: Int = {
+        0
       }
     }
 

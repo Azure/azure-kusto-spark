@@ -1,12 +1,23 @@
-Version 0.1 (baseline):
-- Add a data sink connector, supporting standard 'write' operations ('writeStream' interface is also supported)
-- Add a basic data source connector, supporting standard 'read' operations
+Version 1.0.0-Beta-01 (baseline):
+- Added a data sink connector, supporting standard 'write' operations ('writeStream' interface is also supported)
+- Added a basic data source connector, supporting standard 'read' operations
   Note: in this version, a single partition is forced
 
-Version 0.2:
-- Fix DataTypes support, including DateTime and decimal
-- Fix streaming sink when working with multiple batches. Handle empty batches
-- Add 'KUSTO_WRITE_RESULT_LIMIT' option. When writing to Kusto, limits the number of rows read back as BaseRelation
-- Adjust to Spark 2.4. This is optimized for Azure DataBricks default. In order to use with Spark 2.3, pom.xml
+Version 1.0.0-Beta-01 update 1:
+- Fixed DataTypes support, including DateTime and decimal
+- Fixed streaming sink when working with multiple batches. Handle empty batches
+- Added 'KUSTO_WRITE_RESULT_LIMIT' option. When writing to Kusto, limits the number of rows read back as BaseRelation
+- Adjusted to Spark 2.4. This is optimized for Azure DataBricks default. In order to use with Spark 2.3, pom.xml
   file must be adjusted: spark.version (to 2.3.x) and json4s-jackson_2.11 (to 3.2.11)
 - KustoOptions.KUSTO_TABLE is no longer used in reading using kusto source
+
+1.0.0-Beta-02:
+- Reading modes: added 'scale' reading mode to allow reading large data sets. This is the default mode
+  for reading from Kusto, and it requires the user to provide transient blob storage
+  Reading small data sets directly is also supported by setting 'KUSTO_READ_MODE' option to 'lean'
+- Added column pruning and filter push-down support when reading from Kusto
+- Added Python sample code for reference
+- Added support for Key-vault based authentication, when authentication parameters are stored in KeyVault
+- Allow writing large data sets. Partitions that exceed Kusto ingest policy guidelines are split into several smaller
+  ingestion operations
+- Organize samples and connector as separate modules to reduce dependencies

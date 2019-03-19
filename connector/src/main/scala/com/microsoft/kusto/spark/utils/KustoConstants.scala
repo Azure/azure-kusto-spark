@@ -8,4 +8,5 @@ object KustoConstants {
   val defaultPeriodicSamplePeriod: FiniteDuration = 2 seconds
   val clientName = "Kusto.Spark.Connector"
   val defaultBufferSize: Int = 16 * 1024
+  val storageExpiryMinutes: Int = 120
 }

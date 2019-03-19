@@ -70,7 +70,7 @@ private[kusto] object CslCommandsGenerator{
     val compress = if (isCompressed) "compressed " else ""
     val sizeLimitIfDefined = if (sizeLimit.isDefined) s"sizeLimit=${sizeLimit.get}, " else ""
 
-    var command = s""".export ${async}${compress}to parquet ("$blobUri/$container$secretString)""" +
+    var command = s""".export $async${compress}to parquet ("$blobUri/$container$secretString)""" +
       s""" with (${sizeLimitIfDefined}namePrefix="${directory}part$partitionId", fileExtension=parquet) <| $query"""
 
     if (partitionPredicate.nonEmpty)

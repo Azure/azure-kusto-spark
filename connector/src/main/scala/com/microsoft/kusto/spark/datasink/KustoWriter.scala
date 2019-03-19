@@ -47,8 +47,10 @@ object KustoWriter {
   val GZIP_BUFFER_SIZE: Int = KCONST.defaultBufferSize
   val GIGA_SIZE: Int = 1024 * 1024 * 1024
 
-  private[kusto] def write(batchId: Option[Long], data: DataFrame,
-                           tableCoordinates: KustoCoordinates, authentication: KustoAuthentication, writeOptions: WriteOptions): Unit = {
+  private[kusto] def write(batchId: Option[Long],
+                           data: DataFrame,
+                           tableCoordinates: KustoCoordinates,
+                           authentication: KustoAuthentication, writeOptions: WriteOptions): Unit = {
 
     val batchIdIfExists = batchId.filter(_ != 0 ).map(_.toString).getOrElse("")
     val kustoAdminClient = KustoClient.getAdmin(authentication, tableCoordinates.cluster)
@@ -65,7 +67,7 @@ object KustoWriter {
     KDSU.createTmpTableWithSameSchema(kustoAdminClient, tableCoordinates, tmpTableName, writeOptions.tableCreateOptions, data.schema)
     KDSU.logInfo(myName, s"Successfully created temporary table $tmpTableName, will be deleted after completing the operation")
     val ingestKcsb = KustoClient.getKcsb(authentication, s"https://ingest-${tableCoordinates.cluster}.kusto.windows.net")
-    val storageUri = TempStorageCache.getNewTempBlobReference(tableCoordinates.cluster, ingestKcsb)
+    val storageUri = KustoTempIngestStorageCache.getNewTempBlobReference(tableCoordinates.cluster, ingestKcsb)
     val rdd = data.queryExecution.toRdd
     if (writeOptions.isAsync) {
       val asyncWork: FutureAction[Unit] = rdd.foreachPartitionAsync { rows => ingestRowsIntoTempTbl(rows, batchIdIfExists, writeOptions.timeout, storageUri) }
@@ -104,9 +106,11 @@ object KustoWriter {
     }
 
   def cleanupTempTables(kustoAdminClient: Client, coordinates: KustoCoordinates): Unit = {
-    try {
+
+    val tempTablesOld: Seq[String] = kustoAdminClient.execute(generateFindOldTempTablesCommand(coordinates.database)).getValues.get(0).asScala
+
+    Future {
       // Try delete temporary tablesToCleanup created and not used
-      val tempTablesOld: Seq[String] = kustoAdminClient.execute(generateFindOldTempTablesCommand(coordinates.database)).getValues.get(0).asScala
       val tempTablesCurr: Seq[String] = kustoAdminClient.execute(coordinates.database, generateFindCurrentTempTablesCommand(TempIngestionTablePrefix))
         .getValues.get(0).asScala
 
@@ -115,8 +119,7 @@ object KustoWriter {
       if (tablesToCleanup.nonEmpty) {
         kustoAdminClient.execute(coordinates.database, generateDropTablesCommand(tablesToCleanup.mkString(",")))
       }
-    }
-    catch {
+    } onFailure {
       case ex: Exception =>
         KDSU.reportExceptionAndThrow(
           myName,
@@ -131,6 +134,7 @@ object KustoWriter {
                           storageUri: String)
                          (implicit parameters: KustoWriteResource): Seq[IngestionResult] = {
     import parameters._
+
     val ingestClient = KustoClient.getIngest(authentication, coordinates.cluster)
     val ingestionProperties = new IngestionProperties(coordinates.database, tmpTableName)
 
@@ -201,7 +205,7 @@ object KustoWriter {
         // Proceed only on success. Will throw on failure for the driver to handle
         ingestionResults.foreach { ingestionResult =>
           KDSU.runSequentially[IngestionStatus](
-            func = () => ingestionResult.GetIngestionStatusCollection().get(0),
+            func = () => ingestionResult.getIngestionStatusCollection().get(0),
             0, delayPeriodBetweenCalls, (timeout.toMillis / delayPeriodBetweenCalls + 5).toInt,
             res => res.status == OperationStatus.Pending,
             res => res.status match {
