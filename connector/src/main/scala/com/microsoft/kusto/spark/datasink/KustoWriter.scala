@@ -17,13 +17,14 @@ import com.microsoft.azure.kusto.ingest.IngestionProperties
 import com.microsoft.azure.storage.StorageCredentialsSharedAccessSignature
 import com.microsoft.azure.storage.blob.{CloudBlobContainer, CloudBlockBlob}
 import com.microsoft.kusto.spark.datasink
-import com.microsoft.kusto.spark.datasource.{KustoCoordinates, KustoAuthentication, WriteOptions}
+import com.microsoft.kusto.spark.datasource.{KustoAuthentication, KustoCoordinates, WriteOptions}
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.{KustoClient, KustoQueryUtils, KustoConstants => KCONST, KustoDataSourceUtils => KDSU}
 import com.univocity.parsers.csv.{CsvWriter, CsvWriterSettings}
 import org.apache.commons.lang3.time.FastDateFormat
+import org.apache.spark
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.types.{DateType, StructField, StructType, TimestampType}
+import org.apache.spark.sql.types.{DateType, StructField, StructType, TimestampType, StringType}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.{FutureAction, TaskContext}
@@ -202,8 +203,6 @@ object KustoWriter {
 
     // We force blocking here, since the driver can only complete the ingestion process
     // once all partitions are ingested into the temporary table
-
-
     Await.result(
       Future(ingestRowsIntoKusto(rows, storageUri)).map { ingestionResults =>
         // Proceed only on success. Will throw on failure for the driver to handle
@@ -266,13 +265,13 @@ object KustoWriter {
     //This blobWriter will be used later to write the rows to blob storage, if the limit exceeds
     val blobWriter: BlobWriteResource = createBlobWriter(schema, writeOptions.timeZone, coordinates, tmpTableName, storageUri, container)
 
-    // The first two values stand for last file size and the blob writer used to create it
-
+    // Serialize rows to ingest and send to blob storage.
+    // On each iteration calculate: (updated total file size, current blob writer, and the list of all blobs)
     val (_, _, blobs) = rows.foldLeft[(Long, BlobWriteResource, Seq[CloudBlockBlob])]((0, blobWriter, Seq())) { case ((size, blobWriter, blobsCreated), row) =>
-      val formattedRow: CsvRowResult = convertRowToCSV(row, schema, writeOptions.timeZone)
-      val newTotalSize = size + formattedRow.rowByteSize
+      val csvRowResult: CsvRowResult = convertRowToCSV(row, schema, writeOptions.timeZone)
+      val newTotalSize = size + csvRowResult.rowByteSize
       if (newTotalSize < maxBlobSize) {
-        blobWriter.csvWriter.writeRow(formattedRow.formattedRow)
+        blobWriter.csvWriter.writeRow(csvRowResult.formattedRow)
         (newTotalSize, blobWriter, blobsCreated)
       } else {
         finalizeBlobWrite(blobWriter)
@@ -299,21 +298,19 @@ object KustoWriter {
     val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone(timeZone))
     val schemaFields: Array[StructField] = schema.fields
 
-    val (fields, size) = row.toSeq(schema).foldLeft[(List[String], Int)](List[String](), 0) { (res, curr) =>
-      val fieldIndexInRow = res._1.size
-      val formattedField: String = curr match {
-        case DateType => DateTimeUtils.toJavaDate(row.getInt(fieldIndexInRow)).toString
-        case TimestampType => dateFormat.format(DateTimeUtils.toJavaTimestamp(row.getLong(fieldIndexInRow)))
-        case _ => row.get(res._1.size, schemaFields(fieldIndexInRow).dataType).toString
-
+    val (fields, size) = row.toSeq(schema).foldLeft[(Seq[String], Int)](Seq[String](), 0) { (res, curr) =>
+      val formattedField: String = if (curr == null) "" else {
+        val fieldIndexInRow = res._1.size
+        schemaFields(fieldIndexInRow).dataType match {
+          case DateType => DateTimeUtils.toJavaDate(row.getInt(fieldIndexInRow)).toString
+          case TimestampType => dateFormat.format(DateTimeUtils.toJavaTimestamp(row.getLong(fieldIndexInRow)))
+          case StringType => row.getString(fieldIndexInRow)
+          case _ => row.get(fieldIndexInRow, schemaFields(fieldIndexInRow).dataType).toString
+        }
       }
 
-
-      (formattedField :: res._1, res._2 + (formattedField.length / 2))
+      (res._1 :+ formattedField, res._2 + formattedField.length)
     }
-
-    //
-    val totalSize = size + fields.size
 
     CsvRowResult(fields.toArray, size + fields.size)
   }

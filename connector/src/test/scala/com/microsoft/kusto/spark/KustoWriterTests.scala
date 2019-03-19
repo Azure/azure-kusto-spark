@@ -21,7 +21,7 @@ class KustoWriterTests extends FlatSpec with Matchers {
       .setAppName("SimpleKustoDataSink")
       .setMaster("local[*]")
     val sparkSession = SparkSession.builder().config(sparkConf).getOrCreate()
-    sparkSession.read.format("csv").option("header", "false").load("src/test/resources/TestData/ShortTestData.csv")
+    sparkSession.read.format("csv").option("header", "false").load("src/test/resources/ShortTestData/ShortTestData.csv")
   }
 
   "convertRowToCSV" should "convert the row as expected" in {
