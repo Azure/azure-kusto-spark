@@ -27,6 +27,7 @@ object KustoDataSourceUtils{
   val ClientName = "Kusto.Spark.Connector"
   val DefaultTimeoutLongRunning: FiniteDuration = 90 minutes
   val DefaultPeriodicSamplePeriod: FiniteDuration = 2 seconds
+  val NewLine = sys.props("line.separator")
 
   def setLoggingLevel(level: String): Unit = {
     setLoggingLevel(Level.toLevel(level))
@@ -196,7 +197,7 @@ object KustoDataSourceUtils{
     val clusterDesc = if (cluster.isEmpty) "" else s", cluster: '$cluster' "
     val databaseDesc = if (database.isEmpty) "" else s", database: '$database'"
     val tableDesc = if (table.isEmpty) "" else s", table: '$table'"
-    logError(reporter,s"caught exception $whatFailed$clusterDesc$databaseDesc$tableDesc. Exception: ${exception.getMessage}")
+    logError(reporter,s"caught exception $whatFailed$clusterDesc$databaseDesc$tableDesc.${NewLine}EXCEPTION MESSAGE: ${exception.getMessage}")
 
     if (!isLogDontThrow) throw exception
   }
@@ -290,7 +291,7 @@ object KustoDataSourceUtils{
   private [kusto] def parseSas(url: String): KustoStorageParameters  = {
     val urlPattern: Regex = raw"(?:https://)?([^.]+).blob.core.windows.net/([^?]+)?(.+)".r
     url match {
-      case urlPattern(storageAccountId, container, sasKey) => KustoStorageParameters(storageAccountId, sasKey, container, storageSecretIsAccountKey = false)
+      case urlPattern(storageAccountId, container, sasKey) => KustoStorageParameters(storageAccountId, sasKey, container, secretIsAccountKey = false)
       case _ => throw new InvalidParameterException("SAS url couldn't be parsed. Should be https://<storage-account>.blob.core.windows.net/<container>?<SAS-Token>")
     }
   }
@@ -333,7 +334,7 @@ object KustoDataSourceUtils{
       if (storageAccount.isEmpty || storageContainer.isEmpty || storageSecret.isEmpty){
         val keyVaultParameters = KeyVaultUtils.getStorageParamsFromKeyVault(keyVaultAuthentication)
         // If KeyVault contains sas take it
-        if(!keyVaultParameters.storageSecretIsAccountKey) {
+        if(!keyVaultParameters.secretIsAccountKey) {
           keyVaultParameters
         } else {
           // Try combine
