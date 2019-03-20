@@ -13,21 +13,21 @@ Kusto (A.K.A. [Azure Data Explorer](https://azure.microsoft.com/en-us/services/d
 
 [Spark](https://spark.apache.org/) is a unified analytics engine for large-scale data processing.
 
-Making Kusto and Spark work together enables our users to build fast and scalable applications, targeting a variety of Machine Learning, Extract-Transform-Load, Log Analytics and other data driven scenarios. 
+Making Kusto and Spark work together enables building fast and scalable applications, targeting a variety of Machine Learning, Extract-Transform-Load, Log Analytics and other data driven scenarios. 
  
 ## About This Release
 
 This is a beta release of Kusto connector for Spark. It exposes Kusto as a valid Data Store 
 for standard Spark source and sink operations such as write, read and writeStream.
 
-For main changes from previous releases and known issues please refer to [CHANGELIST](docs/CHANGELIST) 
+For main changes from previous releases and known issues please refer to [CHANGELIST](docs/CHANGELIST.md) 
 
 ## Usage
 
 ### Linking 
 
 For Scala/Java applications using Maven project definitions, 
-link your application with the artifact below in order to use Spark Kusto connector. 
+link your application with the artifact below in order to use the Spark Kusto connector. 
 
 ```
 groupId = com.microsoft.azure
@@ -70,7 +70,7 @@ In order to use the connector, you need to have:
 - Spark version 2.4.0 or higher
 
     >**Note:** 2.3.x versions are also supported, but require some changes in pom.xml dependencies. 
-      For details, refer to [CHANGELIST](docs/CHANGELIST)
+      For details, refer to [CHANGELIST](docs/CHANGELIST.md)
 
 ## Build Commands
    
