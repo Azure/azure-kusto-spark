@@ -3,7 +3,7 @@ package com.microsoft.kusto.spark.datasource
 import java.util.Locale
 
 import scala.concurrent.duration.FiniteDuration
-import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
+
 
 object KustoOptions {
   private val kustoOptionNames = collection.mutable.Set[String]()
@@ -46,7 +46,6 @@ object KustoOptions {
   // it will be created, with a schema matching the DataFrame that is being written.
   // Default: 'FailIfNotExist'
   val KUSTO_TABLE_CREATE_OPTIONS: String = newOption("tableCreateOptions")
-  val KUSTO_TRUNCATE: String = newOption("truncate")
   val KUSTO_ACCESS_TOKEN: String = newOption("accessToken")
   // When writing to Kusto, allows the driver to complete operation asynchronously.  See KustoSink.md for
   // details and limitations. Default: 'false'
@@ -63,8 +62,10 @@ object KustoOptions {
   val KUSTO_READ_PARTITION_MODE: String = newOption("partitionMode")
   // Note: for 'read', this allows to partition export from Kusto to blob (default is '1')
   // It does not affect the number of partitions created when reading from blob.
-  // Therefore it is not recommended to use this option when reading from Kusto, left here for experimentation
+  // Therefore it is not recommended to use this option when reading from Kusto
+  // CURRENTLY NOT USED, left here for experimentation
   val KUSTO_NUM_PARTITIONS: String = newOption("numPartitions")
+  // CURRENTLY NOT USED, left here for experimentation
   val KUSTO_PARTITION_COLUMN: String = newOption("partitionColumn")
 
   object SinkTableCreationMode extends Enumeration {
@@ -83,10 +84,9 @@ object KustoOptions {
   val KUSTO_BLOB_STORAGE_SAS_URL: String = newOption("blobStorageSasUrl")
   // Blob container name
   val KUSTO_BLOB_CONTAINER: String = newOption("blobContainer")
-
   // When reading in 'scale' mode, sets Spark configuration to read from Azure blob.
   // The following configuration parameters are set:
-  // 1. Blob access secrete:
+  // 1. Blob access secret:
   //    a. If storage account key is provided, the following parameter is set:
   //       fs.azure.account.key.<storage-account-name>.blob.core.windows.net, <storage-account-key>
   //    b. If SAS key is provided, the following parameter is set:
@@ -97,11 +97,6 @@ object KustoOptions {
   // If set to 'true', the connector will update these parameters on every 'read' operation
   // Default: 'false'
   val KUSTO_BLOB_SET_FS_CONFIG: String = newOption("blobSetFsConfig")
-
-  // When reading in 'scale' mode, compresses the data upon export from Kusto to Blob
-  // This feature is experimental, in order to measure performance impact w/wo compression
-  // Default: 'true'
-  val KUSTO_BLOB_COMPRESS_ON_EXPORT: String = newOption("blobCompressOnExport")
 
   val NONE_RESULT_LIMIT = "none"
   val supportedReadModes: Set[String] = Set("lean", "scale")
@@ -121,3 +116,27 @@ case class KeyVaultCertificateAuthentication(uri: String, pemFilePath: String, p
 case class WriteOptions(tableCreateOptions: KustoOptions.SinkTableCreationMode.SinkTableCreationMode = KustoOptions.SinkTableCreationMode.FailIfNotExist,
                         isAsync: Boolean = false, writeResultLimit: String = KustoOptions.NONE_RESULT_LIMIT, timeZone: String = "UTC", timeout: FiniteDuration)
 case class KustoAccessTokenAuthentication(token: String) extends KustoAuthentication
+
+/************************************************************************************/
+/*                                    NOTE!!!                                       */
+/* These options are intended for testing, experimentation and debug.               */
+/* They may not be used in a production environment                                 */
+/* Interface stability is not guaranteed: options may be removed or changed freely  */
+/************************************************************************************/
+object KustoDebugOptions {
+  private val kustoOptionNames = collection.mutable.Set[String]()
+
+  private def newOption(name: String): String = {
+    kustoOptionNames += name.toLowerCase(Locale.ROOT)
+    name
+  }
+
+  // When reading in 'scale' mode, compresses the data upon export from Kusto to Blob
+  // This feature is experimental, in order to measure performance impact w/wo compression
+  // Default: 'true'
+  val KUSTO_DBG_BLOB_COMPRESS_ON_EXPORT: String = newOption("dbgBlobCompressOnExport")
+  // The size limit in MB (uncompressed) after which the export to blob command will create another file (split)
+  // Setting negative or zero value results in applying export command default
+  val KUSTO_DBG_BLOB_FILE_SIZE_LIMIT_MB: String = newOption("dbgBlobFileSizeLimitMb")
+}
+

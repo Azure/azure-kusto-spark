@@ -62,7 +62,7 @@ In addition, there are two main reading modes: see **KUSTO_READ_MODE** option be
   Kusto cluster from which the data will be read.
   Use either cluster profile name for global clusters, or <profile-name.region> for regional clusters.
   For example: if the cluster URL is 'https://testcluster.eastus.kusto.windows.net', set this property 
-  as 'testcluster.eastus' 
+  as either 'testcluster.eastus', or  'https://testcluster.eastus.kusto.windows.net'.
    
   * **KUSTO_DATABASE**: 
   Kusto database from which the data will be read. The client must have 'viewer' 
@@ -94,7 +94,9 @@ When reading data from Kusto in 'scale' mode, the data is exported from Kusto in
 In order to allow working in 'scale' mode, storage parameters must be provided by the caller. 
 
 >Note: maintenance of the blob storage is the caller responsibility. This includes provisioning the storage, rotating access keys, 
-deleting transient artifacts etc.
+deleting transient artifacts etc. KustoBlobStorageUtils module contains helper functions for deleting blobs based on either account and container 
+coordinates and account credentials, or a full SAS URL, once the corresponding RDD is no longer needed. Each transaction stores transient blob 
+artifacts in a separate directory. This directory is captured as part of read-transaction information logs reported on Spark Driver node 
 
 * **KUSTO_BLOB_STORAGE_ACCOUNT_NAME**
 Transient storage account name. Either this, or a SAS url, must be provided in order to access the storage account

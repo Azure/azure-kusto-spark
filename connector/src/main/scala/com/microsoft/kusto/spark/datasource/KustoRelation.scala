@@ -3,7 +3,7 @@ package com.microsoft.kusto.spark.datasource
 import java.security.InvalidParameterException
 import java.util.Locale
 
-import com.microsoft.kusto.spark.utils.{KustoClient, KustoQueryUtils}
+import com.microsoft.kusto.spark.utils.{KustoClient, KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.sources.{BaseRelation, Filter, PrunedFilteredScan, TableScan}
 import org.apache.spark.sql.types.StructType
@@ -64,8 +64,7 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
         KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication, timeout),
         storageParameters.get,
         KustoPartitionParameters(numPartitions, getPartitioningColumn, getPartitioningMode),
-        readOptions.isConfigureFileSystem,
-        readOptions.isCompressOnExport,
+        readOptions,
         KustoFiltering(requiredColumns, filters)
       )
     }
@@ -87,7 +86,7 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
       val requestedColumn = partitioningColumn.get.toLowerCase(Locale.ROOT)
       if (!schema.contains(requestedColumn)) {
         throw new InvalidParameterException(
-          s"Cannot partition by column '$requestedColumn' since it is not part of the query schema: ${sys.props("line.separator")}${schema.mkString(", ")}")
+          s"Cannot partition by column '$requestedColumn' since it is not part of the query schema: ${KDSU.NewLine}${schema.mkString(", ")}")
       }
       requestedColumn
     } else schema.head.name
@@ -98,7 +97,7 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
       val mode = partitioningMode.get.toLowerCase(Locale.ROOT)
       if (!KustoOptions.supportedPartitioningModes.contains(mode)) {
         throw new InvalidParameterException(
-          s"Specified partitioning mode '$mode' : ${sys.props("line.separator")}${KustoOptions.supportedPartitioningModes.mkString(", ")}")
+          s"Specified partitioning mode '$mode' : ${KDSU.NewLine}${KustoOptions.supportedPartitioningModes.mkString(", ")}")
       }
       mode
     } else "hash"
