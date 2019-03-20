@@ -41,10 +41,14 @@ for reading from Kusto, and it requires the user to provide transient blob stora
 ### Packaging
 * Organized samples and connector as separate modules to reduce dependencies
 
-# Known Issues
+# Known Issues and Tips
 1. When running with spark 'wholestage codegen' enabled, a mismatch between schema 'nullable' definition and actual data containing
 null values can lead to a NullPointerException to be thrown by org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter.
 If you encounter this error and cannot identify and fix the mismatch, consider disabling 'wholestage codegen' by setting (databricks):
 
    `spark.conf.set("spark.sql.codegen.wholeStage","false")`
-   
+
+2. When writing to Kusto, [entity naming rules](https://docs.microsoft.com/en-us/azure/kusto/query/schema-entities/entity-names)
+  must be followed to avoid collisions with Kusto reserved keywords.
+  For details, refer to [these](https://docs.microsoft.com/en-us/azure/kusto/query/schema-entities/entity-names#naming-your-entities-to-avoid-collisions-with-kusto-language-keywords)
+  guidlines.   
