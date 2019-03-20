@@ -10,7 +10,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.mockito.Mockito._
-import org.scalatest.{FlatSpec, FunSpec, Matchers}
+import org.scalatest.{FlatSpec, Matchers}
 
 
 class KustoWriterTests extends FlatSpec with Matchers {
