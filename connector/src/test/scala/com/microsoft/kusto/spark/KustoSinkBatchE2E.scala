@@ -31,7 +31,7 @@ class KustoSinkBatchE2E extends FlatSpec with BeforeAndAfterAll{
   private def newAllDataTypesRow(v: Int): (String, Int, java.sql.Date, Boolean, Short, Byte, Float ,java.sql.Timestamp, Double, java.math.BigDecimal, Long) ={
     val longie = 80000000 + v.toLong * 100000000
     (s"row-${rowId2.getAndIncrement()}", v, new java.sql.Date(longie), v % 2 == 0, v.toShort, v.toByte,
-                1/v.toFloat, new java.sql.Timestamp(longie), 1/v.toDouble, BigDecimal.valueOf(1/v.toDouble), v)
+                1/v.toFloat, if (v % 10 == 0) null else new java.sql.Timestamp(longie), 1/v.toDouble, BigDecimal.valueOf(1/v.toDouble), v)
   }
 
 

@@ -16,7 +16,7 @@ import org.scalatest.junit.JUnitRunner
 import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
 
 @RunWith(classOf[JUnitRunner])
-class KustoSinkTests extends FlatSpec with MockFactory with Matchers with BeforeAndAfterAll{
+class KustoSinkTests extends FlatSpec with MockFactory with Matchers with BeforeAndAfterAll {
   private val loggingLevel: Option[String] = Option(System.getProperty("logLevel"))
   if (loggingLevel.isDefined) KDSU.setLoggingLevel(loggingLevel.get)
 
@@ -50,12 +50,13 @@ class KustoSinkTests extends FlatSpec with MockFactory with Matchers with Before
 
   private def getSink: KustoSink =
     new KustoSink(
-    sqlContext, 
-    KustoCoordinates(kustoCluster, kustoDatabase, Some(kustoTable)), 
-    AadApplicationAuthentication(appId,appKey, appAuthorityId), 
-    WriteOptions(writeResultLimit = KustoOptions.NONE_RESULT_LIMIT, timeout = KCONST.DefaultTimeoutLongRunning))
+      sqlContext,
+      KustoCoordinates(kustoCluster, kustoDatabase, Some(kustoTable)),
+      AadApplicationAuthentication(appId, appKey, appAuthorityId),
+      WriteOptions(writeResultLimit = KustoOptions.NONE_RESULT_LIMIT, timeout = KCONST.defaultTimeoutLongRunning))
 
   private val rowId = new AtomicInteger(1)
+
   private def newRow(): String = s"row-${rowId.getAndIncrement()}"
 
   // "KustoSink"
@@ -72,6 +73,7 @@ class KustoSinkTests extends FlatSpec with MockFactory with Matchers with Before
       override def getIngestionStatusCollection: util.List[IngestionStatus] = {
         null
       }
+
       override def getIngestionStatusesLength: Int = {
         0
       }
@@ -84,7 +86,7 @@ class KustoSinkTests extends FlatSpec with MockFactory with Matchers with Before
     }
     catch {
       case ex: Exception =>
-        assert( ex.getCause.toString.contains("AuthenticationException"))
+        assert(ex.getCause.toString.contains("AuthenticationException"))
     }
   }
 }
