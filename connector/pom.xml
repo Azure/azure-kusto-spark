@@ -101,12 +101,12 @@
         <dependency>
             <groupId>org.json4s</groupId>
             <artifactId>json4s-core_${scala.version}</artifactId>
-            <version>3.6.3</version>
+            <version>3.5.3</version>
         </dependency>
         <dependency>
             <groupId>org.json4s</groupId>
             <artifactId>json4s-ast_${scala.version}</artifactId>
-            <version>3.6.3</version>
+            <version>3.5.3</version>
         </dependency>
         <dependency>
             <groupId>joda-time</groupId>
