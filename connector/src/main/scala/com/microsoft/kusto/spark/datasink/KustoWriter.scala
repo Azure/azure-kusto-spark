@@ -291,8 +291,8 @@ object KustoWriter {
     }
 
     if (currentFileSize > 0) {
-      finalizeBlobWrite(blobWriter)
-      blobsToIngest :+ blobWriter.blob
+      finalizeBlobWrite(currentBlobWriter)
+      blobsToIngest :+ currentBlobWriter.blob
     }
 
     blobsToIngest
