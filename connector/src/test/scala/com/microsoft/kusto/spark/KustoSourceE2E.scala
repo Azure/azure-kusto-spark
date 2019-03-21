@@ -50,7 +50,61 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
   private val loggingLevel: Option[String] = Option(System.getProperty("logLevel"))
   if (loggingLevel.isDefined) KDSU.setLoggingLevel(loggingLevel.get)
 
-  "KustoSource"should "execute a read query on Kusto cluster in lean mode" taggedAs KustoE2E in {
+  "PerformanceDebug" should "read large amounts of data and write back" taggedAs KustoE2E in {
+
+    import java.sql.Timestamp
+    import java.text.SimpleDateFormat;
+
+    val storageAccount: String = System.getProperty("storageAccount")
+    val container: String = System.getProperty("container")
+    val blobKey: String = System.getProperty("blobKey")
+//    val blobSas: String = System.getProperty("blobSas")
+    val blobSasConnectionString: String = System.getProperty("blobSasQuery")
+
+    val conf: Map[String, String] = Map(
+      KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
+      KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+      KustoOptions.KUSTO_BLOB_CONTAINER -> container,
+      //KustoOptions.KUSTO_BLOB_STORAGE_SAS_URL -> storageSas,
+      KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME -> storageAccount,
+      //KustoOptions.KUSTO_BLOB_SET_FS_CONFIG -> "false",
+      //KustoOptions.KUSTO_BLOB_COMPRESS_ON_EXPORT -> "true",
+      KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_KEY -> blobKey
+    )
+
+    spark.conf.set(s"fs.azure.account.key.$storageAccount.blob.core.windows.net", s"$blobKey")
+
+//    val dateFormat = new SimpleDateFormat("yyyy-MM-dd hh:mm:ss:SSS")
+//    val startDate=dateFormat.parse("2019-03-04 00:00:00:000")
+//    val startDateTime=new Timestamp(startDate.getTime())
+//    val endDate=dateFormat.parse("2019-03-19 00:00:00:000") // Corresponds to 490GB
+//    val endDateTime=new Timestamp(endDate.getTime())
+
+    val srcCluster = "kustoppe"
+    val srcDatabase = "Kuskus"
+    val srcQuery = "AsmIfxAuditApp | where PreciseTimeStamp >=  datetime(2019-03-20 12:00:00) and PreciseTimeStamp  <= datetime(2019-03-20 12:40:00)"
+
+    val df = spark.read.kusto(srcCluster, srcDatabase, srcQuery, conf)
+
+    val numberOfRows = df.count()
+    print(numberOfRows)
+
+    //spark.conf.set("spark.sql.codegen.wholeStage","false")
+
+    df.write
+      .format("com.microsoft.kusto.spark.datasource")
+      .option(KustoOptions.KUSTO_CLUSTER, cluster)
+      .option(KustoOptions.KUSTO_DATABASE, database)
+      .option(KustoOptions.KUSTO_TABLE, "PerformanceDebugTable")
+      .option(KustoOptions.KUSTO_AAD_CLIENT_ID, appId)
+      .option(KustoOptions.KUSTO_AAD_CLIENT_PASSWORD, appKey)
+      .option(KustoOptions.KUSTO_AAD_AUTHORITY_ID, authority)
+      .option(KustoOptions.KUSTO_TABLE_CREATE_OPTIONS, "CreateIfNotExist")
+      .save()
+  }
+
+//  "KustoSource"
+  ignore should "execute a read query on Kusto cluster in lean mode" taggedAs KustoE2E in {
     val table: String = System.getProperty(KustoOptions.KUSTO_TABLE)
     val query: String = System.getProperty(KustoOptions.KUSTO_QUERY, s"$table | where (toint(ColB) % 1000 == 0) | distinct ColA ")
 
@@ -64,7 +118,8 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
     df.show()
   }
 
-  "KustoSource" should "execute a read query on Kusto cluster in scale mode" taggedAs KustoE2E in {
+//  "KustoSource"
+  ignore should "execute a read query on Kusto cluster in scale mode" taggedAs KustoE2E in {
     val table: String = System.getProperty(KustoOptions.KUSTO_TABLE)
     val query: String = System.getProperty(KustoOptions.KUSTO_QUERY, s"$table | where (toint(ColB) % 1 == 0)")
 
@@ -86,7 +141,8 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
     spark.read.kusto(cluster, database, query, conf).show(20)
   }
 
-  "KustoConnector" should "write to a kusto table and read it back in lean mode" taggedAs KustoE2E in {
+//  "KustoConnector"
+  ignore should "write to a kusto table and read it back in lean mode" taggedAs KustoE2E in {
     import spark.implicits._
 
     val rowId = new AtomicInteger(1)

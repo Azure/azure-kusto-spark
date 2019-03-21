@@ -46,7 +46,7 @@ object KustoWriter {
   val statusCol = "Status"
   val delayPeriodBetweenCalls: Int = KCONST.defaultPeriodicSamplePeriod.toMillis.toInt
   val GZIP_BUFFER_SIZE: Int = KCONST.defaultBufferSize
-  val maxBlobSize: Int = KCONST.defaultMaxBlobSize
+  val maxBlobSize: Int = KCONST.oneGiga - KCONST.oneMega
 
   private[kusto] def write(batchId: Option[Long],
                            data: DataFrame,
@@ -142,17 +142,26 @@ object KustoWriter {
 
     val ingestClient = KustoClient.getIngest(authentication, coordinates.cluster)
     val ingestionProperties = new IngestionProperties(coordinates.database, tmpTableName)
+    ingestionProperties.setDataFormat(DATA_FORMAT.csv.name)
+    ingestionProperties.setReportMethod(IngestionProperties.IngestionReportMethod.Table)
+    ingestionProperties.setReportLevel(IngestionProperties.IngestionReportLevel.FailuresAndSuccesses)
 
     val blobList: Seq[CloudBlockBlob] = serializeRows(rows, storageUri, parameters)
 
+    if (blobList.isEmpty) {
+      KDSU.logWarn(myName, "No blobs created for ingestion to Kusto cluster " + {coordinates.cluster} +
+        ", database " + {coordinates.database} + ", table " + {coordinates.table})
+    }
+
     blobList.map { blob =>
       val signature = blob.getServiceClient.getCredentials.asInstanceOf[StorageCredentialsSharedAccessSignature]
-      val blobPath = blob.getStorageUri.getPrimaryUri.toString + "?" + signature.getToken
+      val blobUri = blob.getStorageUri.getPrimaryUri.toString
+      val blobPath = blobUri + "?" + signature.getToken
       val blobSourceInfo = new BlobSourceInfo(blobPath)
 
-      ingestionProperties.setDataFormat(DATA_FORMAT.csv.name)
-      ingestionProperties.setReportMethod(IngestionProperties.IngestionReportMethod.Table)
-      ingestionProperties.setReportLevel(IngestionProperties.IngestionReportLevel.FailuresAndSuccesses)
+      KDSU.logInfo(myName, "Ingesting to Kusto cluster " + {coordinates.cluster} +
+        ", database " + {coordinates.database} + ", table " + {coordinates.table} + " from blob " + blobUri)
+
       ingestClient.ingestFromBlob(blobSourceInfo, ingestionProperties)
     }
   }
@@ -266,12 +275,14 @@ object KustoWriter {
     val blobWriter: BlobWriteResource = createBlobWriter(schema, writeOptions.timeZone, coordinates, tmpTableName, storageUri, container)
 
     // Serialize rows to ingest and send to blob storage.
-    // On each iteration calculate: (updated total file size, current blob writer, and the list of all blobs)
-    val (_, _, blobs) = rows.foldLeft[(Long, BlobWriteResource, Seq[CloudBlockBlob])]((0, blobWriter, Seq())) { case ((size, blobWriter, blobsCreated), row) =>
+    val (currentFileSize, currentBlobWriter, blobsToIngest) = rows.foldLeft[(Long, BlobWriteResource, Seq[CloudBlockBlob])]((0, blobWriter, Seq())) { case ((size, blobWriter, blobsCreated), row) =>
       val csvRowResult: CsvRowResult = convertRowToCSV(row, schema, writeOptions.timeZone)
+      blobWriter.csvWriter.writeRow(csvRowResult.formattedRow)
       val newTotalSize = size + csvRowResult.rowByteSize
+
+      // Check if we crossed the threshold for a single blob to ingest.
+      // If so, add current blob to the list of blobs to ingest, and open a new blob writer
       if (newTotalSize < maxBlobSize) {
-        blobWriter.csvWriter.writeRow(csvRowResult.formattedRow)
         (newTotalSize, blobWriter, blobsCreated)
       } else {
         finalizeBlobWrite(blobWriter)
@@ -279,12 +290,12 @@ object KustoWriter {
       }
     }
 
-    if (blobs.isEmpty) {
+    if (currentFileSize > 0) {
       finalizeBlobWrite(blobWriter)
-      Seq(blobWriter.blob)
-    } else {
-      blobs
+      blobsToIngest :+ blobWriter.blob
     }
+
+    blobsToIngest
   }
 
   def finalizeBlobWrite(blobWriteResource: BlobWriteResource): Unit = {
