@@ -217,7 +217,7 @@ object KustoDataSourceUtils {
     * The function passed is scheduled sequentially by the timer, until last calculated returned value by func does not
     * satisfy the condition of doWhile or a given number of times has passed.
     * After one of these conditions was held true the finalWork function is called over the last returned value by func.
-    * Returns a CountDownLatch object use to countdown times and await on it synchronously if needed
+    * Returns a CountDownLatch object used to count down iterations and await on it synchronously if needed
     *
     * @param func               - the function to run
     * @param delay              - delay before first job

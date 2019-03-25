@@ -68,7 +68,7 @@ private[kusto] object CslCommandsGenerator{
     val blobUri = s"https://$storageAccountName.blob.core.windows.net"
     val async = if (isAsync) "async " else ""
     val compress = if (isCompressed) "compressed " else ""
-    val sizeLimitIfDefined = if (sizeLimit.isDefined) s"sizeLimit=${sizeLimit.get}, " else ""
+    val sizeLimitIfDefined = if (sizeLimit.isDefined) s"sizeLimit=${sizeLimit.get * 1024 * 1024}, " else ""
 
     var command = s""".export $async${compress}to parquet ("$blobUri/$container$secretString)""" +
       s""" with (${sizeLimitIfDefined}namePrefix="${directory}part$partitionId", fileExtension=parquet) <| $query"""
