@@ -37,7 +37,9 @@ version = 1.0.0-Beta-02
 
 **In Maven**:
 
-> Note that the jar is in beta and not available yet in public maven. clone this repository and build it localy to add it to your local maven repository, or use the [pre-built jars](lib/)
+> Note that the jar is in beta and not available yet in public maven. 
+Clone this repository and build it locally to add it to your local maven repository, 
+or use the corresponding [released package](https://github.com/Azure/azure-kusto-spark/releases)
 
  ```xml
    <dependency>
@@ -84,11 +86,20 @@ mvn clean install
 
 ## Pre-Compiled Libraries
 In order to facilitate ramp-up on platforms such as Azure Databricks, pre-compiled libraries
-are published under [GitHub Release Tags](https://github.com/Azure/azure-kusto-spark/releases/tag/v1.0.0-Beta-01).
+are published under [GitHub Releases](https://github.com/Azure/azure-kusto-spark/releases).
 These libraries include:
 * Spark Kusto connector library
-* Kusto Java data and ingestion client libraries (kusto-data and kusto-ingest). 
-When working with Databricks, Kusto connector requires both these libraries to be installed.
+* May also include Kusto Java data and ingestion client libraries (kusto-data and kusto-ingest)
+
+## Dependencies
+Spark Kusto connector takes dependency on [Kusto Data Client Library](https://mvnrepository.com/artifact/com.microsoft.azure.kusto/kusto-data) 
+and [Kusto Ingest Client Library](https://mvnrepository.com/artifact/com.microsoft.azure.kusto/kusto-ingest), 
+available on maven repository.
+When [Key Vault based authentication](Authentication.md) is used, there is an additional dependency 
+on [Microsoft Azure SDK For Key Vault](https://mvnrepository.com/artifact/com.microsoft.azure/azure-keyvault). 
+
+> **Note:** When working with Databricks, Kusto connector requires Kusto java client libraries (and azure key-vault library if used) to be installed.
+This can be done by accessing Databricks Create Library -> Maven -> Search Packages (Maven Central) 
 
 ## Documentation
 
