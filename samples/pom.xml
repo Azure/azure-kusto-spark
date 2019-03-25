@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <artifactId>connector-samples</artifactId>
+    <parent>
+        <artifactId>azure-kusto-spark</artifactId>
+        <groupId>com.microsoft.azure.kusto</groupId>
+        <!--suppress MavenPropertyInParent -->
+        <version>${revision}</version>
+    </parent>
+
+    <dependencies>
+        <!-- Compile Scope -->
+        <dependency>
+            <groupId>org.scala-lang</groupId>
+            <artifactId>scala-library</artifactId>
+            <version>${scala.version}.12</version>
+        </dependency>
+        <dependency>
+            <groupId>org.scala-lang</groupId>
+            <artifactId>scala-reflect</artifactId>
+            <version>${scala.version}.12</version>
+        </dependency>
+        <dependency>
+            <groupId>com.microsoft.azure.kusto</groupId>
+            <artifactId>spark-kusto-connector</artifactId>
+            <!--suppress MavenPropertyInParent -->
+            <version>${revision}</version>
+        </dependency>
+        <!-- https://mvnrepository.com/artifact/com.microsoft.azure/azure-eventhubs-spark -->
+        <dependency>
+            <groupId>com.microsoft.azure</groupId>
+            <artifactId>azure-eventhubs-spark_${scala.version}</artifactId>
+            <version>2.3.9</version>
+        </dependency>
+
+        <!-- Provided Scope -->
+        <dependency>
+            <groupId>org.apache.spark</groupId>
+            <artifactId>spark-core_${scala.version}</artifactId>
+            <version>${spark.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.spark</groupId>
+            <artifactId>spark-sql_${scala.version}</artifactId>
+            <version>${spark.version}</version>
+            <scope>provided</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <sourceDirectory>src/main/scala</sourceDirectory>
+    </build>
+
+</project>

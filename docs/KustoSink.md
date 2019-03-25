@@ -5,7 +5,7 @@ in the specified Kusto cluster and database
 
 ## Authentication
 
-Kusto connector uses  **Azure Active Directory (AAD)** to authenticate the client application 
+Kusto connector uses **Azure Active Directory (AAD)** to authenticate the client application 
 that is using it. Please verify the following before using Kusto connector:
  * Client application is registered in AAD
  * Client application has 'user' privileges or above on the target database
@@ -54,14 +54,7 @@ that is using it. Please verify the following before using Kusto connector:
  set to "FailIfNotExist" (default), the table must already exist, and the client must have 
  'admin' privileges on the table.
  
- * **KUSTO_AAD_CLIENT_ID**: 
- AAD application identifier of the client.
- 
- * **KUSTO_AAD_AUTHORITY_ID**: 
- AAD authentication authority.
- 
- * **KUSTO_AAD_CLIENT_PASSWORD**: 
- AAD application key for the client.
+ **Authentication Parameters** can be found here - [AAD Application Authentication](Authentication.md). 
  
  **Optional Parameters:** 
  * **KUSTO_TABLE_CREATE_OPTIONS**: 
@@ -85,10 +78,24 @@ that is using it. Please verify the following before using Kusto connector:
    * In a failure scenario, error messages are logged on Spark executor nodes, 
  but exceptions will not propagate to the client
  
+ * **KUSTO_TIMEOUT_LIMIT**:
+   An integer number corresponding to the period in seconds after which the operation will timeout.
+   This is an upper limit that may coexist with addition timeout limits as configured on Spark or Kusto clusters.  
+   Default: '5400' (90 minutes)
 
- >**Note**:
+ >**Note:**
  For both synchronous and asynchronous operation, 'write' is an atomic transaction, i.e. 
- either all data is written to Kusto, or no data is written.  
+ either all data is written to Kusto, or no data is written. 
+ 
+### Performance Considerations
+
+Write performance depends on multiple factors, such as cluster scale of both Spark and Kusto clusters.
+WIth regards to Kusto target cluster configuration, one of the factors that impacts performance and latency 
+is [Ingestion Batching Policy](https://docs.microsoft.com/en-us/azure/kusto/concepts/batchingpolicy). Default policy 
+works well for typical scenarios, especially when writing large amounts of data as batch. For reduced latency,
+consider altering the policy to a relatively low value (minimal allowed is 10 seconds).
+**This is mostly relevant when writing to Kusto in streaming mode**
+For more details and command reference, please see [Ingestion Batching Policy command reference](https://docs.microsoft.com/en-us/azure/kusto/management/batching-policy).
  
 ### Examples
 
@@ -166,5 +173,5 @@ df.write
  ```
  
   For more reference code examples please see 
-   [SimpleKustoDataSink](../src/main/scala/com/microsoft/kusto/spark/Sample/SimpleKustoDataSink.scala) and 
-   [KustoConnectorDemo](../src/main/scala/com/microsoft/kusto/spark/Sample/KustoConnectorDemo.scala).
+   [SimpleKustoDataSink](../samples/src/main/scala/SimpleKustoDataSink.scala) and 
+   [KustoConnectorDemo](../samples/src/main/scala/KustoConnectorDemo.scala).

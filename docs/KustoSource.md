@@ -24,6 +24,7 @@ that is using it. Please verify the following before using Kusto connector:
  Kusto table schema is translated into a spark as explained in [DataTypes](Spark-Kusto DataTypes mapping.md).
  
  ### Command Syntax
+ 
  There are two command flavors for reading from Kusto:
  
  **Simplified Command Syntax**: 
@@ -50,6 +51,8 @@ sqlContext.read
 .load()
 ```
 Where **parameters map** is identical for both syntax flavors.
+
+In addition, there are two main reading modes: see **KUSTO_READ_MODE** option below
       
  ### Supported Options
   
@@ -59,29 +62,55 @@ Where **parameters map** is identical for both syntax flavors.
   Kusto cluster from which the data will be read.
   Use either cluster profile name for global clusters, or <profile-name.region> for regional clusters.
   For example: if the cluster URL is 'https://testcluster.eastus.kusto.windows.net', set this property 
-  as 'testcluster.eastus' 
+  as either 'testcluster.eastus', or  'https://testcluster.eastus.kusto.windows.net'.
    
   * **KUSTO_DATABASE**: 
   Kusto database from which the data will be read. The client must have 'viewer' 
   privileges on this database, unless it has 'admin' privileges on the table.
   
-  * **KUSTO_AAD_CLIENT_ID**: 
-  AAD application identifier of the client.
-  
-  * **KUSTO_AAD_AUTHORITY_ID**: 
-  AAD authentication authority.
-  
-  * **KUSTO_AAD_CLIENT_PASSWORD**: 
-  AAD application key for the client.
-  
+  **Authentication Parameters** can be found [AAD Application Authentication](Authentication.md). 
 
-  
   * **KUSTO_QUERY**: 
- A flexible Kusto query (can simply be a table name). The schema of the resulting dataframe will match the schema of the query result. 
+  A flexible Kusto query (can simply be a table name). The schema of the resulting dataframe will match the schema of the query result. 
+ 
  
  **Optional Parameters:** 
  
-    * **KUSTO_NUM_PARTITIONS**: in current release must be set to one (default).
+ * **KUSTO_READ_MODE**: 
+ Selects one of two supported modes for reading data from Kusto:
+   * When set to "lean", queries Kusto admin node directly, and returns the query result. 
+   This option doesn't involve partitioning the data in any way, and is therefore limited to queries resulting in small amount of data 
+   (typically in the order of KiloBytes up to few MegaBytes).
+   * When set to "scale" (**default**), uses a scalable method to export data from Kusto nodes, and convert this data to an RDD.
+   The data is exported to a transient blob storage account provided by the caller, as specified [below](#transient-storage-parameters)
+
+ * **KUSTO_TIMEOUT_LIMIT**:
+ An integer number corresponding to the period in seconds after which the operation will timeout.
+ This is an upper limit that may coexist with addition timeout limits as configured on Spark or Kusto clusters.
+ Default: '5400' (90 minutes)    
+    
+#### Transient Storage Parameters
+When reading data from Kusto in 'scale' mode, the data is exported from Kusto into a blob storage every time the corresponding RDD is materialized.
+In order to allow working in 'scale' mode, storage parameters must be provided by the caller. 
+
+>Note: maintenance of the blob storage is the caller responsibility. This includes provisioning the storage, rotating access keys, 
+deleting transient artifacts etc. KustoBlobStorageUtils module contains helper functions for deleting blobs based on either account and container 
+coordinates and account credentials, or a full SAS URL, once the corresponding RDD is no longer needed. Each transaction stores transient blob 
+artifacts in a separate directory. This directory is captured as part of read-transaction information logs reported on Spark Driver node 
+
+* **KUSTO_BLOB_STORAGE_ACCOUNT_NAME**
+Transient storage account name. Either this, or a SAS url, must be provided in order to access the storage account
+
+* **KUSTO_BLOB_STORAGE_ACCOUNT_KEY**
+Storage account key. Either this, or a SAS url, must be provided in order to access the storage account
+
+* **KUSTO_BLOB_STORAGE_SAS_URL**
+SAS access url: a complete url of the SAS to the container. Either this, or a storage account name and key, must be provided
+  in order to access the storage account
+  
+* **KUSTO_BLOB_CONTAINER**
+Blob container name. This container will be used to store all transient artifacts created every time the corresponding RDD is materialized. 
+Once the RDD is no longer required by the caller application, the container and/or all its contents can be deleted by the caller.  
     
  ### Examples
  
@@ -91,7 +120,8 @@ Where **parameters map** is identical for both syntax flavors.
  ```
  val conf: Map[String, String] = Map(
        KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
-       KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey
+       KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+       KustoOptions.KUSTO_READ_MODE -> "lean"
      )
      
  val df = spark.read.kusto(cluster, database, "MyKustoTable | where (ColB % 1000 == 0) | distinct ColA ", conf)
@@ -116,5 +146,5 @@ Where **parameters map** is identical for both syntax flavors.
   ```
   
   For more reference code examples please see 
-  [SimpleKustoDataSource](../src/main/scala/com/microsoft/kusto/spark/Sample/SimpleKustoDataSource.scala) and 
-  [KustoConnectorDemo](../src/main/scala/com/microsoft/kusto/spark/Sample/KustoConnectorDemo.scala).
+  [SimpleKustoDataSource](../samples/src/main/scala/SimpleKustoDataSource.scala) and 
+  [KustoConnectorDemo](../samples/src/main/scala/KustoConnectorDemo.scala).
