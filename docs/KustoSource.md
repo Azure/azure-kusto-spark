@@ -87,7 +87,8 @@ In addition, there are two main reading modes: see **KUSTO_READ_MODE** option be
  * **KUSTO_TIMEOUT_LIMIT**:
  An integer number corresponding to the period in seconds after which the operation will timeout.
  This is an upper limit that may coexist with addition timeout limits as configured on Spark or Kusto clusters.
- Default: '5400' (90 minutes)    
+ 
+    **Default:** '5400' (90 minutes)    
     
 #### Transient Storage Parameters
 When reading data from Kusto in 'scale' mode, the data is exported from Kusto into a blob storage every time the corresponding RDD is materialized.
@@ -110,7 +111,30 @@ SAS access url: a complete url of the SAS to the container. Either this, or a st
   
 * **KUSTO_BLOB_CONTAINER**
 Blob container name. This container will be used to store all transient artifacts created every time the corresponding RDD is materialized. 
-Once the RDD is no longer required by the caller application, the container and/or all its contents can be deleted by the caller.  
+Once the RDD is no longer required by the caller application, the container and/or all its contents can be deleted by the caller.
+
+* **KUSTO_BLOB_SET_FS_CONFIG**  
+When reading in 'scale' mode, sets Spark configuration to read from Azure blob.
+The following configuration parameters are set:
+1. Blob access secret:
+    1. If storage account key is provided, the following parameter is set:
+      fs.azure.account.key.<storage-account-name>.blob.core.windows.net, <storage-account-key>
+      
+        *For example*:          
+        `spark.conf.set(s"fs.azure.account.key.$storageAccountName.blob.core.windows.net", s"$storageAccountKey")`
+    2. If SAS key is provided, the following parameter is set:
+      fs.azure.sas.<blob-container-name>.<storage-account-name>.blob.core.windows.net, <sas-key>
+      
+        *For example*:          
+        `spark.conf.set(s"fs.azure.sas.$container.$storageAccountName.blob.core.windows.net", s"$storageSas")`
+2. File system specifier property is set as follows:
+    "fs.azure", "org.apache.hadoop.fs.azure.NativeAzureFileSystem"
+    
+    If set to 'false' (default), the user must set up these values prior to using read connector in "scale" mode.
+    
+    If set to 'true', the connector will **set the required configuration automatically**, by updating these parameters on every 'read' operation
+    
+    **Default:** 'false'
     
  ### Examples
  
