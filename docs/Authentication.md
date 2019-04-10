@@ -19,7 +19,6 @@ This authentication method is fairly straightforward, and it is used in most of 
 ```
 df.write
   .format("com.microsoft.kusto.spark.datasource")
-  .partitionBy("value")
   .option(KustoOptions.KUSTO_CLUSTER, "MyCluster")
   .option(KustoOptions.KUSTO_DATABASE, "MyDatabase")
   .option(KustoOptions.KUSTO_TABLE, "MyTable")
@@ -104,7 +103,6 @@ The token must be valid throughout the duration of the read/write operation
 ```
 df.write
   .format("com.microsoft.kusto.spark.datasource")
-  .partitionBy("value")
   .option(KustoOptions.KUSTO_CLUSTER, "MyCluster")
   .option(KustoOptions.KUSTO_DATABASE, "MyDatabase")
   .option(KustoOptions.KUSTO_TABLE, "MyTable")

@@ -47,7 +47,6 @@ class KustoAthenticationTest extends FlatSpec {
 
     df.write
       .format("com.microsoft.kusto.spark.datasource")
-      .partitionBy("value")
       .option(KustoOptions.KUSTO_CLUSTER, cluster)
       .option(KustoOptions.KUSTO_DATABASE, database)
       .option(KustoOptions.KUSTO_TABLE, table)
@@ -84,7 +83,6 @@ class KustoAthenticationTest extends FlatSpec {
 
     df.write
       .format("com.microsoft.kusto.spark.datasource")
-      .partitionBy("value")
       .option(KustoOptions.KUSTO_CLUSTER, s"https://ingest-$cluster.kusto.windows.net")
       .option(KustoOptions.KUSTO_DATABASE, database)
       .option(KustoOptions.KUSTO_TABLE, table)
