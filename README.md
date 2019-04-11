@@ -99,7 +99,9 @@ When [Key Vault based authentication](Authentication.md) is used, there is an ad
 on [Microsoft Azure SDK For Key Vault](https://mvnrepository.com/artifact/com.microsoft.azure/azure-keyvault). 
 
 > **Note:** When working with Databricks, Kusto connector requires Kusto java client libraries (and azure key-vault library if used) to be installed.
-This can be done by accessing Databricks Create Library -> Maven -> Search Packages (Maven Central) 
+This can be done by accessing Databricks Create Library -> Maven and specifying the following coordinates:
+- com.microsoft.azure.kusto:kusto-data:1.0.0-BETA-04
+- com.microsoft.azure.kusto:kusto-ingest:1.0.0-BETA-04
 
 ## Documentation
 

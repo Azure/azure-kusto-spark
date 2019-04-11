@@ -103,7 +103,6 @@ Synchronous mode, table already exists:
 ```
 df.write
   .format("com.microsoft.kusto.spark.datasource")
-  .partitionBy("value")
   .option(KustoOptions.KUSTO_CLUSTER, "MyCluster")
   .option(KustoOptions.KUSTO_DATABASE, "MyDatabase")
   .option(KustoOptions.KUSTO_TABLE, "MyTable")
@@ -117,7 +116,6 @@ Asynchronous mode, table may not exist and will be created:
 ```
 df.write
   .format("com.microsoft.kusto.spark.datasource")
-  .partitionBy("value")
   .option(KustoOptions.KUSTO_CLUSTER, "MyCluster")
   .option(KustoOptions.KUSTO_DATABASE, "MyDatabase")
   .option(KustoOptions.KUSTO_TABLE, "MyTable")

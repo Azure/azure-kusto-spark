@@ -119,7 +119,6 @@ class KustoPruneAndFilterE2E extends FlatSpec with BeforeAndAfterAll {
 
     dfOrig.write
       .format("com.microsoft.kusto.spark.datasource")
-      .partitionBy("value")
       .option(KustoOptions.KUSTO_CLUSTER, cluster)
       .option(KustoOptions.KUSTO_DATABASE, database)
       .option(KustoOptions.KUSTO_TABLE, query)
@@ -192,7 +191,6 @@ class KustoPruneAndFilterE2E extends FlatSpec with BeforeAndAfterAll {
 
     dfOrig.write
       .format("com.microsoft.kusto.spark.datasource")
-      .partitionBy("value")
       .option(KustoOptions.KUSTO_CLUSTER, cluster)
       .option(KustoOptions.KUSTO_DATABASE, database)
       .option(KustoOptions.KUSTO_TABLE, query)
