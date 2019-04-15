@@ -12,4 +12,5 @@ object KustoConstants {
   val oneKilo: Int = 1024
   val oneMega: Int = oneKilo * 1024
   val oneGiga: Int = oneMega * 1024
+  val directQueryUpperBoundRows = 1000
 }

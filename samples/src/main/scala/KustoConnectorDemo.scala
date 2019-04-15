@@ -102,25 +102,22 @@ object KustoConnectorDemo {
 
     kustoQ.start().awaitTermination(TimeUnit.MINUTES.toMillis(8))
 
-      // READING IN LEAN MODE
       val conf: Map[String, String] = Map(
       KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
       KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
-      KustoOptions.KUSTO_QUERY -> s"$table | where (ColB % 1000 == 0) | distinct ColA",
-      KustoOptions.KUSTO_READ_MODE->"lean"
+      KustoOptions.KUSTO_QUERY -> s"$table | where (ColB % 1000 == 0) | distinct ColA"
     )
 
     // Simplified syntax flavour
     import com.microsoft.kusto.spark.sql.extension.SparkExtension._
     val df2 = spark.read.kusto(cluster, database, "", conf)
 
-    // ELABORATE READ SYNTAX, LEAN
+    // ELABORATE READ SYNTAX
     // Here we read the whole table.
     val conf2: Map[String, String] = Map(
           KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
           KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
-          KustoOptions.KUSTO_QUERY -> "StringAndIntTable",
-          KustoOptions.KUSTO_READ_MODE->"lean"
+          KustoOptions.KUSTO_QUERY -> "StringAndIntTable"
         )
 
         val df3 = spark.sqlContext.read

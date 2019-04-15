@@ -2,6 +2,8 @@ package com.microsoft.kusto.spark.datasource
 
 import java.util.Locale
 
+import com.microsoft.kusto.spark.datasource.KustoOptions.newOption
+
 import scala.concurrent.duration.FiniteDuration
 
 
@@ -53,8 +55,6 @@ object KustoOptions {
   // When writing to Kusto, limits the number of rows read back as BaseRelation. Default: '1'.
   // To read back all rows, set as 'none' (NONE_RESULT_LIMIT)
   val KUSTO_WRITE_RESULT_LIMIT: String = newOption("writeResultLimit")
-  // Select either 'scale' or 'lean' read mode. Default: 'scale'
-  val KUSTO_READ_MODE: String = newOption("readMode")
   // An integer number corresponding to the period in seconds after which the operation will timeout. Default: '5400' (90 minutes)
   val KUSTO_TIMEOUT_LIMIT: String = newOption("timeoutLimit")
 
@@ -99,7 +99,6 @@ object KustoOptions {
   val KUSTO_BLOB_SET_FS_CONFIG: String = newOption("blobSetFsConfig")
 
   val NONE_RESULT_LIMIT = "none"
-  val supportedReadModes: Set[String] = Set("lean", "scale")
   // Partitioning modes allow to export data from Kusto to separate folders within the blob container per-partition
   // Note! In current implementation this is not exploited by Kusto read connector, and is not recommended.
   // Left for future experimentation
@@ -130,8 +129,12 @@ object KustoDebugOptions {
     kustoOptionNames += name.toLowerCase(Locale.ROOT)
     name
   }
-
-  // When reading in 'scale' mode, compresses the data upon export from Kusto to Blob
+  // Reading method is determined internally by the connector
+  // This option allows to override connector heuristics and force a specific mode.
+  // Recommended to use only for debug and testing purposes
+  // Supported values: Empty string (""), 'lean' (direct query), 'scale' (via blob). Default: empty
+  val KUSTO_DBG_FORCE_READ_MODE: String = newOption("readMode")
+  // When reading via blob storage, compresses the data upon export from Kusto to Blob
   // This feature is experimental, in order to measure performance impact w/wo compression
   // Default: 'true'
   val KUSTO_DBG_BLOB_COMPRESS_ON_EXPORT: String = newOption("dbgBlobCompressOnExport")

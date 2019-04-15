@@ -98,8 +98,7 @@ class KustoSinkBatchE2E extends FlatSpec with BeforeAndAfterAll{
 
     val conf: Map[String, String] = Map(
       KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
-      KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
-      KustoOptions.KUSTO_READ_MODE->"lean"
+      KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey
     )
 
     val dfResult: DataFrame = spark.read.kusto(cluster, database, table, conf)
