@@ -10,30 +10,31 @@ import scala.collection.immutable.HashMap
 
 object KustoTempIngestStorageCache {
 
-  var roundRubinIdx = 0
+  var roundRobinIdx = 0
+  // Maps each cluster (by cluster-alias including region) to a set of access UIRs to intermediate storage accounts
   var storagesMap = new HashMap[String, Array[String]]
   var lastRefresh: DateTime = new DateTime(DateTimeZone.UTC)
 
   def getNewTempBlobReference(clusterAlias: String, kcsb: ConnectionStringBuilder): String = {
-    getNextUri(clusterAlias, kcsb)
+    getNextUri(clusterAlias, kcsb, new DateTime(DateTimeZone.UTC))
   }
 
-  private def getNextUri(clusterAlias: String, kcsb: ConnectionStringBuilder): String = {
+  private def getNextUri(clusterAlias: String, kcsb: ConnectionStringBuilder, now: DateTime): String = {
     var storageCached = storagesMap.get(clusterAlias)
     // Refresh if storageExpiryMinutes have passed since last refresh for this cluster as SAS should be valid for at least 120 minutes
     if (storageCached.isEmpty ||
       storageCached.get.length == 0 ||
-      new Period(new DateTime(DateTimeZone.UTC), lastRefresh).getMinutes > KustoConstants.storageExpiryMinutes) {
+      new Period(now, lastRefresh).getMinutes > KustoConstants.storageExpiryMinutes) {
       val dmClient = KustoClient.getAdmin(kcsb, clusterAlias, isIngestCluster = true)
 
-      lastRefresh = new DateTime(DateTimeZone.UTC)
+      lastRefresh = now
 
       val res = dmClient.execute(generateCreateTmpStorageCommand())
       storageCached = Some(res.getValues.asScala.map(row => row.get(0)).toArray)
       storagesMap = storagesMap + (clusterAlias -> storageCached.get)
     }
 
-    roundRubinIdx = (roundRubinIdx + 1) % storageCached.get.length
-    storageCached.get(roundRubinIdx)
+    roundRobinIdx = (roundRobinIdx + 1) % storageCached.get.length
+    storageCached.get(roundRobinIdx)
   }
 }

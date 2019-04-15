@@ -14,11 +14,10 @@ import org.apache.log4j.{Level, Logger}
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types.StructType
-import org.json4s.jackson.JsonMethods.parse
+import scala.collection.JavaConversions._
 
 import scala.util.matching.Regex
 import scala.concurrent.duration._
-
 import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
 
 object KustoDataSourceUtils {
@@ -58,35 +57,50 @@ object KustoDataSourceUtils {
                                    tmpTableName: String,
                                    tableCreation: SinkTableCreationMode = SinkTableCreationMode.FailIfNotExist,
                                    schema: StructType): Unit = {
-    val schemaShowCommandResult = kustoAdminClient.execute(tableCoordinates.database, generateTableShowSchemaCommand(tableCoordinates.table.get)).getValues
+    val schemaShowCommandResult = kustoAdminClient.execute(tableCoordinates.database, generateTableGetSchemaAsRowsCommand(tableCoordinates.table.get)).getValues
     var tmpTableSchema: String = ""
-    val tableSchemaBuilder = new StringJoiner(",")
+    val database = tableCoordinates.database
+    val table = tableCoordinates.table.get
 
     if (schemaShowCommandResult.size() == 0) {
       // Table Does not exist
       if (tableCreation == SinkTableCreationMode.FailIfNotExist) {
-        throw new RuntimeException(s"Table '${tableCoordinates.table}' doesn't exist in database " +
-          s"'$tableCoordinates.database', in cluster '$tableCoordinates.cluster'")
+        throw new RuntimeException("Table '" + table + "' doesn't exist in database " + database + "', in cluster '" + tableCoordinates.cluster + "'")
       } else {
         // Parse dataframe schema and create a destination table with that schema
+        val tableSchemaBuilder = new StringJoiner(",")
         schema.fields.foreach { field =>
           val fieldType = DataTypeMapping.getSparkTypeToKustoTypeMap(field.dataType)
           tableSchemaBuilder.add(s"${field.name}:$fieldType")
         }
         tmpTableSchema = tableSchemaBuilder.toString
-        kustoAdminClient.execute(tableCoordinates.database, generateTableCreateCommand(tableCoordinates.table.get, tmpTableSchema))
+        kustoAdminClient.execute(database, generateTableCreateCommand(table, tmpTableSchema))
       }
     } else {
       // Table exists. Parse kusto table schema and check if it matches the dataframes schema
-      val orderedColumns = parse(schemaShowCommandResult.get(0).get(1)) \ "OrderedColumns"
-      orderedColumns.children.foreach { col =>
-        tableSchemaBuilder.add(s"${(col \ "Name").values}:${(col \ "CslType").values}")
-      }
-      tmpTableSchema = tableSchemaBuilder.toString
+      tmpTableSchema = extractSchemaFromResultTable(schemaShowCommandResult)
     }
 
     //  Create a temporary table with the kusto or dataframe parsed schema
-    kustoAdminClient.execute(tableCoordinates.database, generateTableCreateCommand(tmpTableName, tmpTableSchema))
+    kustoAdminClient.execute(database, generateTableCreateCommand(tmpTableName, tmpTableSchema))
+  }
+
+  private[kusto] def extractSchemaFromResultTable(resultRows: util.ArrayList[util.ArrayList[String]]): String = {
+
+    val tableSchemaBuilder = new StringJoiner(",")
+
+    for(row <- resultRows){
+      // Each row contains {Name, CslType, Type}, converted to (Name:CslType) pairs
+      tableSchemaBuilder.add(s"${row.get(0)}:${row.get(1)}")
+    }
+
+    tableSchemaBuilder.toString
+  }
+
+  private[kusto] def getSchema(database: String, query: String, client: Client): StructType = {
+    val schemaQuery = KustoQueryUtils.getQuerySchemaQuery(query)
+
+    KustoResponseDeserializer(client.execute(database, schemaQuery)).getSchema
   }
 
   def parseSourceParameters(parameters: Map[String, String]): SourceParameters = {
