@@ -19,7 +19,7 @@ object KustoTempIngestStorageCache {
   }
 
   private def getNextUri(clusterAlias: String, kcsb: ConnectionStringBuilder): String = {
-    var storageCached = storagesMap.get(clusterAlias)
+    val storageCached = storagesMap.get(clusterAlias)
     // Refresh if storageExpiryMinutes have passed since last refresh for this cluster as SAS should be valid for at least 120 minutes
     if (storageCached.isEmpty ||
       storageCached.get.length == 0 ||
@@ -29,8 +29,7 @@ object KustoTempIngestStorageCache {
       lastRefresh = new DateTime(DateTimeZone.UTC)
 
       val res = dmClient.execute(generateCreateTmpStorageCommand())
-      storageCached = Some(res.getValues.asScala.map(row => row.get(0)).toArray)
-      storagesMap = storagesMap + (clusterAlias -> storageCached.get)
+      storagesMap = storagesMap + (clusterAlias -> res.getValues.asScala.map(row => row.get(0)).toArray)
     }
 
     roundRubinIdx = (roundRubinIdx + 1) % storageCached.get.length

@@ -63,7 +63,6 @@ class DefaultSource extends CreatableRelationProvider
   override def createRelation(sqlContext: SQLContext, parameters: Map[String, String]): BaseRelation = {
     val requestedPartitions = parameters.get(KustoOptions.KUSTO_NUM_PARTITIONS)
     val partitioningMode = parameters.get(KustoOptions.KUSTO_READ_PARTITION_MODE)
-    val isSetFsConfiguration =  parameters.getOrElse(KustoOptions.KUSTO_BLOB_SET_FS_CONFIG, "false").trim.toBoolean
     val isCompressOnExport =  parameters.getOrElse(KustoDebugOptions.KUSTO_DBG_BLOB_COMPRESS_ON_EXPORT, "true").trim.toBoolean
     // Set default export split limit as 1GB, maximal allowed
     val exportSplitLimitMb = parameters.getOrElse(KustoDebugOptions.KUSTO_DBG_BLOB_FILE_SIZE_LIMIT_MB, "1024").trim.toInt
@@ -110,7 +109,7 @@ class DefaultSource extends CreatableRelationProvider
       kustoCoordinates,
       kustoAuthentication.get,
       parameters.getOrElse(KustoOptions.KUSTO_QUERY, ""),
-      KustoReadOptions(parameters.getOrElse(KustoDebugOptions.KUSTO_DBG_FORCE_READ_MODE, ""), isSetFsConfiguration, isCompressOnExport, exportSplitLimitMb),
+      KustoReadOptions(parameters.getOrElse(KustoDebugOptions.KUSTO_DBG_FORCE_READ_MODE, ""), isCompressOnExport, exportSplitLimitMb),
       timeout,
       numPartitions,
       parameters.get(KustoOptions.KUSTO_PARTITION_COLUMN),

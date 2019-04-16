@@ -3,12 +3,13 @@ import java.security.InvalidParameterException
 import java.util.UUID
 
 import com.microsoft.azure.kusto.data.Client
-import com.microsoft.kusto.spark.utils.{KustoBlobStorageUtils, CslCommandsGenerator, KustoClient, KustoQueryUtils, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.{CslCommandsGenerator, KustoAzureFsSetupCache, KustoBlobStorageUtils, KustoClient, KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.spark.Partition
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{Row, SparkSession}
+import org.joda.time.{DateTime, DateTimeZone}
 
 import scala.concurrent.duration.FiniteDuration
 
@@ -33,7 +34,6 @@ private[kusto] case class KustoReadRequest(sparkSession: SparkSession,
                                            timeout: FiniteDuration)
 
 private[kusto] case class KustoReadOptions( forcedReadMode: String = "",
-                                            isConfigureFileSystem: Boolean = true,
                                             isCompressOnExport: Boolean = true,
                                             exportSplitLimitMb: Long = 1024)
 
@@ -59,7 +59,7 @@ private[kusto] object KustoReader {
      options: KustoReadOptions = KustoReadOptions.apply(),
      filtering: KustoFiltering = KustoFiltering.apply()): RDD[Row] = {
 
-    if (options.isConfigureFileSystem) setupBlobAccess(request, storage)
+    setupBlobAccess(request, storage)
     val partitions = calculatePartitions(partitionInfo)
     val reader = new KustoReader(kustoClient, request, storage)
     val directory = KustoQueryUtils.simplifyName(s"${request.kustoCoordinates.database}/dir${UUID.randomUUID()}/")
@@ -108,13 +108,21 @@ private[kusto] object KustoReader {
 
   private[kusto] def setupBlobAccess(request: KustoReadRequest, storage: KustoStorageParameters): Unit = {
     val config = request.sparkSession.conf
+    val now = new DateTime(DateTimeZone.UTC)
     if (storage.secretIsAccountKey) {
-      config.set(s"fs.azure.account.key.${storage.account}.blob.core.windows.net", s"${storage.secret}")
+      if (!KustoAzureFsSetupCache.updateAndGetPrevStorageAccountAccess(storage.account, storage.secret, now)) {
+        config.set(s"fs.azure.account.key.${storage.account}.blob.core.windows.net", s"${storage.secret}")
+      }
     }
     else {
-      config.set(s"fs.azure.sas.${storage.container}.${storage.account}.blob.core.windows.net", s"${storage.secret}")
+      if (!KustoAzureFsSetupCache.updateAndGetPrevSas(storage.container, storage.account, storage.secret, now)) {
+        config.set(s"fs.azure.sas.${storage.container}.${storage.account}.blob.core.windows.net", s"${storage.secret}")
+      }
     }
-    config.set("fs.azure", "org.apache.hadoop.fs.azure.NativeAzureFileSystem")
+
+    if (!KustoAzureFsSetupCache.updateAndGetPrevNativeAzureFs(now)) {
+      config.set("fs.azure", "org.apache.hadoop.fs.azure.NativeAzureFileSystem")
+    }
   }
 
   private def calculatePartitions(partitionInfo: KustoPartitionParameters): Array[Partition] = {

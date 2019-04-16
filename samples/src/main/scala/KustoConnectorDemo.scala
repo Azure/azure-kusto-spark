@@ -127,7 +127,8 @@ object KustoConnectorDemo {
           .options(conf2)
           .load()
 
-    // GET STORAGE PARAMETERS FOR SCALE READ
+    // GET STORAGE PARAMETERS FOR READING A LARGE DATA SET
+    // NOTE: this is a temporary requirement - future connector versions will provision storage internally
     // Use either container/account-key/account name, or container SaS
     val container = "Your container name" // Databricks example: dbutils.secrets.get(scope = "KustoDemos", key = "blobContainer")
     val storageAccountKey = "Your storage account key" // Databricks example: dbutils.secrets.get(scope = "KustoDemos", key = "blobStorageAccountKey")
@@ -145,7 +146,7 @@ object KustoConnectorDemo {
     // when using SAS
     // spark.conf.set(s"fs.azure.sas.$container.$storageAccountName.blob.core.windows.net", s"$storageSas")
 
-    // READING IN SCALE MODE: SET UP CONFIGURATION
+    // READING LARGE DATA SET: SET UP CONFIGURATION
     val conf3: Map[String, String] = Map(
       KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
       KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
@@ -155,11 +156,11 @@ object KustoConnectorDemo {
       KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_KEY -> storageAccountKey
     )
 
-    // READING IN SCALE MODE (FULL TABLE, UNFILTERED)
+    // READING LARGE DATA SET(FULL TABLE, UNFILTERED)
     val query = "ReallyBigTable"
     val df4 = spark.read.kusto(cluster, database, query, conf3)
 
-    // READING IN SCALE MODE (WITH PRUNING AND FILTERING)
+    // READING LARGE DATA SET (WITH PRUNING AND FILTERING)
     val df5 = spark.read.kusto(cluster, database, query, conf3)
 
     val dfFiltered = df5
@@ -178,7 +179,7 @@ object KustoConnectorDemo {
     val keyVaultUri = "https://<Your key vault name>.vault.azure.net"
 
     /************************************************************************************************************/
-    /* Using scale read. The following parameters are taken from Key Vault using connector Key Vault access     */
+    /* The following parameters are taken from Key Vault using connector Key Vault access                       */
     /* blobContainer, blobStorageAccountKey, blobStorageAccountName, kustoAppAuthority, kustoAppId, kustoAppKey */
     /************************************************************************************************************/
     val conf4: Map[String, String] = Map(

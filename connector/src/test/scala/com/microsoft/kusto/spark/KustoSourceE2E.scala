@@ -79,8 +79,7 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
       KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
       KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME -> storageAccount,
       KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_KEY -> blobKey,
-      KustoOptions.KUSTO_BLOB_CONTAINER -> container,
-      KustoOptions.KUSTO_BLOB_SET_FS_CONFIG -> "true"
+      KustoOptions.KUSTO_BLOB_CONTAINER -> container
     )
 
     spark.read.kusto(cluster, database, query, conf).show(20)
