@@ -1,11 +1,7 @@
 package com.microsoft.kusto.spark.datasource
 
 import java.util.Locale
-
-import com.microsoft.kusto.spark.datasource.KustoOptions.newOption
-
 import scala.concurrent.duration.FiniteDuration
-
 
 object KustoOptions {
   private val kustoOptionNames = collection.mutable.Set[String]()
@@ -15,6 +11,7 @@ object KustoOptions {
     name
   }
 
+  // KeyVault options. Relevant only if credentials need to be retrieved from Key Vault
   val KEY_VAULT_URI = "keyVaultUri"
   val KEY_VAULT_CREDENTIALS = "keyVaultCredentials"
   val KEY_VAULT_PEM_FILE_PATH = "keyVaultPemFilePath"
@@ -58,7 +55,8 @@ object KustoOptions {
   // An integer number corresponding to the period in seconds after which the operation will timeout. Default: '5400' (90 minutes)
   val KUSTO_TIMEOUT_LIMIT: String = newOption("timeoutLimit")
 
-  // Partitioning parameters
+  // Partitioning parameters, CURRENTLY NOT USED
+  // CURRENTLY NOT USED
   val KUSTO_READ_PARTITION_MODE: String = newOption("partitionMode")
   // Note: for 'read', this allows to partition export from Kusto to blob (default is '1')
   // It does not affect the number of partitions created when reading from blob.
@@ -74,7 +72,7 @@ object KustoOptions {
   }
 
   // Blob Storage access parameters for source connector when working in 'scale' mode (read)
-  // These parameters will not be needed once we move to automatic provisioning
+  // These parameters will not be needed once we move to automatic blob provisioning
 
   // Transient storage account when reading from Kusto
   val KUSTO_BLOB_STORAGE_ACCOUNT_NAME: String = newOption("blobStorageAccountName")
@@ -87,7 +85,7 @@ object KustoOptions {
   val KUSTO_BLOB_CONTAINER: String = newOption("blobContainer")
   val NONE_RESULT_LIMIT = "none"
   // Partitioning modes allow to export data from Kusto to separate folders within the blob container per-partition
-  // Note! In current implementation this is not exploited by Kusto read connector, and is not recommended.
+  // Note! In current implementation this is not exploited by Kusto read connector
   // Left for future experimentation
   val supportedPartitioningModes: Set[String] = Set("hash")
 }
@@ -120,7 +118,7 @@ object KustoDebugOptions {
   // This option allows to override connector heuristics and force a specific mode.
   // Recommended to use only for debug and testing purposes
   // Supported values: Empty string (""), 'lean' (direct query), 'scale' (via blob). Default: empty
-  val KUSTO_DBG_FORCE_READ_MODE: String = newOption("readMode")
+  val KUSTO_DBG_FORCE_READ_MODE: String = newOption("dbgForceReadMode")
   // When reading via blob storage, compresses the data upon export from Kusto to Blob
   // This feature is experimental, in order to measure performance impact w/wo compression
   // Default: 'true'
