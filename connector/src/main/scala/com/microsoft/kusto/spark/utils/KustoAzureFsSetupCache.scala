@@ -10,43 +10,39 @@ private[kusto] object KustoAzureFsSetupCache {
 
   // Return 'true' iff the entry exists in the cache. If it doesn't, or differs - update the cache
   // now is typically 'new DateTime(DateTimeZone.UTC)'
-  def updateAndGetPrevStorageAccountAccess(account: String, secret: String, utcNow: DateTime): Boolean = {
-    var secreteCached = storageAccountKeyMap(account)
-    if (!secreteCached.isEmpty && (secreteCached != secret)) {
+  def updateAndGetPrevStorageAccountAccess(account: String, secret: String, now: DateTime): Boolean = {
+    var secretCached = storageAccountKeyMap(account)
+    if (!secretCached.isEmpty && (secretCached != secret)) {
       // Entry exists but with a different secret - remove it and update
       storageAccountKeyMap.remove(account)
-      secreteCached = ""
+      secretCached = ""
     }
 
-    if (secreteCached.isEmpty || checkIfRefreshNeeded(utcNow)) {
+    if (secretCached.isEmpty || checkIfRefreshNeeded(now)) {
       storageAccountKeyMap += (account -> secret)
-      lastRefresh = utcNow
-
-      return false
-    }
-    true
+      lastRefresh = now
+      false
+    } else true
   }
 
-  def updateAndGetPrevSas(container: String, account: String, secret: String, utcNow: DateTime): Boolean = {
+  def updateAndGetPrevSas(container: String, account: String, secret: String, now: DateTime): Boolean = {
     val key = container + "." + account
-    var secreteCached = storageSasMap(key)
-    if (!secreteCached.isEmpty && (secreteCached != secret)) {
+    var secretCached = storageSasMap(key)
+    if (!secretCached.isEmpty && (secretCached != secret)) {
       // Entry exists but with a different secret - remove it and update
       storageSasMap.remove(key)
-      secreteCached = ""
+      secretCached = ""
     }
 
-    if (secreteCached.isEmpty || checkIfRefreshNeeded(utcNow)) {
+    if (secretCached.isEmpty || checkIfRefreshNeeded(now)) {
       storageSasMap += (key -> secret)
-      lastRefresh = utcNow
-
-      return false
-    }
-    true
+      lastRefresh = now
+      false
+    } else true
   }
 
-  def updateAndGetPrevNativeAzureFs(utcNow: DateTime): Boolean = {
-    if (nativeAzureFsSet || checkIfRefreshNeeded(utcNow)) true else {
+  def updateAndGetPrevNativeAzureFs(now: DateTime): Boolean = {
+    if (nativeAzureFsSet || checkIfRefreshNeeded(now)) true else {
       nativeAzureFsSet = true
       false
     }

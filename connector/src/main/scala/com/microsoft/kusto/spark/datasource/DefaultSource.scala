@@ -96,7 +96,7 @@ class DefaultSource extends CreatableRelationProvider
           keyVaultAuthentication.get))
       } else {
         // Params passed from options
-        (authenticationParameters, KDSU.tryGetAndValidateTransientStorageParameters(
+        (authenticationParameters, KDSU.getAndValidateTransientStorageParametersIfExist(
           parameters.get(KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME),
           parameters.get(KustoOptions.KUSTO_BLOB_CONTAINER),
           storageSecret,

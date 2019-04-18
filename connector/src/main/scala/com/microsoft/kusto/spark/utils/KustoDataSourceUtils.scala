@@ -367,7 +367,7 @@ object KustoDataSourceUtils {
             val secret = if (storageSecret.isEmpty) Some(keyVaultParameters.secret) else storageSecret
             val container = if (storageContainer.isEmpty) Some(keyVaultParameters.container) else storageContainer
 
-            tryGetAndValidateTransientStorageParameters(account, container, secret, storageSecretIsAccountKey = true)
+            getAndValidateTransientStorageParametersIfExist(account, container, secret, storageSecretIsAccountKey = true)
           }
         }
       } else {
@@ -376,10 +376,10 @@ object KustoDataSourceUtils {
     }
   }
 
-  private[kusto] def tryGetAndValidateTransientStorageParameters(storageAccount: Option[String],
-                                                                 storageContainer: Option[String],
-                                                                 storageAccountSecret: Option[String],
-                                                                 storageSecretIsAccountKey: Boolean): Option[KustoStorageParameters] = {
+  private[kusto] def getAndValidateTransientStorageParametersIfExist(storageAccount: Option[String],
+                                                                     storageContainer: Option[String],
+                                                                     storageAccountSecret: Option[String],
+                                                                     storageSecretIsAccountKey: Boolean): Option[KustoStorageParameters] = {
 
     val paramsFromSas = if (!storageSecretIsAccountKey && storageAccountSecret.isDefined) {
       Some(parseSas(storageAccountSecret.get))

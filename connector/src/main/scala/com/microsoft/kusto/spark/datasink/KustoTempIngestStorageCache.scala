@@ -39,7 +39,7 @@ object KustoTempIngestStorageCache {
 
       storagesMap += clusterAlias -> storage
       roundRobinIdx = 0
-      return storage(roundRobinIdx)
+      storage(roundRobinIdx)
     }
     else {
       roundRobinIdx = (roundRobinIdx + 1) % storageCached.get.length
