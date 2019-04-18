@@ -3,12 +3,13 @@ import java.security.InvalidParameterException
 import java.util.UUID
 
 import com.microsoft.azure.kusto.data.Client
-import com.microsoft.kusto.spark.utils.{KustoBlobStorageUtils, CslCommandsGenerator, KustoClient, KustoQueryUtils, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.{CslCommandsGenerator, KustoAzureFsSetupCache, KustoBlobStorageUtils, KustoClient, KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.spark.Partition
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{Row, SparkSession}
+import org.joda.time.{DateTime, DateTimeZone}
 
 import scala.concurrent.duration.FiniteDuration
 
@@ -32,19 +33,18 @@ private[kusto] case class KustoReadRequest(sparkSession: SparkSession,
                                            authentication: KustoAuthentication,
                                            timeout: FiniteDuration)
 
-private[kusto] case class KustoReadOptions(isLeanMode: Boolean = false,
-                                           isConfigureFileSystem: Boolean = true,
-                                           isCompressOnExport: Boolean = true,
-                                           exportSplitLimitMb: Long = 1024)
+private[kusto] case class KustoReadOptions( forcedReadMode: String = "",
+                                            isCompressOnExport: Boolean = true,
+                                            exportSplitLimitMb: Long = 1024)
 
 private[kusto] object KustoReader {
   private val myName = this.getClass.getSimpleName
 
   private[kusto] def leanBuildScan(
+    kustoClient: Client,
     request: KustoReadRequest,
     filtering: KustoFiltering = KustoFiltering.apply()): RDD[Row] = {
 
-    val kustoClient = KustoClient.getAdmin(request.authentication, request.kustoCoordinates.cluster)
     val filteredQuery = KustoFilter.pruneAndFilter(request.schema, request.query, filtering)
     val kustoResult = kustoClient.execute(request.kustoCoordinates.database, filteredQuery)
     val serializer = KustoResponseDeserializer(kustoResult)
@@ -52,15 +52,16 @@ private[kusto] object KustoReader {
   }
 
   private[kusto] def scaleBuildScan(
+     kustoClient: Client,
      request: KustoReadRequest,
      storage: KustoStorageParameters,
      partitionInfo: KustoPartitionParameters,
      options: KustoReadOptions = KustoReadOptions.apply(),
      filtering: KustoFiltering = KustoFiltering.apply()): RDD[Row] = {
 
-    if (options.isConfigureFileSystem) setupBlobAccess(request, storage)
+    setupBlobAccess(request, storage)
     val partitions = calculatePartitions(partitionInfo)
-    val reader = new KustoReader(request, storage)
+    val reader = new KustoReader(kustoClient, request, storage)
     val directory = KustoQueryUtils.simplifyName(s"${request.kustoCoordinates.database}/dir${UUID.randomUUID()}/")
 
     for (partition <- partitions) {
@@ -82,7 +83,7 @@ private[kusto] object KustoReader {
         // Check whether the result is empty, causing an IO exception on reading empty parquet file
         // We don't mind generating the filtered query again - it only happens upon exception
         val filteredQuery = KustoFilter.pruneAndFilter(request.schema, request.query, filtering)
-        val count = KDSU.countRows(reader.client, filteredQuery, request.kustoCoordinates.database)
+        val count = KDSU.countRows(kustoClient, filteredQuery, request.kustoCoordinates.database)
 
         if (count == 0) {
           request.sparkSession.emptyDataFrame.rdd
@@ -107,13 +108,21 @@ private[kusto] object KustoReader {
 
   private[kusto] def setupBlobAccess(request: KustoReadRequest, storage: KustoStorageParameters): Unit = {
     val config = request.sparkSession.conf
+    val now = new DateTime(DateTimeZone.UTC)
     if (storage.secretIsAccountKey) {
-      config.set(s"fs.azure.account.key.${storage.account}.blob.core.windows.net", s"${storage.secret}")
+      if (!KustoAzureFsSetupCache.updateAndGetPrevStorageAccountAccess(storage.account, storage.secret, now)) {
+        config.set(s"fs.azure.account.key.${storage.account}.blob.core.windows.net", s"${storage.secret}")
+      }
     }
     else {
-      config.set(s"fs.azure.sas.${storage.container}.${storage.account}.blob.core.windows.net", s"${storage.secret}")
+      if (!KustoAzureFsSetupCache.updateAndGetPrevSas(storage.container, storage.account, storage.secret, now)) {
+        config.set(s"fs.azure.sas.${storage.container}.${storage.account}.blob.core.windows.net", s"${storage.secret}")
+      }
     }
-    config.set("fs.azure", "org.apache.hadoop.fs.azure.NativeAzureFileSystem")
+
+    if (!KustoAzureFsSetupCache.updateAndGetPrevNativeAzureFs(now)) {
+      config.set("fs.azure", "org.apache.hadoop.fs.azure.NativeAzureFileSystem")
+    }
   }
 
   private def calculatePartitions(partitionInfo: KustoPartitionParameters): Array[Partition] = {
@@ -136,9 +145,8 @@ private[kusto] object KustoReader {
   }
 }
 
-private[kusto] class KustoReader(request: KustoReadRequest, storage: KustoStorageParameters) {
+private[kusto] class KustoReader(client: Client, request: KustoReadRequest, storage: KustoStorageParameters) {
   private val myName = this.getClass.getSimpleName
-  val client: Client = KustoClient.getAdmin(request.authentication, request.kustoCoordinates.cluster)
 
   // Export a single partition from Kusto to transient Blob storage.
   // Returns the directory path for these blobs

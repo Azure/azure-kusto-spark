@@ -116,7 +116,7 @@ class KustoBlobAccessE2E extends FlatSpec with BeforeAndAfterAll {
     val partitionPredicate = s" hash($firstColumn, $numberOfPartitions) == $partitionId"
     val useKeyNotSas = blobSas == null
 
-    val (blobContainerUri, directory: String, secreteString: String) = getBlobCoordinates(storageAccount, container, secret, useKeyNotSas)
+    val (blobContainerUri, directory: String, secretString: String) = getBlobCoordinates(storageAccount, container, secret, useKeyNotSas)
 
     val (exportCommand) = CslCommandsGenerator.generateExportDataCommand(
       myTable,

@@ -51,4 +51,11 @@ If you encounter this error and cannot identify and fix the mismatch, consider d
 2. When writing to Kusto, [entity naming rules](https://docs.microsoft.com/en-us/azure/kusto/query/schema-entities/entity-names)
   must be followed to avoid collisions with Kusto reserved keywords.
   For details, refer to [these](https://docs.microsoft.com/en-us/azure/kusto/query/schema-entities/entity-names#naming-your-entities-to-avoid-collisions-with-kusto-language-keywords)
-  guidlines.   
+  guidelines.   
+
+# 1.0.0-Beta-03:
+* Add heuristics to automatically decide whether to use lean (direct query) 
+or scale (via transient blob storage) read mode.
+'KUSTO_READ_MODE' option is no longer supported (there is a debug option for testing purposes)
+* Remove dependency on Jackson-core library
+* Deprecate 'KUSTO_BLOB_SET_FS_CONFIG' option. Instead, cache relevant configuration and set if needed

@@ -357,78 +357,76 @@ object KustoDataSourceUtils {
                                                           storageContainer: Option[String],
                                                           storageSecret: Option[String],
                                                           storageSecretIsAccountKey: Boolean,
-                                                          keyVaultAuthentication: KeyVaultAuthentication): KustoStorageParameters = {
+                                                          keyVaultAuthentication: KeyVaultAuthentication): Option[KustoStorageParameters] = {
     if (!storageSecretIsAccountKey) {
       // If SAS option defined - take sas
-      KustoDataSourceUtils.parseSas(storageSecret.get)
+      Some(KustoDataSourceUtils.parseSas(storageSecret.get))
     } else {
       if (storageAccount.isEmpty || storageContainer.isEmpty || storageSecret.isEmpty) {
         val keyVaultParameters = KeyVaultUtils.getStorageParamsFromKeyVault(keyVaultAuthentication)
         // If KeyVault contains sas take it
         if(!keyVaultParameters.secretIsAccountKey) {
-          keyVaultParameters
+          Some(keyVaultParameters)
         } else {
-          // Try combine
+          if ((storageAccount.isEmpty && keyVaultParameters.account.isEmpty) ||
+              (storageContainer.isEmpty && keyVaultParameters.container.isEmpty) ||
+              (storageSecret.isEmpty && keyVaultParameters.secret.isEmpty)) {
 
-          val account = if (storageAccount.isEmpty) {
-            Some(keyVaultParameters.account)
-          } else {
-            storageAccount
-          }
-          val secret = if (storageSecret.isEmpty) {
-            Some(keyVaultParameters.secret)
-          } else {
-            storageSecret
-          }
-          val container = if (storageContainer.isEmpty) {
-            Some(keyVaultParameters.container)
-          } else {
-            storageContainer
-          }
+              // We don't have enough information to access blob storage
+              None
+            }
+          else {
+            // Try combine
+            val account = if (storageAccount.isEmpty) Some(keyVaultParameters.account) else storageAccount
+            val secret = if (storageSecret.isEmpty) Some(keyVaultParameters.secret) else storageSecret
+            val container = if (storageContainer.isEmpty) Some(keyVaultParameters.container) else storageContainer
 
-          getAndValidateTransientStorageParameters(account, container, secret, storageSecretIsAccountKey = true)
+            getAndValidateTransientStorageParametersIfExist(account, container, secret, storageSecretIsAccountKey = true)
+          }
         }
       } else {
-        KustoStorageParameters(storageAccount.get, storageSecret.get, storageContainer.get, storageSecretIsAccountKey)
+        Some(KustoStorageParameters(storageAccount.get, storageSecret.get, storageContainer.get, storageSecretIsAccountKey))
       }
     }
   }
 
-  private[kusto] def getAndValidateTransientStorageParameters(storageAccount: Option[String],
-                                                              storageContainer: Option[String],
-                                                              storageAccountSecret: Option[String],
-                                                              storageSecretIsAccountKey: Boolean): KustoStorageParameters = {
+  private[kusto] def getAndValidateTransientStorageParametersIfExist(storageAccount: Option[String],
+                                                                     storageContainer: Option[String],
+                                                                     storageAccountSecret: Option[String],
+                                                                     storageSecretIsAccountKey: Boolean): Option[KustoStorageParameters] = {
 
-    if (!storageSecretIsAccountKey) {
-      val paramsFromSas = parseSas(storageAccountSecret.get)
+    val paramsFromSas = if (!storageSecretIsAccountKey && storageAccountSecret.isDefined) {
+      Some(parseSas(storageAccountSecret.get))
+    } else None
 
-      if (storageAccount.isDefined && !storageAccount.get.equals(paramsFromSas.account)) {
+    if (paramsFromSas.isDefined) {
+      if (storageAccount.isDefined && !storageAccount.get.equals(paramsFromSas.get.account)) {
         throw new InvalidParameterException("Storage account name does not match the name in storage access SAS key.")
       }
 
-      if (storageContainer.isDefined && !storageContainer.get.equals(paramsFromSas.container)) {
+      if (storageContainer.isDefined && !storageContainer.get.equals(paramsFromSas.get.container)) {
         throw new InvalidParameterException("Storage container name does not match the name in storage access SAS key.")
       }
 
       paramsFromSas
-    } else {
-      if (storageAccount.isEmpty) {
-        throw new InvalidParameterException("Storage account name is empty. Reading in 'Scale' mode requires a transient blob storage")
-      }
-
-      if (storageContainer.isEmpty) {
-        throw new InvalidParameterException("Storage container name is empty.")
-      }
-
-      if (storageAccountSecret.isEmpty) {
-        throw new InvalidParameterException("Storage account secret is empty. Please provide a storage account key or a SAS key")
-      }
-
-      KustoStorageParameters(storageAccount.get, storageAccountSecret.get, storageContainer.get, storageSecretIsAccountKey)
     }
+    else if (storageAccount.isDefined && storageContainer.isDefined && storageAccountSecret.isDefined) {
+      Some(KustoStorageParameters(storageAccount.get, storageAccountSecret.get, storageContainer.get, storageSecretIsAccountKey))
+    }
+    else None
   }
 
   private[kusto] def countRows(client: Client, query: String, database: String): Int = {
     client.execute(database, generateCountQuery(query)).getValues.get(0).get(0).toInt
+  }
+
+  private[kusto] def isLeanReadMode(numberOfRows: Int, storageAccessProvided: Boolean, forcedMode: String): Boolean = {
+    if (!forcedMode.isEmpty) {
+      forcedMode.equalsIgnoreCase("lean")
+    } else {
+      // see https://docs.microsoft.com/en-us/azure/kusto/concepts/querylimits#limit-on-result-set-size-result-truncation
+      // for hard limit on query size
+      !(storageAccessProvided && numberOfRows > KCONST.directQueryUpperBoundRows)
+    }
   }
 }
