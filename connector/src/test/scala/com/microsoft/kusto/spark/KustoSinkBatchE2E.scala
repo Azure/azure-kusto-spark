@@ -74,7 +74,7 @@ class KustoSinkBatchE2E extends FlatSpec with BeforeAndAfterAll{
     KDSU.logFatal(myName,"******** fatal  ********. Use a 'logLevel' system variable to change the logging level.")
   }
 
-  "KustoBatchSinkDataTypesTest" should "ingest structured data to a Kusto cluster" taggedAs KustoE2E in {
+  "KustoBatchSinkDataTypesTest" should "ingest structured data of all types to a Kusto cluster" taggedAs KustoE2E in {
     import spark.implicits._
 
     val prefix = "KustoBatchSinkDataTypesTest_Ingest"
@@ -141,11 +141,16 @@ class KustoSinkBatchE2E extends FlatSpec with BeforeAndAfterAll{
         isEqual = false
       }
     }
+
     assert(isEqual)
     KDSU.logInfo(myName, s"KustoBatchSinkDataTypesTest: Ingestion results validated for table '$table'")
+
+    val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://$cluster.kusto.windows.net", appId, appKey, authority)
+    val engineClient = ClientFactory.createClient(engineKcsb)
+    KustoTestUtils.tryDropAllTablesByPrefix(engineClient, database, prefix)
   }
 
-  "KustoBatchSinkSync" should "also ingest structured data to a Kusto cluster" taggedAs KustoE2E in {
+  "KustoBatchSinkSync" should "also ingest simple data to a Kusto cluster" taggedAs KustoE2E in {
     import spark.implicits._
     val df = rows.toDF("name", "value")
     val prefix = "KustoBatchSinkE2E_Ingest"

@@ -98,7 +98,8 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
     if (getSchemaQuery.isEmpty) {
       throw new RuntimeException("Spark connector cannot run Kusto commands. Please provide a valid query")
     }
-    KustoResponseDeserializer(KustoClient.getAdmin(authentication, kustoCoordinates.cluster).execute(kustoCoordinates.database, getSchemaQuery)).getSchema
+
+    KDSU.getSchema(kustoCoordinates.database, getSchemaQuery, KustoClient.getAdmin(authentication, kustoCoordinates.cluster))
   }
 
   private def getPartitioningColumn: String = {
