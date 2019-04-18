@@ -141,8 +141,13 @@ class KustoSinkBatchE2E extends FlatSpec with BeforeAndAfterAll{
         isEqual = false
       }
     }
+
     assert(isEqual)
     KDSU.logInfo(myName, s"KustoBatchSinkDataTypesTest: Ingestion results validated for table '$table'")
+
+    val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://$cluster.kusto.windows.net", appId, appKey, authority)
+    val engineClient = ClientFactory.createClient(engineKcsb)
+    KustoTestUtils.tryDropAllTablesByPrefix(engineClient, database, prefix)
   }
 
   "KustoBatchSinkSync" should "also ingest simple data to a Kusto cluster" taggedAs KustoE2E in {

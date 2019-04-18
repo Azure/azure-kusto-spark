@@ -9,16 +9,16 @@ import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import scala.collection.JavaConverters._
 import scala.concurrent.TimeoutException
 
-object KustoTestUtils {
+private [kusto] object KustoTestUtils {
   private val myName = this.getClass.getSimpleName
   private val loggingLevel: Option[String] = Option(System.getProperty("logLevel"))
   if (loggingLevel.isDefined) KDSU.setLoggingLevel(loggingLevel.get)
 
-  private [kusto] def validateResultsAndCleanup(
+  def validateResultsAndCleanup(
     kustoAdminClient: Client,
     table: String,
     database: String,
-    expectedNumberOfRows: Int,
+    expectedNumberOfRows: Int, // Set a negative value to skip validation
     timeoutMs: Int,
     cleanupAllTables: Boolean = true,
     tableCleanupPrefix: String = "") : Unit = {
@@ -36,7 +36,7 @@ object KustoTestUtils {
       timeElapsedMs += sleepPeriodMs
     }
 
-    if (cleanupAllTables){
+    if (cleanupAllTables) {
       if (tableCleanupPrefix.isEmpty) throw new InvalidParameterException("Tables cleanup prefix must be set if 'cleanupAllTables' is 'true'")
       tryDropAllTablesByPrefix(kustoAdminClient, database, tableCleanupPrefix)
     }
@@ -44,14 +44,17 @@ object KustoTestUtils {
       kustoAdminClient.execute(database, generateDropTablesCommand(table))
     }
 
-    if (rowCount == expectedNumberOfRows) {
-      KDSU.logInfo(myName, s"KustoSinkStreamingE2E: Ingestion results validated for table '$table'")
-    } else {
-      throw new TimeoutException(s"KustoSinkStreamingE2E: Timed out waiting for ingest. $rowCount rows found in database '$database' table '$table', expected: $expectedNumberOfRows. Elapsed time:$timeElapsedMs")
+    if (expectedNumberOfRows >= 0) {
+      if (rowCount == expectedNumberOfRows) {
+        KDSU.logInfo(myName, s"KustoSinkStreamingE2E: Ingestion results validated for table '$table'")
+      } else {
+        throw new TimeoutException(s"KustoSinkStreamingE2E: Timed out waiting for ingest. $rowCount rows found in database '$database' table '$table', expected: $expectedNumberOfRows. Elapsed time:$timeElapsedMs")
+      }
     }
   }
 
-  private[kusto] def tryDropAllTablesByPrefix(kustoAdminClient: Client, database: String, tablePrefix: String): Unit =
+
+  def tryDropAllTablesByPrefix(kustoAdminClient: Client, database: String, tablePrefix: String): Unit =
   {
     try{
       val res = kustoAdminClient.execute(database, generateFindCurrentTempTablesCommand(tablePrefix))

@@ -195,7 +195,7 @@ object KustoWriter {
       // Protect tmp table from merge/rebuild and move data to the table requested by customer. This operation is atomic.
       kustoAdminClient.execute(database, generateTableAlterMergePolicyCommand(tmpTableName, allowMerge = false, allowRebuild = false))
       kustoAdminClient.execute(database, generateTableMoveExtentsCommand(tmpTableName, table.get))
-      KDSU.logInfo(myName, s"write to Kusto table '$table' finished successfully $batchIdIfExists")
+      KDSU.logInfo(myName, s"write to Kusto table '${table.get}' finished successfully $batchIdIfExists")
     }
     catch {
       case exception: Exception =>
