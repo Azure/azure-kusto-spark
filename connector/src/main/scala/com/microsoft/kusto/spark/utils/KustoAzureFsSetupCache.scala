@@ -11,7 +11,7 @@ private[kusto] object KustoAzureFsSetupCache {
   // Return 'true' iff the entry exists in the cache. If it doesn't, or differs - update the cache
   // now is typically 'new DateTime(DateTimeZone.UTC)'
   def updateAndGetPrevStorageAccountAccess(account: String, secret: String, now: DateTime): Boolean = {
-    var secretCached = storageAccountKeyMap(account)
+    var secretCached = storageAccountKeyMap.getOrElse(account, "")
     if (!secretCached.isEmpty && (secretCached != secret)) {
       // Entry exists but with a different secret - remove it and update
       storageAccountKeyMap.remove(account)
@@ -19,7 +19,7 @@ private[kusto] object KustoAzureFsSetupCache {
     }
 
     if (secretCached.isEmpty || checkIfRefreshNeeded(now)) {
-      storageAccountKeyMap += (account -> secret)
+      storageAccountKeyMap.put(account, secret)
       lastRefresh = now
       false
     } else true
@@ -27,7 +27,7 @@ private[kusto] object KustoAzureFsSetupCache {
 
   def updateAndGetPrevSas(container: String, account: String, secret: String, now: DateTime): Boolean = {
     val key = container + "." + account
-    var secretCached = storageSasMap(key)
+    var secretCached = storageSasMap.getOrElse(key, "")
     if (!secretCached.isEmpty && (secretCached != secret)) {
       // Entry exists but with a different secret - remove it and update
       storageSasMap.remove(key)
@@ -35,7 +35,7 @@ private[kusto] object KustoAzureFsSetupCache {
     }
 
     if (secretCached.isEmpty || checkIfRefreshNeeded(now)) {
-      storageSasMap += (key -> secret)
+      storageSasMap.put(key, secret)
       lastRefresh = now
       false
     } else true
