@@ -102,25 +102,22 @@ object KustoConnectorDemo {
 
     kustoQ.start().awaitTermination(TimeUnit.MINUTES.toMillis(8))
 
-      // READING IN LEAN MODE
       val conf: Map[String, String] = Map(
       KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
       KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
-      KustoOptions.KUSTO_QUERY -> s"$table | where (ColB % 1000 == 0) | distinct ColA",
-      KustoOptions.KUSTO_READ_MODE->"lean"
+      KustoOptions.KUSTO_QUERY -> s"$table | where (ColB % 1000 == 0) | distinct ColA"
     )
 
     // Simplified syntax flavour
     import com.microsoft.kusto.spark.sql.extension.SparkExtension._
     val df2 = spark.read.kusto(cluster, database, "", conf)
 
-    // ELABORATE READ SYNTAX, LEAN
+    // ELABORATE READ SYNTAX
     // Here we read the whole table.
     val conf2: Map[String, String] = Map(
           KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
           KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
-          KustoOptions.KUSTO_QUERY -> "StringAndIntTable",
-          KustoOptions.KUSTO_READ_MODE->"lean"
+          KustoOptions.KUSTO_QUERY -> "StringAndIntTable"
         )
 
         val df3 = spark.sqlContext.read
@@ -130,7 +127,8 @@ object KustoConnectorDemo {
           .options(conf2)
           .load()
 
-    // GET STORAGE PARAMETERS FOR SCALE READ
+    // GET STORAGE PARAMETERS FOR READING A LARGE DATA SET
+    // NOTE: this is a temporary requirement - future connector versions will provision storage internally
     // Use either container/account-key/account name, or container SaS
     val container = "Your container name" // Databricks example: dbutils.secrets.get(scope = "KustoDemos", key = "blobContainer")
     val storageAccountKey = "Your storage account key" // Databricks example: dbutils.secrets.get(scope = "KustoDemos", key = "blobStorageAccountKey")
@@ -148,7 +146,7 @@ object KustoConnectorDemo {
     // when using SAS
     // spark.conf.set(s"fs.azure.sas.$container.$storageAccountName.blob.core.windows.net", s"$storageSas")
 
-    // READING IN SCALE MODE: SET UP CONFIGURATION
+    // READING LARGE DATA SET: SET UP CONFIGURATION
     val conf3: Map[String, String] = Map(
       KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
       KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
@@ -158,11 +156,11 @@ object KustoConnectorDemo {
       KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_KEY -> storageAccountKey
     )
 
-    // READING IN SCALE MODE (FULL TABLE, UNFILTERED)
+    // READING LARGE DATA SET(FULL TABLE, UNFILTERED)
     val query = "ReallyBigTable"
     val df4 = spark.read.kusto(cluster, database, query, conf3)
 
-    // READING IN SCALE MODE (WITH PRUNING AND FILTERING)
+    // READING LARGE DATA SET (WITH PRUNING AND FILTERING)
     val df5 = spark.read.kusto(cluster, database, query, conf3)
 
     val dfFiltered = df5
@@ -173,15 +171,15 @@ object KustoConnectorDemo {
 
     // READING USING KEY VAULT ACCESS
     // There are two different approaches to use parameters stored in Azure Key Vault for Kusto connector:
-    // 1. One can use DataBricks KV-assisted store under a DataBricks secrete scope (see https://docs.azuredatabricks.net/user-guide/secrets/secret-scopes.html#akv-ss). This is how keyVaultClientPassword is stored.
-    // 2. Some parameters, including all secretes required for Kusto connector operations, can be accessed as described in https://github.com/Azure/azure-kusto-spark/blob/dev/docs/Authentication.md
+    // 1. One can use DataBricks KV-assisted store under a DataBricks secret scope (see https://docs.azuredatabricks.net/user-guide/secrets/secret-scopes.html#akv-ss). This is how keyVaultClientPassword is stored.
+    // 2. Some parameters, including all secrets required for Kusto connector operations, can be accessed as described in https://github.com/Azure/azure-kusto-spark/blob/dev/docs/Authentication.md
     // This requires accessing the KV with the three parameters below
     val keyVaultClientPassword = "Password of the AAD client used to identify to your key vault"//Databricks example: dbutils.secrets.get(scope = "KustoDemos", key = "keyVaultClientPassword")
     val keyVaultClientID = "The client id of the AAD client used to identify to your key vault"
     val keyVaultUri = "https://<Your key vault name>.vault.azure.net"
 
     /************************************************************************************************************/
-    /* Using scale read. The following parameters are taken from Key Vault using connector Key Vault access     */
+    /* The following parameters are taken from Key Vault using connector Key Vault access                       */
     /* blobContainer, blobStorageAccountKey, blobStorageAccountName, kustoAppAuthority, kustoAppId, kustoAppKey */
     /************************************************************************************************************/
     val conf4: Map[String, String] = Map(
