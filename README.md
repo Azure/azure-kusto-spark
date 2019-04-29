@@ -32,7 +32,7 @@ link your application with the artifact below in order to use the Spark Kusto co
 ```
 groupId = com.microsoft.azure
 artifactId = spark-kusto-connector
-version = 1.0.0-Beta-02 
+version = 1.0.0-Beta-03 
 ```
 
 **In Maven**:
@@ -41,11 +41,11 @@ version = 1.0.0-Beta-02
 Clone this repository and build it locally to add it to your local maven repository, 
 or use the corresponding [released package](https://github.com/Azure/azure-kusto-spark/releases)
 
- ```xml
+ ```
    <dependency>
      <groupId>com.microsoft.azure</groupId>
      <artifactId>spark-kusto-connector</artifactId>
-     <version>1.0.0-Beta-02</version>
+     <version>1.0.0-Beta-03</version>
    </dependency>
 ```
 
@@ -71,8 +71,8 @@ In order to use the connector, you need to have:
 - [Maven 3.x](https://maven.apache.org/download.cgi) installed
 - Spark version 2.4.0 or higher
 
-    >**Note:** 2.3.x versions are also supported, but require some changes in pom.xml dependencies. 
-      For details, refer to [CHANGELIST](docs/CHANGELIST.md)
+> Note: when working with 2.3 Spark version or lower, please refer to [Building for legacy Spark versions](docs/CHANGELIST.md#building-for-legacy-spark-versions)
+ section of the [CHANGELIST](docs/CHANGELIST.md) document 
 
 ## Build Commands
    

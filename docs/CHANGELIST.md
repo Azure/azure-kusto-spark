@@ -7,8 +7,7 @@
 - Fixed DataTypes support, including DateTime and decimal
 - Fixed streaming sink when working with multiple batches. Handle empty batches
 - Added 'KUSTO_WRITE_RESULT_LIMIT' option. When writing to Kusto, limits the number of rows read back as BaseRelation
-- Adjusted to Spark 2.4. This is optimized for Azure DataBricks default. In order to use with Spark 2.3, pom.xml
-  file must be adjusted: spark.version (to 2.3.x) and json4s-jackson_2.11 (to 3.2.11)
+- Adjusted to Spark 2.4. This is optimized for Azure DataBricks default. 
 - KustoOptions.KUSTO_TABLE is no longer used in reading using kusto source
 
 # 1.0.0-Beta-02:
@@ -41,6 +40,13 @@ for reading from Kusto, and it requires the user to provide transient blob stora
 ### Packaging
 * Organized samples and connector as separate modules to reduce dependencies
 
+# 1.0.0-Beta-03:
+* Add heuristics to automatically decide whether to use lean (direct query) 
+or scale (via transient blob storage) read mode.
+'KUSTO_READ_MODE' option is no longer supported (there is a debug option for testing purposes)
+* Remove dependency on Jackson-core library
+* Deprecate 'KUSTO_BLOB_SET_FS_CONFIG' option. Instead, cache relevant configuration and set if needed
+
 # Known Issues and Tips
 1. When running with spark 'wholestage codegen' enabled, a mismatch between schema 'nullable' definition and actual data containing
 null values can lead to a NullPointerException to be thrown by org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter.
@@ -51,11 +57,16 @@ If you encounter this error and cannot identify and fix the mismatch, consider d
 2. When writing to Kusto, [entity naming rules](https://docs.microsoft.com/en-us/azure/kusto/query/schema-entities/entity-names)
   must be followed to avoid collisions with Kusto reserved keywords.
   For details, refer to [these](https://docs.microsoft.com/en-us/azure/kusto/query/schema-entities/entity-names#naming-your-entities-to-avoid-collisions-with-kusto-language-keywords)
-  guidelines.   
-
-# 1.0.0-Beta-03:
-* Add heuristics to automatically decide whether to use lean (direct query) 
-or scale (via transient blob storage) read mode.
-'KUSTO_READ_MODE' option is no longer supported (there is a debug option for testing purposes)
-* Remove dependency on Jackson-core library
-* Deprecate 'KUSTO_BLOB_SET_FS_CONFIG' option. Instead, cache relevant configuration and set if needed
+  guidelines. 
+  
+### Building for legacy Spark versions:
+Each release is tested with Spark 2.4. 
+Using other Spark versions is also possible, but may require some changes in libraries dependencies.
+Specifically for Spark 2.3, the changes below are required (the list is not guaranteed to be exhaustive).  
+* In [azure-kusto-spark pom file](../pom.xml):
+    * Set spark.version to 2.3.x
+* In [spark-kusto-connector pom file](../connector/pom.xml) adjust the following artifacts:
+  * Set jackson-databind version to 2.6.7.1 
+  * Set com.fasterxml.jackson.module version to 2.6.7.1
+  * Set json4s-core_${scala.version} version to 3.2.11
+  * Set json4s-ast_${scala.version} version to 3.2.11  

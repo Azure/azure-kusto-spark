@@ -94,7 +94,7 @@ WIth regards to Kusto target cluster configuration, one of the factors that impa
 is [Ingestion Batching Policy](https://docs.microsoft.com/en-us/azure/kusto/concepts/batchingpolicy). Default policy 
 works well for typical scenarios, especially when writing large amounts of data as batch. For reduced latency,
 consider altering the policy to a relatively low value (minimal allowed is 10 seconds).
-**This is mostly relevant when writing to Kusto in streaming mode**
+**This is mostly relevant when writing to Kusto in streaming mode**.
 For more details and command reference, please see [Ingestion Batching Policy command reference](https://docs.microsoft.com/en-us/azure/kusto/management/batching-policy).
  
 ### Examples
