@@ -58,7 +58,7 @@ class KustoPruneAndFilterE2E extends FlatSpec with BeforeAndAfterAll {
     val conf = Map(
       KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
       KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
-      KustoOptions.KUSTO_READ_MODE -> "lean"
+      KustoDebugOptions.KUSTO_DBG_FORCE_READ_MODE -> "lean"
     )
 
     val df = spark.read.kusto(cluster, database, query, conf).select("ColA")
@@ -79,14 +79,12 @@ class KustoPruneAndFilterE2E extends FlatSpec with BeforeAndAfterAll {
               KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
               KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME -> storageAccount,
               KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_KEY -> blobKey,
-              KustoOptions.KUSTO_BLOB_CONTAINER -> container,
-              KustoOptions.KUSTO_BLOB_SET_FS_CONFIG -> "true")
+              KustoOptions.KUSTO_BLOB_CONTAINER -> container)
       }
       else {
         Map(KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
           KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
-          KustoOptions.KUSTO_BLOB_STORAGE_SAS_URL -> blobSas,
-          KustoOptions.KUSTO_BLOB_SET_FS_CONFIG -> "true"
+          KustoOptions.KUSTO_BLOB_STORAGE_SAS_URL -> blobSas
 //          , KustoDebugOptions.KUSTO_DBG_BLOB_FORCE_KEEP -> "true"
         )
       }
@@ -119,7 +117,6 @@ class KustoPruneAndFilterE2E extends FlatSpec with BeforeAndAfterAll {
 
     dfOrig.write
       .format("com.microsoft.kusto.spark.datasource")
-      .partitionBy("value")
       .option(KustoOptions.KUSTO_CLUSTER, cluster)
       .option(KustoOptions.KUSTO_DATABASE, database)
       .option(KustoOptions.KUSTO_TABLE, query)
@@ -134,14 +131,12 @@ class KustoPruneAndFilterE2E extends FlatSpec with BeforeAndAfterAll {
         KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME -> storageAccount,
         KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_KEY -> blobKey,
         KustoOptions.KUSTO_BLOB_CONTAINER -> container,
-        KustoOptions.KUSTO_BLOB_SET_FS_CONFIG -> "true",
         KustoDebugOptions.KUSTO_DBG_BLOB_COMPRESS_ON_EXPORT -> "false") // Just to test this option
     }
     else {
       Map(KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
         KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
         KustoOptions.KUSTO_BLOB_STORAGE_SAS_URL -> blobSas,
-        KustoOptions.KUSTO_BLOB_SET_FS_CONFIG -> "true",
         KustoDebugOptions.KUSTO_DBG_BLOB_COMPRESS_ON_EXPORT -> "false") // Just to test this option
     }
 
@@ -192,7 +187,6 @@ class KustoPruneAndFilterE2E extends FlatSpec with BeforeAndAfterAll {
 
     dfOrig.write
       .format("com.microsoft.kusto.spark.datasource")
-      .partitionBy("value")
       .option(KustoOptions.KUSTO_CLUSTER, cluster)
       .option(KustoOptions.KUSTO_DATABASE, database)
       .option(KustoOptions.KUSTO_TABLE, query)
@@ -206,15 +200,12 @@ class KustoPruneAndFilterE2E extends FlatSpec with BeforeAndAfterAll {
         KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
         KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME -> storageAccount,
         KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_KEY -> blobKey,
-        KustoOptions.KUSTO_BLOB_CONTAINER -> container,
-        KustoOptions.KUSTO_BLOB_SET_FS_CONFIG -> "true"
-      )
+        KustoOptions.KUSTO_BLOB_CONTAINER -> container)
     }
     else {
       Map(KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
         KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
-        KustoOptions.KUSTO_BLOB_STORAGE_SAS_URL -> blobSas,
-        KustoOptions.KUSTO_BLOB_SET_FS_CONFIG -> "true")
+        KustoOptions.KUSTO_BLOB_STORAGE_SAS_URL -> blobSas)
     }
 
     val dfResult = spark.read.kusto(cluster, database, query, conf)

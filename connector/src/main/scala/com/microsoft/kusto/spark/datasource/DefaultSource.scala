@@ -48,47 +48,26 @@ class DefaultSource extends CreatableRelationProvider
   }
 
   def adjustParametersForBaseRelation(parameters: Map[String, String], limit: Option[Int]): Map[String, String] = {
-    val readMode = parameters.get(KustoOptions.KUSTO_READ_MODE)
-    val limitIsSmall = limit.isDefined && limit.get <= 200
-    var adjustedParams = parameters
-
-    if (readMode.isEmpty && limitIsSmall) {
-      adjustedParams = parameters + (KustoOptions.KUSTO_READ_MODE -> "lean") + (KustoOptions.KUSTO_NUM_PARTITIONS -> "1")
-    } else if (parameters.get(KustoOptions.KUSTO_BLOB_STORAGE_SAS_URL).isEmpty && (parameters.get(KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME).isEmpty ||
-        parameters.get(KustoOptions.KUSTO_BLOB_CONTAINER).isEmpty ||
-        parameters.get(KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_KEY).isEmpty)) {
-      if (readMode.isDefined && !readMode.get.equalsIgnoreCase("lean")) {
-        throw new InvalidParameterException(s"Read mode is set to '${readMode.get}', but transient storage parameters are not provided")
-      }
-      adjustedParams = parameters + (KustoOptions.KUSTO_READ_MODE -> "lean") + (KustoOptions.KUSTO_NUM_PARTITIONS -> "1")
-    }
-
     if (limit.isDefined) {
-      adjustedParams + (KustoOptions.KUSTO_QUERY -> KustoQueryUtils.limitQuery(parameters(KustoOptions.KUSTO_TABLE), limit.get))
+      parameters + (KustoOptions.KUSTO_QUERY -> KustoQueryUtils.limitQuery(parameters(KustoOptions.KUSTO_TABLE), limit.get))
     } else {
-      adjustedParams
+      parameters
     }
+  }
+
+  private[kusto] def blobStorageAttributesProvided(parameters: Map[String, String]) = {
+    parameters.get(KustoOptions.KUSTO_BLOB_STORAGE_SAS_URL).isDefined || (parameters.get(KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME).isDefined &&
+      parameters.get(KustoOptions.KUSTO_BLOB_CONTAINER).isDefined && parameters.get(KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_KEY).isDefined)
   }
 
   override def createRelation(sqlContext: SQLContext, parameters: Map[String, String]): BaseRelation = {
     val requestedPartitions = parameters.get(KustoOptions.KUSTO_NUM_PARTITIONS)
-    val readMode = parameters.getOrElse(KustoOptions.KUSTO_READ_MODE, "scale").toLowerCase(Locale.ROOT)
     val partitioningMode = parameters.get(KustoOptions.KUSTO_READ_PARTITION_MODE)
-    val isLeanMode = readMode.equals("lean")
-    val isSetFsConfiguration =  parameters.getOrElse(KustoOptions.KUSTO_BLOB_SET_FS_CONFIG, "false").trim.toBoolean
     val isCompressOnExport =  parameters.getOrElse(KustoDebugOptions.KUSTO_DBG_BLOB_COMPRESS_ON_EXPORT, "true").trim.toBoolean
     // Set default export split limit as 1GB, maximal allowed
     val exportSplitLimitMb = parameters.getOrElse(KustoDebugOptions.KUSTO_DBG_BLOB_FILE_SIZE_LIMIT_MB, "1024").trim.toInt
 
-    val numPartitions = setNumPartitionsPerMode(sqlContext, requestedPartitions, isLeanMode, partitioningMode)
-    if (!KustoOptions.supportedReadModes.contains(readMode)) {
-      throw new InvalidParameterException(s"Kusto read mode must be one of ${KustoOptions.supportedReadModes.mkString(", ")}")
-    }
-
-    if (numPartitions != 1 && isLeanMode) {
-      throw new InvalidParameterException(s"Reading in lean mode cannot be done on multiple partitions. Requested number of partitions: $numPartitions")
-    }
-
+    val numPartitions = setNumPartitions(sqlContext, requestedPartitions, partitioningMode)
     var storageSecretIsAccountKey = true
     var storageSecret = parameters.get(KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_KEY)
 
@@ -109,28 +88,20 @@ class DefaultSource extends CreatableRelationProvider
         // Get params from keyVault
         authenticationParameters = Some(KDSU.mergeKeyVaultAndOptionsAuthentication(KeyVaultUtils.getAadAppParametersFromKeyVault(keyVaultAuthentication.get), authenticationParameters))
 
-        if(isLeanMode){
-          (authenticationParameters, None)
-        } else {
-          (authenticationParameters, Some(KDSU.mergeKeyVaultAndOptionsStorageParams(
-            parameters.get(KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME),
-            parameters.get(KustoOptions.KUSTO_BLOB_CONTAINER),
-            storageSecret,
-            storageSecretIsAccountKey,
-            keyVaultAuthentication.get)))
-        }
+        (authenticationParameters, KDSU.mergeKeyVaultAndOptionsStorageParams(
+          parameters.get(KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME),
+          parameters.get(KustoOptions.KUSTO_BLOB_CONTAINER),
+          storageSecret,
+          storageSecretIsAccountKey,
+          keyVaultAuthentication.get))
       } else {
-        if(isLeanMode) {
-          (authenticationParameters, None)
-        } else {
-          // Params passed from options
-          (authenticationParameters, Some(KDSU.getAndValidateTransientStorageParameters(
-            parameters.get(KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME),
-            parameters.get(KustoOptions.KUSTO_BLOB_CONTAINER),
-            storageSecret,
-            storageSecretIsAccountKey)))
-        }
-    }
+        // Params passed from options
+        (authenticationParameters, KDSU.getAndValidateTransientStorageParametersIfExist(
+          parameters.get(KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME),
+          parameters.get(KustoOptions.KUSTO_BLOB_CONTAINER),
+          storageSecret,
+          storageSecretIsAccountKey))
+      }
 
     val timeout = new FiniteDuration(parameters.getOrElse(KustoOptions.KUSTO_TIMEOUT_LIMIT, KCONST.defaultTimeoutAsString).toLong, TimeUnit.SECONDS)
 
@@ -138,7 +109,7 @@ class DefaultSource extends CreatableRelationProvider
       kustoCoordinates,
       kustoAuthentication.get,
       parameters.getOrElse(KustoOptions.KUSTO_QUERY, ""),
-      KustoReadOptions(isLeanMode, isSetFsConfiguration, isCompressOnExport, exportSplitLimitMb),
+      KustoReadOptions(parameters.getOrElse(KustoDebugOptions.KUSTO_DBG_FORCE_READ_MODE, ""), isCompressOnExport, exportSplitLimitMb),
       timeout,
       numPartitions,
       parameters.get(KustoOptions.KUSTO_PARTITION_COLUMN),
@@ -148,16 +119,14 @@ class DefaultSource extends CreatableRelationProvider
     )(sqlContext.sparkSession)
   }
 
-  private def setNumPartitionsPerMode(sqlContext: SQLContext, requestedNumPartitions: Option[String], isLeanMode: Boolean, partitioningMode: Option[String]): Int = {
+  private def setNumPartitions(sqlContext: SQLContext, requestedNumPartitions: Option[String], partitioningMode: Option[String]): Int = {
     if (requestedNumPartitions.isDefined) requestedNumPartitions.get.toInt else {
-      if (isLeanMode) 1 else {
-        partitioningMode match {
-          case Some("hash") => sqlContext.getConf("spark.sql.shuffle.partitions", "10").toInt
-          // In "auto" mode we don't explicitly partition the data:
-          // The data is exported and split to multiple files if required by Kusto 'export' command
-          // The data is then read from the base directory for parquet files and partitioned by the parquet data source
-          case _ => 1
-        }
+      partitioningMode match {
+        case Some("hash") => sqlContext.getConf("spark.sql.shuffle.partitions", "10").toInt
+        // In "auto" mode we don't explicitly partition the data:
+        // The data is exported and split to multiple files if required by Kusto 'export' command
+        // The data is then read from the base directory for parquet files and partitioned by the parquet data source
+        case _ => 1
       }
     }
   }
