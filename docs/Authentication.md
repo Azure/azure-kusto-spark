@@ -19,7 +19,6 @@ This authentication method is fairly straightforward, and it is used in most of 
 ```
 df.write
   .format("com.microsoft.kusto.spark.datasource")
-  .partitionBy("value")
   .option(KustoOptions.KUSTO_CLUSTER, "MyCluster")
   .option(KustoOptions.KUSTO_DATABASE, "MyDatabase")
   .option(KustoOptions.KUSTO_TABLE, "MyTable")
@@ -37,8 +36,7 @@ either key vault or direct options for passing authentication parameters but not
 
 >**Note:** when working with a Databricks notebook, azure-keyvault package must be installed.
 For details, refer to [Databricks documentation](https://docs.databricks.com/user-guide/libraries.html#maven-or-spark-package). 
-                                               
-                                               
+                                                                                             
 **The connector will look for the following secret names:**
 
 ### Kusto Cluster Authentication 
@@ -53,8 +51,8 @@ For details, refer to [Databricks documentation](https://docs.databricks.com/use
 
 ### Transient Storage Parameters
 
->**Note:** these parameters are only required when working in "scale" reading mode. For details, refer to [Kusto Source](KustoSource.md#supported-options) documentation on
-_KUSTO_READ_MODE_.
+>**Note:** these parameters are required when the connector is expected to read large amounts of data. 
+This is a temporary requirement - future versions will be able to provision blob storage internally.
 
  * **blobStorageAccountName**
  Transient storage account name. Either this, or a SAS url, must be provided in order to access the storage account
@@ -104,7 +102,6 @@ The token must be valid throughout the duration of the read/write operation
 ```
 df.write
   .format("com.microsoft.kusto.spark.datasource")
-  .partitionBy("value")
   .option(KustoOptions.KUSTO_CLUSTER, "MyCluster")
   .option(KustoOptions.KUSTO_DATABASE, "MyDatabase")
   .option(KustoOptions.KUSTO_TABLE, "MyTable")

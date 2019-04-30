@@ -26,10 +26,11 @@ private[kusto] object DeviceAuthentication {
     val context: AuthenticationContext =  new AuthenticationContext(aadAuthorityUri, true, service)
 
     val deviceCode =  context.acquireDeviceCode(CLIENT_ID, clusterUrl, null).get
-    val clipboard = Toolkit.getDefaultToolkit.getSystemClipboard
-    val dataFlavor = DataFlavor.stringFlavor
+
     var text: String = null
     Try {
+      val clipboard = Toolkit.getDefaultToolkit.getSystemClipboard
+      val dataFlavor = DataFlavor.stringFlavor
       if (clipboard.isDataFlavorAvailable(dataFlavor)) {
         text = clipboard.getData(dataFlavor).asInstanceOf[String]
       }
@@ -37,9 +38,10 @@ private[kusto] object DeviceAuthentication {
     }
     println(deviceCode.getMessage + " device code is already copied to clipboard - just press ctrl+v in the web")
     if (Desktop.isDesktopSupported) Desktop.getDesktop.browse(new URI(deviceCode.getVerificationUrl))
-    var result = waitAndAcquireTokenByDeviceCode(deviceCode, context)
+    val result = waitAndAcquireTokenByDeviceCode(deviceCode, context)
     if(text != null) {
       Try {
+        val clipboard = Toolkit.getDefaultToolkit.getSystemClipboard
         clipboard.setContents(new StringSelection(text), null)
       }
     }

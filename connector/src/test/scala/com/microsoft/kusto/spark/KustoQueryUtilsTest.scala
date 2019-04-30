@@ -15,7 +15,7 @@ class KustoQueryUtilsTest extends FlatSpec with MockFactory with Matchers with B
   "getQuerySchemaQuery" should "add suffix" in {
     val query = "Table | where column1 = 'abc' | summarize by count()"
 
-    KustoQueryUtils.getQuerySchemaQuery(query) should be ("Table | where column1 = 'abc' | summarize by count()| take 1")
+    KustoQueryUtils.getQuerySchemaQuery(query) should be ("Table | where column1 = 'abc' | summarize by count()| take 0")
   }
 
   "limitQuery" should "add limit" in {

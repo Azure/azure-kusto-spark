@@ -51,8 +51,6 @@ sqlContext.read
 .load()
 ```
 Where **parameters map** is identical for both syntax flavors.
-
-In addition, there are two main reading modes: see **KUSTO_READ_MODE** option below
       
  ### Supported Options
   
@@ -76,14 +74,6 @@ In addition, there are two main reading modes: see **KUSTO_READ_MODE** option be
  
  **Optional Parameters:** 
  
- * **KUSTO_READ_MODE**: 
- Selects one of two supported modes for reading data from Kusto:
-   * When set to "lean", queries Kusto admin node directly, and returns the query result. 
-   This option doesn't involve partitioning the data in any way, and is therefore limited to queries resulting in small amount of data 
-   (typically in the order of KiloBytes up to few MegaBytes).
-   * When set to "scale" (**default**), uses a scalable method to export data from Kusto nodes, and convert this data to an RDD.
-   The data is exported to a transient blob storage account provided by the caller, as specified [below](#transient-storage-parameters)
-
  * **KUSTO_TIMEOUT_LIMIT**:
  An integer number corresponding to the period in seconds after which the operation will timeout.
  This is an upper limit that may coexist with addition timeout limits as configured on Spark or Kusto clusters.
@@ -113,29 +103,6 @@ SAS access url: a complete url of the SAS to the container. Either this, or a st
 Blob container name. This container will be used to store all transient artifacts created every time the corresponding RDD is materialized. 
 Once the RDD is no longer required by the caller application, the container and/or all its contents can be deleted by the caller.
 
-* **KUSTO_BLOB_SET_FS_CONFIG**  
-When reading in 'scale' mode, sets Spark configuration to read from Azure blob.
-The following configuration parameters are set:
-1. Blob access secret:
-    1. If storage account key is provided, the following parameter is set:
-      fs.azure.account.key.<storage-account-name>.blob.core.windows.net, <storage-account-key>
-      
-        *For example*:          
-        `spark.conf.set(s"fs.azure.account.key.$storageAccountName.blob.core.windows.net", s"$storageAccountKey")`
-    2. If SAS key is provided, the following parameter is set:
-      fs.azure.sas.<blob-container-name>.<storage-account-name>.blob.core.windows.net, <sas-key>
-      
-        *For example*:          
-        `spark.conf.set(s"fs.azure.sas.$container.$storageAccountName.blob.core.windows.net", s"$storageSas")`
-2. File system specifier property is set as follows:
-    "fs.azure", "org.apache.hadoop.fs.azure.NativeAzureFileSystem"
-    
-    If set to 'false' (default), the user must set up these values prior to using read connector in "scale" mode.
-    
-    If set to 'true', the connector will **set the required configuration automatically**, by updating these parameters on every 'read' operation
-    
-    **Default:** 'false'
-    
  ### Examples
  
  **Using simplified syntax**
@@ -144,8 +111,7 @@ The following configuration parameters are set:
  ```
  val conf: Map[String, String] = Map(
        KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
-       KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
-       KustoOptions.KUSTO_READ_MODE -> "lean"
+       KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey
      )
      
  val df = spark.read.kusto(cluster, database, "MyKustoTable | where (ColB % 1000 == 0) | distinct ColA ", conf)

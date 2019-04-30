@@ -13,7 +13,7 @@ object KustoQueryUtils {
   }
 
   def getQuerySchemaQuery(query: String): String = {
-    limitQuery(query, 1)
+    limitQuery(query, 0)
   }
 
   def isCommand(query: String): Boolean = query.trim.startsWith(".")

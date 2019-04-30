@@ -26,8 +26,11 @@ private[kusto] object CslCommandsGenerator{
     s".create table $tableName ($columnsTypesAndNames)"
   }
 
-  def generateTableShowSchemaCommand(table: String): String = {
-    s".show table $table schema as json"
+  // Note: we could project-away Type, but this would result in an exception for non-existing tables,
+  // and we rely on getting an empty result in this case
+  def generateTableGetSchemaAsRowsCommand(table: String): String = {
+    ".show table " + table + " schema as json | project ColumnsJson=todynamic(Schema).OrderedColumns" +
+      "| mvexpand ColumnsJson | evaluate bag_unpack(ColumnsJson)"
   }
 
   def generateTableDropCommand(table: String): String = {
@@ -82,5 +85,9 @@ private[kusto] object CslCommandsGenerator{
 
   def generateCountQuery(query: String): String = {
     query + "| count"
+  }
+
+  def generateTableCount(table: String): String = {
+    s".show tables | where TableName == '$table' | count"
   }
 }

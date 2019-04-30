@@ -15,7 +15,6 @@ object SimpleKustoDataSource {
       KustoOptions.KUSTO_AAD_CLIENT_ID -> "Your Client ID",
       KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> "Your secret",
       KustoOptions.KUSTO_QUERY -> "Your Kusto query",
-      KustoOptions.KUSTO_READ_MODE -> "Your reading mode. When set as 'lean', storage parameters are not required",
       KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME -> "Your blob storage account",
       KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_KEY -> "Your storage account key, Alternatively, SAS key can be used",
       KustoOptions.KUSTO_BLOB_CONTAINER -> "Your blob storage container name"
