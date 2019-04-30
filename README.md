@@ -1,23 +1,23 @@
 <p align="center">
-  <img src="kusto_spark.png" alt="Kusto + Apache Spark Connector" width="270"/>
+  <img src="kusto_spark.png" alt="Azure Data Explorer + Apache Spark Connector" width="270"/>
 </p>
 
-# Kusto Connector for Apache Spark
+# Azure Data Explorer Connector for Apache Spark
 
 master: [![Build status](https://msazure.visualstudio.com/One/_apis/build/status/Custom/Kusto/azure-kusto-spark%20ci?branchName=master)](https://msazure.visualstudio.com/One/_build/latest?definitionId=58677)
 dev: [![Build status](https://msazure.visualstudio.com/One/_apis/build/status/Custom/Kusto/azure-kusto-spark%20ci?branchName=dev)](https://msazure.visualstudio.com/One/_build/latest?definitionId=58677)
  
-This library contains the source code for Kusto Data Source and Data Sink Connector for Apache Spark.
+This library contains the source code for Azure Data Explorer Data Source and Data Sink Connector for Apache Spark.
 
-Kusto (A.K.A. [Azure Data Explorer](https://azure.microsoft.com/en-us/services/data-explorer/)) is a lightning-fast indexing and querying service. 
+Azure Data Explorer (A.K.A. [Kusto](https://azure.microsoft.com/en-us/services/data-explorer/)) is a lightning-fast indexing and querying service. 
 
 [Spark](https://spark.apache.org/) is a unified analytics engine for large-scale data processing.
 
-Making Kusto and Spark work together enables building fast and scalable applications, targeting a variety of Machine Learning, Extract-Transform-Load, Log Analytics and other data driven scenarios. 
+Making Azure Data Explorer and Spark work together enables building fast and scalable applications, targeting a variety of Machine Learning, Extract-Transform-Load, Log Analytics and other data driven scenarios. 
  
 ## About This Release
 
-This is a beta release of Kusto connector for Spark. It exposes Kusto as a valid Data Store 
+This is a beta release of Azure Data Explorer connector for Spark. It exposes Azure Data Explorer as a valid Data Store 
 for standard Spark source and sink operations such as write, read and writeStream.
 
 For main changes from previous releases and known issues please refer to [CHANGELIST](docs/CHANGELIST.md) 
@@ -27,12 +27,12 @@ For main changes from previous releases and known issues please refer to [CHANGE
 ### Linking 
 
 For Scala/Java applications using Maven project definitions, 
-link your application with the artifact below in order to use the Spark Kusto connector. 
+link your application with the artifact below in order to use the Azure Data Explorer connector for Spark. 
 
 ```
 groupId = com.microsoft.azure
 artifactId = spark-kusto-connector
-version = 1.0.0-Beta-02 
+version = 1.0.0-Beta-03 
 ```
 
 **In Maven**:
@@ -41,11 +41,11 @@ version = 1.0.0-Beta-02
 Clone this repository and build it locally to add it to your local maven repository, 
 or use the corresponding [released package](https://github.com/Azure/azure-kusto-spark/releases)
 
- ```xml
+ ```
    <dependency>
      <groupId>com.microsoft.azure</groupId>
      <artifactId>spark-kusto-connector</artifactId>
-     <version>1.0.0-Beta-02</version>
+     <version>1.0.0-Beta-03</version>
    </dependency>
 ```
 
@@ -71,8 +71,8 @@ In order to use the connector, you need to have:
 - [Maven 3.x](https://maven.apache.org/download.cgi) installed
 - Spark version 2.4.0 or higher
 
-    >**Note:** 2.3.x versions are also supported, but require some changes in pom.xml dependencies. 
-      For details, refer to [CHANGELIST](docs/CHANGELIST.md)
+> Note: when working with 2.3 Spark version or lower, please refer to [Building for legacy Spark versions](docs/CHANGELIST.md#building-for-legacy-spark-versions)
+ section of the [CHANGELIST](docs/CHANGELIST.md) document 
 
 ## Build Commands
    
@@ -88,17 +88,17 @@ mvn clean install
 In order to facilitate ramp-up on platforms such as Azure Databricks, pre-compiled libraries
 are published under [GitHub Releases](https://github.com/Azure/azure-kusto-spark/releases).
 These libraries include:
-* Spark Kusto connector library
+* Azure Data Explorer connector library
 * May also include Kusto Java data and ingestion client libraries (kusto-data and kusto-ingest)
 
 ## Dependencies
-Spark Kusto connector takes dependency on [Kusto Data Client Library](https://mvnrepository.com/artifact/com.microsoft.azure.kusto/kusto-data) 
-and [Kusto Ingest Client Library](https://mvnrepository.com/artifact/com.microsoft.azure.kusto/kusto-ingest), 
+Spark Azure Data Explorer connector takes dependency on [Azure Data Explorer Data Client Library](https://mvnrepository.com/artifact/com.microsoft.azure.kusto/kusto-data) 
+and [Azure Data Explorer Ingest Client Library](https://mvnrepository.com/artifact/com.microsoft.azure.kusto/kusto-ingest), 
 available on maven repository.
 When [Key Vault based authentication](Authentication.md) is used, there is an additional dependency 
 on [Microsoft Azure SDK For Key Vault](https://mvnrepository.com/artifact/com.microsoft.azure/azure-keyvault). 
 
-> **Note:** When working with Databricks, Kusto connector requires Kusto java client libraries (and azure key-vault library if used) to be installed.
+> **Note:** When working with Databricks, Azure Data Explorer connector requires Azure Data Explorer java client libraries (and azure key-vault library if used) to be installed.
 This can be done by accessing Databricks Create Library -> Maven and specifying the following coordinates:
 - com.microsoft.azure.kusto:kusto-data:1.0.0-BETA-04
 - com.microsoft.azure.kusto:kusto-ingest:1.0.0-BETA-04
@@ -111,9 +111,9 @@ Detailed documentation can be found [here](docs).
 
 Usage examples can be found [here](samples/src/main/scala)
 
-# Available Kusto client libraries:
+# Available Azure Data Explorer client libraries:
 
-Here is a list of currently available client libraries for Kusto:
+Here is a list of currently available client libraries for Azure Data Explorer:
 - [Node](https://github.com/azure/azure-kusto-node)
 - [Python](https://github.com/azure/azure-kusto-python)
 - [.NET](https://docs.microsoft.com/en-us/azure/kusto/api/netfx/about-the-sdk)
