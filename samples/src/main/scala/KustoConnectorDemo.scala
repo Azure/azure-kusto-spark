@@ -136,11 +136,6 @@ object KustoConnectorDemo {
     // Note: alternatively, provide just the container SAS.
     // val storageSas = "Your container SAS" //Databricks example: dbutils.secrets.get(scope = "KustoDemos", key = "blobStorageSasUrl")
 
-
-    // SET UP AZURE FS CONFIGURATION FOR BLOB ACCESS
-    // Note: alternatively, ask the connector to setup FS configuration on every read access by setting:
-    // KustoOptions.KUSTO_BLOB_SET_FS_CONFIG -> "true"
-
     // When using storage account key
     spark.conf.set(s"fs.azure.account.key.$storageAccountName.blob.core.windows.net", s"$storageAccountKey")
     // when using SAS
