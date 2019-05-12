@@ -35,7 +35,6 @@ import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{Await, Future}
-import scala.util.parsing.json.{JSONArray, JSONObject}
 
 object KustoWriter {
   private val myName = this.getClass.getSimpleName
@@ -352,23 +351,27 @@ object KustoWriter {
 
     for (x <- 0 to fields.length - 1) {
       val dataType = fields(x).dataType
-      result(fields(x).name) = if (row.get(x, fields(x).dataType) == null) "" else dataType match {
+      val value = if (row.get(x, fields(x).dataType) == null) null else dataType match {
         case DateType => DateTimeUtils.toJavaDate(row.getInt(x)).toString
         case TimestampType => dateFormat.format(DateTimeUtils.toJavaTimestamp(row.getLong(x)))
-        case StringType => row.getString(x)
+        case StringType => "\"" + row.getString(x) + "\""
         case BooleanType => row.getBoolean(x).toString
         case _ : StructType => convertStructToCsv(row.getStruct(x, dataType.asInstanceOf[StructType].fields.length), dataType.asInstanceOf[StructType], timeZone)
         case _ : ArrayType => ConvertArrayToCsv(row.getArray(x), dataType, timeZone)
         case _ => row.get(x, dataType).toString
       }
+
+      if (value != null) {
+        result(fields(x).name) = value
+      }
     }
 
-    JSONObject(result.toMap).toString()
+    "{" + result.map{case (k, v) => "\"" +  k + "\"" + ":" + v }.mkString(",") + "}"
   }
 
   private def ConvertArrayToCsv(ar: ArrayData, fieldsType: DataType, timeZone: String): String = {
     val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone(timeZone))
-    if (ar == null) "" else {
+    if (ar == null) null else {
       if (ar.numElements() == 0) "[]" else {
         val result:Array[String] = new Array(ar.numElements())
         val fieldType = fieldsType.asInstanceOf[ArrayType].elementType
@@ -383,7 +386,8 @@ object KustoWriter {
             case _ => ar.get(x, fieldType).toString
           }
         }
-        JSONArray(result.toList).toString()
+
+        "[" + result.mkString(",") + "]"
       }
     }
   }
