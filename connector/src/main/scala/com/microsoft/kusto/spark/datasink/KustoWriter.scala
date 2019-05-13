@@ -322,7 +322,7 @@ object KustoWriter {
       val formattedField: String = if (curr == null) "" else {
         val fieldIndexInRow = res._1.size
         val dataType = schemaFields(fieldIndexInRow).dataType
-        getField(row, fieldIndexInRow, dataType, dateFormat, false)
+        getField(row, fieldIndexInRow, dataType, dateFormat, nested=false)
       }
 
       (res._1 :+ formattedField, res._2 + formattedField.length)
@@ -347,9 +347,9 @@ object KustoWriter {
     val fields = schema.fields
     val result:scala.collection.mutable.Map[String,String] = scala.collection.mutable.Map()
 
-    for (x <- 0 to fields.length - 1) {
+    for (x <- fields.indices) {
       val dataType = fields(x).dataType
-      val value = if (row.get(x, fields(x).dataType) == null) null else getField(row, x, dataType, dateFormat, true)
+      val value = if (row.get(x, fields(x).dataType) == null) null else getField(row, x, dataType, dateFormat, nested=true)
       if (value != null) {
         result(fields(x).name) = value
       }
@@ -363,8 +363,8 @@ object KustoWriter {
       if (ar.numElements() == 0) "[]" else {
         val result:Array[String] = new Array(ar.numElements())
         val fieldType = fieldsType.asInstanceOf[ArrayType].elementType
-        for (x <- 0 to ar.numElements() - 1) {
-          result(x) = getField(ar, x, fieldType, dateFormat, true)
+        for (x <- 0 until ar.numElements()) {
+          result(x) = getField(ar, x, fieldType, dateFormat, nested=true)
         }
 
         "[" + result.mkString(",") + "]"
