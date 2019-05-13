@@ -325,7 +325,7 @@ object KustoWriter {
         getField(row, fieldIndexInRow, dataType, dateFormat, nested=false)
       }
 
-      (res._1 :+ formattedField, res._2 + formattedField.length)
+      if (formattedField == null) (res._1 :+ "", res._2) else (res._1 :+ formattedField, res._2 + formattedField.length)
     }
 
     CsvRowResult(fields.toArray, size + fields.size)
@@ -348,11 +348,7 @@ object KustoWriter {
     val result:scala.collection.mutable.Map[String,String] = scala.collection.mutable.Map()
 
     for (x <- fields.indices) {
-      val dataType = fields(x).dataType
-      val value = if (row.get(x, fields(x).dataType) == null) null else getField(row, x, dataType, dateFormat, nested=true)
-      if (value != null) {
-        result(fields(x).name) = value
-      }
+      result(fields(x).name) = getField(row, x, fields(x).dataType, dateFormat, nested=true)
     }
 
     "{" + result.map{case (k, v) => "\"" +  k + "\"" + ":" + v }.mkString(",") + "}"

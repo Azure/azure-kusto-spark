@@ -1,1 +1,1 @@
-﻿{"string":"value","int_ar": [1,2,3],"string_ar": ["a","b","c"],"bool_ar": [true,false],"string_ar_ar":[["a","b","c"]],"struct_struct":{"bool":true,"int":1,"string":"abc","string_ar":["a","b","c"],"int_ar":[1,2,3],"dict_ar":[{"string":"a","int":1},{"string":"b","int":2}]}}
+﻿{"null":null,"string":"value","int_ar": [1,2,3,null],"string_ar": ["a","b","c",null],"bool_ar": [true,false,null],"string_ar_ar":[["a","b","c"],null],"struct_struct":{"bool":true,"int":1,"string":"abc","string_ar":["a","b","c"],"int_ar":[1,2,3],"dict_ar":[{"string":"a","int":1},{"string":"b","int":2}]}}
