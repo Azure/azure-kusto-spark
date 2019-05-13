@@ -23,36 +23,36 @@ import org.scalatest.{FlatSpec, Matchers}
 @RunWith(classOf[JUnitRunner])
 class KustoWriterTests extends FlatSpec with Matchers {
 
-  def getDF(short: Boolean): DataFrame = {
+  def getDF(isNestedSchema: Boolean): DataFrame = {
     val sparkConf = new SparkConf().set("spark.testing", "true")
       .set("spark.ui.enabled", "false")
       .setAppName("SimpleKustoDataSink")
       .setMaster("local[*]")
 
-    val customSchema = if (short) StructType(Array(StructField("Name", StringType, true), StructField("Number", IntegerType, true))) else null
+    val customSchema = if (isNestedSchema) StructType(Array(StructField("Name", StringType, true), StructField("Number", IntegerType, true))) else null
     val sparkSession = SparkSession.builder().config(sparkConf).getOrCreate()
-    if(short) sparkSession.read.format("csv").option("header", "false").schema(customSchema).load("src/test/resources/ShortTestData/ShortTestData.csv")
+    if(isNestedSchema) sparkSession.read.format("csv").option("header", "false").schema(customSchema).load("src/test/resources/ShortTestData/ShortTestData.csv")
     else sparkSession.read.format("json").option("header", "true").load("src/test/resources/TestData/TestDynamicFields.csv")
   }
 
   "convertRowToCsv" should "convert the row as expected" in {
-    val df: DataFrame = getDF(true)
+    val df: DataFrame = getDF(isNestedSchema=true)
     val dfRow: InternalRow = df.queryExecution.toRdd.collect().head
     val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone("UTC"))
     KustoWriter.convertRowToCSV(dfRow, df.schema, dateFormat).formattedRow shouldEqual Array("John Doe", "1")
   }
 
   "convertRowToCsv" should "convert the row as expected, including nested types." in {
-    val df: DataFrame = getDF(false)
+    val df: DataFrame = getDF(isNestedSchema=false)
     val dfRow: InternalRow = df.queryExecution.toRdd.collect().head
     val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone("UTC"))
     KustoWriter.convertRowToCSV(dfRow, df.schema, dateFormat).formattedRow shouldEqual
-      Array("[true,false]", "[1,2,3]", "value", "[\"a\",\"b\",\"c\"]", "[[\"a\",\"b\",\"c\"]]",
+      Array("[true,false,null]", "[1,2,3,null]", "", "value", "[\"a\",\"b\",\"c\",null]", "[[\"a\",\"b\",\"c\"],null]",
       "{\"string_ar\":[\"a\",\"b\",\"c\"],\"int\":1,\"string\":\"abc\",\"int_ar\":[1,2,3],\"bool\":true,\"dict_ar\":[{\"int\":1,\"string\":\"a\"},{\"int\":2,\"string\":\"b\"}]}")
   }
 
   "convertRowToCsv" should "calculate row size as expected" in {
-    val df: DataFrame = getDF(true)
+    val df: DataFrame = getDF(isNestedSchema=true)
     val dfRow: InternalRow = df.queryExecution.toRdd.collect().head
     val expectedSize = "John Doe,1\n".getBytes(StandardCharsets.UTF_8).length
     val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone("UTC"))
