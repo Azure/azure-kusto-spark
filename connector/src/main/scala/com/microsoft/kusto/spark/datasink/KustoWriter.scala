@@ -25,6 +25,7 @@ import com.univocity.parsers.csv.{CsvWriter, CsvWriterSettings}
 import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils}
 import org.apache.spark.sql.types.{DateType, StringType, StructType, TimestampType, _}
 import org.apache.spark.{FutureAction, TaskContext}
@@ -257,7 +258,6 @@ object KustoWriter {
   }
 
   def createBlobWriter(schema: StructType,
-                       timeZone: String,
                        tableCoordinates: KustoCoordinates,
                        tmpTableName: String,
                        storageUri: String,
@@ -279,13 +279,13 @@ object KustoWriter {
     import parameters._
     val container: CloudBlobContainer = new CloudBlobContainer(new URI(storageUri))
     //This blobWriter will be used later to write the rows to blob storage from which it will be ingested to Kusto
-    val initialBlobWriter: BlobWriteResource = createBlobWriter(schema, writeOptions.timeZone, coordinates, tmpTableName, storageUri, container)
+    val initialBlobWriter: BlobWriteResource = createBlobWriter(schema, coordinates, tmpTableName, storageUri, container)
+    val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone(writeOptions.timeZone))
 
     // Serialize rows to ingest and send to blob storage.
     val (currentFileSize, currentBlobWriter, blobsToIngest) = rows.foldLeft[(Long, BlobWriteResource, Seq[(CloudBlockBlob, Long)])]((0, initialBlobWriter, Seq())) {
       case ((size, blobWriter, blobsCreated), row) =>
-
-        val csvRowResult: CsvRowResult = convertRowToCSV(row, schema, writeOptions.timeZone)
+        val csvRowResult: CsvRowResult = convertRowToCSV(row, schema, dateFormat)
         blobWriter.csvWriter.writeRow(csvRowResult.formattedRow)
         val newTotalSize = size + csvRowResult.rowByteSize
 
@@ -295,7 +295,7 @@ object KustoWriter {
           (newTotalSize, blobWriter, blobsCreated)
         } else {
           finalizeBlobWrite(blobWriter)
-          (0, createBlobWriter(schema, writeOptions.timeZone, coordinates, tmpTableName, storageUri, container), blobsCreated :+ (blobWriter.blob, newTotalSize))
+          (0, createBlobWriter(schema, coordinates, tmpTableName, storageUri, container), blobsCreated :+ (blobWriter.blob, newTotalSize))
         }
     }
 
@@ -315,13 +315,14 @@ object KustoWriter {
     blobWriteResource.gzip.close()
   }
 
-  def convertRowToCSV(row: InternalRow, schema: StructType, timeZone: String): CsvRowResult = {
+  def convertRowToCSV(row: InternalRow, schema: StructType, dateFormat: FastDateFormat): CsvRowResult = {
     val schemaFields: Array[StructField] = schema.fields
 
     val (fields, size) = row.toSeq(schema).foldLeft[(Seq[String], Int)](Seq.empty[String], 0) { (res, curr) =>
       val formattedField: String = if (curr == null) "" else {
         val fieldIndexInRow = res._1.size
-        convertOneField(row, schemaFields, fieldIndexInRow, timeZone)
+        val dataType = schemaFields(fieldIndexInRow).dataType
+        getField(row, fieldIndexInRow, dataType, dateFormat, false)
       }
 
       (res._1 :+ formattedField, res._2 + formattedField.length)
@@ -330,37 +331,25 @@ object KustoWriter {
     CsvRowResult(fields.toArray, size + fields.size)
   }
 
-  private def convertOneField(row: InternalRow, schemaFields: Array[StructField], fieldIndexInRow: Int, timeZone: String) = {
-    val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone(timeZone))
-    val dataType = schemaFields(fieldIndexInRow).dataType
-    dataType match {
+  private def getField(row: SpecializedGetters, fieldIndexInRow: Int, dataType: DataType, dateFormat: FastDateFormat, nested: Boolean) = {
+    if (row.get(fieldIndexInRow, dataType) == null) null else dataType match {
       case DateType => DateTimeUtils.toJavaDate(row.getInt(fieldIndexInRow)).toString
       case TimestampType => dateFormat.format(DateTimeUtils.toJavaTimestamp(row.getLong(fieldIndexInRow)))
-      case StringType => row.getString(fieldIndexInRow)
+      case StringType => GetStringFromUTF8(row, fieldIndexInRow, nested)
       case BooleanType => row.getBoolean(fieldIndexInRow).toString
-      case _ : StructType => convertStructToCsv(row.getStruct(fieldIndexInRow, dataType.asInstanceOf[StructType].length), dataType.asInstanceOf[StructType], timeZone)
-      case _ : ArrayType => ConvertArrayToCsv(row.getArray(fieldIndexInRow), dataType, timeZone)
+      case _: StructType => convertStructToCsv(row.getStruct(fieldIndexInRow, dataType.asInstanceOf[StructType].length), dataType.asInstanceOf[StructType], dateFormat)
+      case _: ArrayType => convertArrayToCsv(row.getArray(fieldIndexInRow), dataType, dateFormat)
       case _ => row.get(fieldIndexInRow, dataType).toString
     }
   }
 
-  private def convertStructToCsv(row: InternalRow, schema: StructType, timeZone: String): String = {
-    val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone(timeZone))
+  private def convertStructToCsv(row: InternalRow, schema: StructType, dateFormat: FastDateFormat): String = {
     val fields = schema.fields
     val result:scala.collection.mutable.Map[String,String] = scala.collection.mutable.Map()
 
     for (x <- 0 to fields.length - 1) {
       val dataType = fields(x).dataType
-      val value = if (row.get(x, fields(x).dataType) == null) null else dataType match {
-        case DateType => DateTimeUtils.toJavaDate(row.getInt(x)).toString
-        case TimestampType => dateFormat.format(DateTimeUtils.toJavaTimestamp(row.getLong(x)))
-        case StringType => "\"" + row.getString(x) + "\""
-        case BooleanType => row.getBoolean(x).toString
-        case _ : StructType => convertStructToCsv(row.getStruct(x, dataType.asInstanceOf[StructType].fields.length), dataType.asInstanceOf[StructType], timeZone)
-        case _ : ArrayType => ConvertArrayToCsv(row.getArray(x), dataType, timeZone)
-        case _ => row.get(x, dataType).toString
-      }
-
+      val value = if (row.get(x, fields(x).dataType) == null) null else getField(row, x, dataType, dateFormat, true)
       if (value != null) {
         result(fields(x).name) = value
       }
@@ -369,22 +358,13 @@ object KustoWriter {
     "{" + result.map{case (k, v) => "\"" +  k + "\"" + ":" + v }.mkString(",") + "}"
   }
 
-  private def ConvertArrayToCsv(ar: ArrayData, fieldsType: DataType, timeZone: String): String = {
-    val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone(timeZone))
+  private def convertArrayToCsv(ar: ArrayData, fieldsType: DataType, dateFormat: FastDateFormat): String = {
     if (ar == null) null else {
       if (ar.numElements() == 0) "[]" else {
         val result:Array[String] = new Array(ar.numElements())
         val fieldType = fieldsType.asInstanceOf[ArrayType].elementType
         for (x <- 0 to ar.numElements() - 1) {
-          result(x) = if (ar.get(x, fieldType) == null) "" else fieldType match {
-            case DateType => DateTimeUtils.toJavaDate(ar.getInt(x)).toString
-            case TimestampType => dateFormat.format(DateTimeUtils.toJavaTimestamp(ar.getLong(x)))
-            case StringType => GetStringFromArray(ar, x)
-            case BooleanType => ar.getBoolean(x).toString
-            case _ : StructType => convertStructToCsv(ar.getStruct(x, fieldType.asInstanceOf[StructType].fields.length), fieldType.asInstanceOf[StructType], timeZone)
-            case _ : ArrayType => ConvertArrayToCsv(ar.getArray(x), fieldType.asInstanceOf[DataType], timeZone)
-            case _ => ar.get(x, fieldType).toString
-          }
+          result(x) = getField(ar, x, fieldType, dateFormat, true)
         }
 
         "[" + result.mkString(",") + "]"
@@ -392,8 +372,10 @@ object KustoWriter {
     }
   }
 
-  private def GetStringFromArray(ar: ArrayData, x: Int) = {
-    if (ar.getUTF8String(x) == null) "" else ar.getUTF8String(x).toString
+  private def GetStringFromUTF8(ar: SpecializedGetters, index: Int, nested: Boolean) = {
+    val str = ar.getUTF8String(index)
+    if (str == null) null else
+      if (nested) "\"" + str.toString + "\"" else str.toString
   }
 
   private def readIngestionResult(statusRecord: IngestionStatus): String = {

@@ -3,40 +3,60 @@ package com.microsoft.kusto.spark
 import java.io.BufferedWriter
 import java.nio.charset.StandardCharsets
 import java.util
+import java.util.TimeZone
 import java.util.zip.GZIPOutputStream
 
 import com.microsoft.kusto.spark.datasink.{BlobWriteResource, KustoWriter}
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import com.univocity.parsers.csv.{CsvWriter, CsvWriterSettings}
+import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.types._
+import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.junit.runner.RunWith
 import org.mockito.Mockito._
+import org.scalatest.junit.JUnitRunner
 import org.scalatest.{FlatSpec, Matchers}
 
 
+@RunWith(classOf[JUnitRunner])
 class KustoWriterTests extends FlatSpec with Matchers {
 
-  def getDF(): DataFrame = {
+  def getDF(short: Boolean): DataFrame = {
     val sparkConf = new SparkConf().set("spark.testing", "true")
       .set("spark.ui.enabled", "false")
       .setAppName("SimpleKustoDataSink")
       .setMaster("local[*]")
+
+    val customSchema = if (short) StructType(Array(StructField("Name", StringType, true), StructField("Number", IntegerType, true))) else null
     val sparkSession = SparkSession.builder().config(sparkConf).getOrCreate()
-    sparkSession.read.format("csv").option("header", "false").load("src/test/resources/ShortTestData/ShortTestData.csv")
+    if(short) sparkSession.read.format("csv").option("header", "false").schema(customSchema).load("src/test/resources/ShortTestData/ShortTestData.csv")
+    else sparkSession.read.format("json").option("header", "true").load("src/test/resources/TestData/TestDynamicFields.csv")
   }
 
   "convertRowToCsv" should "convert the row as expected" in {
-    val df: DataFrame = getDF()
-    val dfRow: InternalRow = getDF().queryExecution.toRdd.collect().head
-    KustoWriter.convertRowToCSV(dfRow, df.schema, "UTC").formattedRow shouldEqual Array("John Doe", "1")
+    val df: DataFrame = getDF(true)
+    val dfRow: InternalRow = df.queryExecution.toRdd.collect().head
+    val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone("UTC"))
+    KustoWriter.convertRowToCSV(dfRow, df.schema, dateFormat).formattedRow shouldEqual Array("John Doe", "1")
+  }
+
+  "convertRowToCsv" should "convert the row as expected, including nested types." in {
+    val df: DataFrame = getDF(false)
+    val dfRow: InternalRow = df.queryExecution.toRdd.collect().head
+    val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone("UTC"))
+    KustoWriter.convertRowToCSV(dfRow, df.schema, dateFormat).formattedRow shouldEqual
+      Array("[true,false]", "[1,2,3]", "value", "[\"a\",\"b\",\"c\"]", "[[\"a\",\"b\",\"c\"]]",
+      "{\"string_ar\":[\"a\",\"b\",\"c\"],\"int\":1,\"string\":\"abc\",\"int_ar\":[1,2,3],\"bool\":true,\"dict_ar\":[{\"int\":1,\"string\":\"a\"},{\"int\":2,\"string\":\"b\"}]}")
   }
 
   "convertRowToCsv" should "calculate row size as expected" in {
-    val df: DataFrame = getDF()
-    val dfRow: InternalRow = getDF().queryExecution.toRdd.collect().head
+    val df: DataFrame = getDF(true)
+    val dfRow: InternalRow = df.queryExecution.toRdd.collect().head
     val expectedSize = "John Doe,1\n".getBytes(StandardCharsets.UTF_8).length
-    KustoWriter.convertRowToCSV(dfRow, df.schema, "UTC").rowByteSize shouldEqual expectedSize
+    val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone("UTC"))
+    KustoWriter.convertRowToCSV(dfRow, df.schema, dateFormat).rowByteSize shouldEqual expectedSize
   }
 
   "finalizeFileWrite" should "should flush and close buffers" in {
@@ -82,4 +102,6 @@ class KustoWriterTests extends FlatSpec with Matchers {
     // We could add new elements for IsCurrent:bool,LastModifiedOn:datetime,IntegerValue:int
     parsedSchema shouldEqual "SubscriptionGuid:string,Identifier:string,SomeNumber:long"
   }
+
+
 }
