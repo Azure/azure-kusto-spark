@@ -100,7 +100,7 @@ object KustoWriter {
       } catch {
         case exception: Exception =>
           tryCleanupIngestionByproducts(tableCoordinates.database, kustoAdminClient, tmpTableName)
-          throw exception.getCause
+          throw exception
       }
       finalizeIngestionWhenWorkersSucceeded(tableCoordinates, batchIdIfExists, kustoAdminClient, tmpTableName)
       KDSU.logInfo(myName, s"write operation to Kusto table '$table' finished successfully")
@@ -342,9 +342,9 @@ object KustoWriter {
       case TimestampType => dateFormat.format(DateTimeUtils.toJavaTimestamp(row.getLong(fieldIndexInRow)))
       case StringType => GetStringFromUTF8(row.getUTF8String(fieldIndexInRow), nested)
       case BooleanType => row.getBoolean(fieldIndexInRow).toString
-      case _: StructType => convertStructToCsv(row.getStruct(fieldIndexInRow, dataType.asInstanceOf[StructType].length), dataType.asInstanceOf[StructType], dateFormat)
-      case _: ArrayType => convertArrayToCsv(row.getArray(fieldIndexInRow), dataType, dateFormat)
-      case _: MapType => convertMapToCsv(row.getMap(fieldIndexInRow), dataType.asInstanceOf[MapType], dateFormat)
+      case strType: StructType => convertStructToCsv(row.getStruct(fieldIndexInRow, dataType.asInstanceOf[StructType].length), strType, dateFormat)
+      case arrType: ArrayType => convertArrayToCsv(row.getArray(fieldIndexInRow), arrType.elementType, dateFormat)
+      case mapType: MapType => convertMapToCsv(row.getMap(fieldIndexInRow), mapType, dateFormat)
       case _ => row.get(fieldIndexInRow, dataType).toString
     }
   }
@@ -362,38 +362,26 @@ object KustoWriter {
   private def convertArrayToCsv(ar: ArrayData, fieldsType: DataType, dateFormat: FastDateFormat): String = {
     if (ar == null) null else {
       if (ar.numElements() == 0) "[]" else {
-        val result: Array[String] = new Array(ar.numElements())
-        val fieldType = fieldsType.asInstanceOf[ArrayType].elementType
-        for (x <- 0 until ar.numElements()) {
-          result(x) = getField(ar, x, fieldType, dateFormat, nested = true)
-        }
 
-        "[" + result.mkString(",") + "]"
+        "[" + convertArrayToCsvImpl(ar, fieldsType, dateFormat) + "]"
       }
     }
   }
+  private def convertArrayToCsvImpl(ar: ArrayData, fieldsType: DataType, dateFormat: FastDateFormat, nested: Boolean = true): String = {
+    val result: Array[String] = new Array(ar.numElements())
+    for (x <- 0 until ar.numElements()) {
+      result(x) = getField(ar, x, fieldsType, dateFormat, nested)
+    }
+    result.mkString(",")
+  }
+
 
   private def convertMapToCsv(map: MapData, fieldsType: MapType, dateFormat: FastDateFormat): String = {
-    val kType = fieldsType.keyType
-    val vType = fieldsType.valueType
-    var buffer = ""
-    map.foreach(kType, vType, (k, v) => {
-      buffer += "\"" + serialiseMapValue(k, kType, dateFormat, nested = false) + "\"" + ":" + serialiseMapValue(v, vType, dateFormat, nested = true)
-    })
-    "{" + buffer + "}"
+    val a = convertArrayToCsvImpl(map.keyArray(), fieldsType.keyType, dateFormat, nested = false)
+    val b = convertArrayToCsvImpl(map.valueArray(), fieldsType.valueType, dateFormat)
+    "{" +"\"" + a + "\"" + ":"+ b + "}"
   }
 
-  def serialiseMapValue(value: Any, dataType: DataType, dateFormat: FastDateFormat, nested: Boolean): String = {
-    dataType match {
-      case DateType => DateTimeUtils.toJavaDate(value.asInstanceOf[Int]).toString
-      case TimestampType => dateFormat.format(DateTimeUtils.toJavaTimestamp(value.asInstanceOf[Long]))
-      case StringType => GetStringFromUTF8(value.asInstanceOf[UTF8String], nested = nested)
-      case strType: StructType => convertStructToCsv(value.asInstanceOf[InternalRow], strType, dateFormat)
-      case arrType: ArrayType => convertArrayToCsv(value.asInstanceOf[ArrayData], arrType, dateFormat)
-      case mapType: MapType => convertMapToCsv(value.asInstanceOf[MapData], mapType, dateFormat)
-      case _ => value.toString
-    }
-  }
 
   private def GetStringFromUTF8(str: UTF8String, nested: Boolean) = {
     if (str == null) null else if (nested) "\"" + str.toString + "\"" else str.toString
