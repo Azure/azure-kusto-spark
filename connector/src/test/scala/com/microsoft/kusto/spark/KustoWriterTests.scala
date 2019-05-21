@@ -13,7 +13,7 @@ import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 import org.junit.runner.RunWith
 import org.mockito.Mockito._
 import org.scalatest.junit.JUnitRunner
@@ -22,15 +22,15 @@ import org.scalatest.{FlatSpec, Matchers}
 
 @RunWith(classOf[JUnitRunner])
 class KustoWriterTests extends FlatSpec with Matchers {
+  val sparkConf: SparkConf = new SparkConf().set("spark.testing", "true")
+    .set("spark.ui.enabled", "false")
+    .setAppName("SimpleKustoDataSink")
+    .setMaster("local[*]")
+  val sparkSession = SparkSession.builder().config(sparkConf).getOrCreate()
 
   def getDF(isNestedSchema: Boolean): DataFrame = {
-    val sparkConf = new SparkConf().set("spark.testing", "true")
-      .set("spark.ui.enabled", "false")
-      .setAppName("SimpleKustoDataSink")
-      .setMaster("local[*]")
 
     val customSchema = if (isNestedSchema) StructType(Array(StructField("Name", StringType, true), StructField("Number", IntegerType, true))) else null
-    val sparkSession = SparkSession.builder().config(sparkConf).getOrCreate()
     if(isNestedSchema) sparkSession.read.format("csv").option("header", "false").schema(customSchema).load("src/test/resources/ShortTestData/ShortTestData.csv")
     else sparkSession.read.format("json").option("header", "true").load("src/test/resources/TestData/TestDynamicFields.json")
   }
@@ -40,6 +40,24 @@ class KustoWriterTests extends FlatSpec with Matchers {
     val dfRow: InternalRow = df.queryExecution.toRdd.collect().head
     val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone("UTC"))
     KustoWriter.convertRowToCSV(dfRow, df.schema, dateFormat).formattedRow shouldEqual Array("John Doe", "1")
+  }
+
+  "convertRowToCsv" should "convert the row as expected with maps" in {
+    val someData = List(
+      Map("asd" -> Row(Array("stringVal")))
+    )
+    val someSchema = List(
+      StructField("mapToArray", MapType(StringType, new StructType().add("arrayStrings", ArrayType(StringType,true),true), true),true)
+    )
+
+    val df =sparkSession.createDataFrame(
+      sparkSession.sparkContext.parallelize(asRows(someData)),
+      StructType(asSchema(someSchema))
+    )
+
+    val dfRow: InternalRow = df.queryExecution.toRdd.collect().head
+    val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone("UTC"))
+    KustoWriter.convertRowToCSV(dfRow, df.schema, dateFormat).formattedRow shouldEqual Array("{\"asd\":{\"arrayStrings\":[\"stringVal\"]}}")
   }
 
   "convertRowToCsv" should "convert the row as expected, including nested types." in {
@@ -103,5 +121,23 @@ class KustoWriterTests extends FlatSpec with Matchers {
     parsedSchema shouldEqual "SubscriptionGuid:string,Identifier:string,SomeNumber:long"
   }
 
+  private def asRows[U](values: List[U]): List[Row] = {
+    values.map {
+      case x: Row     => x.asInstanceOf[Row]
+      case y: Product => Row(y.productIterator.toList: _*)
+      case a          => Row(a)
+    }
+  }
 
+  private def asSchema[U <: Product](fields: List[U]): List[StructField] = {
+    fields.map {
+      case x: StructField => x.asInstanceOf[StructField]
+      case (name: String, dataType: DataType, nullable: Boolean) =>
+        StructField(
+          name,
+          dataType,
+          nullable
+        )
+    }
+  }
 }

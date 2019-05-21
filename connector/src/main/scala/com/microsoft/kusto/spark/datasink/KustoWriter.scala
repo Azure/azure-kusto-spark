@@ -367,6 +367,7 @@ object KustoWriter {
       }
     }
   }
+
   private def convertArrayToCsvImpl(ar: ArrayData, fieldsType: DataType, dateFormat: FastDateFormat, nested: Boolean = true): String = {
     val result: Array[String] = new Array(ar.numElements())
     for (x <- 0 until ar.numElements()) {
@@ -375,11 +376,10 @@ object KustoWriter {
     result.mkString(",")
   }
 
-
   private def convertMapToCsv(map: MapData, fieldsType: MapType, dateFormat: FastDateFormat): String = {
     val a = convertArrayToCsvImpl(map.keyArray(), fieldsType.keyType, dateFormat, nested = false)
     val b = convertArrayToCsvImpl(map.valueArray(), fieldsType.valueType, dateFormat)
-    "{" +"\"" + a + "\"" + ":"+ b + "}"
+    "{" + "\"" + a + "\"" + ":" + b + "}"
   }
 
 
