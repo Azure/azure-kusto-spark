@@ -342,7 +342,7 @@ object KustoWriter {
       case TimestampType => dateFormat.format(DateTimeUtils.toJavaTimestamp(row.getLong(fieldIndexInRow)))
       case StringType => GetStringFromUTF8(row.getUTF8String(fieldIndexInRow), nested)
       case BooleanType => row.getBoolean(fieldIndexInRow).toString
-      case structType: StructType => convertStructToCsv(row.getStruct(fieldIndexInRow, dataType.asInstanceOf[StructType].length), structType, dateFormat)
+      case structType: StructType => convertStructToCsv(row.getStruct(fieldIndexInRow, structType.length), structType, dateFormat)
       case arrType: ArrayType => convertArrayToCsv(row.getArray(fieldIndexInRow), arrType.elementType, dateFormat)
       case mapType: MapType => convertMapToCsv(row.getMap(fieldIndexInRow), mapType, dateFormat)
       case _ => row.get(fieldIndexInRow, dataType).toString
