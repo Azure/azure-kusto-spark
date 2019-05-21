@@ -22,14 +22,15 @@ import org.scalatest.{FlatSpec, Matchers}
 
 @RunWith(classOf[JUnitRunner])
 class KustoWriterTests extends FlatSpec with Matchers {
-  val sparkConf: SparkConf = new SparkConf().set("spark.testing", "true")
-    .set("spark.ui.enabled", "false")
-    .setAppName("SimpleKustoDataSink")
-    .setMaster("local[*]")
-  val sparkSession: SparkSession = SparkSession.builder().config(sparkConf).getOrCreate()
+
 
   def getDF(isNestedSchema: Boolean): DataFrame = {
 
+    val sparkConf: SparkConf = new SparkConf().set("spark.testing", "true")
+      .set("spark.ui.enabled", "false")
+      .setAppName("SimpleKustoDataSink")
+      .setMaster("local[*]")
+    val sparkSession: SparkSession = SparkSession.builder().config(sparkConf).getOrCreate()
     val customSchema = if (isNestedSchema) StructType(Array(StructField("Name", StringType, true), StructField("Number", IntegerType, true))) else null
     if (isNestedSchema) sparkSession.read.format("csv").option("header", "false").schema(customSchema).load("src/test/resources/ShortTestData/ShortTestData.csv")
     else sparkSession.read.format("json").option("header", "true").load("src/test/resources/TestData/TestDynamicFields.json")
@@ -104,6 +105,12 @@ class KustoWriterTests extends FlatSpec with Matchers {
   }
 
   "convertRowToCsv" should "convert the row as expected with maps" in {
+    val sparkConf: SparkConf = new SparkConf().set("spark.testing", "true")
+      .set("spark.ui.enabled", "false")
+      .setAppName("SimpleKustoDataSink")
+      .setMaster("local[*]")
+    val sparkSession: SparkSession = SparkSession.builder().config(sparkConf).getOrCreate()
+    
     val someData = List(
       Map("asd" -> Row(Array("stringVal")),
         "asd2" -> Row(Array("stringVal2")))

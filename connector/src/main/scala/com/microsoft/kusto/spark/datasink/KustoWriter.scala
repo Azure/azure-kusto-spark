@@ -342,7 +342,7 @@ object KustoWriter {
       case TimestampType => dateFormat.format(DateTimeUtils.toJavaTimestamp(row.getLong(fieldIndexInRow)))
       case StringType => GetStringFromUTF8(row.getUTF8String(fieldIndexInRow), nested)
       case BooleanType => row.getBoolean(fieldIndexInRow).toString
-      case strType: StructType => convertStructToCsv(row.getStruct(fieldIndexInRow, dataType.asInstanceOf[StructType].length), strType, dateFormat)
+      case structType: StructType => convertStructToCsv(row.getStruct(fieldIndexInRow, dataType.asInstanceOf[StructType].length), structType, dateFormat)
       case arrType: ArrayType => convertArrayToCsv(row.getArray(fieldIndexInRow), arrType.elementType, dateFormat)
       case mapType: MapType => convertMapToCsv(row.getMap(fieldIndexInRow), mapType, dateFormat)
       case _ => row.get(fieldIndexInRow, dataType).toString
@@ -363,12 +363,12 @@ object KustoWriter {
     if (ar == null) null else {
       if (ar.numElements() == 0) "[]" else {
 
-        "[" + convertArrayToCsvImpl(ar, fieldsType, dateFormat).mkString(",") + "]"
+        "[" + convertArrayToStringArray(ar, fieldsType, dateFormat).mkString(",") + "]"
       }
     }
   }
 
-  private def convertArrayToCsvImpl(ar: ArrayData, fieldsType: DataType, dateFormat: FastDateFormat, nested: Boolean = true): Array[String] = {
+  private def convertArrayToStringArray(ar: ArrayData, fieldsType: DataType, dateFormat: FastDateFormat, nested: Boolean = true): Array[String] = {
     val result: Array[String] = new Array(ar.numElements())
     for (x <- 0 until ar.numElements()) {
       result(x) = getField(ar, x, fieldsType, dateFormat, nested)
@@ -377,8 +377,8 @@ object KustoWriter {
   }
 
   private def convertMapToCsv(map: MapData, fieldsType: MapType, dateFormat: FastDateFormat): String = {
-    val keys = convertArrayToCsvImpl(map.keyArray(), fieldsType.keyType, dateFormat, nested = false)
-    val values = convertArrayToCsvImpl(map.valueArray(), fieldsType.valueType, dateFormat)
+    val keys = convertArrayToStringArray(map.keyArray(), fieldsType.keyType, dateFormat, nested = false)
+    val values = convertArrayToStringArray(map.valueArray(), fieldsType.valueType, dateFormat)
 
     val result: Array[String] = new Array(keys.length)
 
