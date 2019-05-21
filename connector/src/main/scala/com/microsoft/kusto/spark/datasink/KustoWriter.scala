@@ -363,23 +363,30 @@ object KustoWriter {
     if (ar == null) null else {
       if (ar.numElements() == 0) "[]" else {
 
-        "[" + convertArrayToCsvImpl(ar, fieldsType, dateFormat) + "]"
+        "[" + convertArrayToCsvImpl(ar, fieldsType, dateFormat).mkString(",") + "]"
       }
     }
   }
 
-  private def convertArrayToCsvImpl(ar: ArrayData, fieldsType: DataType, dateFormat: FastDateFormat, nested: Boolean = true): String = {
+  private def convertArrayToCsvImpl(ar: ArrayData, fieldsType: DataType, dateFormat: FastDateFormat, nested: Boolean = true): Array[String] = {
     val result: Array[String] = new Array(ar.numElements())
     for (x <- 0 until ar.numElements()) {
       result(x) = getField(ar, x, fieldsType, dateFormat, nested)
     }
-    result.mkString(",")
+    result
   }
 
   private def convertMapToCsv(map: MapData, fieldsType: MapType, dateFormat: FastDateFormat): String = {
-    val a = convertArrayToCsvImpl(map.keyArray(), fieldsType.keyType, dateFormat, nested = false)
-    val b = convertArrayToCsvImpl(map.valueArray(), fieldsType.valueType, dateFormat)
-    "{" + "\"" + a + "\"" + ":" + b + "}"
+    val keys = convertArrayToCsvImpl(map.keyArray(), fieldsType.keyType, dateFormat, nested = false)
+    val values = convertArrayToCsvImpl(map.valueArray(), fieldsType.valueType, dateFormat)
+
+    val result: Array[String] = new Array(keys.length)
+
+    for (x <- keys.indices) {
+      result(x) = "\"" + keys(x) + "\"" + ":" + values(x)
+    }
+
+    "{" +  result.mkString(",") +"}"
   }
 
 
