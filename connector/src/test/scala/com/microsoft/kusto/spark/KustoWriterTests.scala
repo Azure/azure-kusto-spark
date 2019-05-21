@@ -26,51 +26,33 @@ class KustoWriterTests extends FlatSpec with Matchers {
     .set("spark.ui.enabled", "false")
     .setAppName("SimpleKustoDataSink")
     .setMaster("local[*]")
-  val sparkSession = SparkSession.builder().config(sparkConf).getOrCreate()
+  val sparkSession: SparkSession = SparkSession.builder().config(sparkConf).getOrCreate()
 
   def getDF(isNestedSchema: Boolean): DataFrame = {
 
     val customSchema = if (isNestedSchema) StructType(Array(StructField("Name", StringType, true), StructField("Number", IntegerType, true))) else null
-    if(isNestedSchema) sparkSession.read.format("csv").option("header", "false").schema(customSchema).load("src/test/resources/ShortTestData/ShortTestData.csv")
+    if (isNestedSchema) sparkSession.read.format("csv").option("header", "false").schema(customSchema).load("src/test/resources/ShortTestData/ShortTestData.csv")
     else sparkSession.read.format("json").option("header", "true").load("src/test/resources/TestData/TestDynamicFields.json")
   }
 
   "convertRowToCsv" should "convert the row as expected" in {
-    val df: DataFrame = getDF(isNestedSchema=true)
+    val df: DataFrame = getDF(isNestedSchema = true)
     val dfRow: InternalRow = df.queryExecution.toRdd.collect().head
     val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone("UTC"))
     KustoWriter.convertRowToCSV(dfRow, df.schema, dateFormat).formattedRow shouldEqual Array("John Doe", "1")
   }
 
-  "convertRowToCsv" should "convert the row as expected with maps" in {
-    val someData = List(
-      Map("asd" -> Row(Array("stringVal")))
-    )
-    val someSchema = List(
-      StructField("mapToArray", MapType(StringType, new StructType().add("arrayStrings", ArrayType(StringType,true),true), true),true)
-    )
-
-    val df =sparkSession.createDataFrame(
-      sparkSession.sparkContext.parallelize(asRows(someData)),
-      StructType(asSchema(someSchema))
-    )
-
-    val dfRow: InternalRow = df.queryExecution.toRdd.collect().head
-    val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone("UTC"))
-    KustoWriter.convertRowToCSV(dfRow, df.schema, dateFormat).formattedRow shouldEqual Array("{\"asd\":{\"arrayStrings\":[\"stringVal\"]}}")
-  }
-
   "convertRowToCsv" should "convert the row as expected, including nested types." in {
-    val df: DataFrame = getDF(isNestedSchema=false)
+    val df: DataFrame = getDF(isNestedSchema = false)
     val dfRow: InternalRow = df.queryExecution.toRdd.collect().head
     val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone("UTC"))
     KustoWriter.convertRowToCSV(dfRow, df.schema, dateFormat).formattedRow shouldEqual
       Array("[true,false,null]", "[1,2,3,null]", "", "value", "[\"a\",\"b\",\"c\",null]", "[[\"a\",\"b\",\"c\"],null]",
-      "{\"string_ar\":[\"a\",\"b\",\"c\"],\"int\":1,\"string\":\"abc\",\"int_ar\":[1,2,3],\"bool\":true,\"dict_ar\":[{\"int\":1,\"string\":\"a\"},{\"int\":2,\"string\":\"b\"}]}")
+        "{\"string_ar\":[\"a\",\"b\",\"c\"],\"int\":1,\"string\":\"abc\",\"int_ar\":[1,2,3],\"bool\":true,\"dict_ar\":[{\"int\":1,\"string\":\"a\"},{\"int\":2,\"string\":\"b\"}]}")
   }
 
   "convertRowToCsv" should "calculate row size as expected" in {
-    val df: DataFrame = getDF(isNestedSchema=true)
+    val df: DataFrame = getDF(isNestedSchema = true)
     val dfRow: InternalRow = df.queryExecution.toRdd.collect().head
     val expectedSize = "John Doe,1\n".getBytes(StandardCharsets.UTF_8).length
     val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone("UTC"))
@@ -110,7 +92,7 @@ class KustoWriterTests extends FlatSpec with Matchers {
     element3.add("long")
     element3.add("System.Int64")
 
-    val resultTable =  new util.ArrayList[util.ArrayList[String]]
+    val resultTable = new util.ArrayList[util.ArrayList[String]]
     resultTable.add(element1)
     resultTable.add(element2)
     resultTable.add(element3)
@@ -121,11 +103,29 @@ class KustoWriterTests extends FlatSpec with Matchers {
     parsedSchema shouldEqual "SubscriptionGuid:string,Identifier:string,SomeNumber:long"
   }
 
+  "convertRowToCsv" should "convert the row as expected with maps" in {
+    val someData = List(
+      Map("asd" -> Row(Array("stringVal")))
+    )
+    val someSchema = List(
+      StructField("mapToArray", MapType(StringType, new StructType().add("arrayStrings", ArrayType(StringType, true), true), true), true)
+    )
+
+    val df = sparkSession.createDataFrame(
+      sparkSession.sparkContext.parallelize(asRows(someData)),
+      StructType(asSchema(someSchema))
+    )
+
+    val dfRow: InternalRow = df.queryExecution.toRdd.collect().head
+    val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone("UTC"))
+    KustoWriter.convertRowToCSV(dfRow, df.schema, dateFormat).formattedRow shouldEqual Array("{\"asd\":{\"arrayStrings\":[\"stringVal\"]}}")
+  }
+
   private def asRows[U](values: List[U]): List[Row] = {
     values.map {
-      case x: Row     => x.asInstanceOf[Row]
+      case x: Row => x.asInstanceOf[Row]
       case y: Product => Row(y.productIterator.toList: _*)
-      case a          => Row(a)
+      case a => Row(a)
     }
   }
 
