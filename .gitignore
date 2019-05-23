@@ -24,6 +24,8 @@ out/
 # JDT-specific (Eclipse Java Development Tools)
 .classpath
 scalastyle-output.xml
+*.prefs
+*.factorypath
 
 # Maven
 target/
@@ -48,3 +50,4 @@ lib_managed/
 src_managed/
 project/boot/
 project/plugins/project/
+
