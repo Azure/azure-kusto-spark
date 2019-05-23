@@ -101,7 +101,7 @@ class KustoWriterTests extends FlatSpec with Matchers {
     //("SubscriptionGuid", "string", "System.String")
     val parsedSchema = KDSU.extractSchemaFromResultTable(resultTable)
     // We could add new elements for IsCurrent:bool,LastModifiedOn:datetime,IntegerValue:int
-    parsedSchema shouldEqual "SubscriptionGuid:string,Identifier:string,SomeNumber:long"
+    parsedSchema shouldEqual "['SubscriptionGuid']:string,['Identifier']:string,['SomeNumber']:long"
   }
 
   "convertRowToCsv" should "convert the row as expected with maps" in {

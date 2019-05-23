@@ -73,7 +73,7 @@ object KustoDataSourceUtils {
         val tableSchemaBuilder = new StringJoiner(",")
         schema.fields.foreach { field =>
           val fieldType = DataTypeMapping.getSparkTypeToKustoTypeMap(field.dataType)
-          tableSchemaBuilder.add(s"${field.name}:$fieldType")
+          tableSchemaBuilder.add(s"['${field.name}']:$fieldType")
         }
         tmpTableSchema = tableSchemaBuilder.toString
         kustoAdminClient.execute(database, generateTableCreateCommand(table, tmpTableSchema))
@@ -93,7 +93,7 @@ object KustoDataSourceUtils {
 
     for(row <- resultRows){
       // Each row contains {Name, CslType, Type}, converted to (Name:CslType) pairs
-      tableSchemaBuilder.add(s"${row.get(0)}:${row.get(1)}")
+      tableSchemaBuilder.add(s"['${row.get(0)}']:${row.get(1)}")
     }
 
     tableSchemaBuilder.toString
