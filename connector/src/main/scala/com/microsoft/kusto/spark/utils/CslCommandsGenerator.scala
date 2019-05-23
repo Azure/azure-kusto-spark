@@ -30,7 +30,7 @@ private[kusto] object CslCommandsGenerator{
   // and we rely on getting an empty result in this case
   def generateTableGetSchemaAsRowsCommand(table: String): String = {
     ".show table " + table + " schema as json | project ColumnsJson=todynamic(Schema).OrderedColumns" +
-      "| mvexpand ColumnsJson | evaluate bag_unpack(ColumnsJson)"
+      "| mv-expand ColumnsJson | evaluate bag_unpack(ColumnsJson)"
   }
 
   def generateTableDropCommand(table: String): String = {
