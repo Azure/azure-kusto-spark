@@ -93,7 +93,7 @@ object KustoDataSourceUtils {
 
     for(row <- resultRows){
       // Each row contains {Name, CslType, Type}, converted to (Name:CslType) pairs
-      tableSchemaBuilder.add(s"[${row.get(0)}]:${row.get(1)}")
+      tableSchemaBuilder.add(s"['${row.get(0)}']:${row.get(1)}")
     }
 
     tableSchemaBuilder.toString
