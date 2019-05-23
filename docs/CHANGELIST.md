@@ -47,6 +47,9 @@ or scale (via transient blob storage) read mode.
 * Remove dependency on Jackson-core library
 * Deprecate 'KUSTO_BLOB_SET_FS_CONFIG' option. Instead, cache relevant configuration and set if needed
 
+# 1.0.0-Beta-04:
+* Support spark StructYype, ArrayType, MapType.
+
 # Known Issues and Tips
 1. When running with spark 'wholestage codegen' enabled, a mismatch between schema 'nullable' definition and actual data containing
 null values can lead to a NullPointerException to be thrown by org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter.
