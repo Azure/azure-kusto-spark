@@ -22,6 +22,8 @@ import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
 
 object KustoDataSourceUtils {
   private val klog = Logger.getLogger("KustoConnector")
+  val urlPattern: Regex = raw"https://(?:ingest-)?([^.]+).kusto.windows.net(?::443)?".r
+  val sasPattern: Regex = raw"(?:https://)?([^.]+).blob.core.windows.net/([^?]+)?(.+)".r
 
   val ClientName = "Kusto.Spark.Connector"
   val DefaultTimeoutLongRunning: FiniteDuration = 90 minutes
@@ -71,7 +73,7 @@ object KustoDataSourceUtils {
         val tableSchemaBuilder = new StringJoiner(",")
         schema.fields.foreach { field =>
           val fieldType = DataTypeMapping.getSparkTypeToKustoTypeMap(field.dataType)
-          tableSchemaBuilder.add(s"${field.name}:$fieldType")
+          tableSchemaBuilder.add(s"['${field.name}']:$fieldType")
         }
         tmpTableSchema = tableSchemaBuilder.toString
         kustoAdminClient.execute(database, generateTableCreateCommand(table, tmpTableSchema))
@@ -91,7 +93,7 @@ object KustoDataSourceUtils {
 
     for(row <- resultRows){
       // Each row contains {Name, CslType, Type}, converted to (Name:CslType) pairs
-      tableSchemaBuilder.add(s"${row.get(0)}:${row.get(1)}")
+      tableSchemaBuilder.add(s"['${row.get(0)}']:${row.get(1)}")
     }
 
     tableSchemaBuilder.toString
@@ -149,7 +151,8 @@ object KustoDataSourceUtils {
     }) {
       authentication = KustoAccessTokenAuthentication(accessToken)
     } else if (keyVaultUri.isEmpty) {
-      authentication = KustoAccessTokenAuthentication(DeviceAuthentication.acquireAccessTokenUsingDeviceCodeFlow(cluster.get))
+      val token = DeviceAuthentication.acquireAccessTokenUsingDeviceCodeFlow(getClusterUrlFromAlias(cluster.get))
+      authentication = KustoAccessTokenAuthentication(token)
     }
 
     SourceParameters(authentication, KustoCoordinates(getClusterNameFromUrlIfNeeded(cluster.get).toLowerCase(), database.get, table), keyVaultAuthentication)
@@ -219,10 +222,16 @@ object KustoDataSourceUtils {
   }
 
   private def getClusterNameFromUrlIfNeeded(url: String): String = {
-    val urlPattern: Regex = raw"https://(?:ingest-)?([^.]+).kusto.windows.net(?::443)?".r
     url match {
       case urlPattern(clusterAlias) => clusterAlias
       case _ => url
+    }
+  }
+
+  private def getClusterUrlFromAlias(alias: String): String = {
+    alias match {
+      case urlPattern(_) => alias
+      case _ => s"https://$alias.kusto.windows.net"
     }
   }
 
@@ -311,9 +320,8 @@ object KustoDataSourceUtils {
   }
 
   private[kusto] def parseSas(url: String): KustoStorageParameters = {
-    val urlPattern: Regex = raw"(?:https://)?([^.]+).blob.core.windows.net/([^?]+)?(.+)".r
     url match {
-      case urlPattern(storageAccountId, container, sasKey) => KustoStorageParameters(storageAccountId, sasKey, container, secretIsAccountKey = false)
+      case sasPattern(storageAccountId, container, sasKey) => KustoStorageParameters(storageAccountId, sasKey, container, secretIsAccountKey = false)
       case _ => throw new InvalidParameterException(
         "SAS url couldn't be parsed. Should be https://<storage-account>.blob.core.windows.net/<container>?<SAS-Token>"
       )
@@ -369,12 +377,12 @@ object KustoDataSourceUtils {
           Some(keyVaultParameters)
         } else {
           if ((storageAccount.isEmpty && keyVaultParameters.account.isEmpty) ||
-              (storageContainer.isEmpty && keyVaultParameters.container.isEmpty) ||
-              (storageSecret.isEmpty && keyVaultParameters.secret.isEmpty)) {
+            (storageContainer.isEmpty && keyVaultParameters.container.isEmpty) ||
+            (storageSecret.isEmpty && keyVaultParameters.secret.isEmpty)) {
 
-              // We don't have enough information to access blob storage
-              None
-            }
+            // We don't have enough information to access blob storage
+            None
+          }
           else {
             // Try combine
             val account = if (storageAccount.isEmpty) Some(keyVaultParameters.account) else storageAccount

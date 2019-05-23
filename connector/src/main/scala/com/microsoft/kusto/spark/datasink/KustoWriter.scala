@@ -1,7 +1,7 @@
 package com.microsoft.kusto.spark.datasink
 
 
-import java.io.{BufferedWriter, IOException, OutputStreamWriter}
+import java.io._
 import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.security.InvalidParameterException
@@ -11,10 +11,10 @@ import java.util.zip.GZIPOutputStream
 import java.util.{TimeZone, UUID}
 
 import com.microsoft.azure.kusto.data.Client
+import com.microsoft.azure.kusto.ingest.IngestionProperties
 import com.microsoft.azure.kusto.ingest.IngestionProperties.DATA_FORMAT
 import com.microsoft.azure.kusto.ingest.result.{IngestionResult, IngestionStatus, OperationStatus}
 import com.microsoft.azure.kusto.ingest.source.BlobSourceInfo
-import com.microsoft.azure.kusto.ingest.IngestionProperties
 import com.microsoft.azure.storage.StorageCredentialsSharedAccessSignature
 import com.microsoft.azure.storage.blob.{CloudBlobContainer, CloudBlockBlob}
 import com.microsoft.kusto.spark.datasink
@@ -23,11 +23,12 @@ import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.{KustoClient, KustoQueryUtils, KustoConstants => KCONST, KustoDataSourceUtils => KDSU}
 import com.univocity.parsers.csv.{CsvWriter, CsvWriterSettings}
 import org.apache.commons.lang3.time.FastDateFormat
-import org.apache.spark
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.types.{DateType, StringType, StructField, StructType, TimestampType}
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
+import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils, MapData}
+import org.apache.spark.sql.types.{DateType, StringType, StructType, TimestampType, _}
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.{FutureAction, TaskContext}
 import shaded.parquet.org.codehaus.jackson.map.ObjectMapper
 
@@ -58,7 +59,7 @@ object KustoWriter {
     val kustoAdminClient = KustoClient.getAdmin(authentication, tableCoordinates.cluster)
 
     if (tableCoordinates.table.isEmpty) {
-       KDSU.reportExceptionAndThrow(myName,  new InvalidParameterException("Table name not specified"), "writing data",
+      KDSU.reportExceptionAndThrow(myName, new InvalidParameterException("Table name not specified"), "writing data",
         tableCoordinates.cluster, tableCoordinates.database)
     }
 
@@ -99,7 +100,7 @@ object KustoWriter {
       } catch {
         case exception: Exception =>
           tryCleanupIngestionByproducts(tableCoordinates.database, kustoAdminClient, tmpTableName)
-          throw exception.getCause
+          throw exception
       }
       finalizeIngestionWhenWorkersSucceeded(tableCoordinates, batchIdIfExists, kustoAdminClient, tmpTableName)
       KDSU.logInfo(myName, s"write operation to Kusto table '$table' finished successfully")
@@ -116,14 +117,13 @@ object KustoWriter {
     }
 
   def cleanupTempTables(kustoAdminClient: Client, coordinates: KustoCoordinates): Unit = {
-
-    val tempTablesOld: Seq[String] =
-      kustoAdminClient.execute(generateFindOldTempTablesCommand(coordinates.database))
-        .getValues.asScala
-        .headOption.map(_.asScala)
-        .getOrElse(Seq())
-
     Future {
+      val tempTablesOld: Seq[String] =
+        kustoAdminClient.execute(generateFindOldTempTablesCommand(coordinates.database))
+          .getValues.asScala
+          .headOption.map(_.asScala)
+          .getOrElse(Seq())
+
       // Try delete temporary tablesToCleanup created and not used
       val tempTablesCurr: Seq[String] = kustoAdminClient.execute(coordinates.database, generateFindCurrentTempTablesCommand(TempIngestionTablePrefix))
         .getValues.get(0).asScala
@@ -159,8 +159,12 @@ object KustoWriter {
     val blobList: Seq[(CloudBlockBlob, Long)] = serializeRows(rows, storageUri, parameters)
 
     if (blobList.isEmpty) {
-      KDSU.logWarn(myName, "No blobs created for ingestion to Kusto cluster " + {coordinates.cluster} +
-        ", database " + {coordinates.database} + ", table " + targetTable)
+      KDSU.logWarn(myName, "No blobs created for ingestion to Kusto cluster " + {
+        coordinates.cluster
+      } +
+        ", database " + {
+        coordinates.database
+      } + ", table " + targetTable)
     }
 
     blobList.map { blobSizePair =>
@@ -225,24 +229,25 @@ object KustoWriter {
       Future(ingestRowsIntoKusto(rows, storageUri)).map { ingestionResults =>
         // Proceed only on success. Will throw on failure for the driver to handle
         ingestionResults.foreach {
-          ingestionResult => KDSU.runSequentially[IngestionStatus](
-            func = () => ingestionResult.getIngestionStatusCollection().get(0),
-            0, delayPeriodBetweenCalls, (timeout.toMillis / delayPeriodBetweenCalls + 5).toInt,
-            res => res.status == OperationStatus.Pending,
-            res => res.status match {
-              case OperationStatus.Pending =>
-                throw new RuntimeException(s"Ingestion to Kusto failed on timeout failure. Cluster: '${coordinates.cluster}', " +
-                  s"database: '${coordinates.database}', table: '$targetTable', batch: '$batchId', partition: '$partitionId'")
-              case OperationStatus.Succeeded =>
-                KDSU.logInfo(myName, s"Ingestion to Kusto succeeded. " +
-                  s"Cluster: '${coordinates.cluster}', " +
-                  s"database: '${coordinates.database}', " +
-                  s"table: '$targetTable', batch: '$batchId', partition: '$partitionId', from: '${res.ingestionSourcePath}', Operation ${res.operationId}")
-              case otherStatus =>
-                throw new RuntimeException(s"Ingestion to Kusto failed with status '$otherStatus'." +
-                  s" Cluster: '${coordinates.cluster}', database: '${coordinates.database}', " +
-                  s"table: '$targetTable', batch: '$batchId', partition: '$partitionId'. Ingestion info: '${readIngestionResult(res)}'")
-            }).await(timeout.toMillis, TimeUnit.MILLISECONDS)
+          ingestionResult =>
+            KDSU.runSequentially[IngestionStatus](
+              func = () => ingestionResult.getIngestionStatusCollection().get(0),
+              0, delayPeriodBetweenCalls, (timeout.toMillis / delayPeriodBetweenCalls + 5).toInt,
+              res => res.status == OperationStatus.Pending,
+              res => res.status match {
+                case OperationStatus.Pending =>
+                  throw new RuntimeException(s"Ingestion to Kusto failed on timeout failure. Cluster: '${coordinates.cluster}', " +
+                    s"database: '${coordinates.database}', table: '$targetTable', batch: '$batchId', partition: '$partitionId'")
+                case OperationStatus.Succeeded =>
+                  KDSU.logInfo(myName, s"Ingestion to Kusto succeeded. " +
+                    s"Cluster: '${coordinates.cluster}', " +
+                    s"database: '${coordinates.database}', " +
+                    s"table: '$targetTable', batch: '$batchId', partition: '$partitionId', from: '${res.ingestionSourcePath}', Operation ${res.operationId}")
+                case otherStatus =>
+                  throw new RuntimeException(s"Ingestion to Kusto failed with status '$otherStatus'." +
+                    s" Cluster: '${coordinates.cluster}', database: '${coordinates.database}', " +
+                    s"table: '$targetTable', batch: '$batchId', partition: '$partitionId'. Ingestion info: '${readIngestionResult(res)}'")
+              }).await(timeout.toMillis, TimeUnit.MILLISECONDS)
         }
       },
       timeout)
@@ -258,7 +263,6 @@ object KustoWriter {
   }
 
   def createBlobWriter(schema: StructType,
-                       timeZone: String,
                        tableCoordinates: KustoCoordinates,
                        tmpTableName: String,
                        storageUri: String,
@@ -280,13 +284,13 @@ object KustoWriter {
     import parameters._
     val container: CloudBlobContainer = new CloudBlobContainer(new URI(storageUri))
     //This blobWriter will be used later to write the rows to blob storage from which it will be ingested to Kusto
-    val initialBlobWriter: BlobWriteResource = createBlobWriter(schema, writeOptions.timeZone, coordinates, tmpTableName, storageUri, container)
+    val initialBlobWriter: BlobWriteResource = createBlobWriter(schema, coordinates, tmpTableName, storageUri, container)
+    val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone(writeOptions.timeZone))
 
     // Serialize rows to ingest and send to blob storage.
     val (currentFileSize, currentBlobWriter, blobsToIngest) = rows.foldLeft[(Long, BlobWriteResource, Seq[(CloudBlockBlob, Long)])]((0, initialBlobWriter, Seq())) {
       case ((size, blobWriter, blobsCreated), row) =>
-
-        val csvRowResult: CsvRowResult = convertRowToCSV(row, schema, writeOptions.timeZone)
+        val csvRowResult: CsvRowResult = convertRowToCSV(row, schema, dateFormat)
         blobWriter.csvWriter.writeRow(csvRowResult.formattedRow)
         val newTotalSize = size + csvRowResult.rowByteSize
 
@@ -296,7 +300,7 @@ object KustoWriter {
           (newTotalSize, blobWriter, blobsCreated)
         } else {
           finalizeBlobWrite(blobWriter)
-          (0, createBlobWriter(schema, writeOptions.timeZone, coordinates, tmpTableName, storageUri, container), blobsCreated :+ (blobWriter.blob, newTotalSize))
+          (0, createBlobWriter(schema, coordinates, tmpTableName, storageUri, container), blobsCreated :+ (blobWriter.blob, newTotalSize))
         }
     }
 
@@ -316,27 +320,79 @@ object KustoWriter {
     blobWriteResource.gzip.close()
   }
 
-  def convertRowToCSV(row: InternalRow, schema: StructType, timeZone: String): CsvRowResult = {
-    val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone(timeZone))
+  def convertRowToCSV(row: InternalRow, schema: StructType, dateFormat: FastDateFormat): CsvRowResult = {
     val schemaFields: Array[StructField] = schema.fields
 
-    val (fields, size) = row.toSeq(schema).foldLeft[(Seq[String], Int)](Seq[String](), 0) { (res, curr) =>
+    val (fields, size) = row.toSeq(schema).foldLeft[(Seq[String], Int)](Seq.empty[String], 0) { (res, curr) =>
       val formattedField: String = if (curr == null) "" else {
         val fieldIndexInRow = res._1.size
-        schemaFields(fieldIndexInRow).dataType match {
-          case DateType => DateTimeUtils.toJavaDate(row.getInt(fieldIndexInRow)).toString
-          case TimestampType => dateFormat.format(DateTimeUtils.toJavaTimestamp(row.getLong(fieldIndexInRow)))
-          case StringType => row.getString(fieldIndexInRow)
-          case _ => row.get(fieldIndexInRow, schemaFields(fieldIndexInRow).dataType).toString
-        }
+        val dataType = schemaFields(fieldIndexInRow).dataType
+        getField(row, fieldIndexInRow, dataType, dateFormat, nested = false)
       }
 
-      (res._1 :+ formattedField, res._2 + formattedField.length)
+      if (formattedField == null) (res._1 :+ "", res._2) else (res._1 :+ formattedField, res._2 + formattedField.length)
     }
 
     CsvRowResult(fields.toArray, size + fields.size)
   }
 
+  private def getField(row: SpecializedGetters, fieldIndexInRow: Int, dataType: DataType, dateFormat: FastDateFormat, nested: Boolean) = {
+    if (row.get(fieldIndexInRow, dataType) == null) null else dataType match {
+      case DateType => DateTimeUtils.toJavaDate(row.getInt(fieldIndexInRow)).toString
+      case TimestampType => dateFormat.format(DateTimeUtils.toJavaTimestamp(row.getLong(fieldIndexInRow)))
+      case StringType => GetStringFromUTF8(row.getUTF8String(fieldIndexInRow), nested)
+      case BooleanType => row.getBoolean(fieldIndexInRow).toString
+      case structType: StructType => convertStructToCsv(row.getStruct(fieldIndexInRow, structType.length), structType, dateFormat)
+      case arrType: ArrayType => convertArrayToCsv(row.getArray(fieldIndexInRow), arrType.elementType, dateFormat)
+      case mapType: MapType => convertMapToCsv(row.getMap(fieldIndexInRow), mapType, dateFormat)
+      case _ => row.get(fieldIndexInRow, dataType).toString
+    }
+  }
+
+  private def convertStructToCsv(row: InternalRow, schema: StructType, dateFormat: FastDateFormat): String = {
+    val fields = schema.fields
+    val result: scala.collection.mutable.Map[String, String] = scala.collection.mutable.Map()
+
+    for (x <- fields.indices) {
+      result(fields(x).name) = getField(row, x, fields(x).dataType, dateFormat, nested = true)
+    }
+    "{" + result.map { case (k, v) => "\"" + k + "\"" + ":" + v }.mkString(",") + "}"
+  }
+
+  private def convertArrayToCsv(ar: ArrayData, fieldsType: DataType, dateFormat: FastDateFormat): String = {
+    if (ar == null) null else {
+      if (ar.numElements() == 0) "[]" else {
+
+        "[" + convertArrayToStringArray(ar, fieldsType, dateFormat).mkString(",") + "]"
+      }
+    }
+  }
+
+  private def convertArrayToStringArray(ar: ArrayData, fieldsType: DataType, dateFormat: FastDateFormat, nested: Boolean = true): Array[String] = {
+    val result: Array[String] = new Array(ar.numElements())
+    for (x <- 0 until ar.numElements()) {
+      result(x) = getField(ar, x, fieldsType, dateFormat, nested)
+    }
+    result
+  }
+
+  private def convertMapToCsv(map: MapData, fieldsType: MapType, dateFormat: FastDateFormat): String = {
+    val keys = convertArrayToStringArray(map.keyArray(), fieldsType.keyType, dateFormat, nested = false)
+    val values = convertArrayToStringArray(map.valueArray(), fieldsType.valueType, dateFormat)
+
+    val result: Array[String] = new Array(keys.length)
+
+    for (x <- keys.indices) {
+      result(x) = "\"" + keys(x) + "\"" + ":" + values(x)
+    }
+
+    "{" +  result.mkString(",") +"}"
+  }
+
+
+  private def GetStringFromUTF8(str: UTF8String, nested: Boolean) = {
+    if (str == null) null else if (nested) "\"" + str.toString + "\"" else str.toString
+  }
 
   private def readIngestionResult(statusRecord: IngestionStatus): String = {
     new ObjectMapper()
