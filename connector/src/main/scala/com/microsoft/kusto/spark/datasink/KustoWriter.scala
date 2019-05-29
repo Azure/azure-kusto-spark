@@ -42,11 +42,6 @@ import scala.concurrent.{Await, Future}
 object KustoWriter {
   private val myName = this.getClass.getSimpleName
   val TempIngestionTablePrefix = "_tmpTable"
-  var OperationShowCommandResult = 16
-  val completedState = "Completed"
-  val inProgressState = "InProgress"
-  val stateCol = "State"
-  val statusCol = "Status"
   val delayPeriodBetweenCalls: Int = KCONST.defaultPeriodicSamplePeriod.toMillis.toInt
   val GZIP_BUFFER_SIZE: Int = KCONST.defaultBufferSize
   val maxBlobSize: Int = KCONST.oneGiga - KCONST.oneMega

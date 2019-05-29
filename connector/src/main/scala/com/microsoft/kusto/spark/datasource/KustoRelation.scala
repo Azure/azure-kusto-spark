@@ -40,8 +40,8 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
   }
 
   override def buildScan(): RDD[Row] = {
-    val kustoClient = KustoClientCache.getClient(kustoCoordinates.cluster, authentication)
-    val count = KDSU.countRows(kustoClient.engineClient, query, kustoCoordinates.database)
+    val kustoClient = KustoClientCache.getClient(kustoCoordinates.cluster, authentication).engineClient
+    val count = KDSU.countRows(kustoClient, query, kustoCoordinates.database)
     if (count == 0)  {
       sparkSession.emptyDataFrame.rdd
     }
@@ -49,12 +49,12 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
       val useLeanMode = KDSU.isLeanReadMode(count, storageParameters.isDefined, readOptions.forcedReadMode)
       if (useLeanMode) {
         KustoReader.leanBuildScan(
-          kustoClient.engineClient,
+          kustoClient,
           KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication, timeout)
         )
       } else {
         KustoReader.scaleBuildScan(
-          kustoClient.engineClient,
+          kustoClient,
           KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication, timeout),
           storageParameters.get,
           KustoPartitionParameters(numPartitions, getPartitioningColumn, getPartitioningMode)
@@ -64,8 +64,8 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
   }
 
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
-    val kustoClient = KustoClientCache.getClient(kustoCoordinates.cluster, authentication)
-    val count = KDSU.countRows(kustoClient.engineClient, query, kustoCoordinates.database)
+    val kustoClient = KustoClientCache.getClient(kustoCoordinates.cluster, authentication).engineClient
+    val count = KDSU.countRows(kustoClient, query, kustoCoordinates.database)
     if (count == 0) {
       sparkSession.emptyDataFrame.rdd
     }
@@ -73,13 +73,13 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
       val useLeanMode = KDSU.isLeanReadMode(count, storageParameters.isDefined, readOptions.forcedReadMode)
       if (useLeanMode) {
         KustoReader.leanBuildScan(
-          kustoClient.engineClient,
+          kustoClient,
           KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication, timeout),
           KustoFiltering(requiredColumns, filters)
         )
       } else {
         KustoReader.scaleBuildScan(
-          kustoClient.engineClient,
+          kustoClient,
           KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication, timeout),
           storageParameters.get,
           KustoPartitionParameters(numPartitions, getPartitioningColumn, getPartitioningMode),
