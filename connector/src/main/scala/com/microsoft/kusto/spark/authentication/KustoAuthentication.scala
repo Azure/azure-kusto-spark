@@ -21,7 +21,7 @@ case class AadApplicationAuthentication(ID: String, password: String, authority:
 }
 
 case class KeyVaultAppAuthentication(uri: String, keyVaultAppID: String, keyVaultAppKey: String) extends KeyVaultAuthentication(uri) {
-  def canEqual(that: Any) : Boolean = that.isInstanceOf[AadApplicationAuthentication]
+  def canEqual(that: Any) : Boolean = that.isInstanceOf[KeyVaultAppAuthentication]
   override def equals(that: Any) : Boolean = that match {
     case auth : KeyVaultAppAuthentication => uri == auth.uri && keyVaultAppID == auth.keyVaultAppID
     case _ => false
@@ -31,7 +31,7 @@ case class KeyVaultAppAuthentication(uri: String, keyVaultAppID: String, keyVaul
 }
 
 case class KeyVaultCertificateAuthentication(uri: String, pemFilePath: String, pemFilePassword: String) extends KeyVaultAuthentication(uri) {
-  def canEqual(that: Any) : Boolean = that.isInstanceOf[AadApplicationAuthentication]
+  def canEqual(that: Any) : Boolean = that.isInstanceOf[KeyVaultCertificateAuthentication]
   override def equals(that: Any) : Boolean = that match {
     case auth : KeyVaultCertificateAuthentication => uri == auth.uri && pemFilePath == auth.pemFilePath
     case _ => false
@@ -41,7 +41,7 @@ case class KeyVaultCertificateAuthentication(uri: String, pemFilePath: String, p
 }
 
 case class KustoAccessTokenAuthentication(token: String) extends KustoAuthentication {
-  def canEqual(that: Any) : Boolean = that.isInstanceOf[AadApplicationAuthentication]
+  def canEqual(that: Any) : Boolean = that.isInstanceOf[KustoAccessTokenAuthentication]
   override def equals(that: Any) : Boolean = that match {
     case auth : KustoAccessTokenAuthentication => token == auth.token
     case _ => false
