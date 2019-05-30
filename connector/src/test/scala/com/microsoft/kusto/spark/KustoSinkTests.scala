@@ -5,8 +5,9 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import com.microsoft.azure.kusto.ingest.IngestClient
 import com.microsoft.azure.kusto.ingest.result.{IngestionResult, IngestionStatus}
+import com.microsoft.kusto.spark.authentication.AadApplicationAuthentication
 import com.microsoft.kusto.spark.datasink.KustoSink
-import com.microsoft.kusto.spark.datasource.{AadApplicationAuthentication, KustoOptions, WriteOptions, KustoCoordinates}
+import com.microsoft.kusto.spark.datasource.{KustoOptions, WriteOptions, KustoCoordinates}
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU, KustoConstants => KCONST}
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{SQLContext, SparkSession}

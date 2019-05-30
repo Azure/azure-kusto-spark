@@ -1,11 +1,11 @@
 package com.microsoft.kusto.spark.datasource
 
 import java.security.InvalidParameterException
-import java.util.Locale
 import java.util.concurrent.TimeUnit
 
+import com.microsoft.kusto.spark.authentication.{KeyVaultAuthentication, KustoAuthentication}
 import com.microsoft.kusto.spark.datasink.KustoWriter
-import com.microsoft.kusto.spark.utils.{KeyVaultUtils, KustoQueryUtils, KustoDataSourceUtils => KDSU, KustoConstants => KCONST}
+import com.microsoft.kusto.spark.utils.{KeyVaultUtils, KustoQueryUtils, KustoConstants => KCONST, KustoDataSourceUtils => KDSU}
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister, RelationProvider}
 import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode}
 

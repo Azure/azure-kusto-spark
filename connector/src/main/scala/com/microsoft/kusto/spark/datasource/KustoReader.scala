@@ -3,7 +3,8 @@ import java.security.InvalidParameterException
 import java.util.UUID
 
 import com.microsoft.azure.kusto.data.Client
-import com.microsoft.kusto.spark.utils.{CslCommandsGenerator, KustoAzureFsSetupCache, KustoBlobStorageUtils, KustoClient, KustoQueryUtils, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.authentication.KustoAuthentication
+import com.microsoft.kusto.spark.utils.{CslCommandsGenerator, KustoAzureFsSetupCache, KustoBlobStorageUtils, KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.spark.Partition
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.sources.Filter

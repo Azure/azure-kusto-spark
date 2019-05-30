@@ -3,7 +3,8 @@ package com.microsoft.kusto.spark.datasource
 import java.security.InvalidParameterException
 import java.util.Locale
 
-import com.microsoft.kusto.spark.utils.{KustoClient, KustoQueryUtils, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.authentication.KustoAuthentication
+import com.microsoft.kusto.spark.utils.{KustoClientCache, KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.sources.{BaseRelation, Filter, PrunedFilteredScan, TableScan}
 import org.apache.spark.sql.types.StructType
@@ -39,7 +40,7 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
   }
 
   override def buildScan(): RDD[Row] = {
-    val kustoClient = KustoClient.getAdmin(authentication, kustoCoordinates.cluster)
+    val kustoClient = KustoClientCache.getClient(kustoCoordinates.cluster, authentication).engineClient
     val count = KDSU.countRows(kustoClient, query, kustoCoordinates.database)
     if (count == 0)  {
       sparkSession.emptyDataFrame.rdd
@@ -63,7 +64,7 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
   }
 
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
-    val kustoClient = KustoClient.getAdmin(authentication, kustoCoordinates.cluster)
+    val kustoClient = KustoClientCache.getClient(kustoCoordinates.cluster, authentication).engineClient
     val count = KDSU.countRows(kustoClient, query, kustoCoordinates.database)
     if (count == 0) {
       sparkSession.emptyDataFrame.rdd
@@ -99,7 +100,7 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
       throw new RuntimeException("Spark connector cannot run Kusto commands. Please provide a valid query")
     }
 
-    KDSU.getSchema(kustoCoordinates.database, getSchemaQuery, KustoClient.getAdmin(authentication, kustoCoordinates.cluster))
+    KDSU.getSchema(kustoCoordinates.database, getSchemaQuery, KustoClientCache.getClient(kustoCoordinates.cluster, authentication).engineClient)
   }
 
   private def getPartitioningColumn: String = {

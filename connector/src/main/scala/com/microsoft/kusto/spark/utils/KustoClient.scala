@@ -1,59 +1,82 @@
 package com.microsoft.kusto.spark.utils
 
-import com.microsoft.azure.kusto.data.{Client, ClientFactory, ConnectionStringBuilder}
-import com.microsoft.azure.kusto.ingest.{IngestClient, IngestClientFactory}
-import com.microsoft.kusto.spark.datasource._
-import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU, KustoConstants => KCONST}
 
-import scala.collection.immutable.HashMap
+import java.util.StringJoiner
 
-object KustoClient {
-  var ingestClientCache = new HashMap[String, IngestClient]
-  var adminClientCache = new HashMap[String, Client]
-  org.apache.spark.sql.sources.In
-  def getAdmin(authentication: KustoAuthentication, clusterAlias: String, isIngestCluster: Boolean = false): Client = {
-    val clusterUri = s"https://${if(isIngestCluster) "ingest" else ""}$clusterAlias.kusto.windows.net"
-    val kcsb = getKcsb(authentication,clusterUri)
-    kcsb.setClientVersionForTracing(KCONST.clientName)
-    getAdmin(kcsb, clusterAlias, isIngestCluster)
-  }
+import com.microsoft.azure.kusto.data.Client
+import com.microsoft.azure.kusto.ingest.IngestClient
+import com.microsoft.kusto.spark.datasource.KustoCoordinates
+import com.microsoft.kusto.spark.datasource.KustoOptions.SinkTableCreationMode
+import com.microsoft.kusto.spark.datasource.KustoOptions.SinkTableCreationMode.SinkTableCreationMode
+import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
+import com.microsoft.kusto.spark.utils.KustoDataSourceUtils.extractSchemaFromResultTable
+import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
+import org.apache.spark.sql.types.StructType
+import org.joda.time.{DateTime, DateTimeZone, Period}
 
-  def getAdmin(kcsb: ConnectionStringBuilder, clusterAlias: String, isIngestCluster: Boolean): Client = {
-    var cachedClient: Option[Client] = adminClientCache.get(clusterAlias + isIngestCluster)
-    if(cachedClient.isEmpty){
-      cachedClient = Some(ClientFactory.createClient(kcsb))
-      adminClientCache = adminClientCache + (clusterAlias + isIngestCluster -> cachedClient.get)
+import scala.collection.JavaConverters._
+
+class KustoClient(val clusterAlias: String, val engineClient: Client, val dmClient: Client, val ingestClient: IngestClient) {
+
+  private val myName = this.getClass.getSimpleName
+
+  def createTmpTableWithSameSchema(tableCoordinates: KustoCoordinates,
+                                   tmpTableName: String,
+                                   tableCreation: SinkTableCreationMode = SinkTableCreationMode.FailIfNotExist,
+                                   schema: StructType): Unit = {
+
+    val schemaShowCommandResult = engineClient.execute(tableCoordinates.database, generateTableGetSchemaAsRowsCommand(tableCoordinates.table.get)).getValues
+    var tmpTableSchema: String = ""
+    val database = tableCoordinates.database
+    val table = tableCoordinates.table.get
+
+    if (schemaShowCommandResult.size() == 0) {
+      // Table Does not exist
+      if (tableCreation == SinkTableCreationMode.FailIfNotExist) {
+        throw new RuntimeException("Table '" + table + "' doesn't exist in database " + database + "', in cluster '" + tableCoordinates.cluster + "'")
+      } else {
+        // Parse dataframe schema and create a destination table with that schema
+        val tableSchemaBuilder = new StringJoiner(",")
+        schema.fields.foreach { field =>
+          val fieldType = DataTypeMapping.getSparkTypeToKustoTypeMap(field.dataType)
+          tableSchemaBuilder.add(s"['${field.name}']:$fieldType")
+        }
+        tmpTableSchema = tableSchemaBuilder.toString
+        engineClient.execute(database, generateTableCreateCommand(table, tmpTableSchema))
+      }
+    } else {
+      // Table exists. Parse kusto table schema and check if it matches the dataframes schema
+      tmpTableSchema = extractSchemaFromResultTable(schemaShowCommandResult)
     }
 
-    cachedClient.get
+    //  Create a temporary table with the kusto or dataframe parsed schema
+    engineClient.execute(database, generateTableCreateCommand(tmpTableName, tmpTableSchema))
   }
 
-  def getIngest(authentication: KustoAuthentication, clusterAlias: String): IngestClient = {
-    val ingestKcsb = getKcsb(authentication, s"https://ingest-$clusterAlias.kusto.windows.net")
-    ingestKcsb.setClientVersionForTracing(KCONST.clientName)
-    getIngest(ingestKcsb, clusterAlias)
-  }
+  private var roundRobinIdx = 0
+  private var storageUris: Seq[String] = Seq.empty
+  private var lastRefresh: DateTime = new DateTime(DateTimeZone.UTC)
 
-  def getIngest(ingestKcsb: ConnectionStringBuilder, clusterAlias: String): IngestClient = {
-    var cachedClient = ingestClientCache.get(clusterAlias)
-    if(cachedClient.isEmpty) {
-      cachedClient = Some(IngestClientFactory.createClient(ingestKcsb))
-      ingestClientCache = ingestClientCache + (clusterAlias -> cachedClient.get)
+  def getNewTempBlobReference(): String = {
+    // Refresh if storageExpiryMinutes have passed since last refresh for this cluster as SAS should be valid for at least 120 minutes
+    if (storageUris.isEmpty ||
+      new Period(new DateTime(DateTimeZone.UTC), lastRefresh).getMinutes > KustoConstants.storageExpiryMinutes) {
+
+      val res = dmClient.execute(generateCreateTmpStorageCommand())
+      val storage = res.getValues.asScala.map(row => row.get(0))
+
+      if (storage.isEmpty) {
+        KDSU.reportExceptionAndThrow(myName, new RuntimeException("Failed to allocate temporary storage"), "writing to Kusto", clusterAlias)
+      }
+
+      lastRefresh = new DateTime(DateTimeZone.UTC)
+      storageUris = storage
+      roundRobinIdx = 0
+      storage(roundRobinIdx)
     }
-
-    cachedClient.get
-  }
-
-  def getKcsb(authentication: KustoAuthentication, clusterUri: String): ConnectionStringBuilder = {
-    authentication match {
-      case null => throw new MatchError("Can't create ConnectionStringBuilder with null authentication params")
-      case app: AadApplicationAuthentication =>
-        ConnectionStringBuilder.createWithAadApplicationCredentials(clusterUri, app.ID, app.password, app.authority)
-      case keyVaultParams: KeyVaultAuthentication =>
-        var app = KeyVaultUtils.getAadAppParametersFromKeyVault(keyVaultParams)
-        ConnectionStringBuilder.createWithAadApplicationCredentials(clusterUri, app.ID, app.password, app.authority)
-      case userTokne: KustoAccessTokenAuthentication =>
-        ConnectionStringBuilder.createWithAadAccessTokenAuthentication(clusterUri, userTokne.token)
+    else {
+      roundRobinIdx = (roundRobinIdx + 1) % storageUris.size
+      storageUris(roundRobinIdx)
     }
   }
 }

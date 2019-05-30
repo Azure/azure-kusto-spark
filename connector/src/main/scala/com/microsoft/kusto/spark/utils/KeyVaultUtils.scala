@@ -4,6 +4,7 @@ import java.io.IOException
 
 import com.microsoft.azure.CloudException
 import com.microsoft.azure.keyvault.KeyVaultClient
+import com.microsoft.kusto.spark.authentication._
 import com.microsoft.kusto.spark.datasource._
 
 object KeyVaultUtils {

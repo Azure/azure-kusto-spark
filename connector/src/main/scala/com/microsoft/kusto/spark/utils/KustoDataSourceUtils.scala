@@ -6,7 +6,8 @@ import java.util.concurrent.{CountDownLatch, TimeUnit, TimeoutException}
 import java.util.{NoSuchElementException, StringJoiner, Timer, TimerTask}
 
 import com.microsoft.azure.kusto.data.{Client, Results}
-import com.microsoft.kusto.spark.datasource.{KeyVaultAuthentication, KustoAuthentication, KustoCoordinates, WriteOptions, _}
+import com.microsoft.kusto.spark.authentication._
+import com.microsoft.kusto.spark.datasource.{KustoCoordinates, WriteOptions, _}
 import com.microsoft.kusto.spark.datasource.KustoOptions.SinkTableCreationMode
 import com.microsoft.kusto.spark.datasource.KustoOptions.SinkTableCreationMode.SinkTableCreationMode
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
@@ -14,8 +15,8 @@ import org.apache.log4j.{Level, Logger}
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types.StructType
-import scala.collection.JavaConversions._
 
+import scala.collection.JavaConversions._
 import scala.util.matching.Regex
 import scala.concurrent.duration._
 import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
@@ -52,39 +53,6 @@ object KustoDataSourceUtils {
 
   private[kusto] def logFatal(reporter: String, message: String): Unit = {
     klog.fatal(s"$reporter: $message")
-  }
-
-  def createTmpTableWithSameSchema(kustoAdminClient: Client,
-                                   tableCoordinates: KustoCoordinates,
-                                   tmpTableName: String,
-                                   tableCreation: SinkTableCreationMode = SinkTableCreationMode.FailIfNotExist,
-                                   schema: StructType): Unit = {
-    val schemaShowCommandResult = kustoAdminClient.execute(tableCoordinates.database, generateTableGetSchemaAsRowsCommand(tableCoordinates.table.get)).getValues
-    var tmpTableSchema: String = ""
-    val database = tableCoordinates.database
-    val table = tableCoordinates.table.get
-
-    if (schemaShowCommandResult.size() == 0) {
-      // Table Does not exist
-      if (tableCreation == SinkTableCreationMode.FailIfNotExist) {
-        throw new RuntimeException("Table '" + table + "' doesn't exist in database " + database + "', in cluster '" + tableCoordinates.cluster + "'")
-      } else {
-        // Parse dataframe schema and create a destination table with that schema
-        val tableSchemaBuilder = new StringJoiner(",")
-        schema.fields.foreach { field =>
-          val fieldType = DataTypeMapping.getSparkTypeToKustoTypeMap(field.dataType)
-          tableSchemaBuilder.add(s"['${field.name}']:$fieldType")
-        }
-        tmpTableSchema = tableSchemaBuilder.toString
-        kustoAdminClient.execute(database, generateTableCreateCommand(table, tmpTableSchema))
-      }
-    } else {
-      // Table exists. Parse kusto table schema and check if it matches the dataframes schema
-      tmpTableSchema = extractSchemaFromResultTable(schemaShowCommandResult)
-    }
-
-    //  Create a temporary table with the kusto or dataframe parsed schema
-    kustoAdminClient.execute(database, generateTableCreateCommand(tmpTableName, tmpTableSchema))
   }
 
   private[kusto] def extractSchemaFromResultTable(resultRows: util.ArrayList[util.ArrayList[String]]): String = {
