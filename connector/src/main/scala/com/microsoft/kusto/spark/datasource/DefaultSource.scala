@@ -3,6 +3,7 @@ package com.microsoft.kusto.spark.datasource
 import java.security.InvalidParameterException
 import java.util.concurrent.TimeUnit
 
+import com.microsoft.azure.kusto.data.ClientRequestProperties
 import com.microsoft.kusto.spark.authentication.{KeyVaultAuthentication, KustoAuthentication}
 import com.microsoft.kusto.spark.datasink.KustoWriter
 import com.microsoft.kusto.spark.utils.{KeyVaultUtils, KustoQueryUtils, KustoConstants => KCONST, KustoDataSourceUtils => KDSU}
@@ -16,6 +17,7 @@ class DefaultSource extends CreatableRelationProvider
   var authenticationParameters: Option[KustoAuthentication] = None
   var kustoCoordinates: KustoCoordinates = _
   var keyVaultAuthentication: Option[KeyVaultAuthentication] = None
+  var clientRequestProperties: Option[ClientRequestProperties] = None
 
   override def createRelation(sqlContext: SQLContext, mode: SaveMode, parameters: Map[String, String], data: DataFrame): BaseRelation = {
     val sinkParameters = KDSU.parseSinkParameters(parameters, mode)
@@ -23,7 +25,7 @@ class DefaultSource extends CreatableRelationProvider
     kustoCoordinates = sinkParameters.sourceParametersResults.kustoCoordinates
     authenticationParameters = Some(sinkParameters.sourceParametersResults.authenticationParameters)
 
-    if(keyVaultAuthentication.isDefined){
+    if (keyVaultAuthentication.isDefined) {
       val paramsFromKeyVault = KeyVaultUtils.getAadAppParametersFromKeyVault(keyVaultAuthentication.get)
       authenticationParameters = Some(KDSU.mergeKeyVaultAndOptionsAuthentication(paramsFromKeyVault, authenticationParameters))
     }
@@ -63,7 +65,7 @@ class DefaultSource extends CreatableRelationProvider
   override def createRelation(sqlContext: SQLContext, parameters: Map[String, String]): BaseRelation = {
     val requestedPartitions = parameters.get(KustoOptions.KUSTO_NUM_PARTITIONS)
     val partitioningMode = parameters.get(KustoOptions.KUSTO_READ_PARTITION_MODE)
-    val isCompressOnExport =  parameters.getOrElse(KustoDebugOptions.KUSTO_DBG_BLOB_COMPRESS_ON_EXPORT, "true").trim.toBoolean
+    val isCompressOnExport = parameters.getOrElse(KustoDebugOptions.KUSTO_DBG_BLOB_COMPRESS_ON_EXPORT, "true").trim.toBoolean
     // Set default export split limit as 1GB, maximal allowed
     val exportSplitLimitMb = parameters.getOrElse(KustoDebugOptions.KUSTO_DBG_BLOB_FILE_SIZE_LIMIT_MB, "1024").trim.toInt
 
@@ -76,11 +78,12 @@ class DefaultSource extends CreatableRelationProvider
       if (storageSecret.isDefined) storageSecretIsAccountKey = false
     }
 
-    if(authenticationParameters.isEmpty){
+    if (authenticationParameters.isEmpty) {
       val sourceParameters = KDSU.parseSourceParameters(parameters)
       authenticationParameters = Some(sourceParameters.authenticationParameters)
       kustoCoordinates = sourceParameters.kustoCoordinates
       keyVaultAuthentication = sourceParameters.keyVaultAuth
+      clientRequestProperties = KDSU.getClientRequestProperties(parameters)
     }
 
     val (kustoAuthentication, storageParameters): (Option[KustoAuthentication], Option[KustoStorageParameters]) =
@@ -115,7 +118,8 @@ class DefaultSource extends CreatableRelationProvider
       parameters.get(KustoOptions.KUSTO_PARTITION_COLUMN),
       partitioningMode,
       parameters.get(KustoOptions.KUSTO_CUSTOM_DATAFRAME_COLUMN_TYPES),
-      storageParameters
+      storageParameters,
+      clientRequestProperties
     )(sqlContext.sparkSession)
   }
 

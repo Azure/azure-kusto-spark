@@ -49,7 +49,8 @@ object KustoWriter {
   private[kusto] def write(batchId: Option[Long],
                            data: DataFrame,
                            tableCoordinates: KustoCoordinates,
-                           authentication: KustoAuthentication, writeOptions: WriteOptions): Unit = {
+                           authentication: KustoAuthentication,
+                           writeOptions: WriteOptions): Unit = {
 
     val batchIdIfExists = batchId.filter(_ != 0).map(_.toString).getOrElse("")
     val kustoClient = KustoClientCache.getClient(tableCoordinates.cluster, authentication)
@@ -102,6 +103,7 @@ object KustoWriter {
     }
   }
 
+
   def ingestRowsIntoTempTbl(rows: Iterator[InternalRow], batchId: String, timeOut: FiniteDuration, storageUri: String)
                            (implicit parameters: KustoWriteResource): Unit =
     if (rows.isEmpty) {
@@ -144,7 +146,12 @@ object KustoWriter {
                          (implicit parameters: KustoWriteResource): Seq[IngestionResult] = {
     import parameters._
 
-    val ingestionProperties = new IngestionProperties(coordinates.database, tmpTableName)
+    val ingestionProperties = if (writeOptions.IngestionProperties.isDefined) {
+      SparkIngestionProperties.fromStringToIngestionProperties(writeOptions.IngestionProperties.get, coordinates.database, tmpTableName)
+    } else {
+      new IngestionProperties(coordinates.database, tmpTableName)
+    }
+
     ingestionProperties.setDataFormat(DATA_FORMAT.csv.name)
     ingestionProperties.setReportMethod(IngestionProperties.IngestionReportMethod.Table)
     ingestionProperties.setReportLevel(IngestionProperties.IngestionReportLevel.FailuresAndSuccesses)
@@ -226,7 +233,7 @@ object KustoWriter {
         ingestionResults.foreach {
           ingestionResult =>
             KDSU.runSequentially[IngestionStatus](
-              func = () => ingestionResult.getIngestionStatusCollection().get(0),
+              func = () => ingestionResult.getIngestionStatusCollection.get(0),
               0, delayPeriodBetweenCalls, (timeout.toMillis / delayPeriodBetweenCalls + 5).toInt,
               res => res.status == OperationStatus.Pending,
               res => res.status match {
@@ -381,7 +388,7 @@ object KustoWriter {
       result(x) = "\"" + keys(x) + "\"" + ":" + values(x)
     }
 
-    "{" +  result.mkString(",") +"}"
+    "{" + result.mkString(",") + "}"
   }
 
 

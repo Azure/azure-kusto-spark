@@ -158,12 +158,16 @@ object KustoDataSourceUtils {
 
     val timeout = new FiniteDuration(parameters.getOrElse(KustoOptions.KUSTO_TIMEOUT_LIMIT, KCONST.defaultTimeoutAsString).toLong, TimeUnit.SECONDS)
 
+    val ingestionPropertiesAsJson = parameters.get(KustoOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON)
+
     val writeOptions = WriteOptions(
       tableCreation,
       isAsync,
       parameters.getOrElse(KustoOptions.KUSTO_WRITE_RESULT_LIMIT, "1"),
       parameters.getOrElse(DateTimeUtils.TIMEZONE_OPTION, "UTC"),
-      timeout)
+      timeout,
+      ingestionPropertiesAsJson
+    )
 
     val sourceParameters = parseSourceParameters(parameters)
 
@@ -171,6 +175,23 @@ object KustoDataSourceUtils {
       throw new InvalidParameterException("KUSTO_TABLE parameter is missing. Must provide a destination table name")
     }
     SinkParameters(writeOptions, sourceParameters)
+  }
+
+  def getClientRequestProperties(parameters: Map[String, String]): Option[ClientRequestProperties] = {
+    val cprOption = parameters.get(KustoOptions.KUSTO_CLIENT_REQUEST_PROPERTIES_JSON)
+
+    if (cprOption.isDefined) {
+      var cpr = new ClientRequestProperties()
+      val jsonObj = new JSONObject(cprOption.get)
+      val it = jsonObj.keySet().iterator()
+      while (it.hasNext) {
+        val optionName: String = it.next()
+        cpr.setOption(optionName, jsonObj.get(optionName))
+      }
+      Some(cpr)
+    } else {
+      None
+    }
   }
 
   private[kusto] def reportExceptionAndThrow(

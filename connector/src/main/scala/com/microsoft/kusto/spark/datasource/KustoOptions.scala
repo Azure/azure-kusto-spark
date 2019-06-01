@@ -55,6 +55,13 @@ object KustoOptions {
   // An integer number corresponding to the period in seconds after which the operation will timeout. Default: '5400' (90 minutes)
   val KUSTO_TIMEOUT_LIMIT: String = newOption("timeoutLimit")
 
+  // A json representation of the ClientRequestProperties object used for reading from Kusto
+  var KUSTO_CLIENT_REQUEST_PROPERTIES_JSON: String = newOption("clientRequestPropertiesJson")
+  // A json representation of the SparkIngestionProperties object used for writing to Kusto
+  var KUSTO_SPARK_INGESTION_PROPERTIES_JSON: String = newOption("sparkIngestionPropertiesJson")
+
+  var KUSTO_CSV_MAPPING: String = newOption("csvMapping")
+  var KUSTO_CSV_MAPPING_REFERENCE: String = newOption("csvMappingReference")
   // Partitioning parameters, CURRENTLY NOT USED
   // CURRENTLY NOT USED
   val KUSTO_READ_PARTITION_MODE: String = newOption("partitionMode")
@@ -92,7 +99,10 @@ object KustoOptions {
 
 case class KustoCoordinates(cluster: String, database: String, table: Option[String] = None)
 case class WriteOptions(tableCreateOptions: KustoOptions.SinkTableCreationMode.SinkTableCreationMode = KustoOptions.SinkTableCreationMode.FailIfNotExist,
-                        isAsync: Boolean = false, writeResultLimit: String = KustoOptions.NONE_RESULT_LIMIT, timeZone: String = "UTC", timeout: FiniteDuration)
+                        isAsync: Boolean = false,
+                        writeResultLimit: String = KustoOptions.NONE_RESULT_LIMIT,
+                        timeZone: String = "UTC", timeout: FiniteDuration,
+                        IngestionProperties: Option[String] = None)
 
 /************************************************************************************/
 /*                                    NOTE!!!                                       */

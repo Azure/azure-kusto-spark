@@ -3,6 +3,7 @@ package com.microsoft.kusto.spark.datasource
 import java.security.InvalidParameterException
 import java.util.Locale
 
+import com.microsoft.azure.kusto.data.ClientRequestProperties
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.utils.{KustoClientCache, KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.spark.rdd.RDD
@@ -21,9 +22,10 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
    partitioningColumn: Option[String],
    partitioningMode: Option[String],
    customSchema: Option[String] = None,
-   storageParameters: Option[KustoStorageParameters])
-  (@transient val sparkSession: SparkSession)
-  extends BaseRelation with TableScan with PrunedFilteredScan with Serializable {
+   storageParameters: Option[KustoStorageParameters],
+   clientRequestProperties: Option[ClientRequestProperties])
+   (@transient val sparkSession: SparkSession)
+   extends BaseRelation with TableScan with PrunedFilteredScan with Serializable {
 
   private val normalizedQuery = KustoQueryUtils.normalizeQuery(query)
   var cachedSchema: StructType = _
@@ -50,12 +52,12 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
       if (useLeanMode) {
         KustoReader.leanBuildScan(
           kustoClient,
-          KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication, timeout)
+          KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication, timeout, clientRequestProperties)
         )
       } else {
         KustoReader.scaleBuildScan(
           kustoClient,
-          KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication, timeout),
+          KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication, timeout,clientRequestProperties),
           storageParameters.get,
           KustoPartitionParameters(numPartitions, getPartitioningColumn, getPartitioningMode)
         )
@@ -74,13 +76,13 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
       if (useLeanMode) {
         KustoReader.leanBuildScan(
           kustoClient,
-          KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication, timeout),
+          KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication, timeout, clientRequestProperties),
           KustoFiltering(requiredColumns, filters)
         )
       } else {
         KustoReader.scaleBuildScan(
           kustoClient,
-          KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication, timeout),
+          KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication, timeout, clientRequestProperties),
           storageParameters.get,
           KustoPartitionParameters(numPartitions, getPartitioningColumn, getPartitioningMode),
           readOptions,
