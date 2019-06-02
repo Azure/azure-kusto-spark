@@ -5,7 +5,7 @@ import java.util
 import java.util.concurrent.{CountDownLatch, TimeUnit, TimeoutException}
 import java.util.{NoSuchElementException, StringJoiner, Timer, TimerTask}
 
-import com.microsoft.azure.kusto.data.{Client, Results}
+import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties, Results}
 import com.microsoft.kusto.spark.authentication._
 import com.microsoft.kusto.spark.datasource.{KustoCoordinates, WriteOptions, _}
 import com.microsoft.kusto.spark.datasource.KustoOptions.SinkTableCreationMode
@@ -20,6 +20,7 @@ import scala.collection.JavaConversions._
 import scala.util.matching.Regex
 import scala.concurrent.duration._
 import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
+import org.json.JSONObject
 
 object KustoDataSourceUtils {
   private val klog = Logger.getLogger("KustoConnector")
