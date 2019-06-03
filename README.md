@@ -115,10 +115,12 @@ Usage examples can be found [here](samples/src/main/scala)
 
 Here is a list of currently available client libraries for Azure Data Explorer:
 - [Node](https://github.com/azure/azure-kusto-node)
-- [Python](https://github.com/azure/azure-kusto-python) , [Pyspark sample](./samples/src/main/python/pyKusto.py)
+- [Python](https://github.com/azure/azure-kusto-python)
 - [.NET](https://docs.microsoft.com/en-us/azure/kusto/api/netfx/about-the-sdk)
 - [Java](https://github.com/azure/azure-kusto-java)
-  
+   
+For the comfort of the user, here is a [Pyspark sample](./samples/src/main/python/pyKusto.py) for the connector.
+
 # Need Support?
 
 - **Have a feature request for SDKs?** Please post it on [User Voice](https://feedback.azure.com/forums/915733-azure-data-explorer) to help us prioritize

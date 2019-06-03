@@ -35,9 +35,9 @@ private[kusto] case class KustoReadRequest(sparkSession: SparkSession,
                                            timeout: FiniteDuration,
                                            clientRequestProperties: Option[ClientRequestProperties])
 
-private[kusto] case class KustoReadOptions( forcedReadMode: String = "",
-                                            isCompressOnExport: Boolean = true,
-                                            exportSplitLimitMb: Long = 1024)
+private[kusto] case class KustoReadOptions(forcedReadMode: String = "",
+                                           shouldCompressOnExport: Boolean = true,
+                                           exportSplitLimitMb: Long = 1024)
 
 private[kusto] object KustoReader {
   private val myName = this.getClass.getSimpleName
@@ -177,7 +177,7 @@ private[kusto] class KustoReader(client: Client, request: KustoReadRequest, stor
       partition.idx,
       partition.predicate,
       limit,
-      isCompressed = options.isCompressOnExport
+      isCompressed = options.shouldCompressOnExport
     )
 
     val commandResult = client.execute(request.kustoCoordinates.database,

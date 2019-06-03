@@ -6,6 +6,7 @@ import com.microsoft.azure.kusto.ingest.IngestionProperties
 import org.codehaus.jackson.annotate.JsonAutoDetect.Visibility
 import org.codehaus.jackson.annotate.JsonMethod
 import org.codehaus.jackson.map.ObjectMapper
+import org.joda.time.DateTime
 
 class SparkIngestionProperties {
   var flushImmediately: Boolean = false
@@ -13,7 +14,7 @@ class SparkIngestionProperties {
   var ingestByTags: util.ArrayList[String] = _
   var additionalTags: util.ArrayList[String] = _
   var ingestIfNotExists: util.ArrayList[String] = _
-  var creationTime: String = _ //TODO: should be date? what are the ok formats?
+  var creationTime: DateTime = _
   var csvMapping: String = _
   var csvMappingNameReference: String = _
 
@@ -22,44 +23,45 @@ class SparkIngestionProperties {
       .writerWithDefaultPrettyPrinter
       .writeValueAsString(this)
   }
-}
 
-object SparkIngestionProperties {
-  private[kusto] def fromStringToIngestionProperties(json: String, database: String, table: String) = {
-    new ObjectMapper().setVisibility(JsonMethod.FIELD, Visibility.ANY).readValue(json, classOf[SparkIngestionProperties])
-
-    val sparkIngestionProperties = new ObjectMapper().setVisibility(JsonMethod.FIELD, Visibility.ANY).readValue(json, classOf[SparkIngestionProperties])
+  def toIngestionProperties(database: String, table: String): IngestionProperties ={
     val ingestionProperties = new IngestionProperties(database, table)
     val additionalProperties = new util.HashMap[String, String]()
-    if (sparkIngestionProperties.dropByTags != null) {
-      ingestionProperties.setDropByTags(sparkIngestionProperties.dropByTags)
+    if (this.dropByTags != null) {
+      ingestionProperties.setDropByTags(this.dropByTags)
     }
 
-    if (sparkIngestionProperties.ingestByTags != null) {
-      ingestionProperties.setIngestByTags(sparkIngestionProperties.ingestByTags)
+    if (this.ingestByTags != null) {
+      ingestionProperties.setIngestByTags(this.ingestByTags)
     }
 
-    if (sparkIngestionProperties.additionalTags != null) {
-      ingestionProperties.setAdditionalTags(sparkIngestionProperties.additionalTags)
+    if (this.additionalTags != null) {
+      ingestionProperties.setAdditionalTags(this.additionalTags)
     }
 
-    if (sparkIngestionProperties.ingestIfNotExists != null) {
-      ingestionProperties.setIngestIfNotExists(sparkIngestionProperties.ingestIfNotExists)
+    if (this.ingestIfNotExists != null) {
+      ingestionProperties.setIngestIfNotExists(this.ingestIfNotExists)
     }
 
-    if (sparkIngestionProperties.creationTime != null) {
-      additionalProperties.put("creationTime", sparkIngestionProperties.creationTime)
+    if (this.creationTime != null) {
+      additionalProperties.put("creationTime", this.creationTime.toString())
     }
 
-    if (sparkIngestionProperties.csvMapping != null) {
-      additionalProperties.put("csvMapping", sparkIngestionProperties.csvMapping)
+    if (this.csvMapping != null) {
+      additionalProperties.put("csvMapping", this.csvMapping)
     }
 
-    if (sparkIngestionProperties.csvMappingNameReference != null) {
-      ingestionProperties.setCsvMappingName(sparkIngestionProperties.csvMappingNameReference)
+    if (this.csvMappingNameReference != null) {
+      ingestionProperties.setCsvMappingName(this.csvMappingNameReference)
     }
 
     ingestionProperties.setAdditionalProperties(additionalProperties)
     ingestionProperties
+  }
+}
+
+object SparkIngestionProperties {
+  private[kusto] def fromString(json: String): SparkIngestionProperties = {
+    new ObjectMapper().setVisibility(JsonMethod.FIELD, Visibility.ANY).readValue(json, classOf[SparkIngestionProperties])
   }
 }

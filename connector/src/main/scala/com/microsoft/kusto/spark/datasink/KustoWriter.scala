@@ -11,15 +11,15 @@ import java.util.zip.GZIPOutputStream
 import java.util.{TimeZone, UUID}
 
 import com.microsoft.azure.kusto.data.Client
-import com.microsoft.azure.kusto.ingest.{IngestClient, IngestionProperties}
 import com.microsoft.azure.kusto.ingest.IngestionProperties.DATA_FORMAT
 import com.microsoft.azure.kusto.ingest.result.{IngestionResult, IngestionStatus, OperationStatus}
 import com.microsoft.azure.kusto.ingest.source.BlobSourceInfo
+import com.microsoft.azure.kusto.ingest.{IngestClient, IngestionProperties}
 import com.microsoft.azure.storage.StorageCredentialsSharedAccessSignature
 import com.microsoft.azure.storage.blob.{CloudBlobContainer, CloudBlockBlob}
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.datasink
-import com.microsoft.kusto.spark.datasource.{KustoCoordinates, WriteOptions}
+import com.microsoft.kusto.spark.datasource.KustoCoordinates
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.{KustoClient, KustoClientCache, KustoQueryUtils, KustoConstants => KCONST, KustoDataSourceUtils => KDSU}
 import com.univocity.parsers.csv.{CsvWriter, CsvWriterSettings}
@@ -103,7 +103,6 @@ object KustoWriter {
     }
   }
 
-
   def ingestRowsIntoTempTbl(rows: Iterator[InternalRow], batchId: String, timeOut: FiniteDuration, storageUri: String)
                            (implicit parameters: KustoWriteResource): Unit =
     if (rows.isEmpty) {
@@ -147,7 +146,7 @@ object KustoWriter {
     import parameters._
 
     val ingestionProperties = if (writeOptions.IngestionProperties.isDefined) {
-      SparkIngestionProperties.fromStringToIngestionProperties(writeOptions.IngestionProperties.get, coordinates.database, tmpTableName)
+      SparkIngestionProperties.fromString(writeOptions.IngestionProperties.get).toIngestionProperties(coordinates.database, tmpTableName)
     } else {
       new IngestionProperties(coordinates.database, tmpTableName)
     }

@@ -3,8 +3,7 @@ package com.microsoft.kusto.spark
 import java.util.UUID
 
 import com.microsoft.azure.kusto.data.{ClientFactory, ConnectionStringBuilder}
-import com.microsoft.kusto.spark.datasource.KustoOptions
-import com.microsoft.kusto.spark.datasource.KustoOptions.SinkTableCreationMode
+import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode}
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.streaming.Trigger
@@ -16,7 +15,7 @@ import org.scalatest.junit.JUnitRunner
 import org.scalatest.{BeforeAndAfterAll, FlatSpec}
 
 @RunWith(classOf[JUnitRunner])
-class KustoSinkStreamingE2E extends FlatSpec with BeforeAndAfterAll{
+class KustoSinkStreamingE2E extends FlatSpec with BeforeAndAfterAll {
   val expectedNumberOfRows: Int = 100
   val timeoutMs: Int = 8 * 60 * 1000 // 8 minutes
   val sleepTimeTillTableCreate: Int = 2 * 60 * 1000 // 2 minutes
@@ -40,11 +39,11 @@ class KustoSinkStreamingE2E extends FlatSpec with BeforeAndAfterAll{
     sc.stop()
   }
 
-  val appId: String = System.getProperty(KustoOptions.KUSTO_AAD_CLIENT_ID)
-  val appKey: String = System.getProperty(KustoOptions.KUSTO_AAD_CLIENT_PASSWORD)
-  val authority: String = System.getProperty(KustoOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com")
-  val cluster: String = System.getProperty(KustoOptions.KUSTO_CLUSTER)
-  val database: String = System.getProperty(KustoOptions.KUSTO_DATABASE)
+  val appId: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_CLIENT_ID)
+  val appKey: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD)
+  val authority: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com")
+  val cluster: String = System.getProperty(KustoSinkOptions.KUSTO_CLUSTER)
+  val database: String = System.getProperty(KustoSinkOptions.KUSTO_DATABASE)
 
   val csvPath: String = System.getProperty("path", "src/test/resources/TestData")
   val customSchema: StructType = new StructType().add("colA", StringType, nullable = true).add("colB", IntegerType, nullable = true)
@@ -78,13 +77,13 @@ class KustoSinkStreamingE2E extends FlatSpec with BeforeAndAfterAll{
       .writeStream
       .format("com.microsoft.kusto.spark.datasink.KustoSinkProvider")
       .options(Map(
-        KustoOptions.KUSTO_CLUSTER -> cluster,
-        KustoOptions.KUSTO_TABLE -> table,
-        KustoOptions.KUSTO_DATABASE -> database,
-        KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
-        KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
-        KustoOptions.KUSTO_AAD_AUTHORITY_ID -> authority,
-        KustoOptions.KUSTO_TABLE_CREATE_OPTIONS -> SinkTableCreationMode.CreateIfNotExist.toString))
+        KustoSinkOptions.KUSTO_CLUSTER -> cluster,
+        KustoSinkOptions.KUSTO_TABLE -> table,
+        KustoSinkOptions.KUSTO_DATABASE -> database,
+        KustoSinkOptions.KUSTO_AAD_CLIENT_ID -> appId,
+        KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+        KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID -> authority,
+        KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS -> SinkTableCreationMode.CreateIfNotExist.toString))
       .trigger(Trigger.Once)
 
     kustoQ.start().awaitTermination()
@@ -125,13 +124,13 @@ class KustoSinkStreamingE2E extends FlatSpec with BeforeAndAfterAll{
       .writeStream
       .format("com.microsoft.kusto.spark.datasink.KustoSinkProvider")
       .options(Map(
-        KustoOptions.KUSTO_CLUSTER -> cluster,
-        KustoOptions.KUSTO_TABLE -> table,
-        KustoOptions.KUSTO_DATABASE -> database,
-        KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
-        KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
-        KustoOptions.KUSTO_AAD_AUTHORITY_ID -> authority,
-        KustoOptions.KUSTO_WRITE_ENABLE_ASYNC -> "true"))
+        KustoSinkOptions.KUSTO_CLUSTER -> cluster,
+        KustoSinkOptions.KUSTO_TABLE -> table,
+        KustoSinkOptions.KUSTO_DATABASE -> database,
+        KustoSinkOptions.KUSTO_AAD_CLIENT_ID -> appId,
+        KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+        KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID -> authority,
+        KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC -> "true"))
       .trigger(Trigger.Once)
 
     kustoQ.start().awaitTermination()

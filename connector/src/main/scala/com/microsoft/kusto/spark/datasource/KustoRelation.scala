@@ -14,26 +14,27 @@ import org.apache.spark.sql.{Row, SQLContext, SparkSession}
 import scala.concurrent.duration.FiniteDuration
 
 private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
-   authentication: KustoAuthentication,
-   query: String,
-   readOptions: KustoReadOptions,
-   timeout: FiniteDuration,
-   numPartitions: Int,
-   partitioningColumn: Option[String],
-   partitioningMode: Option[String],
-   customSchema: Option[String] = None,
-   storageParameters: Option[KustoStorageParameters],
-   clientRequestProperties: Option[ClientRequestProperties])
-   (@transient val sparkSession: SparkSession)
-   extends BaseRelation with TableScan with PrunedFilteredScan with Serializable {
+                                        authentication: KustoAuthentication,
+                                        query: String,
+                                        readOptions: KustoReadOptions,
+                                        timeout: FiniteDuration,
+                                        numPartitions: Int,
+                                        partitioningColumn: Option[String],
+                                        partitioningMode: Option[String],
+                                        customSchema: Option[String] = None,
+                                        storageParameters: Option[KustoStorageParameters],
+                                        clientRequestProperties: Option[ClientRequestProperties])
+                                       (@transient val sparkSession: SparkSession)
+  extends BaseRelation with TableScan with PrunedFilteredScan with Serializable {
 
   private val normalizedQuery = KustoQueryUtils.normalizeQuery(query)
   var cachedSchema: StructType = _
+
   override def sqlContext: SQLContext = sparkSession.sqlContext
 
   override def schema: StructType = {
-    if(cachedSchema == null){
-      cachedSchema =  if (customSchema.isDefined) {
+    if (cachedSchema == null) {
+      cachedSchema = if (customSchema.isDefined) {
         StructType.fromDDL(customSchema.get)
       }
       else getSchema
@@ -44,7 +45,7 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
   override def buildScan(): RDD[Row] = {
     val kustoClient = KustoClientCache.getClient(kustoCoordinates.cluster, authentication).engineClient
     val count = KDSU.countRows(kustoClient, query, kustoCoordinates.database)
-    if (count == 0)  {
+    if (count == 0) {
       sparkSession.emptyDataFrame.rdd
     }
     else {
@@ -57,7 +58,7 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
       } else {
         KustoReader.scaleBuildScan(
           kustoClient,
-          KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication, timeout,clientRequestProperties),
+          KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication, timeout, clientRequestProperties),
           storageParameters.get,
           KustoPartitionParameters(numPartitions, getPartitioningColumn, getPartitioningMode)
         )
@@ -119,9 +120,9 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
   private def getPartitioningMode: String = {
     if (partitioningMode.isDefined) {
       val mode = partitioningMode.get.toLowerCase(Locale.ROOT)
-      if (!KustoOptions.supportedPartitioningModes.contains(mode)) {
+      if (!KustoDebugOptions.supportedPartitioningModes.contains(mode)) {
         throw new InvalidParameterException(
-          s"Specified partitioning mode '$mode' : ${KDSU.NewLine}${KustoOptions.supportedPartitioningModes.mkString(", ")}")
+          s"Specified partitioning mode '$mode' : ${KDSU.NewLine}${KustoDebugOptions.supportedPartitioningModes.mkString(", ")}")
       }
       mode
     } else "hash"

@@ -3,8 +3,8 @@ package com.microsoft.kusto.spark.datasink
 import java.io._
 
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
-import com.microsoft.kusto.spark.datasource._
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.datasource.KustoCoordinates
 import org.apache.spark.sql.execution.streaming.Sink
 import org.apache.spark.sql.{DataFrame, SQLContext}
 
