@@ -2,8 +2,9 @@ package com.microsoft.kusto.spark.datasource
 import java.security.InvalidParameterException
 import java.util.UUID
 
-import com.microsoft.azure.kusto.data.Client
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
+import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties}
+import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.utils.{CslCommandsGenerator, KustoAzureFsSetupCache, KustoBlobStorageUtils, KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.spark.Partition
 import org.apache.spark.rdd.RDD
@@ -32,11 +33,12 @@ private[kusto] case class KustoReadRequest(sparkSession: SparkSession,
                                            kustoCoordinates: KustoCoordinates,
                                            query: String,
                                            authentication: KustoAuthentication,
-                                           timeout: FiniteDuration)
+                                           timeout: FiniteDuration,
+                                           clientRequestProperties: Option[ClientRequestProperties])
 
-private[kusto] case class KustoReadOptions( forcedReadMode: String = "",
-                                            isCompressOnExport: Boolean = true,
-                                            exportSplitLimitMb: Long = 1024)
+private[kusto] case class KustoReadOptions(forcedReadMode: String = "",
+                                           shouldCompressOnExport: Boolean = true,
+                                           exportSplitLimitMb: Long = 1024)
 
 private[kusto] object KustoReader {
   private val myName = this.getClass.getSimpleName
@@ -47,7 +49,10 @@ private[kusto] object KustoReader {
     filtering: KustoFiltering = KustoFiltering.apply()): RDD[Row] = {
 
     val filteredQuery = KustoFilter.pruneAndFilter(request.schema, request.query, filtering)
-    val kustoResult = kustoClient.execute(request.kustoCoordinates.database, filteredQuery)
+    val kustoResult = kustoClient.execute(request.kustoCoordinates.database,
+      filteredQuery,
+      request.clientRequestProperties.orNull)
+
     val serializer = KustoResponseDeserializer(kustoResult)
     request.sparkSession.createDataFrame(serializer.toRows, serializer.getSchema).rdd
   }
@@ -72,7 +77,8 @@ private[kusto] object KustoReader {
         storage,
         directory,
         options,
-        filtering)
+        filtering,
+        request.clientRequestProperties)
     }
 
     val path = s"wasbs://${storage.container}@${storage.account}.blob.core.windows.net/$directory"
@@ -157,7 +163,8 @@ private[kusto] class KustoReader(client: Client, request: KustoReadRequest, stor
     storage: KustoStorageParameters,
     directory: String,
     options: KustoReadOptions,
-    filtering: KustoFiltering): Unit = {
+    filtering: KustoFiltering,
+    clientRequestProperties: Option[ClientRequestProperties]): Unit = {
 
     val limit = if (options.exportSplitLimitMb <= 0) None else Some(options.exportSplitLimitMb)
 
@@ -171,10 +178,12 @@ private[kusto] class KustoReader(client: Client, request: KustoReadRequest, stor
       partition.idx,
       partition.predicate,
       limit,
-      isCompressed = options.isCompressOnExport
+      isCompressed = options.shouldCompressOnExport
     )
 
-    val commandResult = client.execute(request.kustoCoordinates.database, exportCommand)
+    val commandResult = client.execute(request.kustoCoordinates.database,
+      exportCommand,
+      clientRequestProperties.orNull)
     KDSU.verifyAsyncCommandCompletion(client, request.kustoCoordinates.database, commandResult, timeOut = request.timeout)
   }
 }

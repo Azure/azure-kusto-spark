@@ -95,7 +95,7 @@ These libraries include:
 Spark Azure Data Explorer connector takes dependency on [Azure Data Explorer Data Client Library](https://mvnrepository.com/artifact/com.microsoft.azure.kusto/kusto-data) 
 and [Azure Data Explorer Ingest Client Library](https://mvnrepository.com/artifact/com.microsoft.azure.kusto/kusto-ingest), 
 available on maven repository.
-When [Key Vault based authentication](Authentication.md) is used, there is an additional dependency 
+When [Key Vault based authentication](./docs/Authentication.md) is used, there is an additional dependency 
 on [Microsoft Azure SDK For Key Vault](https://mvnrepository.com/artifact/com.microsoft.azure/azure-keyvault). 
 
 > **Note:** When working with Databricks, Azure Data Explorer connector requires Azure Data Explorer java client libraries (and azure key-vault library if used) to be installed.
@@ -118,6 +118,8 @@ Here is a list of currently available client libraries for Azure Data Explorer:
 - [Python](https://github.com/azure/azure-kusto-python)
 - [.NET](https://docs.microsoft.com/en-us/azure/kusto/api/netfx/about-the-sdk)
 - [Java](https://github.com/azure/azure-kusto-java)
+   
+For the comfort of the user, here is a [Pyspark sample](./samples/src/main/python/pyKusto.py) for the connector.
 
 # Need Support?
 

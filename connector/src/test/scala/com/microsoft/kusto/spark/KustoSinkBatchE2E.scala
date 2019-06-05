@@ -7,8 +7,7 @@ import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 
 import com.microsoft.azure.kusto.data.{ClientFactory, ConnectionStringBuilder}
-import com.microsoft.kusto.spark.datasource.KustoOptions
-import com.microsoft.kusto.spark.datasource.KustoOptions.SinkTableCreationMode
+import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode}
 import com.microsoft.kusto.spark.sql.extension.SparkExtension._
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils => KDSU}
@@ -57,12 +56,12 @@ class KustoSinkBatchE2E extends FlatSpec with BeforeAndAfterAll{
     sc.stop()
   }
 
-  val appId: String = System.getProperty(KustoOptions.KUSTO_AAD_CLIENT_ID)
-  val appKey: String = System.getProperty(KustoOptions.KUSTO_AAD_CLIENT_PASSWORD)
-  val authority: String = System.getProperty(KustoOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com")
-  val cluster: String = System.getProperty(KustoOptions.KUSTO_CLUSTER)
-  val database: String = System.getProperty(KustoOptions.KUSTO_DATABASE)
-  val expectedNumberOfRows: Int =  1 * 1000
+  val appId: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_CLIENT_ID)
+  val appKey: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD)
+  val authority: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com")
+  val cluster: String = System.getProperty(KustoSinkOptions.KUSTO_CLUSTER)
+  val database: String = System.getProperty(KustoSinkOptions.KUSTO_DATABASE)
+  val expectedNumberOfRows: Int = 1 * 1000
   val rows: immutable.IndexedSeq[(String, Int)] = (1 to expectedNumberOfRows).map(v => (newRow(), v))
 
   private val loggingLevel: Option[String] = Option(System.getProperty("logLevel"))
@@ -86,19 +85,19 @@ class KustoSinkBatchE2E extends FlatSpec with BeforeAndAfterAll{
     dfOrig.write
       .format("com.microsoft.kusto.spark.datasource")
       .partitionBy("value")
-      .option(KustoOptions.KUSTO_CLUSTER, cluster)
-      .option(KustoOptions.KUSTO_DATABASE, database)
-      .option(KustoOptions.KUSTO_TABLE, table)
-      .option(KustoOptions.KUSTO_AAD_CLIENT_ID, appId)
-      .option(KustoOptions.KUSTO_AAD_CLIENT_PASSWORD, appKey)
-      .option(KustoOptions.KUSTO_AAD_AUTHORITY_ID, authority)
+      .option(KustoSinkOptions.KUSTO_CLUSTER, cluster)
+      .option(KustoSinkOptions.KUSTO_DATABASE, database)
+      .option(KustoSinkOptions.KUSTO_TABLE, table)
+      .option(KustoSinkOptions.KUSTO_AAD_CLIENT_ID, appId)
+      .option(KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD, appKey)
+      .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, authority)
       .option(DateTimeUtils.TIMEZONE_OPTION, "GMT+4")
-      .option(KustoOptions.KUSTO_TABLE_CREATE_OPTIONS, SinkTableCreationMode.CreateIfNotExist.toString)
+      .option(KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS, SinkTableCreationMode.CreateIfNotExist.toString)
       .save()
 
     val conf: Map[String, String] = Map(
-      KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
-      KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey
+      KustoSinkOptions.KUSTO_AAD_CLIENT_ID -> appId,
+      KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey
     )
 
     val dfResult: DataFrame = spark.read.kusto(cluster, database, table, conf)
@@ -162,13 +161,13 @@ class KustoSinkBatchE2E extends FlatSpec with BeforeAndAfterAll{
     df.write
       .format("com.microsoft.kusto.spark.datasource")
       .partitionBy("value")
-      .option(KustoOptions.KUSTO_CLUSTER, cluster)
-      .option(KustoOptions.KUSTO_DATABASE, database)
-      .option(KustoOptions.KUSTO_TABLE, table)
-      .option(KustoOptions.KUSTO_AAD_CLIENT_ID, appId)
-      .option(KustoOptions.KUSTO_AAD_CLIENT_PASSWORD, appKey)
-      .option(KustoOptions.KUSTO_AAD_AUTHORITY_ID, authority)
-      .option(KustoOptions.KUSTO_TIMEOUT_LIMIT, (8 * 60).toString)
+      .option(KustoSinkOptions.KUSTO_CLUSTER, cluster)
+      .option(KustoSinkOptions.KUSTO_DATABASE, database)
+      .option(KustoSinkOptions.KUSTO_TABLE, table)
+      .option(KustoSinkOptions.KUSTO_AAD_CLIENT_ID, appId)
+      .option(KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD, appKey)
+      .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, authority)
+      .option(KustoSinkOptions.KUSTO_TIMEOUT_LIMIT, (8 * 60).toString)
       .save()
 
     val timeoutMs: Int = 8 * 60 * 1000 // 8 minutes
@@ -187,13 +186,13 @@ class KustoSinkBatchE2E extends FlatSpec with BeforeAndAfterAll{
 
     df.write
       .format("com.microsoft.kusto.spark.datasource")
-      .option(KustoOptions.KUSTO_CLUSTER, cluster)
-      .option(KustoOptions.KUSTO_DATABASE, database)
-      .option(KustoOptions.KUSTO_TABLE, table)
-      .option(KustoOptions.KUSTO_AAD_CLIENT_ID, appId)
-      .option(KustoOptions.KUSTO_AAD_CLIENT_PASSWORD, appKey)
-      .option(KustoOptions.KUSTO_AAD_AUTHORITY_ID, authority)
-      .option(KustoOptions.KUSTO_WRITE_ENABLE_ASYNC, "true")
+      .option(KustoSinkOptions.KUSTO_CLUSTER, cluster)
+      .option(KustoSinkOptions.KUSTO_DATABASE, database)
+      .option(KustoSinkOptions.KUSTO_TABLE, table)
+      .option(KustoSinkOptions.KUSTO_AAD_CLIENT_ID, appId)
+      .option(KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD, appKey)
+      .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, authority)
+      .option(KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC, "true")
       .save()
 
     val timeoutMs: Int = 8 * 60 * 1000 // 8 minutes

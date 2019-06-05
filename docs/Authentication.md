@@ -19,12 +19,12 @@ This authentication method is fairly straightforward, and it is used in most of 
 ```
 df.write
   .format("com.microsoft.kusto.spark.datasource")
-  .option(KustoOptions.KUSTO_CLUSTER, "MyCluster")
-  .option(KustoOptions.KUSTO_DATABASE, "MyDatabase")
-  .option(KustoOptions.KUSTO_TABLE, "MyTable")
-  .option(KustoOptions.KUSTO_AAD_CLIENT_ID, "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
-  .option(KustoOptions.KUSTO_AAD_CLIENT_PASSWORD, "MyPassword") 
-  .option(KustoOptions.KUSTO_AAD_AUTHORITY_ID, "AAD Authority Id") // "microsoft.com"
+  .option(KustoSinkOptions.KUSTO_CLUSTER, "MyCluster")
+  .option(KustoSinkOptions.KUSTO_DATABASE, "MyDatabase")
+  .option(KustoSinkOptions.KUSTO_TABLE, "MyTable")
+  .option(KustoSinkOptions.KUSTO_AAD_CLIENT_ID, "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
+  .option(KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD, "MyPassword") 
+  .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, "AAD Authority Id") // "microsoft.com"
   .save()
 ```
 ## Key Vault
@@ -77,21 +77,22 @@ val keyVaultUri: String = "keyVaultUri"
  
 df.write
   .format("com.microsoft.kusto.spark.datasource")
-  .option(KustoOptions.KUSTO_CLUSTER, MyCluster)
-  .option(KustoOptions.KUSTO_DATABASE, MyDatabase)
-  .option(KustoOptions.KUSTO_TABLE, MyTable)
-  .option(KustoOptions.KEY_VAULT_URI, keyVaultUri)
-  .option(KustoOptions.KEY_VAULT_APP_ID, keyVaultClientID)
-  .option(KustoOptions.KEY_VAULT_APP_KEY, keyVaultClientPassword)
+  .option(KustoSinkOptions.KUSTO_CLUSTER, MyCluster)
+  .option(KustoSinkOptions.KUSTO_DATABASE, MyDatabase)
+  .option(KustoSinkOptions.KUSTO_TABLE, MyTable)
+  .option(KustoSinkOptions.KEY_VAULT_URI, keyVaultUri)
+  .option(KustoSinkOptions.KEY_VAULT_APP_ID, keyVaultClientID)
+  .option(KustoSinkOptions.KEY_VAULT_APP_KEY, keyVaultClientPassword)
   .save()
 
 val conf: Map[String, String] = Map(
-  KustoOptions.KEY_VAULT_URI -> keyVaultUri,
-  KustoOptions.KEY_VAULT_APP_ID -> keyVaultClientID,
-  KustoOptions.KEY_VAULT_APP_KEY -> keyVaultClientPassword
+  KustoSourceOptions.KEY_VAULT_URI -> keyVaultUri,
+  KustoSourceOptions.KEY_VAULT_APP_ID -> keyVaultClientID,
+  KustoSourceOptions.KEY_VAULT_APP_KEY -> keyVaultClientPassword
 )
 
-val dfResult = spark.read.kusto(cluster, database, table, conf)
+val query = table
+val dfResult = spark.read.kusto(cluster, database, query, conf)
  ```
 ## Direct Authentication with Access Token
 User can also use ADAL directly to acquire an AAD access token to access Kusto. 
@@ -102,9 +103,9 @@ The token must be valid throughout the duration of the read/write operation
 ```
 df.write
   .format("com.microsoft.kusto.spark.datasource")
-  .option(KustoOptions.KUSTO_CLUSTER, "MyCluster")
-  .option(KustoOptions.KUSTO_DATABASE, "MyDatabase")
-  .option(KustoOptions.KUSTO_TABLE, "MyTable")
+  .option(KustoSinkOptions.KUSTO_CLUSTER, "MyCluster")
+  .option(KustoSinkOptions.KUSTO_DATABASE, "MyDatabase")
+  .option(KustoSinkOptions.KUSTO_TABLE, "MyTable")
   .option(KustoOptions., "MyTable")
   .save()
 ```

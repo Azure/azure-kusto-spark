@@ -1,13 +1,12 @@
 package com.microsoft.kusto.spark.utils
 
-
 import java.util.StringJoiner
 
 import com.microsoft.azure.kusto.data.Client
 import com.microsoft.azure.kusto.ingest.IngestClient
-import com.microsoft.kusto.spark.datasource.KustoCoordinates
-import com.microsoft.kusto.spark.datasource.KustoOptions.SinkTableCreationMode
-import com.microsoft.kusto.spark.datasource.KustoOptions.SinkTableCreationMode.SinkTableCreationMode
+import com.microsoft.kusto.spark.datasink.SinkTableCreationMode
+import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
+import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.KustoDataSourceUtils.extractSchemaFromResultTable
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
@@ -57,7 +56,7 @@ class KustoClient(val clusterAlias: String, val engineClient: Client, val dmClie
   private var storageUris: Seq[String] = Seq.empty
   private var lastRefresh: DateTime = new DateTime(DateTimeZone.UTC)
 
-  def getNewTempBlobReference(): String = {
+  def getNewTempBlobReference: String = {
     // Refresh if storageExpiryMinutes have passed since last refresh for this cluster as SAS should be valid for at least 120 minutes
     if (storageUris.isEmpty ||
       new Period(new DateTime(DateTimeZone.UTC), lastRefresh).getMinutes > KustoConstants.storageExpiryMinutes) {

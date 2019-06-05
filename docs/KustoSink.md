@@ -29,13 +29,15 @@ that is using it. Please verify the following before using Kusto connector:
  <dataframe-object>
  .write
  .format("com.microsoft.kusto.spark.datasource")
- .option(KustoOptions.<option-name-1>, <option-value-1>
+ .option(KustoSinkOptions.<option-name-1>, <option-value-1>
  ...
- .option(KustoOptions.<option-name-n>, <option-value-n>
+ .option(KustoSinkOptions.<option-name-n>, <option-value-n>
  .save()
  ```
  
  ### Supported Options
+ 
+ All the options that can be use in the Kusto sink are under the object KustoSinkOptions.
  
 **Mandatory Parameters:** 
  
@@ -103,12 +105,12 @@ Synchronous mode, table already exists:
 ```
 df.write
   .format("com.microsoft.kusto.spark.datasource")
-  .option(KustoOptions.KUSTO_CLUSTER, "MyCluster")
-  .option(KustoOptions.KUSTO_DATABASE, "MyDatabase")
-  .option(KustoOptions.KUSTO_TABLE, "MyTable")
-  .option(KustoOptions.KUSTO_AAD_CLIENT_ID, "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
-  .option(KustoOptions.KUSTO_AAD_CLIENT_PASSWORD, "MyPassword") 
-  .option(KustoOptions.KUSTO_AAD_AUTHORITY_ID, "AAD Authority Id") // "microsoft.com"
+  .option(KustoSinkOptions.KUSTO_CLUSTER, "MyCluster")
+  .option(KustoSinkOptions.KUSTO_DATABASE, "MyDatabase")
+  .option(KustoSinkOptions.KUSTO_TABLE, "MyTable")
+  .option(KustoSinkOptions.KUSTO_AAD_CLIENT_ID, "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
+  .option(KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD, "MyPassword") 
+  .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, "AAD Authority Id") // "microsoft.com"
   .save()
 ``` 
 

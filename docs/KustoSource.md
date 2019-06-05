@@ -45,15 +45,17 @@ that is using it. Please verify the following before using Kusto connector:
 <dataframe-name> = 
 sqlContext.read
 .format("com.microsoft.kusto.spark.datasource")
-.option(KustoOptions.KUSTO_CLUSTER, <cluster-name>)
-.option(KustoOptions.KUSTO_DATABASE, <database-name>)
-.option(KustoOptions.KUSTO_QUERY, <kusto-query>)
+.option(KustoSourceOptions.KUSTO_CLUSTER, <cluster-name>)
+.option(KustoSourceOptions.KUSTO_DATABASE, <database-name>)
+.option(KustoSourceOptions.KUSTO_QUERY, <kusto-query>)
 .load()
 ```
 Where **parameters map** is identical for both syntax flavors.
       
  ### Supported Options
-  
+   
+All the options that can be use in the Kusto source are under the object KustoSourceOptions.
+
  **Mandatory Parameters:** 
   
  * **KUSTO_CLUSTER**:
@@ -110,8 +112,8 @@ Once the RDD is no longer required by the caller application, the container and/
  Create a DataFrame based on a query accessing 'MyKustoTable' table
  ```
  val conf: Map[String, String] = Map(
-       KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
-       KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey
+       KustoSourceOptions.KUSTO_AAD_CLIENT_ID -> appId,
+       KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey
      )
      
  val df = spark.read.kusto(cluster, database, "MyKustoTable | where (ColB % 1000 == 0) | distinct ColA ", conf)
@@ -122,15 +124,15 @@ Once the RDD is no longer required by the caller application, the container and/
   Create a DataFrame by reading all of 'MyKustoTable' table
   ```
  val conf: Map[String, String] = Map(
-       KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
-       KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
-       KustoOptions.KUSTO_QUERY -> "MyKustoTable"
+       KustoSourceOptions.KUSTO_AAD_CLIENT_ID -> appId,
+       KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+       KustoSourceOptions.KUSTO_QUERY -> "MyKustoTable"
      )
  
  val df = sqlContext.read
   .format("com.microsoft.kusto.spark.datasource")
-  .option(KustoOptions.KUSTO_CLUSTER, "MyCluster")
-  .option(KustoOptions.KUSTO_DATABASE, "MyDatabase")
+  .option(KustoSourceOptions.KUSTO_CLUSTER, "MyCluster")
+  .option(KustoSourceOptions.KUSTO_DATABASE, "MyDatabase")
   .options(conf)
   .load()
   ```

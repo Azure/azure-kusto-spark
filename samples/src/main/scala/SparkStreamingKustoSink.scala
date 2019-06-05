@@ -1,5 +1,6 @@
 import java.util.concurrent.TimeUnit
-import com.microsoft.kusto.spark.datasource.KustoOptions
+
+import com.microsoft.kusto.spark.datasink.KustoSinkOptions
 import org.apache.spark.sql._
 import org.apache.spark.eventhubs.{ConnectionStringBuilder, EventHubsConf, EventPosition}
 import org.apache.spark.sql.streaming.Trigger
@@ -46,16 +47,15 @@ object SparkStreamingKustoSink {
     val df1 = df
       .writeStream
       .format("com.microsoft.kusto.spark.datasink.KustoSinkProvider")
-      .option(KustoOptions.KUSTO_CLUSTER, "Your Kusto Cluster")
-      .option(KustoOptions.KUSTO_DATABASE, "Your Kusto Database")
-      .option(KustoOptions.KUSTO_TABLE, "Your Kusto Destination Table")
-      .option(KustoOptions.KUSTO_AAD_CLIENT_ID, "Your Client ID")
-      .option(KustoOptions.KUSTO_AAD_CLIENT_PASSWORD, "Your secret")
+      .option(KustoSinkOptions.KUSTO_CLUSTER, "Your Kusto Cluster")
+      .option(KustoSinkOptions.KUSTO_DATABASE, "Your Kusto Database")
+      .option(KustoSinkOptions.KUSTO_TABLE, "Your Kusto Destination Table")
+      .option(KustoSinkOptions.KUSTO_AAD_CLIENT_ID, "Your Client ID")
+      .option(KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD, "Your secret")
       .trigger(Trigger.ProcessingTime(0))
       .start()
 
     df1.awaitTermination(TimeUnit.MINUTES.toMillis(8))
-
   }
 }
 

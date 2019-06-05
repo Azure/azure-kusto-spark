@@ -11,15 +11,15 @@ import java.util.zip.GZIPOutputStream
 import java.util.{TimeZone, UUID}
 
 import com.microsoft.azure.kusto.data.Client
-import com.microsoft.azure.kusto.ingest.{IngestClient, IngestionProperties}
 import com.microsoft.azure.kusto.ingest.IngestionProperties.DATA_FORMAT
 import com.microsoft.azure.kusto.ingest.result.{IngestionResult, IngestionStatus, OperationStatus}
 import com.microsoft.azure.kusto.ingest.source.BlobSourceInfo
+import com.microsoft.azure.kusto.ingest.{IngestClient, IngestionProperties}
 import com.microsoft.azure.storage.StorageCredentialsSharedAccessSignature
 import com.microsoft.azure.storage.blob.{CloudBlobContainer, CloudBlockBlob}
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.datasink
-import com.microsoft.kusto.spark.datasource.{KustoCoordinates, WriteOptions}
+import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.{KustoClient, KustoClientCache, KustoQueryUtils, KustoConstants => KCONST, KustoDataSourceUtils => KDSU}
 import com.univocity.parsers.csv.{CsvWriter, CsvWriterSettings}
@@ -49,7 +49,8 @@ object KustoWriter {
   private[kusto] def write(batchId: Option[Long],
                            data: DataFrame,
                            tableCoordinates: KustoCoordinates,
-                           authentication: KustoAuthentication, writeOptions: WriteOptions): Unit = {
+                           authentication: KustoAuthentication,
+                           writeOptions: WriteOptions): Unit = {
 
     val batchIdIfExists = batchId.filter(_ != 0).map(_.toString).getOrElse("")
     val kustoClient = KustoClientCache.getClient(tableCoordinates.cluster, authentication)
@@ -144,7 +145,12 @@ object KustoWriter {
                          (implicit parameters: KustoWriteResource): Seq[IngestionResult] = {
     import parameters._
 
-    val ingestionProperties = new IngestionProperties(coordinates.database, tmpTableName)
+    val ingestionProperties = if (writeOptions.IngestionProperties.isDefined) {
+      SparkIngestionProperties.fromString(writeOptions.IngestionProperties.get).toIngestionProperties(coordinates.database, tmpTableName)
+    } else {
+      new IngestionProperties(coordinates.database, tmpTableName)
+    }
+
     ingestionProperties.setDataFormat(DATA_FORMAT.csv.name)
     ingestionProperties.setReportMethod(IngestionProperties.IngestionReportMethod.Table)
     ingestionProperties.setReportLevel(IngestionProperties.IngestionReportLevel.FailuresAndSuccesses)
@@ -226,7 +232,7 @@ object KustoWriter {
         ingestionResults.foreach {
           ingestionResult =>
             KDSU.runSequentially[IngestionStatus](
-              func = () => ingestionResult.getIngestionStatusCollection().get(0),
+              func = () => ingestionResult.getIngestionStatusCollection.get(0),
               0, delayPeriodBetweenCalls, (timeout.toMillis / delayPeriodBetweenCalls + 5).toInt,
               res => res.status == OperationStatus.Pending,
               res => res.status match {
@@ -381,7 +387,7 @@ object KustoWriter {
       result(x) = "\"" + keys(x) + "\"" + ":" + values(x)
     }
 
-    "{" +  result.mkString(",") +"}"
+    "{" + result.mkString(",") + "}"
   }
 
 
