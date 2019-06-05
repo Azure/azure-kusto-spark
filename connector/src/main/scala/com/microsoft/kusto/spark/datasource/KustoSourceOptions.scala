@@ -1,5 +1,7 @@
 package com.microsoft.kusto.spark.datasource
 
+import com.microsoft.kusto.spark.common.KustoOptions
+
 object KustoSourceOptions extends KustoOptions {
   val KUSTO_CUSTOM_DATAFRAME_COLUMN_TYPES: String = newOption("customSchema")
 

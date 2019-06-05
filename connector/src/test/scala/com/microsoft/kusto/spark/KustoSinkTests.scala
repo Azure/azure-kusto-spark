@@ -7,7 +7,7 @@ import com.microsoft.azure.kusto.ingest.IngestClient
 import com.microsoft.azure.kusto.ingest.result.{IngestionResult, IngestionStatus}
 import com.microsoft.kusto.spark.authentication.AadApplicationAuthentication
 import com.microsoft.kusto.spark.datasink.{KustoSink, KustoSinkOptions, WriteOptions}
-import com.microsoft.kusto.spark.datasource.KustoCoordinates
+import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST, KustoDataSourceUtils => KDSU}
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{SQLContext, SparkSession}

@@ -1,6 +1,6 @@
 package com.microsoft.kusto.spark.datasink
 
-import com.microsoft.kusto.spark.datasource.KustoOptions
+import com.microsoft.kusto.spark.common.KustoOptions
 
 import scala.concurrent.duration.FiniteDuration
 

@@ -4,6 +4,7 @@ import java.util.UUID
 
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties}
+import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.utils.{CslCommandsGenerator, KustoAzureFsSetupCache, KustoBlobStorageUtils, KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.spark.Partition
 import org.apache.spark.rdd.RDD

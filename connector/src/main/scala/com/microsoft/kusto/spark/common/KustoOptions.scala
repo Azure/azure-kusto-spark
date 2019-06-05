@@ -1,4 +1,4 @@
-package com.microsoft.kusto.spark.datasource
+package com.microsoft.kusto.spark.common
 
 import java.util.Locale
 
@@ -13,8 +13,6 @@ trait KustoOptions {
   // KeyVault options. Relevant only if credentials need to be retrieved from Key Vault
   val KEY_VAULT_URI = "keyVaultUri"
   val KEY_VAULT_CREDENTIALS = "keyVaultCredentials"
-  val KEY_VAULT_PEM_FILE_PATH = "keyVaultPemFilePath" // Not supported
-  val KEY_VAULT_CERTIFICATE_KEY = "keyVaultPemFileKey" // Not supported
   val KEY_VAULT_APP_ID = "keyVaultAppId"
   val KEY_VAULT_APP_KEY = "keyVaultAppKey"
 
@@ -86,4 +84,7 @@ private[kusto] object KustoDebugOptions {
   // Note! In current implementation this is not exploited by Kusto read connector
   // Left for future experimentation
   val supportedPartitioningModes: Set[String] = Set("hash")
+
+  val KEY_VAULT_PEM_FILE_PATH = "keyVaultPemFilePath" // Not yet supported
+  val KEY_VAULT_CERTIFICATE_KEY = "keyVaultPemFileKey" // Not yet supported
 }

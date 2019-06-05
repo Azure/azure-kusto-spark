@@ -6,7 +6,7 @@ import com.microsoft.azure.kusto.data.Client
 import com.microsoft.azure.kusto.ingest.IngestClient
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
-import com.microsoft.kusto.spark.datasource.KustoCoordinates
+import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.KustoDataSourceUtils.extractSchemaFromResultTable
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}

@@ -9,7 +9,8 @@ import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties, Results}
 import com.microsoft.kusto.spark.authentication._
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
 import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode, WriteOptions}
-import com.microsoft.kusto.spark.datasource.{KustoCoordinates, _}
+import com.microsoft.kusto.spark.common.{KustoCoordinates, KustoDebugOptions}
+import com.microsoft.kusto.spark.datasource.{KustoResponseDeserializer, KustoSourceOptions, KustoStorageParameters}
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
 import org.apache.log4j.{Level, Logger}
@@ -106,8 +107,8 @@ object KustoDataSourceUtils {
           parameters.getOrElse(KustoSourceOptions.KEY_VAULT_APP_KEY, "")))
       } else {
         keyVaultAuthentication = Some(KeyVaultCertificateAuthentication(keyVaultUri,
-          parameters.getOrElse(KustoSourceOptions.KEY_VAULT_PEM_FILE_PATH, ""),
-          parameters.getOrElse(KustoSourceOptions.KEY_VAULT_CERTIFICATE_KEY, "")))
+          parameters.getOrElse(KustoDebugOptions.KEY_VAULT_PEM_FILE_PATH, ""),
+          parameters.getOrElse(KustoDebugOptions.KEY_VAULT_CERTIFICATE_KEY, "")))
       }
     }
 
