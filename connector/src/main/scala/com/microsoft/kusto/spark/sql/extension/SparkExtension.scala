@@ -24,7 +24,7 @@ object SparkExtension {
   }
 
   implicit class DataFrameWriterExtension(df: DataFrameWriter[Row]) {
-    def kusto(kustoCluster: String, database: String, table: String, sparkIngestionProperties: Option[SparkIngestionProperties] = None): Unit = {
+    def kusto(kustoCluster: String, database: String, table: String, conf: Map[String, String] = Map.empty[String, String], sparkIngestionProperties: Option[SparkIngestionProperties] = None): Unit = {
       (if (sparkIngestionProperties.isDefined) {
         df.option(KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON, sparkIngestionProperties.get.toString)
       } else {
@@ -33,6 +33,7 @@ object SparkExtension {
         .option(KustoSinkOptions.KUSTO_CLUSTER, kustoCluster)
         .option(KustoSinkOptions.KUSTO_DATABASE, database)
         .option(KustoSinkOptions.KUSTO_TABLE, table)
+        .options(conf)
         .save()
     }
   }

@@ -35,6 +35,17 @@ that is using it. Please verify the following before using Kusto connector:
  .save()
  ```
  
+ Or (java/scala only)
+ 
+  ```
+    df.write.kusto(kustoCluster: String,
+     database: String,
+     table: String,
+     conf: Map[String, String] = Map.empty[String, String],
+     sparkIngestionProperties: Option[SparkIngestionProperties] = None)
+  ```
+  
+ 
  ### Supported Options
  
  All the options that can be use in the Kusto sink are under the object KustoSinkOptions.
