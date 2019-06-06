@@ -84,6 +84,36 @@ that is using it. Please verify the following before using Kusto connector:
    An integer number corresponding to the period in seconds after which the operation will timeout.
    This is an upper limit that may coexist with addition timeout limits as configured on Spark or Kusto clusters.  
    Default: '5400' (90 minutes)
+   
+ * **KUSTO_SPARK_INGESTION_PROPERTIES_JSON** *
+ The connector creates a csv blob and ingest it to the Kusto cluster, this option allows the user to add properties to 
+ the ingestion using an instance of the class SparkIngestionProperties that should be serialized to string using the toString
+ method. 
+ 
+    **SparkIngestionProperties - options list**
+    
+     *dropByTags*, *ingestByTags*, *additionalTags* 
+    
+     please read::
+      [Kusto extents-tagging docs](https://docs.microsoft.com/en-us/azure/kusto/management/extents-overview#extent-tagging)
+      
+     *ingestIfNotExists*
+     Will trigger a check if there's already an extent with this specific "ingest-by" tag prefix
+     
+     *creationTime*
+     Set the extents (data) creation time, please read:
+     [Kusto extents docs](https://docs.microsoft.com/en-us/azure/kusto/management/extents-overview)
+     
+     *csvMapping*
+     A full representation of a csv mapping, please read:
+     [Kusto csv mappings](https://docs.microsoft.com/en-us/azure/kusto/management/mappings)
+ 
+     *csvMappingNameReference*
+      Refer to an existing csv mapping by name, please read: 
+     [create csv mappings](https://docs.microsoft.com/en-us/azure/kusto/management/tables#create-ingestion-mapping)
+
+     *flushImmediately*
+      Flush the data immediately without aggregation
 
  >**Note:**
  For both synchronous and asynchronous operation, 'write' is an atomic transaction, i.e. 

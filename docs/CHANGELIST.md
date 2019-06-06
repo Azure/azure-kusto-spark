@@ -47,6 +47,11 @@ or scale (via transient blob storage) read mode.
 * Remove dependency on Jackson-core library
 * Deprecate 'KUSTO_BLOB_SET_FS_CONFIG' option. Instead, cache relevant configuration and set if needed
 
+# 1.0.0-Beta-04:
+* Support spark StructType, ArrayType, MapType.
+* Adding option KUSTO_SPARK_INGESTION_PROPERTIES_JSON to sink.
+* Adding option KUSTO_CLIENT_REQUEST_PROPERTIES_JSON to source.
+
 # Known Issues and Tips
 1. When running with spark 'wholestage codegen' enabled, a mismatch between schema 'nullable' definition and actual data containing
 null values can lead to a NullPointerException to be thrown by org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter.
@@ -54,10 +59,13 @@ If you encounter this error and cannot identify and fix the mismatch, consider d
 
    `spark.conf.set("spark.sql.codegen.wholeStage","false")`
 
-2. When writing to Kusto, [entity naming rules](https://docs.microsoft.com/en-us/azure/kusto/query/schema-entities/entity-names)
+2. For version Beta03 and less: When writing to Kusto, [entity naming rules](https://docs.microsoft.com/en-us/azure/kusto/query/schema-entities/entity-names)
   must be followed to avoid collisions with Kusto reserved keywords.
   For details, refer to [these](https://docs.microsoft.com/en-us/azure/kusto/query/schema-entities/entity-names#naming-your-entities-to-avoid-collisions-with-kusto-language-keywords)
-  guidelines. 
+  guidelines.
+
+3. Using pySpark - cluster name should be just the alias (including region-e.g: alias.westus) and not the complete url 
+(scala agrees to both ways). 
   
 ### Building for legacy Spark versions:
 Each release is tested with Spark 2.4. 
