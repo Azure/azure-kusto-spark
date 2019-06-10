@@ -32,7 +32,7 @@ link your application with the artifact below in order to use the Azure Data Exp
 ```
 groupId = com.microsoft.azure
 artifactId = spark-kusto-connector
-version = 1.0.0-Beta-04
+version = 1.0.0-Beta-03 
 ```
 
 **In Maven**:
@@ -45,7 +45,7 @@ or use the corresponding [released package](https://github.com/Azure/azure-kusto
    <dependency>
      <groupId>com.microsoft.azure</groupId>
      <artifactId>spark-kusto-connector</artifactId>
-     <version>1.0.0-Beta-04</version>
+     <version>1.0.0-Beta-03</version>
    </dependency>
 ```
 
