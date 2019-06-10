@@ -105,6 +105,11 @@ SAS access url: a complete url of the SAS to the container. Either this, or a st
 Blob container name. This container will be used to store all transient artifacts created every time the corresponding RDD is materialized. 
 Once the RDD is no longer required by the caller application, the container and/or all its contents can be deleted by the caller.
 
+* **KUSTO_CLIENT_REQUEST_PROPERTIES_JSON**
+Properties for querying over kusto - used by the Java client when executing the query (or the export command in 'scale' mode),
+using the class  com.microsoft.azure.kusto.data.ClientRequestProperties and calling toString on it.
+Please refer to [Kusto-docs-request-properties](https://docs.microsoft.com/es-es/azure/kusto/api/netfx/request-properties)
+
  ### Examples
  
  **Using simplified syntax**
