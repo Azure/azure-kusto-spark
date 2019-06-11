@@ -4,8 +4,9 @@ import java.security.InvalidParameterException
 import java.util.UUID
 
 import com.microsoft.azure.kusto.data.{ClientFactory, ConnectionStringBuilder}
-import com.microsoft.kusto.spark.datasource.{KustoOptions, KustoResponseDeserializer}
-import com.microsoft.kusto.spark.utils.{KustoBlobStorageUtils, CslCommandsGenerator, KustoQueryUtils, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.datasink.KustoSinkOptions
+import com.microsoft.kusto.spark.datasource.{KustoResponseDeserializer, KustoSourceOptions}
+import com.microsoft.kusto.spark.utils.{CslCommandsGenerator, KustoBlobStorageUtils, KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{SQLContext, SparkSession}
 import org.junit.runner.RunWith
@@ -40,12 +41,12 @@ class KustoBlobAccessE2E extends FlatSpec with BeforeAndAfterAll {
     sc.stop()
   }
 
-  val appId: String = System.getProperty(KustoOptions.KUSTO_AAD_CLIENT_ID)
-  val appKey: String = System.getProperty(KustoOptions.KUSTO_AAD_CLIENT_PASSWORD)
-  val authority: String = System.getProperty(KustoOptions.KUSTO_AAD_AUTHORITY_ID)
-  val cluster: String = System.getProperty(KustoOptions.KUSTO_CLUSTER)
-  val database: String = System.getProperty(KustoOptions.KUSTO_DATABASE)
-  val table: String = System.getProperty(KustoOptions.KUSTO_TABLE, "")
+  val appId: String = System.getProperty(KustoSourceOptions.KUSTO_AAD_CLIENT_ID)
+  val appKey: String = System.getProperty(KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD)
+  val authority: String = System.getProperty(KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID)
+  val cluster: String = System.getProperty(KustoSourceOptions.KUSTO_CLUSTER)
+  val database: String = System.getProperty(KustoSourceOptions.KUSTO_DATABASE)
+  val table: String = System.getProperty(KustoSinkOptions.KUSTO_TABLE, "")
   val storageAccount: String = System.getProperty("storageAccount", "sparkblobforkustomichael")
   val container: String = System.getProperty("container", "CONTAINER")
   val blobKey: String = System.getProperty("blobKey", "KEY")
@@ -72,13 +73,13 @@ class KustoBlobAccessE2E extends FlatSpec with BeforeAndAfterAll {
 
       df.write
         .format("com.microsoft.kusto.spark.datasource")
-        .option(KustoOptions.KUSTO_CLUSTER, cluster)
-        .option(KustoOptions.KUSTO_DATABASE, database)
-        .option(KustoOptions.KUSTO_TABLE, updatedTable)
-        .option(KustoOptions.KUSTO_AAD_CLIENT_ID, appId)
-        .option(KustoOptions.KUSTO_AAD_CLIENT_PASSWORD, appKey)
-        .option(KustoOptions.KUSTO_AAD_AUTHORITY_ID, authority)
-        .option(KustoOptions.KUSTO_TABLE_CREATE_OPTIONS, "CreateIfNotExist")
+        .option(KustoSinkOptions.KUSTO_CLUSTER, cluster)
+        .option(KustoSinkOptions.KUSTO_DATABASE, database)
+        .option(KustoSinkOptions.KUSTO_TABLE, updatedTable)
+        .option(KustoSinkOptions.KUSTO_AAD_CLIENT_ID, appId)
+        .option(KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD, appKey)
+        .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, authority)
+        .option(KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS, "CreateIfNotExist")
         .save()
     }
 

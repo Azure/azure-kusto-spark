@@ -5,23 +5,28 @@ import java.util
 import java.util.concurrent.{CountDownLatch, TimeUnit, TimeoutException}
 import java.util.{NoSuchElementException, StringJoiner, Timer, TimerTask}
 
-import com.microsoft.azure.kusto.data.{Client, Results}
-import com.microsoft.kusto.spark.datasource.{KeyVaultAuthentication, KustoAuthentication, KustoCoordinates, WriteOptions, _}
-import com.microsoft.kusto.spark.datasource.KustoOptions.SinkTableCreationMode
-import com.microsoft.kusto.spark.datasource.KustoOptions.SinkTableCreationMode.SinkTableCreationMode
+import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties, Results}
+import com.microsoft.kusto.spark.authentication._
+import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
+import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode, WriteOptions}
+import com.microsoft.kusto.spark.common.{KustoCoordinates, KustoDebugOptions}
+import com.microsoft.kusto.spark.datasource.{KustoResponseDeserializer, KustoSourceOptions, KustoStorageParameters}
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
+import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types.StructType
-import scala.collection.JavaConversions._
+import org.json.JSONObject
 
-import scala.util.matching.Regex
+import scala.collection.JavaConversions._
 import scala.concurrent.duration._
-import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
+import scala.util.matching.Regex
 
 object KustoDataSourceUtils {
   private val klog = Logger.getLogger("KustoConnector")
+  val urlPattern: Regex = raw"https://(?:ingest-)?([^.]+).kusto.windows.net(?::443)?".r
+  val sasPattern: Regex = raw"(?:https://)?([^.]+).blob.core.windows.net/([^?]+)?(.+)".r
 
   val ClientName = "Kusto.Spark.Connector"
   val DefaultTimeoutLongRunning: FiniteDuration = 90 minutes
@@ -52,46 +57,13 @@ object KustoDataSourceUtils {
     klog.fatal(s"$reporter: $message")
   }
 
-  def createTmpTableWithSameSchema(kustoAdminClient: Client,
-                                   tableCoordinates: KustoCoordinates,
-                                   tmpTableName: String,
-                                   tableCreation: SinkTableCreationMode = SinkTableCreationMode.FailIfNotExist,
-                                   schema: StructType): Unit = {
-    val schemaShowCommandResult = kustoAdminClient.execute(tableCoordinates.database, generateTableGetSchemaAsRowsCommand(tableCoordinates.table.get)).getValues
-    var tmpTableSchema: String = ""
-    val database = tableCoordinates.database
-    val table = tableCoordinates.table.get
-
-    if (schemaShowCommandResult.size() == 0) {
-      // Table Does not exist
-      if (tableCreation == SinkTableCreationMode.FailIfNotExist) {
-        throw new RuntimeException("Table '" + table + "' doesn't exist in database " + database + "', in cluster '" + tableCoordinates.cluster + "'")
-      } else {
-        // Parse dataframe schema and create a destination table with that schema
-        val tableSchemaBuilder = new StringJoiner(",")
-        schema.fields.foreach { field =>
-          val fieldType = DataTypeMapping.getSparkTypeToKustoTypeMap(field.dataType)
-          tableSchemaBuilder.add(s"${field.name}:$fieldType")
-        }
-        tmpTableSchema = tableSchemaBuilder.toString
-        kustoAdminClient.execute(database, generateTableCreateCommand(table, tmpTableSchema))
-      }
-    } else {
-      // Table exists. Parse kusto table schema and check if it matches the dataframes schema
-      tmpTableSchema = extractSchemaFromResultTable(schemaShowCommandResult)
-    }
-
-    //  Create a temporary table with the kusto or dataframe parsed schema
-    kustoAdminClient.execute(database, generateTableCreateCommand(tmpTableName, tmpTableSchema))
-  }
-
   private[kusto] def extractSchemaFromResultTable(resultRows: util.ArrayList[util.ArrayList[String]]): String = {
 
     val tableSchemaBuilder = new StringJoiner(",")
 
-    for(row <- resultRows){
+    for (row <- resultRows) {
       // Each row contains {Name, CslType, Type}, converted to (Name:CslType) pairs
-      tableSchemaBuilder.add(s"${row.get(0)}:${row.get(1)}")
+      tableSchemaBuilder.add(s"['${row.get(0)}']:${row.get(1)}")
     }
 
     tableSchemaBuilder.toString
@@ -105,8 +77,8 @@ object KustoDataSourceUtils {
 
   def parseSourceParameters(parameters: Map[String, String]): SourceParameters = {
     // Parse KustoTableCoordinates - these are mandatory options
-    val database = parameters.get(KustoOptions.KUSTO_DATABASE)
-    val cluster = parameters.get(KustoOptions.KUSTO_CLUSTER)
+    val database = parameters.get(KustoSourceOptions.KUSTO_DATABASE)
+    val cluster = parameters.get(KustoSourceOptions.KUSTO_CLUSTER)
 
     if (database.isEmpty) {
       throw new InvalidParameterException("KUSTO_DATABASE parameter is missing. Must provide a destination database name")
@@ -116,40 +88,41 @@ object KustoDataSourceUtils {
       throw new InvalidParameterException("KUSTO_CLUSTER parameter is missing. Must provide a destination cluster name")
     }
 
-    val table = parameters.get(KustoOptions.KUSTO_TABLE)
+    val table = parameters.get(KustoSinkOptions.KUSTO_TABLE)
 
     // Parse KustoAuthentication
-    val applicationId = parameters.getOrElse(KustoOptions.KUSTO_AAD_CLIENT_ID, "")
-    val applicationKey = parameters.getOrElse(KustoOptions.KUSTO_AAD_CLIENT_PASSWORD, "")
+    val applicationId = parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_CLIENT_ID, "")
+    val applicationKey = parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD, "")
     var authentication: KustoAuthentication = null
-    val keyVaultUri: String = parameters.getOrElse(KustoOptions.KEY_VAULT_URI, "")
+    val keyVaultUri: String = parameters.getOrElse(KustoSourceOptions.KEY_VAULT_URI, "")
     var accessToken: String = ""
     var keyVaultAuthentication: Option[KeyVaultAuthentication] = None
     if (keyVaultUri != "") {
       // KeyVault Authentication
-      val keyVaultAppId: String = parameters.getOrElse(KustoOptions.KEY_VAULT_APP_ID, "")
+      val keyVaultAppId: String = parameters.getOrElse(KustoSourceOptions.KEY_VAULT_APP_ID, "")
 
       if (!keyVaultAppId.isEmpty) {
         keyVaultAuthentication = Some(KeyVaultAppAuthentication(keyVaultUri,
           keyVaultAppId,
-          parameters.getOrElse(KustoOptions.KEY_VAULT_APP_KEY, "")))
+          parameters.getOrElse(KustoSourceOptions.KEY_VAULT_APP_KEY, "")))
       } else {
         keyVaultAuthentication = Some(KeyVaultCertificateAuthentication(keyVaultUri,
-          parameters.getOrElse(KustoOptions.KEY_VAULT_PEM_FILE_PATH, ""),
-          parameters.getOrElse(KustoOptions.KEY_VAULT_CERTIFICATE_KEY, "")))
+          parameters.getOrElse(KustoDebugOptions.KEY_VAULT_PEM_FILE_PATH, ""),
+          parameters.getOrElse(KustoDebugOptions.KEY_VAULT_CERTIFICATE_KEY, "")))
       }
     }
 
     if (!applicationId.isEmpty || !applicationKey.isEmpty) {
-      authentication = AadApplicationAuthentication(applicationId, applicationKey, parameters.getOrElse(KustoOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com"))
+      authentication = AadApplicationAuthentication(applicationId, applicationKey, parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com"))
     }
     else if ( {
-      accessToken = parameters.getOrElse(KustoOptions.KUSTO_ACCESS_TOKEN, "")
+      accessToken = parameters.getOrElse(KustoSourceOptions.KUSTO_ACCESS_TOKEN, "")
       !accessToken.isEmpty
     }) {
       authentication = KustoAccessTokenAuthentication(accessToken)
     } else if (keyVaultUri.isEmpty) {
-      authentication = KustoAccessTokenAuthentication(DeviceAuthentication.acquireAccessTokenUsingDeviceCodeFlow(cluster.get))
+      val token = DeviceAuthentication.acquireAccessTokenUsingDeviceCodeFlow(getClusterUrlFromAlias(cluster.get))
+      authentication = KustoAccessTokenAuthentication(token)
     }
 
     SourceParameters(authentication, KustoCoordinates(getClusterNameFromUrlIfNeeded(cluster.get).toLowerCase(), database.get, table), keyVaultAuthentication)
@@ -175,23 +148,27 @@ object KustoDataSourceUtils {
     var isAsyncParam: String = ""
 
     try {
-      isAsyncParam = parameters.getOrElse(KustoOptions.KUSTO_WRITE_ENABLE_ASYNC, "false")
-      isAsync = parameters.getOrElse(KustoOptions.KUSTO_WRITE_ENABLE_ASYNC, "false").trim.toBoolean
-      tableCreationParam = parameters.get(KustoOptions.KUSTO_TABLE_CREATE_OPTIONS)
+      isAsyncParam = parameters.getOrElse(KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC, "false")
+      isAsync = parameters.getOrElse(KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC, "false").trim.toBoolean
+      tableCreationParam = parameters.get(KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS)
       tableCreation = if (tableCreationParam.isEmpty) SinkTableCreationMode.FailIfNotExist else SinkTableCreationMode.withName(tableCreationParam.get)
     } catch {
       case _: NoSuchElementException => throw new InvalidParameterException(s"No such SinkTableCreationMode option: '${tableCreationParam.get}'")
       case _: java.lang.IllegalArgumentException => throw new InvalidParameterException(s"KUSTO_WRITE_ENABLE_ASYNC is expecting either 'true' or 'false', got: '$isAsyncParam'")
     }
 
-    val timeout = new FiniteDuration(parameters.getOrElse(KustoOptions.KUSTO_TIMEOUT_LIMIT, KCONST.defaultTimeoutAsString).toLong, TimeUnit.SECONDS)
+    val timeout = new FiniteDuration(parameters.getOrElse(KustoSinkOptions.KUSTO_TIMEOUT_LIMIT, KCONST.defaultTimeoutAsString).toLong, TimeUnit.SECONDS)
+
+    val ingestionPropertiesAsJson = parameters.get(KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON)
 
     val writeOptions = WriteOptions(
       tableCreation,
       isAsync,
-      parameters.getOrElse(KustoOptions.KUSTO_WRITE_RESULT_LIMIT, "1"),
+      parameters.getOrElse(KustoSinkOptions.KUSTO_WRITE_RESULT_LIMIT, "1"),
       parameters.getOrElse(DateTimeUtils.TIMEZONE_OPTION, "UTC"),
-      timeout)
+      timeout,
+      ingestionPropertiesAsJson
+    )
 
     val sourceParameters = parseSourceParameters(parameters)
 
@@ -199,6 +176,24 @@ object KustoDataSourceUtils {
       throw new InvalidParameterException("KUSTO_TABLE parameter is missing. Must provide a destination table name")
     }
     SinkParameters(writeOptions, sourceParameters)
+  }
+
+  def getClientRequestProperties(parameters: Map[String, String]): Option[ClientRequestProperties] = {
+    val crpOption = parameters.get(KustoSourceOptions.KUSTO_CLIENT_REQUEST_PROPERTIES_JSON)
+
+    //TODO: use the java client implementation when published to maven
+    if (crpOption.isDefined) {
+      val crp = new ClientRequestProperties()
+      val jsonObj = new JSONObject(crpOption.get).asInstanceOf[util.HashMap[String, Object]]
+      val it = jsonObj.keySet().iterator()
+      while (it.hasNext) {
+        val optionName: String = it.next()
+        crp.setOption(optionName, jsonObj.get(optionName))
+      }
+      Some(crp)
+    } else {
+      None
+    }
   }
 
   private[kusto] def reportExceptionAndThrow(
@@ -213,16 +208,22 @@ object KustoDataSourceUtils {
     val clusterDesc = if (cluster.isEmpty) "" else s", cluster: '$cluster' "
     val databaseDesc = if (database.isEmpty) "" else s", database: '$database'"
     val tableDesc = if (table.isEmpty) "" else s", table: '$table'"
-    logError(reporter,s"caught exception $whatFailed$clusterDesc$databaseDesc$tableDesc.${NewLine}EXCEPTION MESSAGE: ${exception.getMessage}")
+    logError(reporter, s"caught exception $whatFailed$clusterDesc$databaseDesc$tableDesc.${NewLine}EXCEPTION MESSAGE: ${exception.getMessage}")
 
     if (!isLogDontThrow) throw exception
   }
 
   private def getClusterNameFromUrlIfNeeded(url: String): String = {
-    val urlPattern: Regex = raw"https://(?:ingest-)?([^.]+).kusto.windows.net(?::443)?".r
     url match {
       case urlPattern(clusterAlias) => clusterAlias
       case _ => url
+    }
+  }
+
+  private def getClusterUrlFromAlias(alias: String): String = {
+    alias match {
+      case urlPattern(_) => alias
+      case _ => s"https://$alias.kusto.windows.net"
     }
   }
 
@@ -311,9 +312,8 @@ object KustoDataSourceUtils {
   }
 
   private[kusto] def parseSas(url: String): KustoStorageParameters = {
-    val urlPattern: Regex = raw"(?:https://)?([^.]+).blob.core.windows.net/([^?]+)?(.+)".r
     url match {
-      case urlPattern(storageAccountId, container, sasKey) => KustoStorageParameters(storageAccountId, sasKey, container, secretIsAccountKey = false)
+      case sasPattern(storageAccountId, container, sasKey) => KustoStorageParameters(storageAccountId, sasKey, container, secretIsAccountKey = false)
       case _ => throw new InvalidParameterException(
         "SAS url couldn't be parsed. Should be https://<storage-account>.blob.core.windows.net/<container>?<SAS-Token>"
       )
@@ -365,16 +365,16 @@ object KustoDataSourceUtils {
       if (storageAccount.isEmpty || storageContainer.isEmpty || storageSecret.isEmpty) {
         val keyVaultParameters = KeyVaultUtils.getStorageParamsFromKeyVault(keyVaultAuthentication)
         // If KeyVault contains sas take it
-        if(!keyVaultParameters.secretIsAccountKey) {
+        if (!keyVaultParameters.secretIsAccountKey) {
           Some(keyVaultParameters)
         } else {
           if ((storageAccount.isEmpty && keyVaultParameters.account.isEmpty) ||
-              (storageContainer.isEmpty && keyVaultParameters.container.isEmpty) ||
-              (storageSecret.isEmpty && keyVaultParameters.secret.isEmpty)) {
+            (storageContainer.isEmpty && keyVaultParameters.container.isEmpty) ||
+            (storageSecret.isEmpty && keyVaultParameters.secret.isEmpty)) {
 
-              // We don't have enough information to access blob storage
-              None
-            }
+            // We don't have enough information to access blob storage
+            None
+          }
           else {
             // Try combine
             val account = if (storageAccount.isEmpty) Some(keyVaultParameters.account) else storageAccount

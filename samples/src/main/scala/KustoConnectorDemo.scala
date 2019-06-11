@@ -6,7 +6,8 @@
 
 import java.util.concurrent.atomic.AtomicInteger
 
-import com.microsoft.kusto.spark.datasource.KustoOptions
+import com.microsoft.kusto.spark.datasink.KustoSinkOptions
+import com.microsoft.kusto.spark.datasource.KustoSourceOptions
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.types.{StringType, StructType}
@@ -54,12 +55,12 @@ object KustoConnectorDemo {
     // To see how the number of partitions effect the command performance, use 'repartition': e.g. 'df.repartition(16).write...'
     df.write
       .format("com.microsoft.kusto.spark.datasource")
-      .option(KustoOptions.KUSTO_CLUSTER, cluster)
-      .option(KustoOptions.KUSTO_DATABASE, database)
-      .option(KustoOptions.KUSTO_TABLE, table)
-      .option(KustoOptions.KUSTO_AAD_CLIENT_ID, appId)
-      .option(KustoOptions.KUSTO_AAD_CLIENT_PASSWORD, appKey)
-      .option(KustoOptions.KUSTO_AAD_AUTHORITY_ID, authorityId)
+      .option(KustoSinkOptions.KUSTO_CLUSTER, cluster)
+      .option(KustoSinkOptions.KUSTO_DATABASE, database)
+      .option(KustoSinkOptions.KUSTO_TABLE, table)
+      .option(KustoSinkOptions.KUSTO_AAD_CLIENT_ID, appId)
+      .option(KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD, appKey)
+      .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, authorityId)
       .save()
 
       // To write the data to a Kusto cluster, ASYNCronously, add:
@@ -92,20 +93,20 @@ object KustoConnectorDemo {
           .writeStream
           .format("com.microsoft.kusto.spark.datasink.KustoSinkProvider")
           .options(Map(
-            KustoOptions.KUSTO_CLUSTER -> cluster,
-            KustoOptions.KUSTO_TABLE -> table,
-            KustoOptions.KUSTO_DATABASE -> database,
-            KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
-            KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
-            KustoOptions.KUSTO_AAD_AUTHORITY_ID -> authorityId))
+            KustoSinkOptions.KUSTO_CLUSTER -> cluster,
+            KustoSinkOptions.KUSTO_TABLE -> table,
+            KustoSinkOptions.KUSTO_DATABASE -> database,
+            KustoSinkOptions.KUSTO_AAD_CLIENT_ID -> appId,
+            KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+            KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID -> authorityId))
           .trigger(Trigger.Once)
 
     kustoQ.start().awaitTermination(TimeUnit.MINUTES.toMillis(8))
 
       val conf: Map[String, String] = Map(
-      KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
-      KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
-      KustoOptions.KUSTO_QUERY -> s"$table | where (ColB % 1000 == 0) | distinct ColA"
+        KustoSourceOptions.KUSTO_AAD_CLIENT_ID -> appId,
+        KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+        KustoSourceOptions.KUSTO_QUERY -> s"$table | where (ColB % 1000 == 0) | distinct ColA"
     )
 
     // Simplified syntax flavour
@@ -115,15 +116,15 @@ object KustoConnectorDemo {
     // ELABORATE READ SYNTAX
     // Here we read the whole table.
     val conf2: Map[String, String] = Map(
-          KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
-          KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
-          KustoOptions.KUSTO_QUERY -> "StringAndIntTable"
+      KustoSourceOptions.KUSTO_AAD_CLIENT_ID -> appId,
+      KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+      KustoSourceOptions.KUSTO_QUERY -> "StringAndIntTable"
         )
 
         val df3 = spark.sqlContext.read
           .format("com.microsoft.kusto.spark.datasource")
-          .option(KustoOptions.KUSTO_CLUSTER, cluster)
-          .option(KustoOptions.KUSTO_DATABASE, database)
+          .option(KustoSourceOptions.KUSTO_CLUSTER, cluster)
+          .option(KustoSourceOptions.KUSTO_DATABASE, database)
           .options(conf2)
           .load()
 
@@ -143,12 +144,12 @@ object KustoConnectorDemo {
 
     // READING LARGE DATA SET: SET UP CONFIGURATION
     val conf3: Map[String, String] = Map(
-      KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
-      KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
-      KustoOptions.KUSTO_BLOB_CONTAINER -> container,
+      KustoSourceOptions.KUSTO_AAD_CLIENT_ID -> appId,
+      KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+      KustoSourceOptions.KUSTO_BLOB_CONTAINER -> container,
       //KustoOptions.KUSTO_BLOB_STORAGE_SAS_URL -> storageSas,
-      KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME -> storageAccountName,
-      KustoOptions.KUSTO_BLOB_STORAGE_ACCOUNT_KEY -> storageAccountKey
+      KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME -> storageAccountName,
+      KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_KEY -> storageAccountKey
     )
 
     // READING LARGE DATA SET(FULL TABLE, UNFILTERED)
@@ -178,17 +179,17 @@ object KustoConnectorDemo {
     /* blobContainer, blobStorageAccountKey, blobStorageAccountName, kustoAppAuthority, kustoAppId, kustoAppKey */
     /************************************************************************************************************/
     val conf4: Map[String, String] = Map(
-      KustoOptions.KEY_VAULT_URI -> keyVaultUri,
-      KustoOptions.KEY_VAULT_APP_ID -> keyVaultClientID,
-      KustoOptions.KEY_VAULT_APP_KEY -> keyVaultClientPassword,
-      KustoOptions.KUSTO_QUERY -> "StringAndIntExpTable"
+      KustoSourceOptions.KEY_VAULT_URI -> keyVaultUri,
+      KustoSourceOptions.KEY_VAULT_APP_ID -> keyVaultClientID,
+      KustoSourceOptions.KEY_VAULT_APP_KEY -> keyVaultClientPassword,
+      KustoSourceOptions.KUSTO_QUERY -> "StringAndIntExpTable"
     )
 
     val df6 =
     spark.sqlContext.read
     .format("com.microsoft.kusto.spark.datasource")
-    .option(KustoOptions.KUSTO_CLUSTER, cluster)
-    .option(KustoOptions.KUSTO_DATABASE, "ExperimentDb")
+    .option(KustoSourceOptions.KUSTO_CLUSTER, cluster)
+    .option(KustoSourceOptions.KUSTO_DATABASE, "ExperimentDb")
     .options(conf4)
     .load()
   }

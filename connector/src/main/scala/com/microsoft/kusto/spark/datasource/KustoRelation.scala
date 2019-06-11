@@ -3,7 +3,10 @@ package com.microsoft.kusto.spark.datasource
 import java.security.InvalidParameterException
 import java.util.Locale
 
-import com.microsoft.kusto.spark.utils.{KustoClient, KustoQueryUtils, KustoDataSourceUtils => KDSU}
+import com.microsoft.azure.kusto.data.ClientRequestProperties
+import com.microsoft.kusto.spark.authentication.KustoAuthentication
+import com.microsoft.kusto.spark.common.{KustoCoordinates, KustoDebugOptions}
+import com.microsoft.kusto.spark.utils.{KustoClientCache, KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.sources.{BaseRelation, Filter, PrunedFilteredScan, TableScan}
 import org.apache.spark.sql.types.StructType
@@ -12,25 +15,27 @@ import org.apache.spark.sql.{Row, SQLContext, SparkSession}
 import scala.concurrent.duration.FiniteDuration
 
 private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
-   authentication: KustoAuthentication,
-   query: String,
-   readOptions: KustoReadOptions,
-   timeout: FiniteDuration,
-   numPartitions: Int,
-   partitioningColumn: Option[String],
-   partitioningMode: Option[String],
-   customSchema: Option[String] = None,
-   storageParameters: Option[KustoStorageParameters])
-  (@transient val sparkSession: SparkSession)
+                                        authentication: KustoAuthentication,
+                                        query: String,
+                                        readOptions: KustoReadOptions,
+                                        timeout: FiniteDuration,
+                                        numPartitions: Int,
+                                        partitioningColumn: Option[String],
+                                        partitioningMode: Option[String],
+                                        customSchema: Option[String] = None,
+                                        storageParameters: Option[KustoStorageParameters],
+                                        clientRequestProperties: Option[ClientRequestProperties])
+                                       (@transient val sparkSession: SparkSession)
   extends BaseRelation with TableScan with PrunedFilteredScan with Serializable {
 
   private val normalizedQuery = KustoQueryUtils.normalizeQuery(query)
   var cachedSchema: StructType = _
+
   override def sqlContext: SQLContext = sparkSession.sqlContext
 
   override def schema: StructType = {
-    if(cachedSchema == null){
-      cachedSchema =  if (customSchema.isDefined) {
+    if (cachedSchema == null) {
+      cachedSchema = if (customSchema.isDefined) {
         StructType.fromDDL(customSchema.get)
       }
       else getSchema
@@ -39,31 +44,7 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
   }
 
   override def buildScan(): RDD[Row] = {
-    val kustoClient = KustoClient.getAdmin(authentication, kustoCoordinates.cluster)
-    val count = KDSU.countRows(kustoClient, query, kustoCoordinates.database)
-    if (count == 0)  {
-      sparkSession.emptyDataFrame.rdd
-    }
-    else {
-      val useLeanMode = KDSU.isLeanReadMode(count, storageParameters.isDefined, readOptions.forcedReadMode)
-      if (useLeanMode) {
-        KustoReader.leanBuildScan(
-          kustoClient,
-          KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication, timeout)
-        )
-      } else {
-        KustoReader.scaleBuildScan(
-          kustoClient,
-          KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication, timeout),
-          storageParameters.get,
-          KustoPartitionParameters(numPartitions, getPartitioningColumn, getPartitioningMode)
-        )
-      }
-    }
-  }
-
-  override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
-    val kustoClient = KustoClient.getAdmin(authentication, kustoCoordinates.cluster)
+    val kustoClient = KustoClientCache.getClient(kustoCoordinates.cluster, authentication).engineClient
     val count = KDSU.countRows(kustoClient, query, kustoCoordinates.database)
     if (count == 0) {
       sparkSession.emptyDataFrame.rdd
@@ -73,13 +54,37 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
       if (useLeanMode) {
         KustoReader.leanBuildScan(
           kustoClient,
-          KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication, timeout),
+          KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication, timeout, clientRequestProperties)
+        )
+      } else {
+        KustoReader.scaleBuildScan(
+          kustoClient,
+          KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication, timeout, clientRequestProperties),
+          storageParameters.get,
+          KustoPartitionParameters(numPartitions, getPartitioningColumn, getPartitioningMode)
+        )
+      }
+    }
+  }
+
+  override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
+    val kustoClient = KustoClientCache.getClient(kustoCoordinates.cluster, authentication).engineClient
+    val count = KDSU.countRows(kustoClient, query, kustoCoordinates.database)
+    if (count == 0) {
+      sparkSession.emptyDataFrame.rdd
+    }
+    else {
+      val useLeanMode = KDSU.isLeanReadMode(count, storageParameters.isDefined, readOptions.forcedReadMode)
+      if (useLeanMode) {
+        KustoReader.leanBuildScan(
+          kustoClient,
+          KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication, timeout, clientRequestProperties),
           KustoFiltering(requiredColumns, filters)
         )
       } else {
         KustoReader.scaleBuildScan(
           kustoClient,
-          KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication, timeout),
+          KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication, timeout, clientRequestProperties),
           storageParameters.get,
           KustoPartitionParameters(numPartitions, getPartitioningColumn, getPartitioningMode),
           readOptions,
@@ -99,7 +104,7 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
       throw new RuntimeException("Spark connector cannot run Kusto commands. Please provide a valid query")
     }
 
-    KDSU.getSchema(kustoCoordinates.database, getSchemaQuery, KustoClient.getAdmin(authentication, kustoCoordinates.cluster))
+    KDSU.getSchema(kustoCoordinates.database, getSchemaQuery, KustoClientCache.getClient(kustoCoordinates.cluster, authentication).engineClient)
   }
 
   private def getPartitioningColumn: String = {
@@ -116,9 +121,9 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
   private def getPartitioningMode: String = {
     if (partitioningMode.isDefined) {
       val mode = partitioningMode.get.toLowerCase(Locale.ROOT)
-      if (!KustoOptions.supportedPartitioningModes.contains(mode)) {
+      if (!KustoDebugOptions.supportedPartitioningModes.contains(mode)) {
         throw new InvalidParameterException(
-          s"Specified partitioning mode '$mode' : ${KDSU.NewLine}${KustoOptions.supportedPartitioningModes.mkString(", ")}")
+          s"Specified partitioning mode '$mode' : ${KDSU.NewLine}${KustoDebugOptions.supportedPartitioningModes.mkString(", ")}")
       }
       mode
     } else "hash"
