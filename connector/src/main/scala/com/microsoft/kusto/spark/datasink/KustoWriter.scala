@@ -32,6 +32,7 @@ import org.apache.spark.sql.types.{DateType, StringType, StructType, TimestampTy
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.{FutureAction, TaskContext}
 import shaded.parquet.org.codehaus.jackson.map.ObjectMapper
+import org.apache.spark.util.CollectionAccumulator
 
 import scala.collection.Iterator
 import scala.collection.JavaConverters._
@@ -76,12 +77,14 @@ object KustoWriter {
 
     val storageUri = kustoClient.getNewTempBlobReference
     val rdd = data.queryExecution.toRdd
+    val acc = rdd.sparkContext.collectionAccumulator[PartitionResult]
+
     if (writeOptions.isAsync) {
-      val asyncWork: FutureAction[Unit] = rdd.foreachPartitionAsync { rows => ingestRowsIntoTempTbl(rows, batchIdIfExists, writeOptions.timeout, storageUri) }
+      val asyncWork: FutureAction[Unit] = rdd.foreachPartitionAsync { rows => ingestRowsIntoTempTbl(rows, batchIdIfExists, storageUri, acc) }
       KDSU.logInfo(myName, s"asynchronous write to Kusto table '$table' in progress")
       // This part runs back on the driver
       asyncWork.onSuccess {
-        case _ => finalizeIngestionWhenWorkersSucceeded(tableCoordinates, batchIdIfExists, kustoClient.engineClient, tmpTableName, isAsync = true)
+        case _ => finalizeIngestionWhenWorkersSucceeded(tableCoordinates, batchIdIfExists, kustoClient.engineClient, tmpTableName, acc, writeOptions.timeout, isAsync = true)
       }
       asyncWork.onFailure {
         case exception: Exception =>
@@ -92,23 +95,22 @@ object KustoWriter {
     }
     else {
       try {
-        rdd.foreachPartition { rows => ingestRowsIntoTempTbl(rows, batchIdIfExists, writeOptions.timeout, storageUri) }
+        rdd.foreachPartition { rows => ingestRowsIntoTempTbl(rows, batchIdIfExists, storageUri, acc) }
       } catch {
         case exception: Exception =>
           tryCleanupIngestionByproducts(tableCoordinates.database, kustoClient.engineClient, tmpTableName)
           throw exception
       }
-      finalizeIngestionWhenWorkersSucceeded(tableCoordinates, batchIdIfExists, kustoClient.engineClient, tmpTableName)
-      KDSU.logInfo(myName, s"write operation to Kusto table '$table' finished successfully")
+      finalizeIngestionWhenWorkersSucceeded(tableCoordinates, batchIdIfExists, kustoClient.engineClient, tmpTableName, acc, writeOptions.timeout)
     }
   }
 
-  def ingestRowsIntoTempTbl(rows: Iterator[InternalRow], batchId: String, timeOut: FiniteDuration, storageUri: String)
+  def ingestRowsIntoTempTbl(rows: Iterator[InternalRow], batchId: String, storageUri: String, acc: CollectionAccumulator[PartitionResult])
                            (implicit parameters: KustoWriteResource): Unit =
     if (rows.isEmpty) {
       KDSU.logWarn(myName, s"sink to Kusto table '${parameters.coordinates.table.get}' with no rows to write on partition ${TaskContext.getPartitionId}")
     } else {
-      ingestToTemporaryTableByWorkers(batchId, timeOut, storageUri, rows)
+      ingestToTemporaryTableByWorkers(batchId, storageUri, rows, acc)
     }
 
   def cleanupTempTables(kustoClient: KustoClient, coordinates: KustoCoordinates): Unit = {
@@ -141,8 +143,9 @@ object KustoWriter {
 
   def ingestRowsIntoKusto(rows: Iterator[InternalRow],
                           storageUri: String,
-                          ingestClient: IngestClient)
-                         (implicit parameters: KustoWriteResource): Seq[IngestionResult] = {
+                          ingestClient: IngestClient,
+                          acc: CollectionAccumulator[PartitionResult])
+                         (implicit parameters: KustoWriteResource): Unit = {
     import parameters._
 
     val ingestionProperties = if (writeOptions.IngestionProperties.isDefined) {
@@ -175,7 +178,7 @@ object KustoWriter {
       val blobSourceInfo = new BlobSourceInfo(blobPath, blobSize)
 
       ingestClient.ingestFromBlob(blobSourceInfo, ingestionProperties)
-    }
+    }.foreach(blob => acc.add(PartitionResult(blob, TaskContext.getPartitionId)))
   }
 
   private def tryCleanupIngestionByproducts(database: String, kustoAdminClient: Client, tmpTableName: String) = {
@@ -192,66 +195,75 @@ object KustoWriter {
                                                     batchIdIfExists: String,
                                                     kustoAdminClient: Client,
                                                     tmpTableName: String,
+                                                    acc: CollectionAccumulator[PartitionResult],
+                                                    timeout: FiniteDuration,
                                                     isAsync: Boolean = false): Unit = {
     import coordinates._
-    try {
-      // Move data to real table
-      // Protect tmp table from merge/rebuild and move data to the table requested by customer. This operation is atomic.
-      kustoAdminClient.execute(database, generateTableAlterMergePolicyCommand(tmpTableName, allowMerge = false, allowRebuild = false))
-      kustoAdminClient.execute(database, generateTableMoveExtentsCommand(tmpTableName, table.get))
-      KDSU.logInfo(myName, s"write to Kusto table '${table.get}' finished successfully $batchIdIfExists")
-    }
-    catch {
-      case exception: Exception =>
-        KDSU.reportExceptionAndThrow(myName, exception, "finalizing write operation", cluster, database, table.get, isLogDontThrow = isAsync)
-    }
-    finally {
-      tryCleanupIngestionByproducts(database, kustoAdminClient, tmpTableName)
-    }
-  }
 
-  private def ingestToTemporaryTableByWorkers(
-                                               batchId: String,
-                                               timeout: FiniteDuration,
-                                               storageUri: String,
-                                               rows: Iterator[InternalRow])
-                                             (implicit parameters: KustoWriteResource)
-  : Unit = {
-
-    import parameters._
-    val partitionId = TaskContext.getPartitionId
-    KDSU.logInfo(myName, s"Ingesting partition '$partitionId'")
-    val targetTable = coordinates.table.get
-    val ingestClient = KustoClientCache.getClient(coordinates.cluster, authentication).ingestClient
-
-    // We force blocking here, since the driver can only complete the ingestion process
-    // once all partitions are ingested into the temporary table
-    Await.result(
-      Future(ingestRowsIntoKusto(rows, storageUri, ingestClient)).map { ingestionResults =>
-        // Proceed only on success. Will throw on failure for the driver to handle
-        ingestionResults.foreach {
-          ingestionResult =>
+    val partitionsResults = acc.value
+    val mergeTask = Future {
+      try {
+        partitionsResults.asScala.foreach {
+          partitionResult =>
             KDSU.runSequentially[IngestionStatus](
-              func = () => ingestionResult.getIngestionStatusCollection.get(0),
+              func = () => partitionResult.ingestionResult.getIngestionStatusCollection.get(0),
               0, delayPeriodBetweenCalls, (timeout.toMillis / delayPeriodBetweenCalls + 5).toInt,
               res => res.status == OperationStatus.Pending,
               res => res.status match {
                 case OperationStatus.Pending =>
                   throw new RuntimeException(s"Ingestion to Kusto failed on timeout failure. Cluster: '${coordinates.cluster}', " +
-                    s"database: '${coordinates.database}', table: '$targetTable', batch: '$batchId', partition: '$partitionId'")
+                    s"database: '${coordinates.database}', table: '$tmpTableName', batch: '$batchIdIfExists', partition: '${partitionResult.partitionId}'")
                 case OperationStatus.Succeeded =>
                   KDSU.logInfo(myName, s"Ingestion to Kusto succeeded. " +
                     s"Cluster: '${coordinates.cluster}', " +
                     s"database: '${coordinates.database}', " +
-                    s"table: '$targetTable', batch: '$batchId', partition: '$partitionId', from: '${res.ingestionSourcePath}', Operation ${res.operationId}")
+                    s"table: '$tmpTableName', batch: '$batchIdIfExists', partition: '${partitionResult.partitionId}'', from: '${res.ingestionSourcePath}', Operation ${res.operationId}")
                 case otherStatus =>
                   throw new RuntimeException(s"Ingestion to Kusto failed with status '$otherStatus'." +
                     s" Cluster: '${coordinates.cluster}', database: '${coordinates.database}', " +
-                    s"table: '$targetTable', batch: '$batchId', partition: '$partitionId'. Ingestion info: '${readIngestionResult(res)}'")
+                    s"table: '$tmpTableName', batch: '$batchIdIfExists', partition: '${partitionResult.partitionId}''. Ingestion info: '${readIngestionResult(res)}'")
               }).await(timeout.toMillis, TimeUnit.MILLISECONDS)
         }
-      },
-      timeout)
+
+        // Move data to real table
+        // Protect tmp table from merge/rebuild and move data to the table requested by customer. This operation is atomic.
+        kustoAdminClient.execute(database, generateTableAlterMergePolicyCommand(tmpTableName, allowMerge = false, allowRebuild = false))
+        kustoAdminClient.execute(database, generateTableMoveExtentsCommand(tmpTableName, table.get))
+        KDSU.logInfo(myName, s"write to Kusto table '${table.get}' finished successfully $batchIdIfExists")
+      } catch {
+        case ex: Exception =>
+          KDSU.reportExceptionAndThrow(
+            myName,
+            ex,
+            "Trying to poll on pending ingestions", coordinates.cluster, coordinates.database, coordinates.table.getOrElse("Unspecified table name"),
+            isLogDontThrow = true
+          )
+      } finally {
+        tryCleanupIngestionByproducts(database, kustoAdminClient, tmpTableName)
+      }
+    }
+
+    if(!isAsync)
+    {
+      Await.result(mergeTask, timeout)
+    }
+  }
+
+  private def ingestToTemporaryTableByWorkers(
+                                               batchId: String,
+                                               storageUri: String,
+                                               rows: Iterator[InternalRow],
+                                               acc: CollectionAccumulator[PartitionResult])
+                                             (implicit parameters: KustoWriteResource): Unit = {
+
+    import parameters._
+    val partitionId = TaskContext.getPartitionId
+    KDSU.logInfo(myName, s"Ingesting partition '$partitionId'")
+    val ingestClient = KustoClientCache.getClient(coordinates.cluster, authentication).ingestClient
+
+    // We force blocking here, since the driver can only complete the ingestion process
+    // once all partitions are ingested into the temporary table
+    ingestRowsIntoKusto(rows, storageUri, ingestClient, acc)
   }
 
   def all(list: util.ArrayList[Boolean]): Boolean = {
@@ -411,3 +423,4 @@ case class KustoWriteResource(authentication: KustoAuthentication,
                               schema: StructType,
                               writeOptions: WriteOptions,
                               tmpTableName: String)
+case class PartitionResult(ingestionResult: IngestionResult, partitionId: Int)
