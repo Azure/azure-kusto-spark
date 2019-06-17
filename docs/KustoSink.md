@@ -85,6 +85,22 @@ that is using it. Please verify the following before using Kusto connector:
    This is an upper limit that may coexist with addition timeout limits as configured on Spark or Kusto clusters.  
    Default: '5400' (90 minutes)
 
+* **KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON**:
+    A json representation of a SparkIngestionProperties (use toString to make a json of an instance).
+    
+    Properties:
+        
+    dropByTags,,ingestByTags, additionalTags, ingestIfNotExists: util.ArrayList[String] - 
+    Tags list to add to the extents. Read [kusto logs - extents](https://docs.microsoft.com/en-us/azure/kusto/management/extents-overview#ingest-by-extent-tags)
+    
+    creationTime: DateTime 
+    
+    csvMapping: String
+    
+    csvMappingNameReference: String
+    
+    flushImmediately: Boolean
+
  >**Note:**
  For both synchronous and asynchronous operation, 'write' is an atomic transaction, i.e. 
  either all data is written to Kusto, or no data is written. 
@@ -113,6 +129,20 @@ df.write
   .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, "AAD Authority Id") // "microsoft.com"
   .save()
 ``` 
+
+IngestionProperties and short scala usage:
+```
+val sp = new SparkIngestionProperties
+var tags = new util.ArrayList[String]()
+tags.add("newTag")
+sp.ingestByTags = tags
+sp.creationTime = new DateTime().minusDays(1)
+df.write.kusto(cluster,
+             database,
+             table, 
+             conf, // optional
+             Some(sp)) // optional
+```
 
 Asynchronous mode, table may not exist and will be created:
 ```

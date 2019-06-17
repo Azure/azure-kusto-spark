@@ -82,6 +82,11 @@ All the options that can be use in the Kusto source are under the object KustoSo
  
     **Default:** '5400' (90 minutes)    
     
+* **KUSTO_CLIENT_REQUEST_PROPERTIES_JSON**:
+  A json representation for [ClientRequestProperties](https://github.com/Azure/azure-kusto-java/blob/master/data/src/main/java/com/microsoft/azure/kusto/data/ClientRequestProperties.java)
+   used in the call for reading from kusto (or the export command for 'scale' mode). Use toString to make the json.
+    
+    
 #### Transient Storage Parameters
 When reading data from Kusto in 'scale' mode, the data is exported from Kusto into a blob storage every time the corresponding RDD is materialized.
 In order to allow working in 'scale' mode, storage parameters must be provided by the caller. 
@@ -117,6 +122,7 @@ Once the RDD is no longer required by the caller application, the container and/
      )
      
  val df = spark.read.kusto(cluster, database, "MyKustoTable | where (ColB % 1000 == 0) | distinct ColA ", conf)
+ // spark.read.kusto(cluster, database, table, conf, Some(clientRequestProperties))
  ``` 
  
  **Using elaborate syntax**

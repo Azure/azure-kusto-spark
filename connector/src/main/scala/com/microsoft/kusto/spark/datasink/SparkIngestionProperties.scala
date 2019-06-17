@@ -27,6 +27,11 @@ class SparkIngestionProperties {
   def toIngestionProperties(database: String, table: String): IngestionProperties ={
     val ingestionProperties = new IngestionProperties(database, table)
     val additionalProperties = new util.HashMap[String, String]()
+
+    if (this.flushImmediately){
+      ingestionProperties.setFlushImmediately(true)
+    }
+
     if (this.dropByTags != null) {
       ingestionProperties.setDropByTags(this.dropByTags)
     }
