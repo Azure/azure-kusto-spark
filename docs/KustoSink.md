@@ -74,9 +74,10 @@ that is using it. Please verify the following before using Kusto connector:
    This is the recommended option for typical use cases. However, using it results in blocking
  Spark driver for as long as the operation is running, up to several minutes. 
  To avoid blocking Spark driver, it is possible to execute Kusto 'write' operation in an 
- opportunistic mode as an asynchronous operation. This results in the following behavior:
+ opportunistic mode as an asynchronous operation, this is recommended only for spark streaming.
+  The resulted behavior is the following:
    * Spark driver is not blocked
-   * In a success scenario, all data is written eventually
+   * In a success scenario, all data is written eventually only if the job is still running 
    * In a failure scenario, error messages are logged on Spark executor nodes, 
  but exceptions will not propagate to the client
  
