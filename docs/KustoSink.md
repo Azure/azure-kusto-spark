@@ -91,15 +91,16 @@ that is using it. Please verify the following before using Kusto connector:
     Properties:
         
     dropByTags,,ingestByTags, additionalTags, ingestIfNotExists: util.ArrayList[String] - 
-    Tags list to add to the extents. Read [kusto logs - extents](https://docs.microsoft.com/en-us/azure/kusto/management/extents-overview#ingest-by-extent-tags)
+    Tags list to add to the extents. Read [kusto docs - extents](https://docs.microsoft.com/en-us/azure/kusto/management/extents-overview#ingest-by-extent-tags)
     
-    creationTime: DateTime 
+    creationTime: DateTime - sets the extents creationTime value to this date
     
-    csvMapping: String
+    csvMapping: String - a full json representation of a csvMapping (the connector always upload csv files to Kusto), 
+    see here [kusto docs - mappings](https://docs.microsoft.com/en-us/azure/kusto/management/mappings)
     
-    csvMappingNameReference: String
+    csvMappingNameReference: String - a reference to a name of a csvMapping pre-created for the table  
     
-    flushImmediately: Boolean
+    flushImmediately: Boolean - use with caution - flushes the data immidiatly upon ingestion without aggregation.
 
  >**Note:**
  For both synchronous and asynchronous operation, 'write' is an atomic transaction, i.e. 
