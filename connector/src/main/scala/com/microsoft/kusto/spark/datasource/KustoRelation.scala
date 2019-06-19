@@ -11,8 +11,12 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.sources.{BaseRelation, Filter, PrunedFilteredScan, TableScan}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{Row, SQLContext, SparkSession}
+import com.microsoft.kusto.spark.utils.KustoConstants
 
-import scala.concurrent.duration.FiniteDuration
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.{Await, Future}
+import scala.concurrent.duration._
+import java.util.concurrent.TimeoutException
 
 private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
                                         authentication: KustoAuthentication,
@@ -30,6 +34,7 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
 
   private val normalizedQuery = KustoQueryUtils.normalizeQuery(query)
   var cachedSchema: StructType = _
+  val timeoutForCountCheck : FiniteDuration = 10 seconds
 
   override def sqlContext: SQLContext = sparkSession.sqlContext
 
@@ -45,7 +50,15 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
 
   override def buildScan(): RDD[Row] = {
     val kustoClient = KustoClientCache.getClient(kustoCoordinates.cluster, authentication).engineClient
-    val count = KDSU.countRows(kustoClient, query, kustoCoordinates.database)
+
+    var count = 0
+    try {
+      count = Await.result(Future(KDSU.countRows(kustoClient, query, kustoCoordinates.database)), timeout)
+    } catch {
+      // Count must be high if took more than 10 seconds
+      case TimeoutException => count = KustoConstants.directQueryUpperBoundRows + 1
+    }
+    
     if (count == 0) {
       sparkSession.emptyDataFrame.rdd
     }
