@@ -133,7 +133,7 @@ df.write
 ``` 
 
 IngestionProperties and short scala usage:
-```
+```scala
 val sp = new SparkIngestionProperties
 var tags = new util.ArrayList[String]()
 tags.add("newTag")
