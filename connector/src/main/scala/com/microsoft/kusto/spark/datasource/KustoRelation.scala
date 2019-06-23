@@ -55,18 +55,19 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
     val kustoClient = KustoClientCache.getClient(kustoCoordinates.cluster, authentication).engineClient
     var count = 0
+    var timedOutCounting = false
     try {
       count = Await.result(Future(KDSU.countRows(kustoClient, query, kustoCoordinates.database)), timeoutForCountCheck)
     } catch {
       // Count must be high if took more than 10 seconds
-      case _: TimeoutException => count = KustoConstants.directQueryUpperBoundRows + 1
+      case _: TimeoutException => timedOutCounting = true
     }
 
-    if (count == 0) {
+    if (count == 0 && !timedOutCounting) {
       sparkSession.emptyDataFrame.rdd
     }
     else {
-      val useLeanMode = KDSU.isLeanReadMode(count, storageParameters.isDefined, readOptions.forcedReadMode)
+      val useLeanMode = KDSU.shouldUseLeanReadMode(count, storageParameters.isDefined, readOptions.forcedReadMode, timedOutCounting)
       if (useLeanMode) {
         KustoReader.leanBuildScan(
           kustoClient,
