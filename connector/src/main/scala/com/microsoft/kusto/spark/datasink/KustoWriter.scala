@@ -17,7 +17,6 @@ import com.microsoft.azure.storage.StorageCredentialsSharedAccessSignature
 import com.microsoft.azure.storage.blob.{CloudBlobContainer, CloudBlockBlob}
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
-import com.microsoft.kusto.spark.datasink
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.{KustoClient, KustoClientCache, KustoQueryUtils, KustoConstants => KCONST, KustoDataSourceUtils => KDSU}
 import com.univocity.parsers.csv.{CsvWriter, CsvWriterSettings}
@@ -211,7 +210,7 @@ object KustoWriter {
     val writer = new OutputStreamWriter(gzip, StandardCharsets.UTF_8)
     val buffer: BufferedWriter = new BufferedWriter(writer, GZIP_BUFFER_SIZE)
     val csvWriter: CsvWriter = new CsvWriter(buffer, new CsvWriterSettings)
-    datasink.BlobWriteResource(buffer, gzip, csvWriter, blob)
+    BlobWriteResource(buffer, gzip, csvWriter, blob)
   }
 
   @throws[IOException]
