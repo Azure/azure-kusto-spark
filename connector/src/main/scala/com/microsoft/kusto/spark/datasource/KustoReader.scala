@@ -46,7 +46,7 @@ private[kusto] object KustoReader {
   private[kusto] def leanBuildScan(
     kustoClient: Client,
     request: KustoReadRequest,
-    filtering: KustoFiltering = KustoFiltering.apply()): RDD[Row] = {
+    filtering: KustoFiltering): RDD[Row] = {
 
     val filteredQuery = KustoFilter.pruneAndFilter(request.schema, request.query, filtering)
     val kustoResult = kustoClient.execute(request.kustoCoordinates.database,
@@ -62,8 +62,8 @@ private[kusto] object KustoReader {
      request: KustoReadRequest,
      storage: KustoStorageParameters,
      partitionInfo: KustoPartitionParameters,
-     options: KustoReadOptions = KustoReadOptions.apply(),
-     filtering: KustoFiltering = KustoFiltering.apply()): RDD[Row] = {
+     options: KustoReadOptions,
+     filtering: KustoFiltering): RDD[Row] = {
 
     setupBlobAccess(request, storage)
     val partitions = calculatePartitions(partitionInfo)

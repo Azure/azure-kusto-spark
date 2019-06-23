@@ -49,40 +49,19 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
   }
 
   override def buildScan(): RDD[Row] = {
-    val kustoClient = KustoClientCache.getClient(kustoCoordinates.cluster, authentication).engineClient
-
-    var count = 0
-    try {
-      count = Await.result(Future(KDSU.countRows(kustoClient, query, kustoCoordinates.database)), timeout)
-    } catch {
-      // Count must be high if took more than 10 seconds
-      case TimeoutException => count = KustoConstants.directQueryUpperBoundRows + 1
-    }
-    
-    if (count == 0) {
-      sparkSession.emptyDataFrame.rdd
-    }
-    else {
-      val useLeanMode = KDSU.isLeanReadMode(count, storageParameters.isDefined, readOptions.forcedReadMode)
-      if (useLeanMode) {
-        KustoReader.leanBuildScan(
-          kustoClient,
-          KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication, timeout, clientRequestProperties)
-        )
-      } else {
-        KustoReader.scaleBuildScan(
-          kustoClient,
-          KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication, timeout, clientRequestProperties),
-          storageParameters.get,
-          KustoPartitionParameters(numPartitions, getPartitioningColumn, getPartitioningMode)
-        )
-      }
-    }
+    buildScan(Array.empty, Array.empty)
   }
 
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
     val kustoClient = KustoClientCache.getClient(kustoCoordinates.cluster, authentication).engineClient
-    val count = KDSU.countRows(kustoClient, query, kustoCoordinates.database)
+    var count = 0
+    try {
+      count = Await.result(Future(KDSU.countRows(kustoClient, query, kustoCoordinates.database)), timeoutForCountCheck)
+    } catch {
+      // Count must be high if took more than 10 seconds
+      case _: TimeoutException => count = KustoConstants.directQueryUpperBoundRows + 1
+    }
+
     if (count == 0) {
       sparkSession.emptyDataFrame.rdd
     }
