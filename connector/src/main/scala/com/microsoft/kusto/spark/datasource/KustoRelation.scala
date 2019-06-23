@@ -11,8 +11,12 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.sources.{BaseRelation, Filter, PrunedFilteredScan, TableScan}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{Row, SQLContext, SparkSession}
+import com.microsoft.kusto.spark.utils.KustoConstants
 
-import scala.concurrent.duration.FiniteDuration
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.{Await, Future}
+import scala.concurrent.duration._
+import java.util.concurrent.TimeoutException
 
 private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
                                         authentication: KustoAuthentication,
@@ -30,6 +34,7 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
 
   private val normalizedQuery = KustoQueryUtils.normalizeQuery(query)
   var cachedSchema: StructType = _
+  val timeoutForCountCheck : FiniteDuration = 10 seconds
 
   override def sqlContext: SQLContext = sparkSession.sqlContext
 
@@ -44,37 +49,25 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
   }
 
   override def buildScan(): RDD[Row] = {
-    val kustoClient = KustoClientCache.getClient(kustoCoordinates.cluster, authentication).engineClient
-    val count = KDSU.countRows(kustoClient, query, kustoCoordinates.database)
-    if (count == 0) {
-      sparkSession.emptyDataFrame.rdd
-    }
-    else {
-      val useLeanMode = KDSU.isLeanReadMode(count, storageParameters.isDefined, readOptions.forcedReadMode)
-      if (useLeanMode) {
-        KustoReader.leanBuildScan(
-          kustoClient,
-          KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication, timeout, clientRequestProperties)
-        )
-      } else {
-        KustoReader.scaleBuildScan(
-          kustoClient,
-          KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication, timeout, clientRequestProperties),
-          storageParameters.get,
-          KustoPartitionParameters(numPartitions, getPartitioningColumn, getPartitioningMode)
-        )
-      }
-    }
+    buildScan(Array.empty, Array.empty)
   }
 
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
     val kustoClient = KustoClientCache.getClient(kustoCoordinates.cluster, authentication).engineClient
-    val count = KDSU.countRows(kustoClient, query, kustoCoordinates.database)
-    if (count == 0) {
+    var count = 0
+    var timedOutCounting = false
+    try {
+      count = Await.result(Future(KDSU.countRows(kustoClient, query, kustoCoordinates.database)), timeoutForCountCheck)
+    } catch {
+      // Count must be high if took more than 10 seconds
+      case _: TimeoutException => timedOutCounting = true
+    }
+
+    if (count == 0 && !timedOutCounting) {
       sparkSession.emptyDataFrame.rdd
     }
     else {
-      val useLeanMode = KDSU.isLeanReadMode(count, storageParameters.isDefined, readOptions.forcedReadMode)
+      val useLeanMode = KDSU.shouldUseLeanReadMode(count, storageParameters.isDefined, readOptions.forcedReadMode, timedOutCounting)
       if (useLeanMode) {
         KustoReader.leanBuildScan(
           kustoClient,
