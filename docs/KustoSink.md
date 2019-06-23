@@ -77,7 +77,7 @@ that is using it. Please verify the following before using Kusto connector:
  opportunistic mode as an asynchronous operation, this is recommended only for spark streaming.
   The resulted behavior is the following:
    * Spark driver is not blocked
-   * In a success scenario, all data is written eventually only if the job is still running 
+   * In a success scenario, all data will eventually be written, only if the job is left running.  Job success status **DOES NOT** mean data is committed yet.
    * In a failure scenario, error messages are logged on Spark executor nodes, 
  but exceptions will not propagate to the client
  
