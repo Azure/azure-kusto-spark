@@ -73,7 +73,7 @@ that is using it. Please verify the following before using Kusto connector:
  
    This is the recommended option for typical use cases. However, using it results in blocking
  Spark driver for as long as the operation is running, up to several minutes. 
- To avoid blocking Spark driver, it is possible to execute Kusto 'write' operation in an 
+ To **avoid blocking Spark driver**, it is possible to execute Kusto 'write' operation in an 
  opportunistic mode as an asynchronous operation, this is recommended only for spark streaming.
   The resulted behavior is the following:
    * Spark driver is not blocked
