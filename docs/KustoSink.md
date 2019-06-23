@@ -91,7 +91,7 @@ that is using it. Please verify the following before using Kusto connector:
     
     Properties:
         
-    dropByTags,,ingestByTags, additionalTags, ingestIfNotExists: util.ArrayList[String] - 
+    dropByTags,ingestByTags, additionalTags, ingestIfNotExists: util.ArrayList[String] - 
     Tags list to add to the extents. Read [kusto docs - extents](https://docs.microsoft.com/en-us/azure/kusto/management/extents-overview#ingest-by-extent-tags)
     
     creationTime: DateTime - sets the extents creationTime value to this date
