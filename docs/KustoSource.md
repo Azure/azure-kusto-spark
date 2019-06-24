@@ -93,7 +93,7 @@ In order to allow working in 'scale' mode, storage parameters must be provided b
 
 >Note: maintenance of the blob storage is the caller responsibility. This includes provisioning the storage, rotating access keys, 
 deleting transient artifacts etc. KustoBlobStorageUtils module contains helper functions for deleting blobs based on either account and container 
-coordinates and account credentials, or a full SAS URL, once the corresponding RDD is no longer needed. Each transaction stores transient blob 
+coordinates and account credentials, or a full SAS URL with write, read and list permissions. Once the corresponding RDD is no longer needed. Each transaction stores transient blob 
 artifacts in a separate directory. This directory is captured as part of read-transaction information logs reported on Spark Driver node 
 
 * **KUSTO_BLOB_STORAGE_ACCOUNT_NAME**
@@ -102,14 +102,14 @@ Transient storage account name. Either this, or a SAS url, must be provided in o
 * **KUSTO_BLOB_STORAGE_ACCOUNT_KEY**
 Storage account key. Either this, or a SAS url, must be provided in order to access the storage account
 
-* **KUSTO_BLOB_STORAGE_SAS_URL**
-SAS access url: a complete url of the SAS to the container. Either this, or a storage account name and key, must be provided
-  in order to access the storage account
-  
 * **KUSTO_BLOB_CONTAINER**
 Blob container name. This container will be used to store all transient artifacts created every time the corresponding RDD is materialized. 
 Once the RDD is no longer required by the caller application, the container and/or all its contents can be deleted by the caller.
 
+* **KUSTO_BLOB_STORAGE_SAS_URL**
+SAS access url: a complete url of the SAS to the container. Either this, or a storage account name and key, must be provided
+  in order to access the storage account
+  
  ### Examples
  
  **Using simplified syntax**

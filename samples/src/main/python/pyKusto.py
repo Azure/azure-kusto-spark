@@ -7,7 +7,10 @@ sc._jvm.com.microsoft.kusto.spark.utils.KustoDataSourceUtils.setLoggingLevel("al
 # COMMAND ----------
 
 pyKusto = SparkSession.builder.appName("kustoPySpark").getOrCreate()
-kustoOptions = {"kustoCluster":"<cluster-name>", "kustoDatabase" : "<database-name>", "kustoTable" : "<table-name>", "kustoAADClientID":"<AAD-app id>" ,"kustoClientAADClientPassword":"<AAD-app key>", "kustoAADAuthorityID":"<AAD authentication authority>"}
+kustoOptions = {"kustoCluster":"<cluster-name>", "kustoDatabase" : "<database-name>", "kustoTable" : "<table-name>", "kustoAADClientID":"<AAD-app id>" ,
+ "kustoClientAADClientPassword":"<AAD-app key>", "kustoAADAuthorityID":"<AAD authentication authority>",
+ "blobStorageAccountName":"<Storage-Account-Name>","blobStorageAccountKey":"<Storage-Account-Key>", "blobContainer":"<Container-Name>", # For scale read
+ "blobStorageSasUrl":"<blob-Storage-Full-Sas-Url>"} # This can replace the above scale mode options
 # Create a DataFrame for ingestion
 df = spark.createDataFrame([("row-"+str(i),i)for i in range(1000)],["name", "value"])
 
@@ -39,12 +42,54 @@ kustoDf  = pyKusto.read. \
             option("kustoAADClientID", kustoOptions["kustoAADClientID"]). \
             option("kustoClientAADClientPassword", kustoOptions["kustoClientAADClientPassword"]). \
             option("kustoAADAuthorityID", kustoOptions["kustoAADAuthorityID"]). \
-            option("readMode", "lean"). \
+            load()
+
+# Read the data from the kusto table in 'scale' mode and with advanced options
+
+crp = sc._jvm.com.microsoft.azure.kusto.data.ClientRequestProperties()
+crp.setOption("norequesttimeout",True)
+crp.toString()
+
+kustoDf  = pyKusto.read. \
+            format("com.microsoft.kusto.spark.datasource"). \
+            option("kustoCluster", kustoOptions["kustoCluster"]). \
+            option("kustoDatabase", kustoOptions["kustoDatabase"]). \
+            option("kustoQuery", kustoOptions["kustoTable"]). \
+            option("kustoAADClientID", kustoOptions["kustoAADClientID"]). \
+            option("kustoClientAADClientPassword", kustoOptions["kustoClientAADClientPassword"]). \
+            option("kustoAADAuthorityID", kustoOptions["kustoAADAuthorityID"]). \
+            option("blobStorageAccountName",kustoOptions["blobStorageAccountName"]). \
+            option("blobStorageAccountKey",kustoOptions["blobStorageAccountKey"]). \
+            option("blobContainer",kustoOptions["blobContainer"]). \
+            option("blobStorageSasUrl",kustoOptions["blobStorageSasUrl"]). \ # Second option for scaling
+            option("clientRequestPropertiesJson", crp.toString()). \
             load()
 
 kustoDf.show()
 
 # COMMAND ----------
+
+#Writing with advanced options
+
+time = sc._jvm.org.joda.time.DateTime.now().minusDays(1)
+csvMap = "[{\"Name\":\"ColA\",\"Ordinal\":0},{\"Name\":\"ColB\",\"Ordinal\":1}]"
+
+sp = sc._jvm.com.microsoft.kusto.spark.datasink.SparkIngestionProperties(False, ["1"], ["2"], ["3"], ["4"], time, csvMap, None)
+
+df.write. \
+  format("com.microsoft.kusto.spark.datasource"). \
+  option("kustoCluster",kustoOptions["kustoCluster"]). \
+  option("kustoDatabase",kustoOptions["kustoDatabase"]). \
+  option("kustoTable", kustoOptions["kustoTable"]). \
+  option("kustoAADClientID",kustoOptions["kustoAADClientID"]). \
+  option("kustoClientAADClientPassword",kustoOptions["kustoClientAADClientPassword"]). \
+  option("kustoAADAuthorityID",kustoOptions["kustoAADAuthorityID"]). \
+  option("kustoAADAuthorityID",kustoOptions["kustoAADAuthorityID"]). \
+  option("tableCreateOptions","CreateIfNotExist"). \
+  save()
+
+# COMMAND ----------
+
 
 ##########################
 # STREAMING SINK EXAMPLE #
@@ -79,5 +124,7 @@ kustoQ = csvDf.writeStream. \
   option("kustoClientAADClientPassword",kustoOptions["kustoClientAADClientPassword"]). \
   option("kustoAADAuthorityID",kustoOptions["kustoAADAuthorityID"]). \
   trigger(once = True)
+
+
 
 kustoQ.start().awaitTermination(60*8)

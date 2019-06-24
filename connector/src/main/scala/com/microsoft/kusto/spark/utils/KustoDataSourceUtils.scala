@@ -25,7 +25,7 @@ import scala.util.matching.Regex
 
 object KustoDataSourceUtils {
   private val klog = Logger.getLogger("KustoConnector")
-  val urlPattern: Regex = raw"https://(?:ingest-)?([^.]+).kusto.windows.net(?::443)?".r
+  val urlPattern: Regex = raw"https://(?:ingest-)?(.+).kusto.windows.net(?::443)?".r
   val sasPattern: Regex = raw"(?:https://)?([^.]+).blob.core.windows.net/([^?]+)?(.+)".r
 
   val ClientName = "Kusto.Spark.Connector"
@@ -184,7 +184,7 @@ object KustoDataSourceUtils {
     //TODO: use the java client implementation when published to maven
     if (crpOption.isDefined) {
       val crp = new ClientRequestProperties()
-      val jsonObj = new JSONObject(crpOption.get).asInstanceOf[util.HashMap[String, Object]]
+      val jsonObj = new JSONObject(crpOption.get).toMap.asInstanceOf[util.HashMap[String, Object]]
       val it = jsonObj.keySet().iterator()
       while (it.hasNext) {
         val optionName: String = it.next()

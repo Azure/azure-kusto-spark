@@ -8,15 +8,18 @@ import org.codehaus.jackson.annotate.JsonMethod
 import org.codehaus.jackson.map.ObjectMapper
 import org.joda.time.DateTime
 
-class SparkIngestionProperties {
-  var flushImmediately: Boolean = false
-  var dropByTags: util.ArrayList[String] = _
-  var ingestByTags: util.ArrayList[String] = _
-  var additionalTags: util.ArrayList[String] = _
-  var ingestIfNotExists: util.ArrayList[String] = _
-  var creationTime: DateTime = _
-  var csvMapping: String = _
-  var csvMappingNameReference: String = _
+class SparkIngestionProperties(var flushImmediately: Boolean = false,
+                               var dropByTags: util.ArrayList[String] = null,
+                               var ingestByTags: util.ArrayList[String] = null,
+                               var additionalTags: util.ArrayList[String] = null,
+                               var ingestIfNotExists: util.ArrayList[String] = null,
+                               var creationTime: DateTime = null,
+                               var csvMapping: String = null,
+                               var csvMappingNameReference: String = null){
+  // C'tor for serialization
+  def this(){
+    this(false)
+  }
 
   override def toString: String = {
     new ObjectMapper().setVisibility(JsonMethod.FIELD, Visibility.ANY)
