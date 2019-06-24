@@ -82,13 +82,18 @@ All the options that can be use in the Kusto source are under the object KustoSo
  
     **Default:** '5400' (90 minutes)    
     
+* **KUSTO_CLIENT_REQUEST_PROPERTIES_JSON**:
+  A json representation for [ClientRequestProperties](https://github.com/Azure/azure-kusto-java/blob/master/data/src/main/java/com/microsoft/azure/kusto/data/ClientRequestProperties.java)
+   used in the call for reading from kusto (or the export command for 'scale' mode). Use toString to make the json.
+    
+    
 #### Transient Storage Parameters
 When reading data from Kusto in 'scale' mode, the data is exported from Kusto into a blob storage every time the corresponding RDD is materialized.
 In order to allow working in 'scale' mode, storage parameters must be provided by the caller. 
 
 >Note: maintenance of the blob storage is the caller responsibility. This includes provisioning the storage, rotating access keys, 
 deleting transient artifacts etc. KustoBlobStorageUtils module contains helper functions for deleting blobs based on either account and container 
-coordinates and account credentials, or a full SAS URL, once the corresponding RDD is no longer needed. Each transaction stores transient blob 
+coordinates and account credentials, or a full SAS URL with write, read and list permissions. Once the corresponding RDD is no longer needed. Each transaction stores transient blob 
 artifacts in a separate directory. This directory is captured as part of read-transaction information logs reported on Spark Driver node 
 
 * **KUSTO_BLOB_STORAGE_ACCOUNT_NAME**
@@ -97,14 +102,14 @@ Transient storage account name. Either this, or a SAS url, must be provided in o
 * **KUSTO_BLOB_STORAGE_ACCOUNT_KEY**
 Storage account key. Either this, or a SAS url, must be provided in order to access the storage account
 
-* **KUSTO_BLOB_STORAGE_SAS_URL**
-SAS access url: a complete url of the SAS to the container. Either this, or a storage account name and key, must be provided
-  in order to access the storage account
-  
 * **KUSTO_BLOB_CONTAINER**
 Blob container name. This container will be used to store all transient artifacts created every time the corresponding RDD is materialized. 
 Once the RDD is no longer required by the caller application, the container and/or all its contents can be deleted by the caller.
 
+* **KUSTO_BLOB_STORAGE_SAS_URL**
+SAS access url: a complete url of the SAS to the container. Either this, or a storage account name and key, must be provided
+  in order to access the storage account
+  
  ### Examples
  
  **Using simplified syntax**
@@ -117,6 +122,7 @@ Once the RDD is no longer required by the caller application, the container and/
      )
      
  val df = spark.read.kusto(cluster, database, "MyKustoTable | where (ColB % 1000 == 0) | distinct ColA ", conf)
+ // spark.read.kusto(cluster, database, table, conf, Some(clientRequestProperties))
  ``` 
  
  **Using elaborate syntax**
