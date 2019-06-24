@@ -109,7 +109,7 @@ private[kusto] object KustoReader {
     }
     catch {
       case ex: Exception =>
-        KDSU.reportExceptionAndThrow(myName, ex, "trying to delete transient blobs from azure storage", isLogDontThrow = true)
+        KDSU.reportExceptionAndThrow(myName, ex, "trying to delete transient blobs from azure storage", shouldNotThrow = true)
     }
   }
 

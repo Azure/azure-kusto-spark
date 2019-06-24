@@ -32,6 +32,7 @@ object KustoDataSourceUtils {
   val DefaultTimeoutLongRunning: FiniteDuration = 90 minutes
   val DefaultPeriodicSamplePeriod: FiniteDuration = 2 seconds
   val NewLine = sys.props("line.separator")
+  val MaxWaitTime = 1 minute
 
   def setLoggingLevel(level: String): Unit = {
     setLoggingLevel(Level.toLevel(level))
@@ -203,14 +204,14 @@ object KustoDataSourceUtils {
                                               cluster: String = "",
                                               database: String = "",
                                               table: String = "",
-                                              isLogDontThrow: Boolean = false): Unit = {
+                                              shouldNotThrow: Boolean = false): Unit = {
     val whatFailed = if (doingWhat.isEmpty) "" else s"when $doingWhat"
     val clusterDesc = if (cluster.isEmpty) "" else s", cluster: '$cluster' "
     val databaseDesc = if (database.isEmpty) "" else s", database: '$database'"
     val tableDesc = if (table.isEmpty) "" else s", table: '$table'"
     logError(reporter, s"caught exception $whatFailed$clusterDesc$databaseDesc$tableDesc.${NewLine}EXCEPTION MESSAGE: ${exception.getMessage}")
 
-    if (!isLogDontThrow) throw exception
+    if (!shouldNotThrow) throw exception
   }
 
   private def getClusterNameFromUrlIfNeeded(url: String): String = {
@@ -245,7 +246,9 @@ object KustoDataSourceUtils {
   def runSequentially[A](func: () => A, delay: Int, runEvery: Int, numberOfTimesToRun: Int, doWhile: A => Boolean, finalWork: A => Unit): CountDownLatch = {
     val latch = new CountDownLatch(if (numberOfTimesToRun > 0) numberOfTimesToRun else 1)
     val t = new Timer()
-    val task = new TimerTask() {
+    var currentWaitTime = runEvery
+
+    class ExponentialBackoffTask extends  TimerTask {
       def run(): Unit = {
         val res = func.apply()
         if (numberOfTimesToRun > 0) {
@@ -257,7 +260,6 @@ object KustoDataSourceUtils {
         }
 
         if (!doWhile.apply(res)) {
-          t.cancel()
           try {
             finalWork.apply(res)
           }
@@ -267,10 +269,15 @@ object KustoDataSourceUtils {
               throw exception
           }
           while (latch.getCount > 0) latch.countDown()
+        } else {
+          currentWaitTime = if(currentWaitTime > MaxWaitTime.toMillis) currentWaitTime else currentWaitTime + currentWaitTime
+          t.schedule(new ExponentialBackoffTask() , currentWaitTime)
         }
       }
     }
-    t.schedule(task, delay, runEvery)
+
+    val task: TimerTask = new ExponentialBackoffTask()
+    t.schedule(task, delay)
     latch
   }
 

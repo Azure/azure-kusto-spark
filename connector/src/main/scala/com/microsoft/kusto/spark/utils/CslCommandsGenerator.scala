@@ -2,7 +2,7 @@ package com.microsoft.kusto.spark.utils
 
 import com.microsoft.kusto.spark.datasink.KustoWriter.TempIngestionTablePrefix
 
-private[kusto] object CslCommandsGenerator{
+private[kusto] object CslCommandsGenerator {
 
   // Not used. Here in case we prefer this approach
   def generateFindOldTemporaryTablesCommand2(database: String): String = {
@@ -41,11 +41,11 @@ private[kusto] object CslCommandsGenerator{
     s".create tempstorage"
   }
 
-  def generateTableMoveExtentsCommand(sourceTableName:String, destinationTableName: String): String ={
+  def generateTableMoveExtentsCommand(sourceTableName: String, destinationTableName: String): String = {
     s".move extents all from table $sourceTableName to table $destinationTableName"
   }
 
-  def generateTableAlterMergePolicyCommand(table: String, allowMerge: Boolean, allowRebuild: Boolean): String ={
+  def generateTableAlterMergePolicyCommand(table: String, allowMerge: Boolean, allowRebuild: Boolean): String = {
     s""".alter table $table policy merge @'{"AllowMerge":"$allowMerge", "AllowRebuild":"$allowRebuild"}'"""
   }
 
@@ -55,17 +55,17 @@ private[kusto] object CslCommandsGenerator{
 
   // Export data to blob
   def generateExportDataCommand(
-     query: String,
-     storageAccountName: String,
-     container: String,
-     directory: String,
-     secret: String,
-     useKeyNotSas: Boolean = true,
-     partitionId: Int,
-     partitionPredicate: Option[String] = None,
-     sizeLimit: Option[Long],
-     isAsync: Boolean = true,
-     isCompressed: Boolean = false): String = {
+                                 query: String,
+                                 storageAccountName: String,
+                                 container: String,
+                                 directory: String,
+                                 secret: String,
+                                 useKeyNotSas: Boolean = true,
+                                 partitionId: Int,
+                                 partitionPredicate: Option[String] = None,
+                                 sizeLimit: Option[Long],
+                                 isAsync: Boolean = true,
+                                 isCompressed: Boolean = false): String = {
 
     val secretString = if (useKeyNotSas) s""";" h@"$secret"""" else if (secret(0) == '?') s"""" h@"$secret"""" else s"""?" h@"$secret""""
     val blobUri = s"https://$storageAccountName.blob.core.windows.net"
@@ -73,11 +73,11 @@ private[kusto] object CslCommandsGenerator{
     val compress = if (isCompressed) "compressed " else ""
     val sizeLimitIfDefined = if (sizeLimit.isDefined) s"sizeLimit=${sizeLimit.get * 1024 * 1024}, " else ""
 
-    var command = s""".export $async${compress}to parquet ("$blobUri/$container$secretString)""" +
-      s""" with (${sizeLimitIfDefined}namePrefix="${directory}part$partitionId", fileExtension=parquet) <| $query"""
+    var command =
+      s""".export $async${compress}to parquet ("$blobUri/$container$secretString)""" +
+        s""" with (${sizeLimitIfDefined}namePrefix="${directory}part$partitionId", fileExtension=parquet) <| $query"""
 
-    if (partitionPredicate.nonEmpty)
-    {
+    if (partitionPredicate.nonEmpty) {
       command += s" | where ${partitionPredicate.get}"
     }
     command
@@ -89,5 +89,9 @@ private[kusto] object CslCommandsGenerator{
 
   def generateTableCount(table: String): String = {
     s".show tables | where TableName == '$table' | count"
+  }
+
+  def generateTableAlterRetentionPolicy(tmpTableName: String, period: String, recoverable: Boolean): String = {
+    s""".alter table $tmpTableName policy retention '{ "SoftDeletePeriod": "$period", "Recoverability":"${if (recoverable) "Enabled" else "Disabled"}" }' """
   }
 }
