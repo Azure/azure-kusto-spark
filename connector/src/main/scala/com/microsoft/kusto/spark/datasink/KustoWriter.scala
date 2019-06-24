@@ -82,8 +82,8 @@ object KustoWriter {
       }
       asyncWork.onFailure {
         case exception: Exception =>
-          kustoClient.tryCleanupIngestionByproducts(tableCoordinates.database, kustoClient.engineClient, tmpTableName)
-          KDSU.reportExceptionAndThrow(myName, exception, "writing data", tableCoordinates.cluster, tableCoordinates.database, table, isLogDontThrow = true)
+          kustoClient.cleanupIngestionByproducts(tableCoordinates.database, kustoClient.engineClient, tmpTableName)
+          KDSU.reportExceptionAndThrow(myName, exception, "writing data", tableCoordinates.cluster, tableCoordinates.database, table, shouldNotThrow = true)
           KDSU.logError(myName, "The exception is not visible in the driver since we're in async mode")
       }
     }
@@ -92,7 +92,7 @@ object KustoWriter {
         rdd.foreachPartition { rows => ingestRowsIntoTempTbl(rows, batchIdIfExists, partitionsResults) }
       } catch {
         case exception: Exception =>
-          kustoClient.tryCleanupIngestionByproducts(tableCoordinates.database, kustoClient.engineClient, tmpTableName)
+          kustoClient.cleanupIngestionByproducts(tableCoordinates.database, kustoClient.engineClient, tmpTableName)
           throw exception
       }
       kustoClient.finalizeIngestionWhenWorkersSucceeded(tableCoordinates, batchIdIfExists, kustoClient.engineClient, tmpTableName, partitionsResults, writeOptions.timeout)
@@ -130,7 +130,7 @@ object KustoWriter {
           myName,
           ex,
           "trying to drop temporary tables", coordinates.cluster, coordinates.database, coordinates.table.getOrElse("Unspecified table name"),
-          isLogDontThrow = true
+          shouldNotThrow = true
         )
     }
   }

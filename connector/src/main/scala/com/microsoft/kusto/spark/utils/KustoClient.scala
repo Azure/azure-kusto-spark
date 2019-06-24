@@ -40,7 +40,7 @@ class KustoClient(val clusterAlias: String, val engineClient: Client, val dmClie
     if (schemaShowCommandResult.size() == 0) {
       // Table Does not exist
       if (tableCreation == SinkTableCreationMode.FailIfNotExist) {
-        throw new RuntimeException("Table '" + table + "' doesn't exist in database " + database + "', in cluster '" + tableCoordinates.cluster + "'")
+        throw new RuntimeException("Table '" + table + "' doesn't exist in database '" + database + "', in cluster '" + tableCoordinates.cluster + "'")
       } else {
         // Parse dataframe schema and create a destination table with that schema
         val tableSchemaBuilder = new StringJoiner(",")
@@ -134,10 +134,10 @@ class KustoClient(val clusterAlias: String, val engineClient: Client, val dmClie
             myName,
             ex,
             "Trying to poll on pending ingestions", coordinates.cluster, coordinates.database, coordinates.table.getOrElse("Unspecified table name"),
-            isLogDontThrow = true
+            shouldNotThrow = true
           )
       } finally {
-        tryCleanupIngestionByproducts(database, kustoAdminClient, tmpTableName)
+        cleanupIngestionByproducts(database, kustoAdminClient, tmpTableName)
       }
     }
 
@@ -147,13 +147,13 @@ class KustoClient(val clusterAlias: String, val engineClient: Client, val dmClie
     }
   }
 
-  private[kusto] def tryCleanupIngestionByproducts(database: String, kustoAdminClient: Client, tmpTableName: String): Unit = {
+  private[kusto] def cleanupIngestionByproducts(database: String, kustoAdminClient: Client, tmpTableName: String): Unit = {
     try {
       kustoAdminClient.execute(database, generateTableDropCommand(tmpTableName))
     }
     catch {
       case exception: Exception =>
-        KDSU.reportExceptionAndThrow(myName, exception, s"deleting temporary table $tmpTableName", database = database, isLogDontThrow = true)
+        KDSU.reportExceptionAndThrow(myName, exception, s"deleting temporary table $tmpTableName", database = database, shouldNotThrow = true)
     }
   }
 

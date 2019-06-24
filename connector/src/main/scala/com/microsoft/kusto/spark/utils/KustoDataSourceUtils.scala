@@ -204,14 +204,14 @@ object KustoDataSourceUtils {
                                               cluster: String = "",
                                               database: String = "",
                                               table: String = "",
-                                              isLogDontThrow: Boolean = false): Unit = {
+                                              shouldNotThrow: Boolean = false): Unit = {
     val whatFailed = if (doingWhat.isEmpty) "" else s"when $doingWhat"
     val clusterDesc = if (cluster.isEmpty) "" else s", cluster: '$cluster' "
     val databaseDesc = if (database.isEmpty) "" else s", database: '$database'"
     val tableDesc = if (table.isEmpty) "" else s", table: '$table'"
     logError(reporter, s"caught exception $whatFailed$clusterDesc$databaseDesc$tableDesc.${NewLine}EXCEPTION MESSAGE: ${exception.getMessage}")
 
-    if (!isLogDontThrow) throw exception
+    if (!shouldNotThrow) throw exception
   }
 
   private def getClusterNameFromUrlIfNeeded(url: String): String = {
