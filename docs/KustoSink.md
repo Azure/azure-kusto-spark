@@ -77,7 +77,7 @@ that is using it. Please verify the following before using Kusto connector:
  opportunistic mode as an asynchronous operation, this is recommended only for spark streaming.
   The resulted behavior is the following:
    * Spark driver is not blocked
-   * In a success scenario, all data is written eventually only if the job is still running 
+   * In a success scenario, all data will eventually be written, only if the job is left running.  Job success status **DOES NOT** mean data is committed yet.
    * In a failure scenario, error messages are logged on Spark executor nodes, 
  but exceptions will not propagate to the client
  
@@ -91,7 +91,7 @@ that is using it. Please verify the following before using Kusto connector:
     
     Properties:
         
-    dropByTags,,ingestByTags, additionalTags, ingestIfNotExists: util.ArrayList[String] - 
+    dropByTags,ingestByTags, additionalTags, ingestIfNotExists: util.ArrayList[String] - 
     Tags list to add to the extents. Read [kusto docs - extents](https://docs.microsoft.com/en-us/azure/kusto/management/extents-overview#ingest-by-extent-tags)
     
     creationTime: DateTime - sets the extents creationTime value to this date
@@ -133,7 +133,7 @@ df.write
 ``` 
 
 IngestionProperties and short scala usage:
-```
+```scala
 val sp = new SparkIngestionProperties
 var tags = new util.ArrayList[String]()
 tags.add("newTag")
