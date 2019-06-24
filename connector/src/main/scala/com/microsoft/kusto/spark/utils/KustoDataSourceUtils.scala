@@ -427,13 +427,13 @@ object KustoDataSourceUtils {
     client.execute(database, generateCountQuery(query)).getValues.get(0).get(0).toInt
   }
 
-  private[kusto] def isLeanReadMode(numberOfRows: Int, storageAccessProvided: Boolean, forcedMode: String): Boolean = {
+  private[kusto] def shouldUseLeanReadMode(numberOfRows: Int, storageAccessProvided: Boolean, forcedMode: String, timedOutCounting: Boolean): Boolean = {
     if (!forcedMode.isEmpty) {
       forcedMode.equalsIgnoreCase("lean")
     } else {
       // see https://docs.microsoft.com/en-us/azure/kusto/concepts/querylimits#limit-on-result-set-size-result-truncation
       // for hard limit on query size
-      !(storageAccessProvided && numberOfRows > KCONST.directQueryUpperBoundRows)
+      !(storageAccessProvided && (timedOutCounting || numberOfRows > KCONST.directQueryUpperBoundRows))
     }
   }
 }
