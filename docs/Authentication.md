@@ -19,7 +19,7 @@ This authentication method is fairly straightforward, and it is used in most of 
 ```
 df.write
   .format("com.microsoft.kusto.spark.datasource")
-  .option(KustoSinkOptions.KUSTO_CLUSTER, "MyCluster")
+  .option(KustoSinkOptions.KUSTO_CLUSTER, "MyCluster.RegionName")
   .option(KustoSinkOptions.KUSTO_DATABASE, "MyDatabase")
   .option(KustoSinkOptions.KUSTO_TABLE, "MyTable")
   .option(KustoSinkOptions.KUSTO_AAD_CLIENT_ID, "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
