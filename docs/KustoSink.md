@@ -123,7 +123,7 @@ Synchronous mode, table already exists:
 ```
 df.write
   .format("com.microsoft.kusto.spark.datasource")
-  .option(KustoSinkOptions.KUSTO_CLUSTER, "MyCluster")
+  .option(KustoSinkOptions.KUSTO_CLUSTER, "MyCluster.RegionName")
   .option(KustoSinkOptions.KUSTO_DATABASE, "MyDatabase")
   .option(KustoSinkOptions.KUSTO_TABLE, "MyTable")
   .option(KustoSinkOptions.KUSTO_AAD_CLIENT_ID, "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
@@ -150,7 +150,7 @@ Asynchronous mode, table may not exist and will be created:
 ```
 df.write
   .format("com.microsoft.kusto.spark.datasource")
-  .option(KustoOptions.KUSTO_CLUSTER, "MyCluster")
+  .option(KustoOptions.KUSTO_CLUSTER, "MyCluster.RegionName")
   .option(KustoOptions.KUSTO_DATABASE, "MyDatabase")
   .option(KustoOptions.KUSTO_TABLE, "MyTable")
   .option(KustoOptions.KUSTO_AAD_CLIENT_ID, "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
