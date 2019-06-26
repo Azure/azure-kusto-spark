@@ -30,7 +30,7 @@ that is using it. Please verify the following before using Kusto connector:
  **Simplified Command Syntax**: 
   ```
  <dataframe-name> = 
- spark.read.kusto(<cluster-name>, <database-name>, <kusto-query>, <parameters map>)
+ spark.read.kusto(<cluster-name.region-name>, <database-name>, <kusto-query>, <parameters map>)
   ```
  where:
  * **Kusto-query** is any valid Kusto query. For details, please refer to [Query statements documentation](https://docs.microsoft.com/en-us/azure/kusto/query/statements). To read the whole table, just provide the table name as query.
@@ -45,7 +45,7 @@ that is using it. Please verify the following before using Kusto connector:
 <dataframe-name> = 
 sqlContext.read
 .format("com.microsoft.kusto.spark.datasource")
-.option(KustoSourceOptions.KUSTO_CLUSTER, <cluster-name>)
+.option(KustoSourceOptions.KUSTO_CLUSTER, <cluster-name.region-name>)
 .option(KustoSourceOptions.KUSTO_DATABASE, <database-name>)
 .option(KustoSourceOptions.KUSTO_QUERY, <kusto-query>)
 .load()
@@ -137,7 +137,7 @@ SAS access url: a complete url of the SAS to the container. Either this, or a st
  
  val df = sqlContext.read
   .format("com.microsoft.kusto.spark.datasource")
-  .option(KustoSourceOptions.KUSTO_CLUSTER, "MyCluster")
+  .option(KustoSourceOptions.KUSTO_CLUSTER, "MyCluster.RegionName")
   .option(KustoSourceOptions.KUSTO_DATABASE, "MyDatabase")
   .options(conf)
   .load()
