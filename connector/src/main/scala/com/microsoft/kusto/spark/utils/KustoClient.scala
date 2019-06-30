@@ -58,7 +58,7 @@ class KustoClient(val clusterAlias: String, val engineClient: Client, val dmClie
 
     //  Create a temporary table with the kusto or dataframe parsed schema with 1 day retention
     engineClient.execute(database, generateTableCreateCommand(tmpTableName, tmpTableSchema))
-    engineClient.execute(database, generateTableAlterRetentionPolicy(tmpTableName, "100:00:00:00", recoverable = false))
+    engineClient.execute(database, generateTableAlterRetentionPolicy(tmpTableName, "001:00:00:00", recoverable = false))
   }
 
   private var roundRobinIdx = 0
