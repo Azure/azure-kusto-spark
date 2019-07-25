@@ -8,15 +8,16 @@ import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.{KustoCoordinates, KustoDebugOptions}
 import com.microsoft.kusto.spark.utils.{KustoClientCache, KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.sources.{BaseRelation, Filter, PrunedFilteredScan, TableScan}
+import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.{Row, SQLContext, SparkSession}
-import com.microsoft.kusto.spark.utils.KustoConstants
+import org.apache.spark.sql.{DataFrame, Row, SQLContext, SparkSession}
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
-import java.util.concurrent.TimeoutException
+import java.util.concurrent.{TimeUnit, TimeoutException}
+
+import com.microsoft.kusto.spark.datasink.{KustoWriter, WriteOptions}
 
 private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
                                         authentication: KustoAuthentication,
@@ -30,7 +31,7 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
                                         storageParameters: Option[KustoStorageParameters],
                                         clientRequestProperties: Option[ClientRequestProperties])
                                        (@transient val sparkSession: SparkSession)
-  extends BaseRelation with TableScan with PrunedFilteredScan with Serializable {
+  extends BaseRelation with TableScan with PrunedFilteredScan with Serializable with InsertableRelation  {
 
   private val normalizedQuery = KustoQueryUtils.normalizeQuery(query)
   var cachedSchema: StructType = _
@@ -120,5 +121,16 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
       }
       mode
     } else "hash"
+  }
+
+  // Used for cached results
+  override def equals(other: Any): Boolean = other match  {
+    case that: KustoRelation => kustoCoordinates == kustoCoordinates && query == that.query
+    case _ => false
+  }
+
+  override def insert(data: DataFrame, overwrite: Boolean): Unit = {
+    KustoWriter.write(Some(0), data, kustoCoordinates, authentication, writeOptions =
+      WriteOptions.apply(timeout = new FiniteDuration(90, TimeUnit.MINUTES)))
   }
 }

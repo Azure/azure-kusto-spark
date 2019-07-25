@@ -81,11 +81,13 @@ private[kusto] object KustoReader {
         request.clientRequestProperties)
     }
 
+    KDSU.logInfo(myName, s"Finished exporting from kusto to '${storage.account}/${storage.container}/$directory'" +
+      s", will start parquet reading now")
+
     val path = s"wasbs://${storage.container}@${storage.account}.blob.core.windows.net/$directory"
     val rdd = try {
-      request.sparkSession.read.parquet(s"$path").rdd
-    }
-    catch {
+      request.sparkSession.read.parquet(s"$path").queryExecution.executedPlan.execute().asInstanceOf[RDD[Row]]
+    } catch {
       case ex: Exception =>
         // Check whether the result is empty, causing an IO exception on reading empty parquet file
         // We don't mind generating the filtered query again - it only happens upon exception
