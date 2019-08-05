@@ -12,9 +12,9 @@ trait KustoOptions {
 
   // KeyVault options. Relevant only if credentials need to be retrieved from Key Vault
   val KEY_VAULT_URI = "keyVaultUri"
-  val KEY_VAULT_CREDENTIALS = "keyVaultCredentials"
   val KEY_VAULT_APP_ID = "keyVaultAppId"
   val KEY_VAULT_APP_KEY = "keyVaultAppKey"
+
 
   // AAD application identifier of the client
   val KUSTO_AAD_CLIENT_ID: String = newOption("kustoAADClientID")
