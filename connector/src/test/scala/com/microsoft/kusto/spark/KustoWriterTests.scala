@@ -41,16 +41,29 @@ class KustoWriterTests extends FlatSpec with Matchers {
     val df: DataFrame = getDF(isNestedSchema = true)
     val dfRow: InternalRow = df.queryExecution.toRdd.collect().head
     val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone("UTC"))
-    KustoWriter.convertRowToCSV(dfRow, df.schema, dateFormat).formattedRow shouldEqual Array("John Doe", "1")
+    val byteArrayOutputStream = new ByteArrayOutputStream()
+    val streamWriter = new OutputStreamWriter(byteArrayOutputStream)
+    val writer = new BufferWriterWithProgress(streamWriter)
+    KustoWriter.writeRowAsCSV(dfRow, df.schema, dateFormat, writer)
+    writer.flush()
+    writer.close()
+    byteArrayOutputStream.toString() shouldEqual "John Doe,1" + lineSep
   }
 
   "convertRowToCsv" should "convert the row as expected, including nested types." in {
     val df: DataFrame = getDF(isNestedSchema = false)
     val dfRow: InternalRow = df.queryExecution.toRdd.collect().head
     val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone("UTC"))
-    KustoWriter.convertRowToCSV(dfRow, df.schema, dateFormat).formattedRow shouldEqual
-      Array("[true,false,null]", "[1,2,3,null]", "", "value", "[\"a\",\"b\",\"c\",null]", "[[\"a\",\"b\",\"c\"],null]",
-        "{\"string_ar\":[\"a\",\"b\",\"c\"],\"int\":1,\"string\":\"abc\",\"int_ar\":[1,2,3],\"bool\":true,\"dict_ar\":[{\"int\":1,\"string\":\"a\"},{\"int\":2,\"string\":\"b\"}]}")
+    val expected = Array("[true,false,]", "[1,2,3,]", "", "value", "[\"a\",\"b\",\"c\",]", "[[\"a\",\"b\",\"c\"],]",
+      "{\"bool\":true,\"dict_ar\":[{\"int\":1,\"string\":\"a\"},{\"int\":2,\"string\":\"b\"}],\"int\":1,\"int_ar\":[1,2,3],\"string\":\"abc\",\"string_ar\":[\"a\",\"b\",\"c\"]}").mkString(",") + lineSep
+    val byteArrayOutputStream = new ByteArrayOutputStream()
+    val streamWriter = new OutputStreamWriter(byteArrayOutputStream)
+    val writer = new BufferWriterWithProgress(streamWriter)
+    KustoWriter.writeRowAsCSV(dfRow, df.schema, dateFormat, writer)
+    writer.flush()
+    writer.close()
+    val got = byteArrayOutputStream.toString
+    got shouldEqual expected
   }
 
   "convertRowToCsv" should "calculate row size as expected" in {
@@ -58,15 +71,20 @@ class KustoWriterTests extends FlatSpec with Matchers {
     val dfRow: InternalRow = df.queryExecution.toRdd.collect().head
     val expectedSize = ("John Doe,1" + lineSep).getBytes(StandardCharsets.UTF_8).length
     val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone("UTC"))
-    KustoWriter.convertRowToCSV(dfRow, df.schema, dateFormat).rowByteSize shouldEqual expectedSize
+    val byteArrayOutputStream = new ByteArrayOutputStream()
+    val streamWriter = new OutputStreamWriter(byteArrayOutputStream)
+    val writer = new BufferWriterWithProgress(streamWriter)
+    KustoWriter.writeRowAsCSV(dfRow, df.schema, dateFormat, writer)
+    writer.flush()
+    writer.close()
+    writer.getProgress shouldEqual expectedSize
   }
 
   "finalizeFileWrite" should "should flush and close buffers" in {
     val gzip = mock(classOf[GZIPOutputStream])
-    val buffer = mock(classOf[BufferedWriter])
-    val csvWriter = new CsvWriter(buffer, new CsvWriterSettings)
+    val buffer = mock(classOf[com.microsoft.kusto.spark.javaUtil.BufferWriterWithProgress])
 
-    val fileWriteResource = BlobWriteResource(buffer, gzip, csvWriter, null)
+    val fileWriteResource = BlobWriteResource(buffer, gzip, null)
     KustoWriter.finalizeBlobWrite(fileWriteResource)
 
     verify(gzip, times(1)).flush()
@@ -121,16 +139,24 @@ class KustoWriterTests extends FlatSpec with Matchers {
     )
 
     val df = sparkSession.createDataFrame(
-      sparkSession.sparkContext.parallelize(asRows(someData)),
-      StructType(asSchema(someSchema))
+      sparkSession.sparkContext.parallelize(KustoWriterTests.asRows(someData)),
+      StructType(KustoWriterTests.asSchema(someSchema))
     )
 
     val dfRow: InternalRow = df.queryExecution.toRdd.collect().head
     val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone("UTC"))
-    KustoWriter.convertRowToCSV(dfRow, df.schema, dateFormat).formattedRow shouldEqual Array("{\"asd\":{\"arrayStrings\":[\"stringVal\"]},\"asd2\":{\"arrayStrings\":[\"stringVal2\"]}}")
+    val byteArrayOutputStream = new ByteArrayOutputStream()
+    val streamWriter = new OutputStreamWriter(byteArrayOutputStream)
+    val writer = new BufferWriterWithProgress(streamWriter)
+    KustoWriter.writeRowAsCSV(dfRow, df.schema, dateFormat, writer)
+    writer.flush()
+    writer.close()
+    byteArrayOutputStream.toString shouldEqual Array("{\"asd\":{\"arrayStrings\":[\"stringVal\"]},\"asd2\":{\"arrayStrings\":[\"stringVal2\"]}}").mkString(",") + lineSep
   }
+}
 
-  private def asRows[U](values: List[U]): List[Row] = {
+object KustoWriterTests {
+  def asRows[U](values: List[U]): List[Row] = {
     values.map {
       case row: Row => row.asInstanceOf[Row]
       case prod: Product => Row(prod.productIterator.toList: _*)
@@ -138,7 +164,7 @@ class KustoWriterTests extends FlatSpec with Matchers {
     }
   }
 
-  private def asSchema[U <: Product](fields: List[U]): List[StructField] = {
+  def asSchema[U <: Product](fields: List[U]): List[StructField] = {
     fields.map {
       case x: StructField => x.asInstanceOf[StructField]
       case (name: String, dataType: DataType, nullable: Boolean) =>
