@@ -172,6 +172,8 @@ object KustoWriter {
 
       ingestClient.ingestFromBlob(blobSourceInfo, ingestionProperties)
     }.foreach(blob => partitionsResults.add(PartitionResult(blob, TaskContext.getPartitionId)))
+
+    KDSU.logWarn(myName, s"Finished ingesting using ingest client - partition: ${TaskContext.getPartitionId()} , took:${System.currentTimeMillis() - t1}")
   }
 
   private def ingestToTemporaryTableByWorkers(

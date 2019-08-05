@@ -1,14 +1,14 @@
 package com.microsoft.kusto.spark
 
-import java.io.BufferedWriter
+import java.io.{ByteArrayOutputStream, OutputStreamWriter}
 import java.nio.charset.StandardCharsets
 import java.util
 import java.util.TimeZone
 import java.util.zip.GZIPOutputStream
 
 import com.microsoft.kusto.spark.datasink.{BlobWriteResource, KustoWriter}
+import com.microsoft.kusto.spark.javaUtil.BufferWriterWithProgress
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
-import com.univocity.parsers.csv.{CsvWriter, CsvWriterSettings}
 import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.InternalRow
@@ -23,6 +23,7 @@ import org.scalatest.{FlatSpec, Matchers}
 @RunWith(classOf[JUnitRunner])
 class KustoWriterTests extends FlatSpec with Matchers {
 
+  val lineSep: String = java.security.AccessController.doPrivileged(new sun.security.action.GetPropertyAction("line.separator"))
 
   def getDF(isNestedSchema: Boolean): DataFrame = {
 
@@ -31,7 +32,7 @@ class KustoWriterTests extends FlatSpec with Matchers {
       .setAppName("SimpleKustoDataSink")
       .setMaster("local[*]")
     val sparkSession: SparkSession = SparkSession.builder().config(sparkConf).getOrCreate()
-    val customSchema = if (isNestedSchema) StructType(Array(StructField("Name", StringType, true), StructField("Number", IntegerType, true))) else null
+    val customSchema = if (isNestedSchema) StructType(Array(StructField("Name", StringType, nullable = true), StructField("Number", IntegerType, nullable = true))) else null
     if (isNestedSchema) sparkSession.read.format("csv").option("header", "false").schema(customSchema).load("src/test/resources/ShortTestData/ShortTestData.csv")
     else sparkSession.read.format("json").option("header", "true").load("src/test/resources/TestData/TestDynamicFields.json")
   }
@@ -55,7 +56,7 @@ class KustoWriterTests extends FlatSpec with Matchers {
   "convertRowToCsv" should "calculate row size as expected" in {
     val df: DataFrame = getDF(isNestedSchema = true)
     val dfRow: InternalRow = df.queryExecution.toRdd.collect().head
-    val expectedSize = "John Doe,1\n".getBytes(StandardCharsets.UTF_8).length
+    val expectedSize = ("John Doe,1" + lineSep).getBytes(StandardCharsets.UTF_8).length
     val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone("UTC"))
     KustoWriter.convertRowToCSV(dfRow, df.schema, dateFormat).rowByteSize shouldEqual expectedSize
   }
@@ -110,13 +111,13 @@ class KustoWriterTests extends FlatSpec with Matchers {
       .setAppName("SimpleKustoDataSink")
       .setMaster("local[*]")
     val sparkSession: SparkSession = SparkSession.builder().config(sparkConf).getOrCreate()
-    
+
     val someData = List(
       Map("asd" -> Row(Array("stringVal")),
         "asd2" -> Row(Array("stringVal2")))
     )
     val someSchema = List(
-      StructField("mapToArray", MapType(StringType, new StructType().add("arrayStrings", ArrayType(StringType, true), true), true), true)
+      StructField("mapToArray", MapType(StringType, new StructType().add("arrayStrings", ArrayType(StringType, containsNull = true), nullable = true), valueContainsNull = true), nullable = true)
     )
 
     val df = sparkSession.createDataFrame(
