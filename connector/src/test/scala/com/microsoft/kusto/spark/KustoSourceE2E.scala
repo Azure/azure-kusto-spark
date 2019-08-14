@@ -51,47 +51,47 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
 
   private val loggingLevel: Option[String] = Option(System.getProperty("logLevel"))
   if (loggingLevel.isDefined) KDSU.setLoggingLevel(loggingLevel.get)
-//
-//  "KustoSource" should "execute a read query on Kusto cluster in lean mode" taggedAs KustoE2E in {
-//    val table: String = System.getProperty(KustoSinkOptions.KUSTO_TABLE)
-//    val query: String = System.getProperty(KustoSourceOptions.KUSTO_QUERY, s"$table | where (toint(ColB) % 1000 == 0) | distinct ColA ")
-//
-//    val conf: Map[String, String] = Map(
-//      KustoSourceOptions.KUSTO_AAD_CLIENT_ID -> appId,
-//      KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
-//      KustoDebugOptions.KUSTO_DBG_FORCE_READ_MODE -> "lean"
-//    )
-//
-//    val df = spark.read.kusto(cluster, database, query, conf)
-//    df.show()
-//  }
-//
-//  "KustoSource" should "execute a read query on Kusto cluster in scale mode" taggedAs KustoE2E in {
-//    val table: String = System.getProperty(KustoSinkOptions.KUSTO_TABLE)
-//    val query: String = System.getProperty(KustoSourceOptions.KUSTO_QUERY, s"$table | where (toint(ColB) % 1 == 0)")
-//
-//    val storageAccount: String = System.getProperty("storageAccount")
-//    val container: String = System.getProperty("container")
-//    val blobKey: String = System.getProperty("blobKey")
-//    val blobSas: String = System.getProperty("blobSas")
-//    val blobSasConnectionString: String = System.getProperty("blobSasQuery")
-//
-//    val conf: Map[String, String] = Map(
-//      KustoSourceOptions.KUSTO_AAD_CLIENT_ID -> appId,
-//      KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
-//      KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME -> storageAccount,
-//      KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_KEY -> blobKey,
-//      KustoSourceOptions.KUSTO_BLOB_CONTAINER -> container
-//    )
-//
-//    spark.read.kusto(cluster, database, query, conf).show(20)
-//  }
+
+  "KustoSource" should "execute a read query on Kusto cluster in lean mode" taggedAs KustoE2E in {
+    val table: String = System.getProperty(KustoSinkOptions.KUSTO_TABLE)
+    val query: String = System.getProperty(KustoSourceOptions.KUSTO_QUERY, s"$table | where (toint(ColB) % 1000 == 0) | distinct ColA ")
+
+    val conf: Map[String, String] = Map(
+      KustoSourceOptions.KUSTO_AAD_CLIENT_ID -> appId,
+      KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+      KustoDebugOptions.KUSTO_DBG_FORCE_READ_MODE -> "lean"
+    )
+
+    val df = spark.read.kusto(cluster, database, query, conf)
+    df.show()
+  }
+
+  "KustoSource" should "execute a read query on Kusto cluster in scale mode" taggedAs KustoE2E in {
+    val table: String = System.getProperty(KustoSinkOptions.KUSTO_TABLE)
+    val query: String = System.getProperty(KustoSourceOptions.KUSTO_QUERY, s"$table | where (toint(ColB) % 1 == 0)")
+
+    val storageAccount: String = System.getProperty("storageAccount")
+    val container: String = System.getProperty("container")
+    val blobKey: String = System.getProperty("blobKey")
+    val blobSas: String = System.getProperty("blobSas")
+    val blobSasConnectionString: String = System.getProperty("blobSasQuery")
+
+    val conf: Map[String, String] = Map(
+      KustoSourceOptions.KUSTO_AAD_CLIENT_ID -> appId,
+      KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+      KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME -> storageAccount,
+      KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_KEY -> blobKey,
+      KustoSourceOptions.KUSTO_BLOB_CONTAINER -> container
+    )
+
+    spark.read.kusto(cluster, database, query, conf).show(20)
+  }
 
   "KustoConnector" should "write to a kusto table and read it back in lean mode" taggedAs KustoE2E in {
     import spark.implicits._
 
     val rowId = new AtomicInteger(1)
-    def newRow(): String = s"""row-${rowId.getAndIncrement()},"asb """
+    def newRow(): String = s"row-${rowId.getAndIncrement()}"
     val expectedNumberOfRows: Int =  100
     val rows: immutable.IndexedSeq[(String, Int)] = (1 to expectedNumberOfRows).map(v => (newRow(), v))
     val dfOrig = rows.toDF("name", "value")
