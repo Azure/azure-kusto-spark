@@ -44,10 +44,9 @@ private[kusto] case class KustoReadOptions(forcedReadMode: String = "",
 private[kusto] object KustoReader {
   private val myName = this.getClass.getSimpleName
 
-  private[kusto] def leanBuildScan(
-                                    kustoClient: Client,
-                                    request: KustoReadRequest,
-                                    filtering: KustoFiltering): RDD[Row] = {
+  private[kusto] def leanBuildScan(kustoClient: Client,
+                                   request: KustoReadRequest,
+                                   filtering: KustoFiltering): RDD[Row] = {
 
     val filteredQuery = KustoFilter.pruneAndFilter(request.schema, request.query, filtering)
     val kustoResult = kustoClient.execute(request.kustoCoordinates.database,
@@ -58,13 +57,12 @@ private[kusto] object KustoReader {
     request.sparkSession.createDataFrame(serializer.toRows, serializer.getSchema).rdd
   }
 
-  private[kusto] def scaleBuildScan(
-                                     kustoClient: Client,
-                                     request: KustoReadRequest,
-                                     storage: KustoStorageParameters,
-                                     partitionInfo: KustoPartitionParameters,
-                                     options: KustoReadOptions,
-                                     filtering: KustoFiltering): RDD[Row] = {
+  private[kusto] def scaleBuildScan(kustoClient: Client,
+                                    request: KustoReadRequest,
+                                    storage: KustoStorageParameters,
+                                    partitionInfo: KustoPartitionParameters,
+                                    options: KustoReadOptions,
+                                    filtering: KustoFiltering): RDD[Row] = {
 
     setupBlobAccess(request, storage)
     val partitions = calculatePartitions(partitionInfo)
@@ -162,14 +160,13 @@ private[kusto] class KustoReader(client: Client, request: KustoReadRequest, stor
 
   // Export a single partition from Kusto to transient Blob storage.
   // Returns the directory path for these blobs
-  private[kusto] def exportPartitionToBlob(
-                                            partition: KustoPartition,
-                                            request: KustoReadRequest,
-                                            storage: KustoStorageParameters,
-                                            directory: String,
-                                            options: KustoReadOptions,
-                                            filtering: KustoFiltering,
-                                            clientRequestProperties: Option[ClientRequestProperties]): Unit = {
+  private[kusto] def exportPartitionToBlob(partition: KustoPartition,
+                                           request: KustoReadRequest,
+                                           storage: KustoStorageParameters,
+                                           directory: String,
+                                           options: KustoReadOptions,
+                                           filtering: KustoFiltering,
+                                           clientRequestProperties: Option[ClientRequestProperties]): Unit = {
 
     val limit = if (options.exportSplitLimitMb <= 0) None else Some(options.exportSplitLimitMb)
 

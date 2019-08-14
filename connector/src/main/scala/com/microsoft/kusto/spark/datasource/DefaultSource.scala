@@ -107,7 +107,7 @@ class DefaultSource extends CreatableRelationProvider
           storageSecretIsAccountKey))
       }
 
-    val timeout = new FiniteDuration(parameters.getOrElse(KustoSourceOptions.KUSTO_TIMEOUT_LIMIT, KCONST.defaultTimeoutAsString).toLong, TimeUnit.SECONDS)
+    val timeout = new FiniteDuration(parameters.getOrElse(KustoSourceOptions.KUSTO_TIMEOUT_LIMIT, KCONST.nonWaitingConst).toLong, TimeUnit.SECONDS)
 
     KustoRelation(
       kustoCoordinates,

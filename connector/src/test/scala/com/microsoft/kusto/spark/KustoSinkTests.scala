@@ -6,15 +6,17 @@ import java.util.concurrent.atomic.AtomicInteger
 import com.microsoft.azure.kusto.ingest.IngestClient
 import com.microsoft.azure.kusto.ingest.result.{IngestionResult, IngestionStatus}
 import com.microsoft.kusto.spark.authentication.AadApplicationAuthentication
-import com.microsoft.kusto.spark.datasink.{KustoSink, KustoSinkOptions, WriteOptions}
 import com.microsoft.kusto.spark.common.KustoCoordinates
-import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.datasink.{KustoSink, KustoSinkOptions, WriteOptions}
+import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{SQLContext, SparkSession}
 import org.junit.runner.RunWith
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.junit.JUnitRunner
 import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
+
+import scala.concurrent.duration._
 
 @RunWith(classOf[JUnitRunner])
 class KustoSinkTests extends FlatSpec with MockFactory with Matchers with BeforeAndAfterAll {
@@ -54,7 +56,7 @@ class KustoSinkTests extends FlatSpec with MockFactory with Matchers with Before
       sqlContext,
       KustoCoordinates(kustoCluster, kustoDatabase, Some(kustoTable)),
       AadApplicationAuthentication(appId, appKey, appAuthorityId),
-      WriteOptions(writeResultLimit = KustoSinkOptions.NONE_RESULT_LIMIT, timeout = KCONST.defaultTimeoutLongRunning))
+      WriteOptions(writeResultLimit = KustoSinkOptions.NONE_RESULT_LIMIT, timeout = 15 minutes))
 
   private val rowId = new AtomicInteger(1)
 

@@ -32,7 +32,7 @@ object KustoDataSourceUtils {
   val DefaultTimeoutLongRunning: FiniteDuration = 90 minutes
   val DefaultPeriodicSamplePeriod: FiniteDuration = 2 seconds
   val NewLine = sys.props("line.separator")
-  val MaxWaitTime = 1 minute
+  val MaxWaitTime: FiniteDuration = 1 minute
 
   def setLoggingLevel(level: String): Unit = {
     setLoggingLevel(Level.toLevel(level))
@@ -158,7 +158,7 @@ object KustoDataSourceUtils {
       case _: java.lang.IllegalArgumentException => throw new InvalidParameterException(s"KUSTO_WRITE_ENABLE_ASYNC is expecting either 'true' or 'false', got: '$isAsyncParam'")
     }
 
-    val timeout = new FiniteDuration(parameters.getOrElse(KustoSinkOptions.KUSTO_TIMEOUT_LIMIT, KCONST.defaultTimeoutAsString).toLong, TimeUnit.SECONDS)
+    val timeout = new FiniteDuration(parameters.getOrElse(KustoSinkOptions.KUSTO_TIMEOUT_LIMIT, KCONST.nonWaitingConst).toLong, TimeUnit.SECONDS)
 
     val ingestionPropertiesAsJson = parameters.get(KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON)
 
@@ -232,7 +232,8 @@ object KustoDataSourceUtils {
     * A function to run sequentially async work on TimerTask using a Timer.
     * The function passed is scheduled sequentially by the timer, until last calculated returned value by func does not
     * satisfy the condition of doWhile or a given number of times has passed.
-    * After one of these conditions was held true the finalWork function is called over the last returned value by func.
+    * After either this condition was satisfied or the 'numberOfTimesToRun' has passed (This can be avoided by setting
+    * numberOfTimesToRun to a value less than 0), the finalWork function is called over the last returned value by func.
     * Returns a CountDownLatch object used to count down iterations and await on it synchronously if needed
     *
     * @param func               - the function to run
@@ -291,7 +292,7 @@ object KustoDataSourceUtils {
     val sampleInMillis = samplePeriod.toMillis.toInt
     val timeoutInMillis = timeOut.toMillis
     val delayPeriodBetweenCalls = if (sampleInMillis < 1) 1 else sampleInMillis
-    val timesToRun = (timeoutInMillis / delayPeriodBetweenCalls + 5).toInt
+    val timesToRun = if(timeOut < FiniteDuration.apply(0, SECONDS)) -1 else (timeoutInMillis / delayPeriodBetweenCalls + 5).toInt
 
     val stateCol = "State"
     val statusCol = "Status"
@@ -299,19 +300,31 @@ object KustoDataSourceUtils {
     val stateIdx = showCommandResult.getColumnNameToIndex.get(stateCol)
     val statusIdx = showCommandResult.getColumnNameToIndex.get(statusCol)
 
-    val success = runSequentially[util.ArrayList[String]](
+    var lastResponse:  Option[util.ArrayList[String]] = None
+    val task = runSequentially[util.ArrayList[String]](
       func = () => client.execute(database, operationsShowCommand).getValues.get(0),
       delay = 0, runEvery = delayPeriodBetweenCalls, numberOfTimesToRun = timesToRun,
       doWhile = result => {
         result.get(stateIdx) == "InProgress"
       },
       finalWork = result => {
-        if (result.get(stateIdx) != "Completed") {
-          throw new RuntimeException(
-            s"Failed to execute Kusto operation with OperationId '$operationId', State: '${result.get(stateIdx)}', Status: '${result.get(statusIdx)}'"
-          )
-        }
-      }).await(timeoutInMillis, TimeUnit.MILLISECONDS)
+        lastResponse = Some(result)
+      })
+    var success = true
+    if(timeOut < FiniteDuration.apply(0, SECONDS)){
+      task.await()
+    } else {
+      if(task.await(timeoutInMillis, TimeUnit.SECONDS)){
+        success = false
+      }
+    }
+
+    if (lastResponse.isDefined && lastResponse.get.get(stateIdx) != "Completed") {
+      throw new RuntimeException(
+        s"Failed to execute Kusto operation with OperationId '$operationId', State: '${lastResponse.get.get(stateIdx)}'," +
+          s" Status: '${lastResponse.get.get(statusIdx)}'"
+      )
+    }
 
     if (!success) {
       throw new RuntimeException(s"Timed out while waiting for operation with OperationId '$operationId'")
