@@ -7,9 +7,9 @@ import java.util.{NoSuchElementException, StringJoiner, Timer, TimerTask}
 
 import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties, Results}
 import com.microsoft.kusto.spark.authentication._
+import com.microsoft.kusto.spark.common.{KustoCoordinates, KustoDebugOptions}
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
 import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode, WriteOptions}
-import com.microsoft.kusto.spark.common.{KustoCoordinates, KustoDebugOptions}
 import com.microsoft.kusto.spark.datasource.{KustoResponseDeserializer, KustoSourceOptions, KustoStorageParameters}
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
@@ -249,7 +249,7 @@ object KustoDataSourceUtils {
     val t = new Timer()
     var currentWaitTime = runEvery
 
-    class ExponentialBackoffTask extends  TimerTask {
+    class ExponentialBackoffTask extends TimerTask {
       def run(): Unit = {
         val res = func.apply()
         if (numberOfTimesToRun > 0) {
@@ -271,8 +271,8 @@ object KustoDataSourceUtils {
           }
           while (latch.getCount > 0) latch.countDown()
         } else {
-          currentWaitTime = if(currentWaitTime > MaxWaitTime.toMillis) currentWaitTime else currentWaitTime + currentWaitTime
-          t.schedule(new ExponentialBackoffTask() , currentWaitTime)
+          currentWaitTime = if (currentWaitTime > MaxWaitTime.toMillis) currentWaitTime else currentWaitTime + currentWaitTime
+          t.schedule(new ExponentialBackoffTask(), currentWaitTime)
         }
       }
     }
@@ -292,7 +292,7 @@ object KustoDataSourceUtils {
     val sampleInMillis = samplePeriod.toMillis.toInt
     val timeoutInMillis = timeOut.toMillis
     val delayPeriodBetweenCalls = if (sampleInMillis < 1) 1 else sampleInMillis
-    val timesToRun = if(timeOut < FiniteDuration.apply(0, SECONDS)) -1 else (timeoutInMillis / delayPeriodBetweenCalls + 5).toInt
+    val timesToRun = if (timeOut < FiniteDuration.apply(0, SECONDS)) -1 else (timeoutInMillis / delayPeriodBetweenCalls + 5).toInt
 
     val stateCol = "State"
     val statusCol = "Status"
@@ -300,7 +300,7 @@ object KustoDataSourceUtils {
     val stateIdx = showCommandResult.getColumnNameToIndex.get(stateCol)
     val statusIdx = showCommandResult.getColumnNameToIndex.get(statusCol)
 
-    var lastResponse:  Option[util.ArrayList[String]] = None
+    var lastResponse: Option[util.ArrayList[String]] = None
     val task = runSequentially[util.ArrayList[String]](
       func = () => client.execute(database, operationsShowCommand).getValues.get(0),
       delay = 0, runEvery = delayPeriodBetweenCalls, numberOfTimesToRun = timesToRun,
@@ -311,10 +311,10 @@ object KustoDataSourceUtils {
         lastResponse = Some(result)
       })
     var success = true
-    if(timeOut < FiniteDuration.apply(0, SECONDS)){
+    if (timeOut < FiniteDuration.apply(0, SECONDS)) {
       task.await()
     } else {
-      if(task.await(timeoutInMillis, TimeUnit.SECONDS)){
+      if (task.await(timeoutInMillis, TimeUnit.SECONDS)) {
         success = false
       }
     }
@@ -416,6 +416,9 @@ object KustoDataSourceUtils {
                                                                      storageSecretIsAccountKey: Boolean): Option[KustoStorageParameters] = {
 
     val paramsFromSas = if (!storageSecretIsAccountKey && storageAccountSecret.isDefined) {
+      if (storageAccountSecret.get == null) {
+        throw new InvalidParameterException("storage secret from parameters is null")
+      }
       Some(parseSas(storageAccountSecret.get))
     } else None
 
@@ -431,6 +434,9 @@ object KustoDataSourceUtils {
       paramsFromSas
     }
     else if (storageAccount.isDefined && storageContainer.isDefined && storageAccountSecret.isDefined) {
+      if (storageAccount.get == null || storageAccountSecret.get == null || storageContainer.get == null) {
+        throw new InvalidParameterException("storageAccount key from parameters is null")
+      }
       Some(KustoStorageParameters(storageAccount.get, storageAccountSecret.get, storageContainer.get, storageSecretIsAccountKey))
     }
     else None
