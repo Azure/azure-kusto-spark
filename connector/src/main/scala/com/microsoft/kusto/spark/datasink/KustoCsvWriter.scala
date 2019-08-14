@@ -20,69 +20,27 @@ case class KustoCsvWriter(out: Writer) {
 
   def writeStringField(str: String, nested: Boolean) {
     if (str.length > 0) {
-      if(nested){
-        for (c <- str) {
-          if (c == '"') {
-            out.write("\"\"")
-            progress += 1
-          }
-          else {
-            out.write(c)
-          }
+      if(!nested) {
+        out.write("\"")
+        progress += 2
+      }
+
+      for (c <- str) {
+        if (c == '"') {
+          out.write("\"\"")
+          progress += 1
         }
-      } else {
-        var shouldNotQuoute = true
-        var i = 0
-        while (shouldNotQuoute && i < str.length) {
-          val c = str(i)
-          i += 1
-          if (c == '"' || c == '\r' || c == '\n' || c == ',') {
-            shouldNotQuoute = false
-          }
-        }
-        if (shouldNotQuoute)
-        {
-          for (c <- str) {
-            out.write(c)
-          }
-        } else {
-          out.write("\"")
-          for (c <- str) {
-            if (c == '"') {
-              out.write("\"\"")
-              progress += 1
-            }
-            else {
-              out.write(c)
-            }
-          }
-          out.write("\"")
-          progress += 2
+        else {
+          out.write(c)
         }
       }
-      progress += str.length
-//      if (!nested) {
-//        out.write('"')
-//        progress += 1
-//      }
-//
-//      for (c <- str) {
-//        if (c == '"') {
-//          out.write("\"\"")
-//          progress += 1
-//        }
-//        else {
-//          out.write(c)
-//        }
-//      }
-//
-//      progress += str.length
-//
-//      if (!nested) {
-//        out.write('"')
-//        progress += 1
-//      }
     }
+
+    if(!nested) {
+      out.write("\"")
+    }
+
+    progress += str.length
   }
 
   def getProgress: Long = progress
