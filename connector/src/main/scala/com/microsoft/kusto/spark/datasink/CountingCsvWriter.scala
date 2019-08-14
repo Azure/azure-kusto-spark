@@ -2,33 +2,33 @@ package com.microsoft.kusto.spark.datasink
 
 import java.io.Writer
 
-case class KustoCsvWriter(out: Writer) {
+case class CountingCsvWriter(out: Writer) {
   val newLineSep: String = java.security.AccessController.doPrivileged(
     new sun.security.action.GetPropertyAction("line.separator"))
   val newLineSepLength: Int = newLineSep.length
-  var progress: Long = 0L
+  var bytsCounter: Long = 0L
 
   def newLine(): Unit = {
     out.write(newLineSep)
-    progress += newLineSepLength
+    bytsCounter += newLineSepLength
   }
 
   def write(str: String): Unit = {
     out.write(str)
-    progress += str.length
+    bytsCounter += str.length
   }
 
   def writeStringField(str: String, nested: Boolean) {
     if (str.length > 0) {
       if(!nested) {
         out.write("\"")
-        progress += 2
+        bytsCounter += 2
       }
 
       for (c <- str) {
         if (c == '"') {
           out.write("\"\"")
-          progress += 1
+          bytsCounter += 1
         }
         else {
           out.write(c)
@@ -40,13 +40,13 @@ case class KustoCsvWriter(out: Writer) {
       out.write("\"")
     }
 
-    progress += str.length
+    bytsCounter += str.length
   }
 
-  def getProgress: Long = progress
+  def getProgress: Long = bytsCounter
 
   def resetProgress(): Unit = {
-    progress = 0
+    bytsCounter = 0
   }
 
 }

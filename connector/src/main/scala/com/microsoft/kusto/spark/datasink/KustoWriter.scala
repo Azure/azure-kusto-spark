@@ -203,7 +203,7 @@ object KustoWriter {
     val writer = new OutputStreamWriter(gzip, StandardCharsets.UTF_8)
 
     val buffer: BufferedWriter = new BufferedWriter(writer, GZIP_BUFFER_SIZE)
-    val csvWriter = KustoCsvWriter(buffer)
+    val csvWriter = CountingCsvWriter(buffer)
     BlobWriteResource(buffer, gzip, csvWriter, blob)
   }
 
@@ -226,9 +226,8 @@ object KustoWriter {
 
         writeRowAsCSV(row, schema, dateFormat, blobWriter.csvWriter)
 
-        // Check if we crossed the threshold for a single blob to ingest.
-        // If so, add current blob to the list of blobs to ingest, and open a new blob writer
-        if (blobWriter.csvWriter.getProgress < maxBlobSize) {
+        val shouldCommitBlockBlob = blobWriter.csvWriter.getProgress < maxBlobSize
+        if (shouldCommitBlockBlob) {
           (blobWriter, blobsCreated)
         } else {
           finalizeBlobWrite(blobWriter)
@@ -255,7 +254,7 @@ object KustoWriter {
     blobWriteResource.gzip.close()
   }
 
-  def writeRowAsCSV(row: InternalRow, schema: StructType, dateFormat: FastDateFormat, writer: KustoCsvWriter): Unit = {
+  def writeRowAsCSV(row: InternalRow, schema: StructType, dateFormat: FastDateFormat, writer: CountingCsvWriter): Unit = {
     val schemaFields: Array[StructField] = schema.fields
 
     writeField(row, fieldIndexInRow = 0, schemaFields(0).dataType, dateFormat, writer, nested = false)
@@ -267,7 +266,7 @@ object KustoWriter {
     writer.newLine()
   }
 
-  private def writeField(row: SpecializedGetters, fieldIndexInRow: Int, dataType: DataType, dateFormat: FastDateFormat, bufferedWriter: KustoCsvWriter, nested: Boolean): Unit = {
+  private def writeField(row: SpecializedGetters, fieldIndexInRow: Int, dataType: DataType, dateFormat: FastDateFormat, bufferedWriter: CountingCsvWriter, nested: Boolean): Unit = {
     if (!row.isNullAt(fieldIndexInRow)) dataType match {
       case DateType => bufferedWriter.write(DateTimeUtils.toJavaDate(row.getInt(fieldIndexInRow)).toString)
       case TimestampType => bufferedWriter.write(dateFormat.format(DateTimeUtils.toJavaTimestamp(row.getLong(fieldIndexInRow))))
@@ -280,7 +279,7 @@ object KustoWriter {
     }
   }
 
-  private def convertStructToCsv(row: InternalRow, schema: StructType, dateFormat: FastDateFormat, bufferedWriter: KustoCsvWriter): Unit = {
+  private def convertStructToCsv(row: InternalRow, schema: StructType, dateFormat: FastDateFormat, bufferedWriter: CountingCsvWriter): Unit = {
     val fields = schema.fields
 
     if (fields.length != 0) {
@@ -302,7 +301,7 @@ object KustoWriter {
     }
   }
 
-  private def convertArrayToCsv(ar: ArrayData, fieldsType: DataType, dateFormat: FastDateFormat, bufferedWriter: KustoCsvWriter): Unit = {
+  private def convertArrayToCsv(ar: ArrayData, fieldsType: DataType, dateFormat: FastDateFormat, bufferedWriter: CountingCsvWriter): Unit = {
     if (ar.numElements() == 0) bufferedWriter.write("[]") else {
       bufferedWriter.write("[")
       writeField(ar, fieldIndexInRow = 0, fieldsType, dateFormat, bufferedWriter, nested = false)
@@ -314,7 +313,7 @@ object KustoWriter {
     }
   }
 
-  private def convertMapToCsv(map: MapData, fieldsType: MapType, dateFormat: FastDateFormat, bufferedWriter: KustoCsvWriter): Unit = {
+  private def convertMapToCsv(map: MapData, fieldsType: MapType, dateFormat: FastDateFormat, bufferedWriter: CountingCsvWriter): Unit = {
     val keys = map.keyArray()
     val values = map.valueArray()
     bufferedWriter.write("{")
@@ -335,12 +334,12 @@ object KustoWriter {
     bufferedWriter.write("}")
   }
 
-  private def GetStringFromUTF8(str: UTF8String, nested: Boolean, writer: KustoCsvWriter) : Unit = {
+  private def GetStringFromUTF8(str: UTF8String, nested: Boolean, writer: CountingCsvWriter) : Unit = {
     writer.writeStringField(str.toString, nested)
   }
 }
 
-case class BlobWriteResource(writer: BufferedWriter, gzip: GZIPOutputStream, csvWriter: KustoCsvWriter, blob: CloudBlockBlob)
+case class BlobWriteResource(writer: BufferedWriter, gzip: GZIPOutputStream, csvWriter: CountingCsvWriter, blob: CloudBlockBlob)
 
 case class KustoWriteResource(authentication: KustoAuthentication,
                               coordinates: KustoCoordinates,

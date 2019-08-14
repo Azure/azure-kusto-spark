@@ -6,7 +6,7 @@ import java.util
 import java.util.TimeZone
 import java.util.zip.GZIPOutputStream
 
-import com.microsoft.kusto.spark.datasink.{BlobWriteResource, KustoCsvWriter, KustoWriter}
+import com.microsoft.kusto.spark.datasink.{BlobWriteResource, CountingCsvWriter, KustoWriter}
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.spark.SparkConf
@@ -43,7 +43,7 @@ class KustoWriterTests extends FlatSpec with Matchers {
     val byteArrayOutputStream = new ByteArrayOutputStream()
     val streamWriter = new OutputStreamWriter(byteArrayOutputStream)
     val writer = new BufferedWriter(streamWriter)
-    val csvWriter = KustoCsvWriter(writer)
+    val csvWriter = CountingCsvWriter(writer)
     KustoWriter.writeRowAsCSV(dfRow, df.schema, dateFormat, csvWriter)
     writer.flush()
     writer.close()
@@ -59,7 +59,7 @@ class KustoWriterTests extends FlatSpec with Matchers {
     val byteArrayOutputStream = new ByteArrayOutputStream()
     val streamWriter = new OutputStreamWriter(byteArrayOutputStream)
     val writer = new BufferedWriter(streamWriter)
-    val csvWriter = KustoCsvWriter(writer)
+    val csvWriter = CountingCsvWriter(writer)
     KustoWriter.writeRowAsCSV(dfRow, df.schema, dateFormat, csvWriter)
     writer.flush()
     writer.close()
@@ -75,7 +75,7 @@ class KustoWriterTests extends FlatSpec with Matchers {
     val byteArrayOutputStream = new ByteArrayOutputStream()
     val streamWriter = new OutputStreamWriter(byteArrayOutputStream)
     val writer = new BufferedWriter(streamWriter)
-    val csvWriter = KustoCsvWriter(writer)
+    val csvWriter = CountingCsvWriter(writer)
 
     KustoWriter.writeRowAsCSV(dfRow, df.schema, dateFormat, csvWriter)
     writer.flush()
@@ -86,7 +86,7 @@ class KustoWriterTests extends FlatSpec with Matchers {
   "finalizeFileWrite" should "should flush and close buffers" in {
     val gzip = mock(classOf[GZIPOutputStream])
     val buffer = mock(classOf[BufferedWriter])
-    val csvWriter = KustoCsvWriter(buffer)
+    val csvWriter = CountingCsvWriter(buffer)
 
     val fileWriteResource = BlobWriteResource(buffer, gzip, csvWriter, null)
     KustoWriter.finalizeBlobWrite(fileWriteResource)
@@ -152,7 +152,7 @@ class KustoWriterTests extends FlatSpec with Matchers {
     val byteArrayOutputStream = new ByteArrayOutputStream()
     val streamWriter = new OutputStreamWriter(byteArrayOutputStream)
     val writer = new BufferedWriter(streamWriter)
-    val csvWriter = KustoCsvWriter(writer)
+    val csvWriter = CountingCsvWriter(writer)
 
     KustoWriter.writeRowAsCSV(dfRow, df.schema, dateFormat, csvWriter)
     writer.flush()
