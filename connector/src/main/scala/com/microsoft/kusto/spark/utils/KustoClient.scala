@@ -100,6 +100,7 @@ class KustoClient(val clusterAlias: String, val engineClient: Client, val dmClie
     val mergeTask = Future {
       try {
         partitionsResults.value.asScala.foreach {
+          var finalRes: IngestionStatus = null
           partitionResult =>
             KDSU.runSequentially[IngestionStatus](
               func = () => partitionResult.ingestionResult.getIngestionStatusCollection.get(0),
@@ -107,20 +108,22 @@ class KustoClient(val clusterAlias: String, val engineClient: Client, val dmClie
               delayPeriodBetweenCalls,
               (timeout.toMillis / delayPeriodBetweenCalls + 5).toInt,
               res => res.status == OperationStatus.Pending,
-              res => res.status match {
-                case OperationStatus.Pending =>
-                  throw new RuntimeException(s"Ingestion to Kusto failed on timeout failure. Cluster: '${coordinates.cluster}', " +
-                    s"database: '${coordinates.database}', table: '$tmpTableName', batch: '$batchIdIfExists', partition: '${partitionResult.partitionId}'")
-                case OperationStatus.Succeeded =>
-                  KDSU.logInfo(myName, s"Ingestion to Kusto succeeded. " +
-                    s"Cluster: '${coordinates.cluster}', " +
-                    s"database: '${coordinates.database}', " +
-                    s"table: '$tmpTableName', batch: '$batchIdIfExists', partition: '${partitionResult.partitionId}'', from: '${res.ingestionSourcePath}', Operation ${res.operationId}")
-                case otherStatus =>
-                  throw new RuntimeException(s"Ingestion to Kusto failed with status '$otherStatus'." +
-                    s" Cluster: '${coordinates.cluster}', database: '${coordinates.database}', " +
-                    s"table: '$tmpTableName', batch: '$batchIdIfExists', partition: '${partitionResult.partitionId}''. Ingestion info: '${readIngestionResult(res)}'")
-              }).await(timeout.toMillis, TimeUnit.MILLISECONDS)
+              res => finalRes = res).await(timeout.toMillis, TimeUnit.MILLISECONDS)
+
+            finalRes.status match {
+              case OperationStatus.Pending =>
+                throw new RuntimeException(s"Ingestion to Kusto failed on timeout failure. Cluster: '${coordinates.cluster}', " +
+                  s"database: '${coordinates.database}', table: '$tmpTableName', batch: '$batchIdIfExists', partition: '${partitionResult.partitionId}'")
+              case OperationStatus.Succeeded =>
+                KDSU.logInfo(myName, s"Ingestion to Kusto succeeded. " +
+                  s"Cluster: '${coordinates.cluster}', " +
+                  s"database: '${coordinates.database}', " +
+                  s"table: '$tmpTableName', batch: '$batchIdIfExists', partition: '${partitionResult.partitionId}'', from: '${finalRes.ingestionSourcePath}', Operation ${finalRes.operationId}")
+              case otherStatus =>
+                throw new RuntimeException(s"Ingestion to Kusto failed with status '$otherStatus'." +
+                  s" Cluster: '${coordinates.cluster}', database: '${coordinates.database}', " +
+                  s"table: '$tmpTableName', batch: '$batchIdIfExists', partition: '${partitionResult.partitionId}''. Ingestion info: '${readIngestionResult(finalRes)}'")
+            }
         }
 
         // Move data to real table
@@ -133,8 +136,7 @@ class KustoClient(val clusterAlias: String, val engineClient: Client, val dmClie
           KDSU.reportExceptionAndThrow(
             myName,
             ex,
-            "Trying to poll on pending ingestions", coordinates.cluster, coordinates.database, coordinates.table.getOrElse("Unspecified table name"),
-            shouldNotThrow = true
+            "Trying to poll on pending ingestions", coordinates.cluster, coordinates.database, coordinates.table.getOrElse("Unspecified table name")
           )
       } finally {
         cleanupIngestionByproducts(database, kustoAdminClient, tmpTableName)

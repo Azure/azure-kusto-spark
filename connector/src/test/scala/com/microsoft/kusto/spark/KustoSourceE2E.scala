@@ -4,7 +4,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import com.microsoft.azure.kusto.data.{ClientFactory, ConnectionStringBuilder}
 import com.microsoft.kusto.spark.common.KustoDebugOptions
-import com.microsoft.kusto.spark.datasink.KustoSinkOptions
+import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode}
 import com.microsoft.kusto.spark.datasource.KustoSourceOptions
 import com.microsoft.kusto.spark.sql.extension.SparkExtension._
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
@@ -52,80 +52,81 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
   private val loggingLevel: Option[String] = Option(System.getProperty("logLevel"))
   if (loggingLevel.isDefined) KDSU.setLoggingLevel(loggingLevel.get)
 
-  "KustoSource" should "execute a read query on Kusto cluster in lean mode" taggedAs KustoE2E in {
-    val table: String = System.getProperty(KustoSinkOptions.KUSTO_TABLE)
-    val query: String = System.getProperty(KustoSourceOptions.KUSTO_QUERY, s"$table | where (toint(ColB) % 1000 == 0) | distinct ColA ")
-
-    val conf: Map[String, String] = Map(
-      KustoSourceOptions.KUSTO_AAD_CLIENT_ID -> appId,
-      KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
-      KustoDebugOptions.KUSTO_DBG_FORCE_READ_MODE -> "lean"
-    )
-
-    val df = spark.read.kusto(cluster, database, query, conf)
-    df.show()
-  }
-
-  "KustoSource" should "execute a read query on Kusto cluster in scale mode" taggedAs KustoE2E in {
-    val table: String = System.getProperty(KustoSinkOptions.KUSTO_TABLE)
-    val query: String = System.getProperty(KustoSourceOptions.KUSTO_QUERY, s"$table | where (toint(ColB) % 1 == 0)")
-
-    val storageAccount: String = System.getProperty("storageAccount")
-    val container: String = System.getProperty("container")
-    val blobKey: String = System.getProperty("blobKey")
-    val blobSas: String = System.getProperty("blobSas")
-    val blobSasConnectionString: String = System.getProperty("blobSasQuery")
-
-    val conf: Map[String, String] = Map(
-      KustoSourceOptions.KUSTO_AAD_CLIENT_ID -> appId,
-      KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
-      KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME -> storageAccount,
-      KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_KEY -> blobKey,
-      KustoSourceOptions.KUSTO_BLOB_CONTAINER -> container
-    )
-
-    spark.read.kusto(cluster, database, query, conf).show(20)
-  }
+//  "KustoSource" should "execute a read query on Kusto cluster in lean mode" taggedAs KustoE2E in {
+//    val table: String = System.getProperty(KustoSinkOptions.KUSTO_TABLE)
+//    val query: String = System.getProperty(KustoSourceOptions.KUSTO_QUERY, s"$table | where (toint(ColB) % 1000 == 0) | distinct ColA ")
+//
+//    val conf: Map[String, String] = Map(
+//      KustoSourceOptions.KUSTO_AAD_CLIENT_ID -> appId,
+//      KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+//      KustoDebugOptions.KUSTO_DBG_FORCE_READ_MODE -> "lean"
+//    )
+//
+//    val df = spark.read.kusto(cluster, database, query, conf)
+//    df.show()
+//  }
+//
+//  "KustoSource" should "execute a read query on Kusto cluster in scale mode" taggedAs KustoE2E in {
+//    val table: String = System.getProperty(KustoSinkOptions.KUSTO_TABLE)
+//    val query: String = System.getProperty(KustoSourceOptions.KUSTO_QUERY, s"$table | where (toint(ColB) % 1 == 0)")
+//
+//    val storageAccount: String = System.getProperty("storageAccount")
+//    val container: String = System.getProperty("container")
+//    val blobKey: String = System.getProperty("blobKey")
+//    val blobSas: String = System.getProperty("blobSas")
+//    val blobSasConnectionString: String = System.getProperty("blobSasQuery")
+//
+//    val conf: Map[String, String] = Map(
+//      KustoSourceOptions.KUSTO_AAD_CLIENT_ID -> appId,
+//      KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+//      KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME -> storageAccount,
+//      KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_KEY -> blobKey,
+//      KustoSourceOptions.KUSTO_BLOB_CONTAINER -> container
+//    )
+//
+//    spark.read.kusto(cluster, database, query, conf).show(20)
+//  }
 
   "KustoConnector" should "write to a kusto table and read it back in lean mode" taggedAs KustoE2E in {
     import spark.implicits._
 
-    val rowId = new AtomicInteger(1)
-    def newRow(): String = s"row-${rowId.getAndIncrement()}"
-    val expectedNumberOfRows: Int =  100
-    val rows: immutable.IndexedSeq[(String, Int)] = (1 to expectedNumberOfRows).map(v => (newRow(), v))
-    val dfOrig = rows.toDF("name", "value")
-    val table = KustoQueryUtils.simplifyName(s"KustoSparkReadWriteTest_${UUID.randomUUID()}")
+//    val rowId = new AtomicInteger(1)
+//    def newRow(): String = s"row-${rowId.getAndIncrement()}"
+//    val expectedNumberOfRows: Int =  100
+//    val rows: immutable.IndexedSeq[(String, Int)] = (1 to expectedNumberOfRows).map(v => (newRow(), v))
+//    val dfOrig = rows.toDF("name", "value")
+//    val table = KustoQueryUtils.simplifyName(s"KustoSparkReadWriteTest_${UUID.randomUUID()}")
 
     // Create a new table.
-    val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://$cluster.kusto.windows.net", appId, appKey, authority)
-    val kustoAdminClient = ClientFactory.createClient(engineKcsb)
-    kustoAdminClient.execute(database, generateTableCreateCommand(table, columnsTypesAndNames = "ColA:string, ColB:int"))
-
+//    val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://$cluster.kusto.windows.net", appId, appKey, authority)
+//    val kustoAdminClient = ClientFactory.createClient(engineKcsb)
+//    kustoAdminClient.execute(database, generateTableCreateCommand(table, columnsTypesAndNames = "ColA:string, ColB:int"))
+    val dfOrig = spark.read.parquet("C:\\Users\\ohbitton\\Desktop\\Adobe\\batchId=0bfaac359eeb40fb8c59318df67adb3e\\c_date=2018-03-09")
     dfOrig.write
       .format("com.microsoft.kusto.spark.datasource")
       .option(KustoSinkOptions.KUSTO_CLUSTER, cluster)
       .option(KustoSinkOptions.KUSTO_DATABASE, database)
-      .option(KustoSinkOptions.KUSTO_TABLE, table)
+      .option(KustoSinkOptions.KUSTO_TABLE, "deleteMEe")
       .option(KustoSinkOptions.KUSTO_AAD_CLIENT_ID, appId)
       .option(KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD, appKey)
       .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, authority)
+      .option(KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS, SinkTableCreationMode.CreateIfNotExist.toString)
       .save()
 
-    val conf: Map[String, String] = Map(
-      KustoSinkOptions.KUSTO_AAD_CLIENT_ID -> appId,
-      KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
-      KustoDebugOptions.KUSTO_DBG_FORCE_READ_MODE -> "lean"
-    )
-
-    val dfResult = spark.read.kusto(cluster, database, table, conf)
-
-    val orig = dfOrig.select("name", "value").rdd.map(x => (x.getString(0), x.getInt(1))).collect().sortBy(_._2)
-    val result = dfResult.select("ColA", "ColB").rdd.map(x => (x.getString(0), x.getInt(1))).collect().sortBy(_._2)
-
-    assert(orig.deep == result.deep)
-
-    // Cleanup
-    KustoTestUtils.tryDropAllTablesByPrefix(kustoAdminClient, database, "KustoSparkReadWriteTest")
+//    val conf: Map[String, String] = Map(
+//      KustoSinkOptions.KUSTO_AAD_CLIENT_ID -> appId,
+//      KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+//      KustoDebugOptions.KUSTO_DBG_FORCE_READ_MODE -> "lean"
+//    )
+//
+//    val dfResult = spark.read.kusto(cluster, database, table, conf)
+//
+//    val orig = dfOrig.select("name", "value").rdd.map(x => (x.getString(0), x.getInt(1))).collect().sortBy(_._2)
+//    val result = dfResult.select("ColA", "ColB").rdd.map(x => (x.getString(0), x.getInt(1))).collect().sortBy(_._2)
+//
+//    assert(orig.deep == result.deep)
+//
+//    // Cleanup
+//    KustoTestUtils.tryDropAllTablesByPrefix(kustoAdminClient, database, "KustoSparkReadWriteTest")
   }
 }

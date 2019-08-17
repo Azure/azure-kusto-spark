@@ -43,9 +43,9 @@ case class CountingCsvWriter(out: Writer) {
     bytsCounter += str.length
   }
 
-  def getProgress: Long = bytsCounter
+  def getCounter: Long = bytsCounter
 
-  def resetProgress(): Unit = {
+  def resetCounter(): Unit = {
     bytsCounter = 0
   }
 
