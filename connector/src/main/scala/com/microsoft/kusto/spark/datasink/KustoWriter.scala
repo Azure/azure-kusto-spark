@@ -297,15 +297,23 @@ object KustoWriter {
       }
 
       csvWriter.write('{')
-      if(!row.isNullAt(0)) {
-        writeStructField(0)
+
+      var x = 0
+      var isNull = true
+      while(x < fields.length && isNull){
+        isNull = row.isNullAt(x)
+        if(!isNull){
+          writeStructField(x)
+        }
+        x+=1
       }
 
-      for (x <- 1 until fields.length) {
+      while (x < fields.length) {
         if(!row.isNullAt(x)) {
           csvWriter.write(',')
           writeStructField(x)
         }
+        x+=1
       }
       csvWriter.write('}')
 
@@ -351,15 +359,22 @@ object KustoWriter {
 
     csvWriter.write('{')
 
-    if(!values.isNullAt(0)) {
-      writeMapField(0)
+    var x = 0
+    var isNull = true
+    while(x < map.keyArray().numElements() && isNull){
+      isNull = values.isNullAt(x)
+      if(!isNull){
+        writeMapField(x)
+      }
+      x+=1
     }
 
-    for (x <- 1 until map.keyArray().numElements()) {
+    while(x < map.keyArray().numElements()) {
       if(!values.isNullAt(x)) {
         csvWriter.write(',')
         writeMapField(x)
       }
+      x+=1
     }
 
     csvWriter.write('}')
