@@ -13,6 +13,10 @@ case class CountingCsvWriter(out: Writer) {
     bytsCounter += newLineSepLength
   }
 
+  def write(c: Char): Unit ={
+    out.write(c)
+    bytsCounter += 1
+  }
   def write(str: String): Unit = {
     out.write(str)
     bytsCounter += str.length
@@ -20,10 +24,14 @@ case class CountingCsvWriter(out: Writer) {
 
   def writeStringField(str: String, nested: Boolean) {
     if (str.length > 0) {
-      if(!nested) {
-        out.write("\"")
+
+      out.write('"')
+      if(nested){
+        out.write('"')
         bytsCounter += 2
       }
+
+      bytsCounter += 2
 
       for (c <- str) {
         if (c == '"') {
@@ -34,13 +42,14 @@ case class CountingCsvWriter(out: Writer) {
           out.write(c)
         }
       }
-    }
 
-    if(!nested) {
-      out.write("\"")
-    }
+      out.write('"')
+      if(nested){
+        out.write('"')
+      }
 
-    bytsCounter += str.length
+      bytsCounter += str.length
+    }
   }
 
   def getCounter: Long = bytsCounter

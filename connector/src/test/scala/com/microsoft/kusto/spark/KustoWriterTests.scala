@@ -3,11 +3,12 @@ package com.microsoft.kusto.spark
 import java.io.{BufferedWriter, ByteArrayOutputStream, OutputStreamWriter}
 import java.nio.charset.StandardCharsets
 import java.util
-import java.util.TimeZone
+import java.util.{Collections, TimeZone}
 import java.util.zip.GZIPOutputStream
 
 import com.microsoft.kusto.spark.datasink.{BlobWriteResource, CountingCsvWriter, KustoWriter}
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
+import com.univocity.parsers.csv.{CsvWriter, CsvWriterSettings}
 import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.InternalRow
@@ -54,16 +55,16 @@ class KustoWriterTests extends FlatSpec with Matchers {
     val df: DataFrame = getDF(isNestedSchema = false)
     val dfRow: InternalRow = df.queryExecution.toRdd.collect().head
     val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone("UTC"))
-    val expected = Array("[true,false,]", "[1,2,3,]", "", "\"value\"", "[\"a\",\"b\",\"c\",]", "[[\"a\",\"b\",\"c\"],]",
-      "{\"bool\":true,\"dict_ar\":[{\"int\":1,\"string\":\"a\"},{\"int\":2,\"string\":\"b\"}],\"int\":1,\"int_ar\":[1,2,3],\"string\":\"abc\",\"string_ar\":[\"a\",\"b\",\"c\"]}").mkString(",") + lineSep
+    val expected = """"[true,false,null]","[1,2,3,null]",,"value","[""a"",""b"",""c"",null]","[[""a"",""b"",""c""],null]","{""bool"":true,""dict_ar"":[{""int"":1,""string"":""a""},{""int"":2,""string"":""b""}],""int"":1,""int_ar"":[1,2,3],""string"":""abc"",""string_ar"":[""a"",""b"",""c""]}"""".concat(lineSep)
+
     val byteArrayOutputStream = new ByteArrayOutputStream()
     val streamWriter = new OutputStreamWriter(byteArrayOutputStream)
     val writer = new BufferedWriter(streamWriter)
-    val csvWriter = CountingCsvWriter(writer)
+    var csvWriter = CountingCsvWriter(writer)
     KustoWriter.writeRowAsCSV(dfRow, df.schema, dateFormat, csvWriter)
     writer.flush()
-    writer.close()
-    val got = byteArrayOutputStream.toString
+    val got = byteArrayOutputStream.toString()
+
     got shouldEqual expected
   }
 
@@ -80,7 +81,7 @@ class KustoWriterTests extends FlatSpec with Matchers {
     KustoWriter.writeRowAsCSV(dfRow, df.schema, dateFormat, csvWriter)
     writer.flush()
     writer.close()
-    csvWriter.getProgress shouldEqual expectedSize
+    csvWriter.getCounter shouldEqual expectedSize
   }
 
   "finalizeFileWrite" should "should flush and close buffers" in {
@@ -157,7 +158,7 @@ class KustoWriterTests extends FlatSpec with Matchers {
     KustoWriter.writeRowAsCSV(dfRow, df.schema, dateFormat, csvWriter)
     writer.flush()
     writer.close()
-    byteArrayOutputStream.toString shouldEqual Array("{\"asd\":{\"arrayStrings\":[\"stringVal\"]},\"asd2\":{\"arrayStrings\":[\"stringVal2\"]}}").mkString(",") + lineSep
+    byteArrayOutputStream.toString shouldEqual "\"{\"\"asd\"\":{\"\"arrayStrings\"\":[\"\"stringVal\"\"]},\"\"asd2\"\":{\"\"arrayStrings\"\":[\"\"stringVal2\"\"]}}\"" + lineSep
   }
 }
 

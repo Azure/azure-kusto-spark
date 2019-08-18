@@ -263,7 +263,7 @@ object KustoWriter {
     }
 
     for (i <- 1 until row.numFields) {
-      writer.write(",")
+      writer.write(',')
       if (!row.isNullAt(i))
       {
         writeField(row, i, schemaFields(i).dataType, dateFormat, writer, nested = false, omitNulls)
@@ -280,87 +280,100 @@ object KustoWriter {
     case TimestampType => csvWriter.write(dateFormat.format(DateTimeUtils.toJavaTimestamp(row.getLong(fieldIndexInRow))))
     case StringType => GetStringFromUTF8(row.getUTF8String(fieldIndexInRow), nested, csvWriter)
     case BooleanType => csvWriter.write(row.getBoolean(fieldIndexInRow).toString)
-    case structType: StructType => convertStructToCsv(row.getStruct(fieldIndexInRow, structType.length), structType, dateFormat, csvWriter, omitNulls)
-    case arrType: ArrayType => convertArrayToCsv(row.getArray(fieldIndexInRow), arrType.elementType, dateFormat, csvWriter, omitNulls)
-    case mapType: MapType => convertMapToCsv(row.getMap(fieldIndexInRow), mapType, dateFormat, csvWriter, omitNulls)
+    case structType: StructType => convertStructToCsv(row.getStruct(fieldIndexInRow, structType.length), structType, dateFormat, csvWriter, omitNulls, nested)
+    case arrType: ArrayType => convertArrayToCsv(row.getArray(fieldIndexInRow), arrType.elementType, dateFormat, csvWriter, omitNulls, nested)
+    case mapType: MapType => convertMapToCsv(row.getMap(fieldIndexInRow), mapType, dateFormat, csvWriter, omitNulls, nested)
     case _ => csvWriter.write(row.get(fieldIndexInRow, dataType).toString)
     }
   }
 
-  private def convertStructToCsv(row: InternalRow, schema: StructType, dateFormat: FastDateFormat, csvWriter: CountingCsvWriter, omitNulls: Boolean): Unit = {
+  private def convertStructToCsv(row: InternalRow, schema: StructType, dateFormat: FastDateFormat, csvWriter: CountingCsvWriter, omitNulls: Boolean, nested: Boolean): Unit = {
 
     val fields = schema.fields
     if (fields.length != 0) {
-      csvWriter.write("\"")
-      csvWriter.write("{")
-      if(!omitNulls && !row.isNullAt(0)) {
+
+      if(!nested){
+        csvWriter.write('"')
+      }
+
+      csvWriter.write('{')
+      if(!row.isNullAt(0) || !omitNulls) {
         writeStructField(0)
       }
 
       for (x <- 1 until fields.length) {
-        if(!omitNulls && !row.isNullAt(x)) {
-          csvWriter.write(",")
+        if(!row.isNullAt(x) || !omitNulls) {
+          csvWriter.write(',')
           writeStructField(x)
         }
       }
-      csvWriter.write("}")
-      csvWriter.write("\"")
-    }
+      csvWriter.write('}')
 
-    def writeStructField(idx: Int): Unit ={
-        csvWriter.write("\"")
-        csvWriter.write("\"")
-        csvWriter.writeStringField(fields(idx).name, nested = true)
-        csvWriter.write("\"")
-        csvWriter.write("\"")
-        csvWriter.write(":")
-        writeField(row, idx, fields(idx).dataType, dateFormat, csvWriter, nested = false, omitNulls)
-
-    }
-  }
-
-  private def convertArrayToCsv(ar: ArrayData, fieldsType: DataType, dateFormat: FastDateFormat, csvWriter: CountingCsvWriter, omitNulls: Boolean): Unit = {
-    if (ar.numElements() == 0) csvWriter.write("[]") else {
-      csvWriter.write("[")
-      if(ar.isNullAt(0)) csvWriter.write("null") else writeField(ar, fieldIndexInRow = 0, fieldsType, dateFormat, csvWriter, nested = false, omitNulls)
-      for (x <- 1 until ar.numElements()) {
-        csvWriter.write(",")
-        if(ar.isNullAt(x)) csvWriter.write("null") else writeField(ar, x, fieldsType, dateFormat, csvWriter, nested = false, omitNulls)
+      if(!nested){
+        csvWriter.write('"')
       }
-      csvWriter.write("]")
+    }
+
+    def writeStructField(idx: Int): Unit = {
+        csvWriter.writeStringField(fields(idx).name, nested = true)
+        csvWriter.write(':')
+        writeField(row, idx, fields(idx).dataType, dateFormat, csvWriter, nested = true, omitNulls)
+
     }
   }
 
-  private def convertMapToCsv(map: MapData, fieldsType: MapType, dateFormat: FastDateFormat, csvWriter: CountingCsvWriter, omitNulls: Boolean): Unit = {
+  private def convertArrayToCsv(ar: ArrayData, fieldsType: DataType, dateFormat: FastDateFormat, csvWriter: CountingCsvWriter, omitNulls: Boolean, nested: Boolean): Unit = {
+    if (ar.numElements() == 0) csvWriter.write("[]") else {
+      if (!nested){
+        csvWriter.write('"')
+      }
+
+      csvWriter.write('[')
+      if(ar.isNullAt(0)) csvWriter.write("null") else writeField(ar, fieldIndexInRow = 0, fieldsType, dateFormat, csvWriter, nested = true, omitNulls)
+      for (x <- 1 until ar.numElements()) {
+        csvWriter.write(',')
+        if(ar.isNullAt(x)) csvWriter.write("null") else writeField(ar, x, fieldsType, dateFormat, csvWriter, nested = true, omitNulls)
+      }
+      csvWriter.write(']')
+
+      if (!nested){
+        csvWriter.write('"')
+      }
+    }
+  }
+
+  private def convertMapToCsv(map: MapData, fieldsType: MapType, dateFormat: FastDateFormat, csvWriter: CountingCsvWriter, omitNulls: Boolean, nested: Boolean): Unit = {
     val keys = map.keyArray()
     val values = map.valueArray()
 
-    csvWriter.write("\"")
+    if(!nested){
+      csvWriter.write('"')
+    }
 
-    csvWriter.write("{")
+    csvWriter.write('{')
 
-    if(!values.isNullAt(0)) {
+    if(!values.isNullAt(0) || !omitNulls) {
       writeMapField(0)
     }
 
     for (x <- 1 until map.keyArray().numElements()) {
-      if(!values.isNullAt(x)) {
-        csvWriter.write(",")
+      if(!values.isNullAt(x) || !omitNulls) {
+        csvWriter.write(',')
         writeMapField(x)
       }
     }
 
-    csvWriter.write("}")
-    csvWriter.write("\"")
+    csvWriter.write('}')
+    if(!nested){
+      csvWriter.write('"')
+    }
 
     def writeMapField(idx: Int): Unit ={
-      csvWriter.write("\"")
-      csvWriter.write("\"")
-      writeField(keys, fieldIndexInRow = idx, dataType = fieldsType.keyType, dateFormat = dateFormat, csvWriter = csvWriter, nested = true, omitNulls)
-      csvWriter.write("\"")
-      csvWriter.write("\"")
-      csvWriter.write(":")
-      writeField(values, fieldIndexInRow = idx, dataType = fieldsType.valueType, dateFormat = dateFormat, csvWriter = csvWriter, nested = false, omitNulls)
+      csvWriter.write('"')
+      writeField(keys, fieldIndexInRow = idx, dataType = fieldsType.keyType, dateFormat = dateFormat, csvWriter = csvWriter, nested = false, omitNulls)
+      csvWriter.write('"')
+      csvWriter.write(':')
+      writeField(values, fieldIndexInRow = idx, dataType = fieldsType.valueType, dateFormat = dateFormat, csvWriter = csvWriter, nested = true, omitNulls)
      }
   }
 
