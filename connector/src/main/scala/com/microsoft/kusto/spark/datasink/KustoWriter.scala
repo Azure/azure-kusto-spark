@@ -297,12 +297,12 @@ object KustoWriter {
       }
 
       csvWriter.write('{')
-      if(!row.isNullAt(0) || !omitNulls) {
+      if(!(row.isNullAt(0) && omitNulls)) {
         writeStructField(0)
       }
 
       for (x <- 1 until fields.length) {
-        if(!row.isNullAt(x) || !omitNulls) {
+        if(!(row.isNullAt(x) && omitNulls)) {
           csvWriter.write(',')
           writeStructField(x)
         }
@@ -318,7 +318,6 @@ object KustoWriter {
         csvWriter.writeStringField(fields(idx).name, nested = true)
         csvWriter.write(':')
         writeField(row, idx, fields(idx).dataType, dateFormat, csvWriter, nested = true, omitNulls)
-
     }
   }
 
@@ -352,12 +351,12 @@ object KustoWriter {
 
     csvWriter.write('{')
 
-    if(!values.isNullAt(0) || !omitNulls) {
+    if(!(values.isNullAt(0) && omitNulls)) {
       writeMapField(0)
     }
 
     for (x <- 1 until map.keyArray().numElements()) {
-      if(!values.isNullAt(x) || !omitNulls) {
+      if(!(values.isNullAt(x) && omitNulls)) {
         csvWriter.write(',')
         writeMapField(x)
       }
