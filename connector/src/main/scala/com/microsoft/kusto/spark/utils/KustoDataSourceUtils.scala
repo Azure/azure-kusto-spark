@@ -161,7 +161,7 @@ object KustoDataSourceUtils {
     val timeout = new FiniteDuration(parameters.getOrElse(KustoSinkOptions.KUSTO_TIMEOUT_LIMIT, KCONST.defaultTimeoutAsString).toLong, TimeUnit.SECONDS)
 
     val ingestionPropertiesAsJson = parameters.get(KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON)
-    val omitNulls = parameters.getOrElse(KustoSinkOptions.KUSTO_OMIT_NULLS, "false").trim.toBoolean
+    val omitNulls = parameters.getOrElse(KustoSinkOptions.KUSTO_OMIT_NULLS, "true").trim.toBoolean
 
     val writeOptions = WriteOptions(
       tableCreation,
