@@ -1,11 +1,9 @@
 package com.microsoft.kusto.spark.datasink
 
-
 import java.io._
 import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.security.InvalidParameterException
-import java.util
 import java.util.zip.GZIPOutputStream
 import java.util.{TimeZone, UUID}
 
@@ -19,7 +17,6 @@ import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.{KustoClient, KustoClientCache, KustoQueryUtils, KustoConstants => KCONST, KustoDataSourceUtils => KDSU}
-import com.univocity.parsers.csv.{CsvWriter, CsvWriterSettings}
 import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.InternalRow
@@ -163,6 +160,9 @@ object KustoWriter {
       } + ", table " + targetTable)
     }
 
+    KDSU.logWarn(myName, s"Ingesting using ingest client - partition: ${TaskContext.getPartitionId()}")
+    val t1 = System.currentTimeMillis()
+
     blobList.map { blobSizePair =>
       val (blob, blobSize) = (blobSizePair._1, blobSizePair._2)
       val signature = blob.getServiceClient.getCredentials.asInstanceOf[StorageCredentialsSharedAccessSignature]
@@ -172,6 +172,8 @@ object KustoWriter {
 
       ingestClient.ingestFromBlob(blobSourceInfo, ingestionProperties)
     }.foreach(blob => partitionsResults.add(PartitionResult(blob, TaskContext.getPartitionId)))
+
+    KDSU.logWarn(myName, s"Finished ingesting using ingest client - partition: ${TaskContext.getPartitionId()} , took:${System.currentTimeMillis() - t1}")
   }
 
   private def ingestToTemporaryTableByWorkers(
@@ -190,26 +192,18 @@ object KustoWriter {
     ingestRowsIntoKusto(rows, ingestClient, partitionsResults)
   }
 
-  def all(list: util.ArrayList[Boolean]): Boolean = {
-    val it = list.iterator
-    var res = true
-    while (it.hasNext && res) {
-      res = it.next()
-    }
-    res
-  }
-
   def createBlobWriter(schema: StructType,
                        tableCoordinates: KustoCoordinates,
                        tmpTableName: String,
                        container: CloudBlobContainer): BlobWriteResource = {
-    val blobName = s"${tableCoordinates.database}_${tmpTableName}_${UUID.randomUUID.toString}_SparkStreamUpload.gz"
+    val blobName = s"${tableCoordinates.database}_${tmpTableName}_${UUID.randomUUID.toString}_SparkStreamUpload.csv.gz"
     val blob: CloudBlockBlob = container.getBlockBlobReference(blobName)
     val gzip: GZIPOutputStream = new GZIPOutputStream(blob.openOutputStream())
 
     val writer = new OutputStreamWriter(gzip, StandardCharsets.UTF_8)
+
     val buffer: BufferedWriter = new BufferedWriter(writer, GZIP_BUFFER_SIZE)
-    val csvWriter: CsvWriter = new CsvWriter(buffer, new CsvWriterSettings)
+    val csvWriter = CountingCsvWriter(buffer)
     BlobWriteResource(buffer, gzip, csvWriter, blob)
   }
 
@@ -218,34 +212,35 @@ object KustoWriter {
                                    parameters: KustoWriteResource): Seq[(CloudBlockBlob, Long)] = {
     import parameters._
 
-    var kustoClient = KustoClientCache.getClient(coordinates.cluster, authentication)
-    var initialStorageUri = kustoClient.getNewTempBlobReference
+    val kustoClient = KustoClientCache.getClient(coordinates.cluster, authentication)
+    val initialStorageUri = kustoClient.getNewTempBlobReference
     val initialContainer: CloudBlobContainer = new CloudBlobContainer(new URI(initialStorageUri))
+
     //This blobWriter will be used later to write the rows to blob storage from which it will be ingested to Kusto
     val initialBlobWriter: BlobWriteResource = createBlobWriter(schema, coordinates, tmpTableName, initialContainer)
     val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone(writeOptions.timeZone))
 
     // Serialize rows to ingest and send to blob storage.
-    val (currentFileSize, currentBlobWriter, blobsToIngest) = rows.foldLeft[(Long, BlobWriteResource, Seq[(CloudBlockBlob, Long)])]((0, initialBlobWriter, Seq())) {
-      case ((size, blobWriter, blobsCreated), row) =>
-        val csvRowResult: CsvRowResult = convertRowToCSV(row, schema, dateFormat)
-        blobWriter.csvWriter.writeRow(csvRowResult.formattedRow)
-        val newTotalSize = size + csvRowResult.rowByteSize
+    val (currentBlobWriter, blobsToIngest) = rows.foldLeft[(BlobWriteResource, Seq[(CloudBlockBlob, Long)])]((initialBlobWriter, Seq())) {
+      case ((blobWriter, blobsCreated), row) =>
 
-        // Check if we crossed the threshold for a single blob to ingest.
-        // If so, add current blob to the list of blobs to ingest, and open a new blob writer
-        if (newTotalSize < maxBlobSize) {
-          (newTotalSize, blobWriter, blobsCreated)
+        writeRowAsCSV(row, schema, dateFormat, blobWriter.csvWriter)
+
+        val shouldCommitBlockBlob = blobWriter.csvWriter.getCounter < maxBlobSize
+        if (shouldCommitBlockBlob) {
+          (blobWriter, blobsCreated)
         } else {
           finalizeBlobWrite(blobWriter)
+
           val container: CloudBlobContainer = new CloudBlobContainer(new URI(kustoClient.getNewTempBlobReference))
-          (0, createBlobWriter(schema, coordinates, tmpTableName, container), blobsCreated :+ (blobWriter.blob, newTotalSize))
+          (createBlobWriter(schema, coordinates, tmpTableName, container), blobsCreated :+ (blobWriter.blob, blobWriter.csvWriter.getCounter))
         }
     }
 
-    if (currentFileSize > 0) {
-      finalizeBlobWrite(currentBlobWriter)
-      blobsToIngest :+ (currentBlobWriter.blob, currentFileSize)
+    KDSU.logInfo(myName, s"finished serializing partition ${TaskContext.getPartitionId}")
+    finalizeBlobWrite(currentBlobWriter)
+    if (currentBlobWriter.csvWriter.getCounter > 0) {
+      blobsToIngest :+ (currentBlobWriter.blob, currentBlobWriter.csvWriter.getCounter)
     }
     else {
       blobsToIngest
@@ -253,90 +248,155 @@ object KustoWriter {
   }
 
   def finalizeBlobWrite(blobWriteResource: BlobWriteResource): Unit = {
-    blobWriteResource.buffer.flush()
+    blobWriteResource.writer.flush()
     blobWriteResource.gzip.flush()
-    blobWriteResource.buffer.close()
+    blobWriteResource.writer.close()
     blobWriteResource.gzip.close()
   }
 
-  def convertRowToCSV(row: InternalRow, schema: StructType, dateFormat: FastDateFormat): CsvRowResult = {
+  def writeRowAsCSV(row: InternalRow, schema: StructType, dateFormat: FastDateFormat, writer: CountingCsvWriter): Unit = {
     val schemaFields: Array[StructField] = schema.fields
 
-    val (fields, size) = row.toSeq(schema).foldLeft[(Seq[String], Int)](Seq.empty[String], 0) { (res, curr) =>
-      val formattedField: String = if (curr == null) "" else {
-        val fieldIndexInRow = res._1.size
-        val dataType = schemaFields(fieldIndexInRow).dataType
-        getField(row, fieldIndexInRow, dataType, dateFormat, nested = false)
+    if (!row.isNullAt(0))
+    {
+      writeField(row, fieldIndexInRow = 0, schemaFields(0).dataType, dateFormat, writer, nested = false)
+    }
+
+    for (i <- 1 until row.numFields) {
+      writer.write(',')
+      if (!row.isNullAt(i))
+      {
+        writeField(row, i, schemaFields(i).dataType, dateFormat, writer, nested = false)
       }
-
-      if (formattedField == null) (res._1 :+ "", res._2) else (res._1 :+ formattedField, res._2 + formattedField.length)
     }
 
-    CsvRowResult(fields.toArray, size + fields.size)
+    writer.newLine()
   }
 
-  private def getField(row: SpecializedGetters, fieldIndexInRow: Int, dataType: DataType, dateFormat: FastDateFormat, nested: Boolean) = {
-    if (row.get(fieldIndexInRow, dataType) == null) null else dataType match {
-      case DateType => DateTimeUtils.toJavaDate(row.getInt(fieldIndexInRow)).toString
-      case TimestampType => dateFormat.format(DateTimeUtils.toJavaTimestamp(row.getLong(fieldIndexInRow)))
-      case StringType => GetStringFromUTF8(row.getUTF8String(fieldIndexInRow), nested)
-      case BooleanType => row.getBoolean(fieldIndexInRow).toString
-      case structType: StructType => convertStructToCsv(row.getStruct(fieldIndexInRow, structType.length), structType, dateFormat)
-      case arrType: ArrayType => convertArrayToCsv(row.getArray(fieldIndexInRow), arrType.elementType, dateFormat)
-      case mapType: MapType => convertMapToCsv(row.getMap(fieldIndexInRow), mapType, dateFormat)
-      case _ => row.get(fieldIndexInRow, dataType).toString
+  // This method does not check for null at the current row idx and should be checked before !
+  private def writeField(row: SpecializedGetters, fieldIndexInRow: Int, dataType: DataType, dateFormat: FastDateFormat, csvWriter: CountingCsvWriter, nested: Boolean): Unit = {
+   dataType match {
+    case DateType => csvWriter.write(DateTimeUtils.toJavaDate(row.getInt(fieldIndexInRow)).toString)
+    case TimestampType => csvWriter.write(dateFormat.format(DateTimeUtils.toJavaTimestamp(row.getLong(fieldIndexInRow))))
+    case StringType => GetStringFromUTF8(row.getUTF8String(fieldIndexInRow), nested, csvWriter)
+    case BooleanType => csvWriter.write(row.getBoolean(fieldIndexInRow).toString)
+    case structType: StructType => convertStructToCsv(row.getStruct(fieldIndexInRow, structType.length), structType, dateFormat, csvWriter, nested)
+    case arrType: ArrayType => convertArrayToCsv(row.getArray(fieldIndexInRow), arrType.elementType, dateFormat, csvWriter, nested)
+    case mapType: MapType => convertMapToCsv(row.getMap(fieldIndexInRow), mapType, dateFormat, csvWriter, nested)
+    case _ => csvWriter.write(row.get(fieldIndexInRow, dataType).toString)
     }
   }
 
-  private def convertStructToCsv(row: InternalRow, schema: StructType, dateFormat: FastDateFormat): String = {
+  private def convertStructToCsv(row: InternalRow, schema: StructType, dateFormat: FastDateFormat, csvWriter: CountingCsvWriter, nested: Boolean): Unit = {
+
     val fields = schema.fields
-    val result: scala.collection.mutable.Map[String, String] = scala.collection.mutable.Map()
+    if (fields.length != 0) {
 
-    for (x <- fields.indices) {
-      result(fields(x).name) = getField(row, x, fields(x).dataType, dateFormat, nested = true)
+      if(!nested){
+        csvWriter.write('"')
+      }
+
+      csvWriter.write('{')
+
+      var x = 0
+      var isNull = true
+      while(x < fields.length && isNull){
+        isNull = row.isNullAt(x)
+        if(!isNull){
+          writeStructField(x)
+        }
+        x+=1
+      }
+
+      while (x < fields.length) {
+        if(!row.isNullAt(x)) {
+          csvWriter.write(',')
+          writeStructField(x)
+        }
+        x+=1
+      }
+      csvWriter.write('}')
+
+      if(!nested){
+        csvWriter.write('"')
+      }
     }
-    "{" + result.map { case (k, v) => "\"" + k + "\"" + ":" + v }.mkString(",") + "}"
+
+    def writeStructField(idx: Int): Unit = {
+        csvWriter.writeStringField(fields(idx).name, nested = true)
+        csvWriter.write(':')
+        writeField(row, idx, fields(idx).dataType, dateFormat, csvWriter, nested = true)
+    }
   }
 
-  private def convertArrayToCsv(ar: ArrayData, fieldsType: DataType, dateFormat: FastDateFormat): String = {
-    if (ar == null) null else {
-      if (ar.numElements() == 0) "[]" else {
+  private def convertArrayToCsv(ar: ArrayData, fieldsType: DataType, dateFormat: FastDateFormat, csvWriter: CountingCsvWriter, nested: Boolean): Unit = {
+    if (ar.numElements() == 0) csvWriter.write("[]") else {
+      if (!nested){
+        csvWriter.write('"')
+      }
 
-        "[" + convertArrayToStringArray(ar, fieldsType, dateFormat).mkString(",") + "]"
+      csvWriter.write('[')
+      if(ar.isNullAt(0)) csvWriter.write("null") else writeField(ar, fieldIndexInRow = 0, fieldsType, dateFormat, csvWriter, nested = true)
+      for (x <- 1 until ar.numElements()) {
+        csvWriter.write(',')
+        if(ar.isNullAt(x)) csvWriter.write("null") else writeField(ar, x, fieldsType, dateFormat, csvWriter, nested = true)
+      }
+      csvWriter.write(']')
+
+      if (!nested){
+        csvWriter.write('"')
       }
     }
   }
 
-  private def convertArrayToStringArray(ar: ArrayData, fieldsType: DataType, dateFormat: FastDateFormat, nested: Boolean = true): Array[String] = {
-    val result: Array[String] = new Array(ar.numElements())
-    for (x <- 0 until ar.numElements()) {
-      result(x) = getField(ar, x, fieldsType, dateFormat, nested)
-    }
-    result
-  }
+  private def convertMapToCsv(map: MapData, fieldsType: MapType, dateFormat: FastDateFormat, csvWriter: CountingCsvWriter,  nested: Boolean): Unit = {
+    val keys = map.keyArray()
+    val values = map.valueArray()
 
-  private def convertMapToCsv(map: MapData, fieldsType: MapType, dateFormat: FastDateFormat): String = {
-    val keys = convertArrayToStringArray(map.keyArray(), fieldsType.keyType, dateFormat, nested = false)
-    val values = convertArrayToStringArray(map.valueArray(), fieldsType.valueType, dateFormat)
-
-    val result: Array[String] = new Array(keys.length)
-
-    for (x <- keys.indices) {
-      result(x) = "\"" + keys(x) + "\"" + ":" + values(x)
+    if(!nested){
+      csvWriter.write('"')
     }
 
-    "{" + result.mkString(",") + "}"
+    csvWriter.write('{')
+
+    var x = 0
+    var isNull = true
+    while(x < map.keyArray().numElements() && isNull){
+      isNull = values.isNullAt(x)
+      if(!isNull){
+        writeMapField(x)
+      }
+      x+=1
+    }
+
+    while(x < map.keyArray().numElements()) {
+      if(!values.isNullAt(x)) {
+        csvWriter.write(',')
+        writeMapField(x)
+      }
+      x+=1
+    }
+
+    csvWriter.write('}')
+    if(!nested){
+      csvWriter.write('"')
+    }
+
+    def writeMapField(idx: Int): Unit ={
+      csvWriter.write('"')
+      writeField(keys, fieldIndexInRow = idx, dataType = fieldsType.keyType, dateFormat = dateFormat, csvWriter = csvWriter, nested = false)
+      csvWriter.write('"')
+      csvWriter.write(':')
+      writeField(values, fieldIndexInRow = idx, dataType = fieldsType.valueType, dateFormat = dateFormat, csvWriter = csvWriter, nested = true)
+     }
   }
 
-
-  private def GetStringFromUTF8(str: UTF8String, nested: Boolean) = {
-    if (str == null) null else if (nested) "\"" + str.toString + "\"" else str.toString
+  private def GetStringFromUTF8(str: UTF8String, nested: Boolean, writer: CountingCsvWriter) : Unit = {
+    writer.writeStringField(str.toString, nested)
   }
 }
 
-case class CsvRowResult(formattedRow: Array[String], rowByteSize: Long)
-
-case class BlobWriteResource(buffer: BufferedWriter, gzip: GZIPOutputStream, csvWriter: CsvWriter, blob: CloudBlockBlob)
+case class BlobWriteResource(writer: BufferedWriter, gzip: GZIPOutputStream, csvWriter: CountingCsvWriter, blob: CloudBlockBlob)
 
 case class KustoWriteResource(authentication: KustoAuthentication,
                               coordinates: KustoCoordinates,

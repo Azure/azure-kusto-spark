@@ -23,7 +23,9 @@ object KustoSinkOptions extends KustoOptions{
   val KUSTO_WRITE_RESULT_LIMIT: String = newOption("writeResultLimit")
 
   // A json representation of the SparkIngestionProperties object used for writing to Kusto
-  var KUSTO_SPARK_INGESTION_PROPERTIES_JSON: String = newOption("sparkIngestionPropertiesJson")
+  val KUSTO_SPARK_INGESTION_PROPERTIES_JSON: String = newOption("sparkIngestionPropertiesJson")
+
+  val KUSTO_OMIT_NULLS: String = newOption("omitNulls")
 
   val NONE_RESULT_LIMIT = "none"
 }
@@ -37,4 +39,5 @@ case class WriteOptions(tableCreateOptions: SinkTableCreationMode.SinkTableCreat
                         isAsync: Boolean = false,
                         writeResultLimit: String = KustoSinkOptions.NONE_RESULT_LIMIT,
                         timeZone: String = "UTC", timeout: FiniteDuration,
-                        IngestionProperties: Option[String] = None)
+                        IngestionProperties: Option[String] = None,
+                        omitNulls: Boolean = true)

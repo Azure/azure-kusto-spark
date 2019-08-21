@@ -15,6 +15,7 @@ trait KustoOptions {
   val KEY_VAULT_APP_ID = "keyVaultAppId"
   val KEY_VAULT_APP_KEY = "keyVaultAppKey"
 
+
   // AAD application identifier of the client
   val KUSTO_AAD_CLIENT_ID: String = newOption("kustoAADClientID")
   // AAD authentication authority
