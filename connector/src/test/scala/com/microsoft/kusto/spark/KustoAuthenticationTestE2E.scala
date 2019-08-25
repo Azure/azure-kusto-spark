@@ -14,7 +14,7 @@ import org.scalatest.junit.JUnitRunner
 import scala.collection.immutable
 
 @RunWith(classOf[JUnitRunner])
-class KustoAthenticationTest extends FlatSpec {
+class KustoAuthenticationTestE2E extends FlatSpec {
   private val spark: SparkSession = SparkSession.builder()
     .appName("KustoSink")
     .master(f"local[2]")
@@ -43,23 +43,15 @@ class KustoAthenticationTest extends FlatSpec {
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
 
     val df = rows.toDF("name", "value")
-
-    df.write
-      .format("com.microsoft.kusto.spark.datasource")
-      .option(KustoSinkOptions.KUSTO_CLUSTER, cluster)
-      .option(KustoSinkOptions.KUSTO_DATABASE, database)
-      .option(KustoSinkOptions.KUSTO_TABLE, table)
-      .option(KustoSinkOptions.KEY_VAULT_URI, keyVaultUri)
-      .option(KustoSinkOptions.KEY_VAULT_APP_ID, keyVaultClientID)
-      .option(KustoSinkOptions.KEY_VAULT_APP_KEY, keyVaultClientPassword)
-      .option(KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS, SinkTableCreationMode.CreateIfNotExist.toString)
-      .save()
-
     val conf: Map[String, String] = Map(
       KustoSinkOptions.KEY_VAULT_URI -> keyVaultUri,
       KustoSinkOptions.KEY_VAULT_APP_ID -> keyVaultClientID,
-      KustoSinkOptions.KEY_VAULT_APP_KEY -> keyVaultClientPassword
+      KustoSinkOptions.KEY_VAULT_APP_KEY -> keyVaultClientPassword,
+      KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS -> SinkTableCreationMode.CreateIfNotExist.toString
     )
+
+    df.write.kusto(cluster, database, table, conf)
+
     val dfResult = spark.read.kusto(cluster, database, table, conf)
     val result = dfResult.select("name", "value").rdd.collect().sortBy(x => x.getInt(1))
     val orig = df.select("name", "value").rdd.collect().sortBy(x => x.getInt(1))
@@ -79,14 +71,11 @@ class KustoAthenticationTest extends FlatSpec {
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
 
     val df = rows.toDF("name", "value")
+    val conf: Map[String, String] = Map(
+      KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS -> SinkTableCreationMode.CreateIfNotExist.toString
+    )
 
-    df.write
-      .format("com.microsoft.kusto.spark.datasource")
-      .option(KustoSinkOptions.KUSTO_CLUSTER, s"https://ingest-$cluster.kusto.windows.net")
-      .option(KustoSinkOptions.KUSTO_DATABASE, database)
-      .option(KustoSinkOptions.KUSTO_TABLE, table)
-      .option(KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS, SinkTableCreationMode.CreateIfNotExist.toString)
-      .save()
+    df.write.kusto(cluster, database, table, conf)
 
     KustoTestUtils.validateResultsAndCleanup(kustoAdminClient, table, database, expectedNumberOfRows, timeoutMs, tableCleanupPrefix = prefix)
   }

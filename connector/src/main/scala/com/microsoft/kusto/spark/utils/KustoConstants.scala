@@ -5,6 +5,7 @@ import scala.concurrent.duration._
 object KustoConstants {
   val nonWaitingConst: String = (-1 seconds).toSeconds.toString
   val defaultPeriodicSamplePeriod: FiniteDuration = 1 seconds
+  val defaultIngestionTaskTime: FiniteDuration = 10 seconds
   val clientName = "Kusto.Spark.Connector"
   val defaultBufferSize: Int = 16 * 1024
   val storageExpiryMinutes: Int = 120

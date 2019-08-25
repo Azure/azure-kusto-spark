@@ -29,6 +29,7 @@ df.write. \
   option("kustoAADClientID",kustoOptions["kustoAADClientID"]). \
   option("kustoClientAADClientPassword",kustoOptions["kustoClientAADClientPassword"]). \
   option("kustoAADAuthorityID",kustoOptions["kustoAADAuthorityID"]). \
+  mode("Append"). \
   save()
 
 # COMMAND ----------
@@ -45,6 +46,8 @@ kustoDf  = pyKusto.read. \
             load()
 
 # Read the data from the kusto table in 'scale' mode and with advanced options
+# Please refer to https://github.com/Azure/azure-kusto-spark/blob/master/connector/src/main/scala/com/microsoft/kusto/spark/datasource/KustoSourceOptions.scala
+# to get the string representation of the options you need as pyspark does not support usage of scala objects.
 
 crp = sc._jvm.com.microsoft.azure.kusto.data.ClientRequestProperties()
 crp.setOption("norequesttimeout",True)
@@ -69,8 +72,9 @@ kustoDf.show()
 
 # COMMAND ----------
 
-#Writing with advanced options
-
+# Writing with advanced options
+# Please refer to https://github.com/Azure/azure-kusto-spark/blob/master/connector/src/main/scala/com/microsoft/kusto/spark/datasink/KustoSinkOptions.scala
+# to get the string representation of the options you need
 time = sc._jvm.org.joda.time.DateTime.now().minusDays(1)
 csvMap = "[{\"Name\":\"ColA\",\"Ordinal\":0},{\"Name\":\"ColB\",\"Ordinal\":1}]"
 
@@ -86,6 +90,7 @@ df.write. \
   option("kustoAADAuthorityID",kustoOptions["kustoAADAuthorityID"]). \
   option("kustoAADAuthorityID",kustoOptions["kustoAADAuthorityID"]). \
   option("tableCreateOptions","CreateIfNotExist"). \
+  mode("Append"). \
   save()
 
 # COMMAND ----------

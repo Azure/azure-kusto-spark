@@ -25,6 +25,7 @@ df.write
   .option(KustoSinkOptions.KUSTO_AAD_CLIENT_ID, "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
   .option(KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD, "MyPassword") 
   .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, "AAD Authority Id") // "microsoft.com"
+  .mode(SaveMode.Append)
   .save()
 ```
 ## Key Vault
@@ -83,6 +84,7 @@ df.write
   .option(KustoSinkOptions.KEY_VAULT_URI, keyVaultUri)
   .option(KustoSinkOptions.KEY_VAULT_APP_ID, keyVaultClientID)
   .option(KustoSinkOptions.KEY_VAULT_APP_KEY, keyVaultClientPassword)
+  .mode(SaveMode.Append)
   .save()
 
 val conf: Map[String, String] = Map(
@@ -107,6 +109,7 @@ df.write
   .option(KustoSinkOptions.KUSTO_DATABASE, "MyDatabase")
   .option(KustoSinkOptions.KUSTO_TABLE, "MyTable")
   .option(KustoOptions., "MyTable")
+  .mode(SaveMode.Append)
   .save()
 ```
 ## Device Authentication

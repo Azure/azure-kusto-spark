@@ -3,8 +3,8 @@ package com.microsoft.kusto.spark.utils
 import java.util.StringJoiner
 import java.util.concurrent.TimeUnit
 
-import com.microsoft.azure.kusto.data.Client
-import com.microsoft.azure.kusto.ingest.IngestClient
+import com.microsoft.azure.kusto.data.{Client, ClientFactory, ConnectionStringBuilder}
+import com.microsoft.azure.kusto.ingest.{IngestClient, IngestClientFactory}
 import com.microsoft.azure.kusto.ingest.result.{IngestionStatus, OperationStatus}
 import com.microsoft.kusto.spark.datasink.{PartitionResult, SinkTableCreationMode}
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
@@ -18,12 +18,19 @@ import org.apache.spark.util.CollectionAccumulator
 import org.joda.time.{DateTime, DateTimeZone, Period}
 import shaded.parquet.org.codehaus.jackson.map.ObjectMapper
 
+import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.collection.JavaConverters._
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{Await, Future}
 
-class KustoClient(val clusterAlias: String, val engineClient: Client, val dmClient: Client, val ingestClient: IngestClient) {
+class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuilder, val ingestKcsb: ConnectionStringBuilder) {
+
+  val engineClient: Client = ClientFactory.createClient(engineKcsb)
+
+  // Reading process does not require ingest client to start working
+  lazy val dmClient: Client = ClientFactory.createClient(ingestKcsb)
+  lazy val ingestClient: IngestClient = IngestClientFactory.createClient(ingestKcsb)
 
   private val myName = this.getClass.getSimpleName
 
@@ -62,16 +69,16 @@ class KustoClient(val clusterAlias: String, val engineClient: Client, val dmClie
   }
 
   private var roundRobinIdx = 0
-  private var storageUris: Seq[String] = Seq.empty
+  private var storageUris: Seq[ContainerAndSas] = Seq.empty
   private var lastRefresh: DateTime = new DateTime(DateTimeZone.UTC)
 
-  def getNewTempBlobReference: String = {
+  def getNewTempBlobReference: ContainerAndSas = {
     // Refresh if storageExpiryMinutes have passed since last refresh for this cluster as SAS should be valid for at least 120 minutes
     if (storageUris.isEmpty ||
       new Period(new DateTime(DateTimeZone.UTC), lastRefresh).getMinutes > KustoConstants.storageExpiryMinutes) {
 
       val res = dmClient.execute(generateCreateTmpStorageCommand())
-      val storage = res.getValues.asScala.map(row => row.get(0))
+      val storage = res.getValues.asScala.map(row => { val parts = row.get(0).split('?'); ContainerAndSas(parts(0), '?' + parts(1))})
 
       if (storage.isEmpty) {
         KDSU.reportExceptionAndThrow(myName, new RuntimeException("Failed to allocate temporary storage"), "writing to Kusto", clusterAlias)
@@ -97,18 +104,26 @@ class KustoClient(val clusterAlias: String, val engineClient: Client, val dmClie
                                                            isAsync: Boolean = false): Unit = {
     import coordinates._
 
+    val realTimeout = if(timeout <= (0 seconds)){
+      90 days
+    }else{
+      timeout
+    }
+
     val mergeTask = Future {
+      KDSU.logInfo(myName, s"Polling on ingestion results, will merge data to destination table when finished")
+
       try {
         partitionsResults.value.asScala.foreach {
-          var finalRes: IngestionStatus = null
-          partitionResult =>
+          partitionResult => {
+            var finalRes: IngestionStatus = null
             KDSU.runSequentially[IngestionStatus](
-              func = () => partitionResult.ingestionResult.getIngestionStatusCollection.get(0),
+              func = () => {finalRes = partitionResult.ingestionResult.getIngestionStatusCollection.get(0); finalRes},
               0,
               delayPeriodBetweenCalls,
-              (timeout.toMillis / delayPeriodBetweenCalls + 5).toInt,
+              (realTimeout.toMillis / delayPeriodBetweenCalls + 5).toInt,
               res => res.status == OperationStatus.Pending,
-              res => finalRes = res).await(timeout.toMillis, TimeUnit.MILLISECONDS)
+              res => finalRes = res).await(realTimeout.toMillis, TimeUnit.MILLISECONDS)
 
             finalRes.status match {
               case OperationStatus.Pending =>
@@ -124,6 +139,7 @@ class KustoClient(val clusterAlias: String, val engineClient: Client, val dmClie
                   s" Cluster: '${coordinates.cluster}', database: '${coordinates.database}', " +
                   s"table: '$tmpTableName', batch: '$batchIdIfExists', partition: '${partitionResult.partitionId}''. Ingestion info: '${readIngestionResult(finalRes)}'")
             }
+          }
         }
 
         // Move data to real table
@@ -143,9 +159,8 @@ class KustoClient(val clusterAlias: String, val engineClient: Client, val dmClie
       }
     }
 
-    if(!isAsync)
-    {
-      Await.result(mergeTask, timeout)
+    if(!isAsync) {
+      Await.result(mergeTask, realTimeout)
     }
   }
 
@@ -165,3 +180,5 @@ class KustoClient(val clusterAlias: String, val engineClient: Client, val dmClie
       .writeValueAsString(statusRecord)
   }
 }
+
+case class ContainerAndSas(containerUrl: String, sas: String)

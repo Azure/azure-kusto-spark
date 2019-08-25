@@ -75,7 +75,7 @@ private[kusto] object CslCommandsGenerator {
 
     var command =
       s""".export $async${compress}to parquet ("$blobUri/$container$secretString)""" +
-        s""" with (${sizeLimitIfDefined}namePrefix="${directory}part$partitionId", fileExtension=parquet) <| $query"""
+        s""" with (${sizeLimitIfDefined}namePrefix="${directory}part$partitionId", compressionType=snappy) <| $query"""
 
     if (partitionPredicate.nonEmpty) {
       command += s" | where ${partitionPredicate.get}"

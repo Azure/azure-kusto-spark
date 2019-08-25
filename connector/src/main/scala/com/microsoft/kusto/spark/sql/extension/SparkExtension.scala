@@ -1,12 +1,10 @@
 package com.microsoft.kusto.spark.sql.extension
 
-import java.util
-
 import com.microsoft.azure.kusto.data.ClientRequestProperties
 import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SparkIngestionProperties}
 import com.microsoft.kusto.spark.datasource.KustoSourceOptions
+import org.apache.spark.sql.streaming.DataStreamWriter
 import org.apache.spark.sql.{DataFrameWriter, _}
-import org.joda.time.DateTime
 
 object SparkExtension {
 
@@ -38,7 +36,24 @@ object SparkExtension {
         .option(KustoSinkOptions.KUSTO_DATABASE, database)
         .option(KustoSinkOptions.KUSTO_TABLE, table)
         .options(conf)
+        .mode(SaveMode.Append)
         .save()
     }
   }
+
+  implicit class DataStreamWriterExtension(df: DataStreamWriter[Row]) {
+    def kusto(kustoCluster: String, database: String, table: String, conf: Map[String, String] = Map.empty[String, String], sparkIngestionProperties: Option[SparkIngestionProperties] = None): Unit = {
+
+      (if (sparkIngestionProperties.isDefined) {
+        df.option(KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON, sparkIngestionProperties.get.toString)
+      } else {
+        df
+      }).format("com.microsoft.kusto.spark.datasource")
+        .option(KustoSinkOptions.KUSTO_CLUSTER, kustoCluster)
+        .option(KustoSinkOptions.KUSTO_DATABASE, database)
+        .option(KustoSinkOptions.KUSTO_TABLE, table)
+        .options(conf)
+    }
+  }
+
 }

@@ -30,6 +30,7 @@ object SimpleKustoDataSink {
       .option(KustoSinkOptions.KUSTO_TABLE, "Your Kusto Destination Table")
       .option(KustoSinkOptions.KUSTO_AAD_CLIENT_ID, "Your Client ID")
       .option(KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD, "Your secret")
+      .mode(SaveMode.Append)
       .save()
 
     sparkSession.stop

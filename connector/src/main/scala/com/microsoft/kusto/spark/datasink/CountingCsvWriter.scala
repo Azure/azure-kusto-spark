@@ -6,20 +6,20 @@ case class CountingCsvWriter(out: Writer) {
   val newLineSep: String = java.security.AccessController.doPrivileged(
     new sun.security.action.GetPropertyAction("line.separator"))
   val newLineSepLength: Int = newLineSep.length
-  var bytsCounter: Long = 0L
+  var bytesCounter: Long = 0L
 
   def newLine(): Unit = {
     out.write(newLineSep)
-    bytsCounter += newLineSepLength
+    bytesCounter += newLineSepLength
   }
 
   def write(c: Char): Unit ={
     out.write(c)
-    bytsCounter += 1
+    bytesCounter += 1
   }
   def write(str: String): Unit = {
     out.write(str)
-    bytsCounter += str.length
+    bytesCounter += str.length
   }
 
   def writeStringField(str: String, nested: Boolean) {
@@ -28,15 +28,15 @@ case class CountingCsvWriter(out: Writer) {
       out.write('"')
       if(nested){
         out.write('"')
-        bytsCounter += 2
+        bytesCounter += 2
       }
 
-      bytsCounter += 2
+      bytesCounter += 2
 
       for (c <- str) {
         if (c == '"') {
           out.write("\"\"")
-          bytsCounter += 1
+          bytesCounter += 1
         }
         else {
           out.write(c)
@@ -48,14 +48,14 @@ case class CountingCsvWriter(out: Writer) {
         out.write('"')
       }
 
-      bytsCounter += str.length
+      bytesCounter += str.length
     }
   }
 
-  def getCounter: Long = bytsCounter
+  def getCounter: Long = bytesCounter
 
   def resetCounter(): Unit = {
-    bytsCounter = 0
+    bytesCounter = 0
   }
 
 }

@@ -13,6 +13,7 @@ import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMo
 import com.microsoft.kusto.spark.datasource.{KustoResponseDeserializer, KustoSourceOptions, KustoStorageParameters}
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
+import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -71,9 +72,7 @@ object KustoDataSourceUtils {
   }
 
   private[kusto] def getSchema(database: String, query: String, client: Client): StructType = {
-    val schemaQuery = KustoQueryUtils.getQuerySchemaQuery(query)
-
-    KustoResponseDeserializer(client.execute(database, schemaQuery)).getSchema
+    KustoResponseDeserializer(client.execute(database, query)).getSchema
   }
 
   def parseSourceParameters(parameters: Map[String, String]): SourceParameters = {
@@ -135,11 +134,7 @@ object KustoDataSourceUtils {
 
   def parseSinkParameters(parameters: Map[String, String], mode: SaveMode = SaveMode.Append): SinkParameters = {
     if (mode != SaveMode.Append) {
-      if (mode == SaveMode.ErrorIfExists) {
-        logInfo(KCONST.clientName, "Kusto data source supports only append mode. Ignoring 'ErrorIfExists' directive")
-      } else {
-        throw new InvalidParameterException(s"Kusto data source supports only append mode. '$mode' directive is invalid")
-      }
+      throw new InvalidParameterException(s"Kusto data source supports only 'Append' mode, '$mode' directive is invalid. Please use df.write.mode(SaveMode.Append)..")
     }
 
     // Parse WriteOptions
@@ -161,7 +156,6 @@ object KustoDataSourceUtils {
     val timeout = new FiniteDuration(parameters.getOrElse(KustoSinkOptions.KUSTO_TIMEOUT_LIMIT, KCONST.nonWaitingConst).toLong, TimeUnit.SECONDS)
 
     val ingestionPropertiesAsJson = parameters.get(KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON)
-    val omitNulls = parameters.getOrElse(KustoSinkOptions.KUSTO_OMIT_NULLS, "true").trim.toBoolean
 
     val writeOptions = WriteOptions(
       tableCreation,
@@ -169,8 +163,7 @@ object KustoDataSourceUtils {
       parameters.getOrElse(KustoSinkOptions.KUSTO_WRITE_RESULT_LIMIT, "1"),
       parameters.getOrElse(DateTimeUtils.TIMEZONE_OPTION, "UTC"),
       timeout,
-      ingestionPropertiesAsJson,
-      omitNulls
+      ingestionPropertiesAsJson
     )
 
     val sourceParameters = parseSourceParameters(parameters)
@@ -186,12 +179,23 @@ object KustoDataSourceUtils {
 
     //TODO: use the java client implementation when published to maven
     if (crpOption.isDefined) {
-      val crp = new ClientRequestProperties()
-      val jsonObj = new JSONObject(crpOption.get).toMap.asInstanceOf[util.HashMap[String, Object]]
-      val it = jsonObj.keySet().iterator()
-      while (it.hasNext) {
-        val optionName: String = it.next()
-        crp.setOption(optionName, jsonObj.get(optionName))
+      val crp = new ClientRequestProperties
+      val jsonObj = new JSONObject(crpOption.get)
+      val it = jsonObj.keys
+      while ( {
+        it.hasNext
+      }) {
+        val propertyName = it.next
+        if (propertyName == "Options") {
+          val options = jsonObj.get(propertyName).asInstanceOf[JSONObject]
+          val optionsIt = options.keys
+          while ( {
+            optionsIt.hasNext
+          }) {
+            val optionName = optionsIt.next
+            crp.setOption(optionName, options.get(optionName))
+          }
+        }
       }
       Some(crp)
     } else {
@@ -211,9 +215,14 @@ object KustoDataSourceUtils {
     val clusterDesc = if (cluster.isEmpty) "" else s", cluster: '$cluster' "
     val databaseDesc = if (database.isEmpty) "" else s", database: '$database'"
     val tableDesc = if (table.isEmpty) "" else s", table: '$table'"
-    logError(reporter, s"caught exception $whatFailed$clusterDesc$databaseDesc$tableDesc.${NewLine}EXCEPTION MESSAGE: ${exception.getMessage}")
 
-    if (!shouldNotThrow) throw exception
+    if (shouldNotThrow) {
+      logWarn(reporter, s"caught exception $whatFailed$clusterDesc$databaseDesc$tableDesc, exception ignored.${NewLine}EXCEPTION: ${ExceptionUtils.getStackTrace(exception)}")
+
+    } else {
+      logError(reporter, s"caught exception $whatFailed$clusterDesc$databaseDesc$tableDesc.${NewLine}EXCEPTION: ${ExceptionUtils.getStackTrace(exception)}")
+      throw exception
+    }
   }
 
   private def getClusterNameFromUrlIfNeeded(url: String): String = {
@@ -246,35 +255,34 @@ object KustoDataSourceUtils {
     * @param doWhile            - stop jobs if condition holds for the func.apply output
     * @param finalWork          - do final work with the last func.apply output
     */
-  def runSequentially[A](func: () => A, delay: Int, runEvery: Int, numberOfTimesToRun: Int, doWhile: A => Boolean, finalWork: A => Unit): CountDownLatch = {
+  def runSequentially[A](func: () => A, delay: Long, runEvery: Int, numberOfTimesToRun: Int, doWhile: A => Boolean, finalWork: A => Unit): CountDownLatch = {
     val latch = new CountDownLatch(if (numberOfTimesToRun > 0) numberOfTimesToRun else 1)
     val t = new Timer()
     var currentWaitTime = runEvery
 
     class ExponentialBackoffTask extends TimerTask {
       def run(): Unit = {
-        val res = func.apply()
-        if (numberOfTimesToRun > 0) {
-          latch.countDown()
-        }
+        try {
+          val res = func.apply()
+          if (numberOfTimesToRun > 0) {
+            latch.countDown()
+          }
 
-        if (latch.getCount == 0) {
-          throw new TimeoutException(s"runSequentially: timed out based on maximal allowed repetitions ($numberOfTimesToRun), aborting")
-        }
+          if (latch.getCount == 0) {
+            throw new TimeoutException(s"runSequentially: timed out based on maximal allowed repetitions ($numberOfTimesToRun), aborting")
+          }
 
-        if (!doWhile.apply(res)) {
-          try {
+          if (!doWhile.apply(res)) {
             finalWork.apply(res)
+            while (latch.getCount > 0) latch.countDown()
+          } else {
+            currentWaitTime = if (currentWaitTime > MaxWaitTime.toMillis) currentWaitTime else currentWaitTime + currentWaitTime
+            t.schedule(new ExponentialBackoffTask(), currentWaitTime)
           }
-          catch {
-            case exception: Exception =>
-              while (latch.getCount > 0) latch.countDown()
-              throw exception
-          }
-          while (latch.getCount > 0) latch.countDown()
-        } else {
-          currentWaitTime = if (currentWaitTime > MaxWaitTime.toMillis) currentWaitTime else currentWaitTime + currentWaitTime
-          t.schedule(new ExponentialBackoffTask(), currentWaitTime)
+        } catch {
+          case exception: Exception =>
+            while (latch.getCount > 0) latch.countDown()
+            throw exception
         }
       }
     }

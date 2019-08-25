@@ -7,6 +7,8 @@ import com.microsoft.azure.kusto.data.{ClientFactory, ConnectionStringBuilder}
 import com.microsoft.kusto.spark.datasink.KustoSinkOptions
 import com.microsoft.kusto.spark.datasource.{KustoResponseDeserializer, KustoSourceOptions}
 import com.microsoft.kusto.spark.utils.{CslCommandsGenerator, KustoBlobStorageUtils, KustoQueryUtils, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.sql.extension.SparkExtension._
+
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{SQLContext, SparkSession}
 import org.junit.runner.RunWith
@@ -71,16 +73,14 @@ class KustoBlobAccessE2E extends FlatSpec with BeforeAndAfterAll {
       import spark.implicits._
       val df = rows.toDF("name", "value")
 
-      df.write
-        .format("com.microsoft.kusto.spark.datasource")
-        .option(KustoSinkOptions.KUSTO_CLUSTER, cluster)
-        .option(KustoSinkOptions.KUSTO_DATABASE, database)
-        .option(KustoSinkOptions.KUSTO_TABLE, updatedTable)
-        .option(KustoSinkOptions.KUSTO_AAD_CLIENT_ID, appId)
-        .option(KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD, appKey)
-        .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, authority)
-        .option(KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS, "CreateIfNotExist")
-        .save()
+      val conf = Map(
+        KustoSinkOptions.KUSTO_AAD_CLIENT_ID -> appId,
+        KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+        KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID -> authority,
+        KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS -> "CreateIfNotExist"
+      )
+
+      df.write.kusto(cluster, database, updatedTable, conf)
     }
 
     updatedTable
@@ -117,9 +117,9 @@ class KustoBlobAccessE2E extends FlatSpec with BeforeAndAfterAll {
     val partitionPredicate = s" hash($firstColumn, $numberOfPartitions) == $partitionId"
     val useKeyNotSas = blobSas == null
 
-    val (blobContainerUri, directory: String, secretString: String) = getBlobCoordinates(storageAccount, container, secret, useKeyNotSas)
+    val (_, directory: String, _) = getBlobCoordinates(storageAccount, container, secret, useKeyNotSas)
 
-    val (exportCommand) = CslCommandsGenerator.generateExportDataCommand(
+    val exportCommand = CslCommandsGenerator.generateExportDataCommand(
       myTable,
       storageAccount,
       container,

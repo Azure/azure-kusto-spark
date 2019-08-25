@@ -32,6 +32,7 @@ that is using it. Please verify the following before using Kusto connector:
  .option(KustoSinkOptions.<option-name-1>, <option-value-1>
  ...
  .option(KustoSinkOptions.<option-name-n>, <option-value-n>
+ .mode(SaveMode.Append)
  .save()
  ```
  
@@ -129,11 +130,12 @@ df.write
   .option(KustoSinkOptions.KUSTO_AAD_CLIENT_ID, "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
   .option(KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD, "MyPassword") 
   .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, "AAD Authority Id") // "microsoft.com"
+  .mode(SaveMode.Append)
   .save()
 ``` 
 
 IngestionProperties and short scala usage:
-```scala
+```
 val sp = new SparkIngestionProperties
 var tags = new util.ArrayList[String]()
 tags.add("newTag")
@@ -158,6 +160,7 @@ df.write
   .option(KustoOptions.KUSTO_AAD_AUTHORITY_ID, "AAD Authority Id") // "microsoft.com"
   .option(KustoOptions.KUSTO_WRITE_ENABLE_ASYNC, true)
   .option(KustoOptions.KUSTO_TABLE_CREATE_OPTIONS, "CreateIfNotExist")
+  .mode(SaveMode.Append)
   .save()
 ```
 

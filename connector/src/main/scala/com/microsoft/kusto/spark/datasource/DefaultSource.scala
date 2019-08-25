@@ -19,6 +19,7 @@ class DefaultSource extends CreatableRelationProvider
   var kustoCoordinates: KustoCoordinates = _
   var keyVaultAuthentication: Option[KeyVaultAuthentication] = None
   var clientRequestProperties: Option[ClientRequestProperties] = None
+  val myName: String = this.getClass.getSimpleName
 
   override def createRelation(sqlContext: SQLContext, mode: SaveMode, parameters: Map[String, String], data: DataFrame): BaseRelation = {
     val sinkParameters = KDSU.parseSinkParameters(parameters, mode)
@@ -108,6 +109,8 @@ class DefaultSource extends CreatableRelationProvider
       }
 
     val timeout = new FiniteDuration(parameters.getOrElse(KustoSourceOptions.KUSTO_TIMEOUT_LIMIT, KCONST.nonWaitingConst).toLong, TimeUnit.SECONDS)
+
+    KDSU.logInfo(myName, "Finished serializing parameters for reading")
 
     KustoRelation(
       kustoCoordinates,

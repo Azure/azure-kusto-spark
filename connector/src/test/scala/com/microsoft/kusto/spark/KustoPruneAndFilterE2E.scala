@@ -11,7 +11,7 @@ import com.microsoft.kusto.spark.sql.extension.SparkExtension._
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.{Row, SQLContext, SparkSession}
+import org.apache.spark.sql.{Row, SQLContext, SaveMode, SparkSession}
 import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
 import org.scalatest.{BeforeAndAfterAll, FlatSpec}
@@ -125,6 +125,7 @@ class KustoPruneAndFilterE2E extends FlatSpec with BeforeAndAfterAll {
       .option(KustoSinkOptions.KUSTO_AAD_CLIENT_ID, appId)
       .option(KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD, appKey)
       .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, authority)
+      .mode(SaveMode.Append)
       .save()
 
     val conf = if (blobSas.isEmpty) {
@@ -195,6 +196,7 @@ class KustoPruneAndFilterE2E extends FlatSpec with BeforeAndAfterAll {
       .option(KustoSinkOptions.KUSTO_AAD_CLIENT_ID, appId)
       .option(KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD, appKey)
       .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, authority)
+      .mode(SaveMode.Append)
       .save()
 
     val conf = if (blobSas.isEmpty) {
