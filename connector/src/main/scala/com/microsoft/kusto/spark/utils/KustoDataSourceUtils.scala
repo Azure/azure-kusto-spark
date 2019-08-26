@@ -177,26 +177,8 @@ object KustoDataSourceUtils {
   def getClientRequestProperties(parameters: Map[String, String]): Option[ClientRequestProperties] = {
     val crpOption = parameters.get(KustoSourceOptions.KUSTO_CLIENT_REQUEST_PROPERTIES_JSON)
 
-    //TODO: use the java client implementation when published to maven
     if (crpOption.isDefined) {
-      val crp = new ClientRequestProperties
-      val jsonObj = new JSONObject(crpOption.get)
-      val it = jsonObj.keys
-      while ( {
-        it.hasNext
-      }) {
-        val propertyName = it.next
-        if (propertyName == "Options") {
-          val options = jsonObj.get(propertyName).asInstanceOf[JSONObject]
-          val optionsIt = options.keys
-          while ( {
-            optionsIt.hasNext
-          }) {
-            val optionName = optionsIt.next
-            crp.setOption(optionName, options.get(optionName))
-          }
-        }
-      }
+      val crp = ClientRequestProperties.fromString(crpOption.get)
       Some(crp)
     } else {
       None

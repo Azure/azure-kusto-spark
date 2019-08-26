@@ -2,7 +2,7 @@ package com.microsoft.kusto.spark.datasink
 
 import java.util
 
-import com.microsoft.azure.kusto.ingest.IngestionProperties
+import com.microsoft.azure.kusto.ingest.{IngestionMapping, IngestionProperties}
 import org.codehaus.jackson.annotate.JsonAutoDetect.Visibility
 import org.codehaus.jackson.annotate.JsonMethod
 import org.codehaus.jackson.map.ObjectMapper
@@ -60,7 +60,7 @@ class SparkIngestionProperties(var flushImmediately: Boolean = false,
     }
 
     if (this.csvMappingNameReference != null) {
-      ingestionProperties.setCsvMappingName(this.csvMappingNameReference)
+      ingestionProperties.setIngestionMapping(new IngestionMapping(this.csvMappingNameReference, IngestionMapping.IngestionMappingKind.csv))
     }
 
     ingestionProperties.setAdditionalProperties(additionalProperties)
