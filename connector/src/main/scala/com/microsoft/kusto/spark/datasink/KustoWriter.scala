@@ -148,7 +148,7 @@ object KustoWriter {
     ingestionProperties.setReportMethod(IngestionProperties.IngestionReportMethod.Table)
     ingestionProperties.setReportLevel(IngestionProperties.IngestionReportLevel.FailuresAndSuccesses)
 
-    val tasks = serializeRowsAndIngest(rows, parameters, ingestClient, ingestionProperties)
+    val tasks = serializeRowsAndIngest(rows, parameters, ingestClient, ingestionProperties, partitionsResults)
 
     KDSU.logWarn(myName, s"Ingesting using ingest client - partition: ${TaskContext.getPartitionId()}")
 
@@ -193,14 +193,15 @@ object KustoWriter {
   private[kusto] def serializeRowsAndIngest(rows: Iterator[InternalRow],
                                             parameters: KustoWriteResource,
                                             ingestClient: IngestClient,
-                                            ingestionProperties: IngestionProperties): util.ArrayList[Future[IngestionResult]] = {
-    def ingest(blob: CloudBlockBlob, size: Long, sas: String): Future[IngestionResult] = {
+                                            ingestionProperties: IngestionProperties,
+                                            partitionsResults: CollectionAccumulator[PartitionResult]): util.ArrayList[Future[Unit]]
+  = {
+    def ingest(blob: CloudBlockBlob, size: Long, sas: String): Future[Unit] = {
       Future {
         val blobUri = blob.getStorageUri.getPrimaryUri.toString
         val blobPath = blobUri + sas
         val blobSourceInfo = new BlobSourceInfo(blobPath, size)
-
-        ingestClient.ingestFromBlob(blobSourceInfo, ingestionProperties)
+        partitionsResults.add(PartitionResult(ingestClient.ingestFromBlob(blobSourceInfo, ingestionProperties), TaskContext.getPartitionId))
       }
     }
 
@@ -212,7 +213,7 @@ object KustoWriter {
     val initialBlobWriter: BlobWriteResource = createBlobWriter(schema, coordinates, tmpTableName, kustoClient)
     val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone(writeOptions.timeZone))
 
-    val ingestionTasks: util.ArrayList[Future[IngestionResult]] = new util.ArrayList()
+    val ingestionTasks: util.ArrayList[Future[Unit]] = new util.ArrayList()
 
     // Serialize rows to ingest and send to blob storage.
     val lastBlobWriter = rows.foldLeft[BlobWriteResource](initialBlobWriter) {
