@@ -63,6 +63,7 @@ private[kusto] object KustoReader {
                                     partitionInfo: KustoPartitionParameters,
                                     options: KustoReadOptions,
                                     filtering: KustoFiltering): RDD[Row] = {
+    KDSU.logInfo(myName, "Starting exporting data from Kusto to blob storage")
 
     setupBlobAccess(request, storage)
     val partitions = calculatePartitions(partitionInfo)
@@ -80,7 +81,7 @@ private[kusto] object KustoReader {
         request.clientRequestProperties)
     }
 
-    KDSU.logInfo(myName, s"Finished exporting from kusto to '${storage.account}/${storage.container}/$directory'" +
+    KDSU.logInfo(myName, s"Finished exporting from Kusto to '${storage.account}/${storage.container}/$directory'" +
       s", will start parquet reading now")
 
     val path = s"wasbs://${storage.container}@${storage.account}.blob.core.windows.net/$directory"

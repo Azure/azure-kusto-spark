@@ -1,9 +1,9 @@
 package com.microsoft.kusto.spark.utils
 
 import java.util.concurrent.ConcurrentHashMap
+import java.util.function
 
-import com.microsoft.azure.kusto.data.{ClientFactory, ConnectionStringBuilder}
-import com.microsoft.azure.kusto.ingest.IngestClientFactory
+import com.microsoft.azure.kusto.data.ConnectionStringBuilder
 import com.microsoft.kusto.spark.authentication.{AadApplicationAuthentication, KeyVaultAuthentication, KustoAccessTokenAuthentication, KustoAuthentication}
 import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
 
@@ -15,7 +15,7 @@ object KustoClientCache {
     clientCache.computeIfAbsent(aliasAndAuth, adderSupplier)
   }
 
-  val adderSupplier = new java.util.function.Function[AliasAndAuth, KustoClient]() {
+  val adderSupplier: function.Function[AliasAndAuth, KustoClient] = new java.util.function.Function[AliasAndAuth, KustoClient]() {
     override def apply(aa: AliasAndAuth): KustoClient = createClient(aa)
   }
 
@@ -33,33 +33,31 @@ object KustoClientCache {
           ConnectionStringBuilder.createWithAadApplicationCredentials(aliasAndAuth.ingestUri, app.ID, app.password, app.authority)
         )
       case userToken: KustoAccessTokenAuthentication => (
-          ConnectionStringBuilder.createWithAadAccessTokenAuthentication(aliasAndAuth.engineUri, userToken.token),
-          ConnectionStringBuilder.createWithAadAccessTokenAuthentication(aliasAndAuth.ingestUri, userToken.token)
-        )
+        ConnectionStringBuilder.createWithAadAccessTokenAuthentication(aliasAndAuth.engineUri, userToken.token),
+        ConnectionStringBuilder.createWithAadAccessTokenAuthentication(aliasAndAuth.ingestUri, userToken.token)
+      )
     }
 
     engineKcsb.setClientVersionForTracing(KCONST.clientName)
     ingestKcsb.setClientVersionForTracing(KCONST.clientName)
 
-    new KustoClient(aliasAndAuth.clusterAlias,
-      ClientFactory.createClient(engineKcsb),
-      ClientFactory.createClient(ingestKcsb),
-      IngestClientFactory.createClient(ingestKcsb))
+    new KustoClient(aliasAndAuth.clusterAlias, engineKcsb, ingestKcsb)
   }
 
   private[KustoClientCache] case class AliasAndAuth(clusterAlias: String, authentication: KustoAuthentication) {
     private[AliasAndAuth] val clusterUri = "https://%s.kusto.windows.net"
-    val ingestClusterAlias = s"ingest-${clusterAlias}"
-    val engineUri = clusterUri.format(clusterAlias)
-    val ingestUri = clusterUri.format(ingestClusterAlias)
+    val ingestClusterAlias = s"ingest-$clusterAlias"
+    val engineUri: String = clusterUri.format(clusterAlias)
+    val ingestUri: String = clusterUri.format(ingestClusterAlias)
 
-    override def equals(that: Any) : Boolean = that match {
+    override def equals(that: Any): Boolean = that match {
       case aa: AliasAndAuth => clusterAlias == aa.clusterAlias && authentication == aa.authentication
       case _ => false
     }
 
     override def hashCode(): Int = clusterAlias.hashCode + authentication.hashCode
   }
+
 }
 
 

@@ -3,12 +3,11 @@ package com.microsoft.kusto.spark
 import java.io.{BufferedWriter, ByteArrayOutputStream, OutputStreamWriter}
 import java.nio.charset.StandardCharsets
 import java.util
-import java.util.{Collections, TimeZone}
+import java.util.TimeZone
 import java.util.zip.GZIPOutputStream
 
 import com.microsoft.kusto.spark.datasink.{BlobWriteResource, CountingCsvWriter, KustoWriter}
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
-import com.univocity.parsers.csv.{CsvWriter, CsvWriterSettings}
 import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.InternalRow
@@ -89,7 +88,7 @@ class KustoWriterTests extends FlatSpec with Matchers {
     val buffer = mock(classOf[BufferedWriter])
     val csvWriter = CountingCsvWriter(buffer)
 
-    val fileWriteResource = BlobWriteResource(buffer, gzip, csvWriter, null)
+    val fileWriteResource = BlobWriteResource(buffer, gzip, csvWriter, null, null)
     KustoWriter.finalizeBlobWrite(fileWriteResource)
 
     verify(gzip, times(1)).flush()

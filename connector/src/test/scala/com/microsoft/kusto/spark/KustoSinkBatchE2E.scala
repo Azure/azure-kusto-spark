@@ -13,7 +13,7 @@ import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.{DataFrame, Row, SQLContext, SparkSession}
+import org.apache.spark.sql._
 import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
 import org.scalatest.{BeforeAndAfterAll, FlatSpec}
@@ -93,6 +93,7 @@ class KustoSinkBatchE2E extends FlatSpec with BeforeAndAfterAll{
       .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, authority)
       .option(DateTimeUtils.TIMEZONE_OPTION, "GMT+4")
       .option(KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS, SinkTableCreationMode.CreateIfNotExist.toString)
+      .mode(SaveMode.Append)
       .save()
 
     val conf: Map[String, String] = Map(
@@ -168,6 +169,7 @@ class KustoSinkBatchE2E extends FlatSpec with BeforeAndAfterAll{
       .option(KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD, appKey)
       .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, authority)
       .option(KustoSinkOptions.KUSTO_TIMEOUT_LIMIT, (8 * 60).toString)
+      .mode(SaveMode.Append)
       .save()
 
     val timeoutMs: Int = 8 * 60 * 1000 // 8 minutes
@@ -193,6 +195,7 @@ class KustoSinkBatchE2E extends FlatSpec with BeforeAndAfterAll{
       .option(KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD, appKey)
       .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, authority)
       .option(KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC, "true")
+      .mode(SaveMode.Append)
       .save()
 
     val timeoutMs: Int = 8 * 60 * 1000 // 8 minutes

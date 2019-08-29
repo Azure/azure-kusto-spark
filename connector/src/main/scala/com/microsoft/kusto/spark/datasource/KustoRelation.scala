@@ -6,7 +6,7 @@ import java.util.Locale
 import com.microsoft.azure.kusto.data.ClientRequestProperties
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.{KustoCoordinates, KustoDebugOptions}
-import com.microsoft.kusto.spark.utils.{KustoClientCache, KustoQueryUtils, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.{KustoClientCache, KustoConstants, KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
@@ -131,6 +131,6 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
 
   override def insert(data: DataFrame, overwrite: Boolean): Unit = {
     KustoWriter.write(Some(0), data, kustoCoordinates, authentication, writeOptions =
-      WriteOptions.apply(timeout = new FiniteDuration(90, TimeUnit.MINUTES)))
+      WriteOptions.apply(timeout = new FiniteDuration(KustoConstants.defaultWaitingIntervalLongRunning.toLong, TimeUnit.MINUTES)))
   }
 }

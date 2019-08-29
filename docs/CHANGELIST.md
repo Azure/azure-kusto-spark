@@ -33,7 +33,7 @@ for reading from Kusto, and it requires the user to provide transient blob stora
   For details, refer to [Authentication.md](Authentication.md) document
 
 ### Examples
-* Added Python sample code for reference: [pyKusto.py](../samples/src/main/scala/pyKusto.py)
+* Added Python sample code for reference: [pyKusto.py](../samples/src/main/python/pyKusto.py)
 * Updated existing references. 
   In particular, the reference based on Databricks notebook: [KustoConnectorDemo](../samples/src/main/scala/KustoConnectorDemo.scala)
 
@@ -47,6 +47,12 @@ or scale (via transient blob storage) read mode.
 * Remove dependency on Jackson-core library
 * Deprecate 'KUSTO_BLOB_SET_FS_CONFIG' option. Instead, cache relevant configuration and set if needed
 
+# 1.0.0-Beta-05
+* __!!Important!!__ User must specify now that SaveMode is 'Append' when writing to Kusto, so as to not 'hide' that this is the only
+option available in Kusto. User can get SaveMode-like experience via SparkIngestionProperties using drop-by
+and IngestIfNotExists tags, although overusing ingest-by tags is not recommended. 
+The simplified syntax extension takes care of it itself and there's no need to specify the SaveMode there.
+
 # Known Issues and Tips
 1. When running with spark 'wholestage codegen' enabled, a mismatch between schema 'nullable' definition and actual data containing
 null values can lead to a NullPointerException to be thrown by org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter.
@@ -59,6 +65,8 @@ If you encounter this error and cannot identify and fix the mismatch, consider d
   For details, refer to [these](https://docs.microsoft.com/en-us/azure/kusto/query/schema-entities/entity-names#naming-your-entities-to-avoid-collisions-with-kusto-language-keywords)
   guidelines. 
   
+3. Version beta-04 has problems with timeout that can be solved using KustoSinkOptions.KUSTO_TIMEOUT_LIMIT to specify operations timeout in seconds.
+ 
 ### Building for legacy Spark versions:
 Each release is tested with Spark 2.4. 
 Using other Spark versions is also possible, but may require some changes in libraries dependencies.

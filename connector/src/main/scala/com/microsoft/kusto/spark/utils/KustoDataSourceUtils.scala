@@ -13,6 +13,7 @@ import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMo
 import com.microsoft.kusto.spark.datasource.{KustoResponseDeserializer, KustoSourceOptions, KustoStorageParameters}
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
+import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -29,8 +30,6 @@ object KustoDataSourceUtils {
   val sasPattern: Regex = raw"(?:https://)?([^.]+).blob.core.windows.net/([^?]+)?(.+)".r
 
   val ClientName = "Kusto.Spark.Connector"
-  val DefaultTimeoutLongRunning: FiniteDuration = 90 minutes
-  val DefaultPeriodicSamplePeriod: FiniteDuration = 2 seconds
   val NewLine = sys.props("line.separator")
   val MaxWaitTime: FiniteDuration = 1 minute
 
@@ -71,9 +70,7 @@ object KustoDataSourceUtils {
   }
 
   private[kusto] def getSchema(database: String, query: String, client: Client): StructType = {
-    val schemaQuery = KustoQueryUtils.getQuerySchemaQuery(query)
-
-    KustoResponseDeserializer(client.execute(database, schemaQuery)).getSchema
+    KustoResponseDeserializer(client.execute(database, query)).getSchema
   }
 
   def parseSourceParameters(parameters: Map[String, String]): SourceParameters = {
@@ -135,11 +132,7 @@ object KustoDataSourceUtils {
 
   def parseSinkParameters(parameters: Map[String, String], mode: SaveMode = SaveMode.Append): SinkParameters = {
     if (mode != SaveMode.Append) {
-      if (mode == SaveMode.ErrorIfExists) {
-        logInfo(KCONST.clientName, "Kusto data source supports only append mode. Ignoring 'ErrorIfExists' directive")
-      } else {
-        throw new InvalidParameterException(s"Kusto data source supports only append mode. '$mode' directive is invalid")
-      }
+      throw new InvalidParameterException(s"Kusto data source supports only 'Append' mode, '$mode' directive is invalid. Please use df.write.mode(SaveMode.Append)..")
     }
 
     // Parse WriteOptions
@@ -158,10 +151,9 @@ object KustoDataSourceUtils {
       case _: java.lang.IllegalArgumentException => throw new InvalidParameterException(s"KUSTO_WRITE_ENABLE_ASYNC is expecting either 'true' or 'false', got: '$isAsyncParam'")
     }
 
-    val timeout = new FiniteDuration(parameters.getOrElse(KustoSinkOptions.KUSTO_TIMEOUT_LIMIT, KCONST.nonWaitingConst).toLong, TimeUnit.SECONDS)
+    val timeout = new FiniteDuration(parameters.getOrElse(KustoSinkOptions.KUSTO_TIMEOUT_LIMIT, KCONST.defaultWaitingIntervalLongRunning).toLong, TimeUnit.SECONDS)
 
     val ingestionPropertiesAsJson = parameters.get(KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON)
-    val omitNulls = parameters.getOrElse(KustoSinkOptions.KUSTO_OMIT_NULLS, "true").trim.toBoolean
 
     val writeOptions = WriteOptions(
       tableCreation,
@@ -169,8 +161,7 @@ object KustoDataSourceUtils {
       parameters.getOrElse(KustoSinkOptions.KUSTO_WRITE_RESULT_LIMIT, "1"),
       parameters.getOrElse(DateTimeUtils.TIMEZONE_OPTION, "UTC"),
       timeout,
-      ingestionPropertiesAsJson,
-      omitNulls
+      ingestionPropertiesAsJson
     )
 
     val sourceParameters = parseSourceParameters(parameters)
@@ -184,15 +175,8 @@ object KustoDataSourceUtils {
   def getClientRequestProperties(parameters: Map[String, String]): Option[ClientRequestProperties] = {
     val crpOption = parameters.get(KustoSourceOptions.KUSTO_CLIENT_REQUEST_PROPERTIES_JSON)
 
-    //TODO: use the java client implementation when published to maven
     if (crpOption.isDefined) {
-      val crp = new ClientRequestProperties()
-      val jsonObj = new JSONObject(crpOption.get).toMap.asInstanceOf[util.HashMap[String, Object]]
-      val it = jsonObj.keySet().iterator()
-      while (it.hasNext) {
-        val optionName: String = it.next()
-        crp.setOption(optionName, jsonObj.get(optionName))
-      }
+      val crp = ClientRequestProperties.fromString(crpOption.get)
       Some(crp)
     } else {
       None
@@ -211,9 +195,13 @@ object KustoDataSourceUtils {
     val clusterDesc = if (cluster.isEmpty) "" else s", cluster: '$cluster' "
     val databaseDesc = if (database.isEmpty) "" else s", database: '$database'"
     val tableDesc = if (table.isEmpty) "" else s", table: '$table'"
-    logError(reporter, s"caught exception $whatFailed$clusterDesc$databaseDesc$tableDesc.${NewLine}EXCEPTION MESSAGE: ${exception.getMessage}")
 
-    if (!shouldNotThrow) throw exception
+    if (!shouldNotThrow) {
+      logError(reporter, s"caught exception $whatFailed$clusterDesc$databaseDesc$tableDesc.${NewLine}EXCEPTION: ${ExceptionUtils.getStackTrace(exception)}")
+      throw exception
+    }
+
+    logWarn(reporter, s"caught exception $whatFailed$clusterDesc$databaseDesc$tableDesc, exception ignored.${NewLine}EXCEPTION: ${ExceptionUtils.getStackTrace(exception)}")
   }
 
   private def getClusterNameFromUrlIfNeeded(url: String): String = {
@@ -246,41 +234,40 @@ object KustoDataSourceUtils {
     * @param doWhile            - stop jobs if condition holds for the func.apply output
     * @param finalWork          - do final work with the last func.apply output
     */
-  def runSequentially[A](func: () => A, delay: Int, runEvery: Int, numberOfTimesToRun: Int, doWhile: A => Boolean, finalWork: A => Unit): CountDownLatch = {
-    val latch = new CountDownLatch(if (numberOfTimesToRun > 0) numberOfTimesToRun else 1)
+    def doWhile[A](func: () => A, delayBeforeStart: Long, delayBeforeEach: Int, timesToRun: Int, stopCondition: A => Boolean, finalWork: A => Unit): CountDownLatch = {
+    val latch = new CountDownLatch(if (timesToRun > 0) timesToRun else 1)
     val t = new Timer()
-    var currentWaitTime = runEvery
+    var currentWaitTime = delayBeforeEach
 
     class ExponentialBackoffTask extends TimerTask {
       def run(): Unit = {
-        val res = func.apply()
-        if (numberOfTimesToRun > 0) {
-          latch.countDown()
-        }
+        try {
+          val res = func.apply()
+          if (timesToRun > 0) {
+            latch.countDown()
+          }
 
-        if (latch.getCount == 0) {
-          throw new TimeoutException(s"runSequentially: timed out based on maximal allowed repetitions ($numberOfTimesToRun), aborting")
-        }
+          if (latch.getCount == 0) {
+            throw new TimeoutException(s"runSequentially: timed out based on maximal allowed repetitions ($timesToRun), aborting")
+          }
 
-        if (!doWhile.apply(res)) {
-          try {
+          if (!stopCondition.apply(res)) {
             finalWork.apply(res)
+            while (latch.getCount > 0) latch.countDown()
+          } else {
+            currentWaitTime = if (currentWaitTime > MaxWaitTime.toMillis) currentWaitTime else currentWaitTime + currentWaitTime
+            t.schedule(new ExponentialBackoffTask(), currentWaitTime)
           }
-          catch {
-            case exception: Exception =>
-              while (latch.getCount > 0) latch.countDown()
-              throw exception
-          }
-          while (latch.getCount > 0) latch.countDown()
-        } else {
-          currentWaitTime = if (currentWaitTime > MaxWaitTime.toMillis) currentWaitTime else currentWaitTime + currentWaitTime
-          t.schedule(new ExponentialBackoffTask(), currentWaitTime)
+        } catch {
+          case exception: Exception =>
+            while (latch.getCount > 0) latch.countDown()
+            throw exception
         }
       }
     }
 
     val task: TimerTask = new ExponentialBackoffTask()
-    t.schedule(task, delay)
+    t.schedule(task, delayBeforeStart)
     latch
   }
 
@@ -303,10 +290,10 @@ object KustoDataSourceUtils {
     val statusIdx = showCommandResult.getColumnNameToIndex.get(statusCol)
 
     var lastResponse: Option[util.ArrayList[String]] = None
-    val task = runSequentially[util.ArrayList[String]](
+    val task = doWhile[util.ArrayList[String]](
       func = () => client.execute(database, operationsShowCommand).getValues.get(0),
-      delay = 0, runEvery = delayPeriodBetweenCalls, numberOfTimesToRun = timesToRun,
-      doWhile = result => {
+      delayBeforeStart = 0, delayBeforeEach = delayPeriodBetweenCalls, timesToRun = timesToRun,
+      stopCondition = result => {
         result.get(stateIdx) == "InProgress"
       },
       finalWork = result => {

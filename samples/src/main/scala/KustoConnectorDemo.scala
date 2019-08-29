@@ -9,7 +9,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import com.microsoft.kusto.spark.datasink.KustoSinkOptions
 import com.microsoft.kusto.spark.datasource.KustoSourceOptions
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{SaveMode, SparkSession}
 import org.apache.spark.sql.types.{StringType, StructType}
 
 object KustoConnectorDemo {
@@ -61,9 +61,10 @@ object KustoConnectorDemo {
       .option(KustoSinkOptions.KUSTO_AAD_CLIENT_ID, appId)
       .option(KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD, appKey)
       .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, authorityId)
+      .mode(SaveMode.Append)
       .save()
 
-      // To write the data to a Kusto cluster, ASYNCronously, add:
+      // To write the data to a Kusto cluster, asynchronously, add:
       // " .option(KustoOptions.KUSTO_WRITE_ENABLE_ASYNC, true) "
       // The driver will return quickly, and will complete the operation asynchronously once the workers end ingestion to Kusto.
       // However exceptions are not captured in the driver, and tracking command success/failure status is not straightforward as in synchronous mode
@@ -77,7 +78,7 @@ object KustoConnectorDemo {
     val csvDf = spark
           .readStream      
           .schema(customSchema)
-          .csv("/FileStore/tables")
+          .csv("Samples/FileStore/tables")
 
     // PERFORM STREAMING WRITE
     import java.util.concurrent.TimeUnit
@@ -88,7 +89,7 @@ object KustoConnectorDemo {
     spark.conf.set("spark.sql.streaming.checkpointLocation", "/FileStore/temp/checkpoint")
     spark.conf.set("spark.sql.codegen.wholeStage","false")
 
-    // Write to a Kusto table fro streaming source
+    // Write to a Kusto table from streaming source
     val kustoQ = csvDf
           .writeStream
           .format("com.microsoft.kusto.spark.datasink.KustoSinkProvider")
@@ -98,20 +99,22 @@ object KustoConnectorDemo {
             KustoSinkOptions.KUSTO_DATABASE -> database,
             KustoSinkOptions.KUSTO_AAD_CLIENT_ID -> appId,
             KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
-            KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID -> authorityId))
+            KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID -> authorityId,
+            KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS -> "CreateIfNotExist"))
           .trigger(Trigger.Once)
 
+    // On databricks - this connection will hold without awaitTermination call
     kustoQ.start().awaitTermination(TimeUnit.MINUTES.toMillis(8))
 
       val conf: Map[String, String] = Map(
         KustoSourceOptions.KUSTO_AAD_CLIENT_ID -> appId,
         KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
-        KustoSourceOptions.KUSTO_QUERY -> s"$table | where (ColB % 1000 == 0) | distinct ColA"
+        KustoSourceOptions.KUSTO_QUERY -> s"$table | where colB % 50 == 0 | distinct colA"
     )
 
     // Simplified syntax flavour
     import com.microsoft.kusto.spark.sql.extension.SparkExtension._
-    val df2 = spark.read.kusto(cluster, database, "", conf)
+    val df2 = spark.read.kusto(cluster, database, query = "", conf)
 
     // ELABORATE READ SYNTAX
     // Here we read the whole table.
