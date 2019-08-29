@@ -234,7 +234,7 @@ object KustoDataSourceUtils {
     * @param doWhile            - stop jobs if condition holds for the func.apply output
     * @param finalWork          - do final work with the last func.apply output
     */
-    def runSequentially[A](func: () => A, delayBeforeStart: Long, delayBeforeEach: Int, timesToRun: Int, stopCondition: A => Boolean, finalWork: A => Unit): CountDownLatch = {
+    def doWhile[A](func: () => A, delayBeforeStart: Long, delayBeforeEach: Int, timesToRun: Int, stopCondition: A => Boolean, finalWork: A => Unit): CountDownLatch = {
     val latch = new CountDownLatch(if (timesToRun > 0) timesToRun else 1)
     val t = new Timer()
     var currentWaitTime = delayBeforeEach
@@ -290,7 +290,7 @@ object KustoDataSourceUtils {
     val statusIdx = showCommandResult.getColumnNameToIndex.get(statusCol)
 
     var lastResponse: Option[util.ArrayList[String]] = None
-    val task = runSequentially[util.ArrayList[String]](
+    val task = doWhile[util.ArrayList[String]](
       func = () => client.execute(database, operationsShowCommand).getValues.get(0),
       delayBeforeStart = 0, delayBeforeEach = delayPeriodBetweenCalls, timesToRun = timesToRun,
       stopCondition = result => {

@@ -112,8 +112,8 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
         partitionsResults.value.asScala.foreach {
           partitionResult => {
             var finalRes: IngestionStatus = null
-            KDSU.runSequentially[IngestionStatus](
-              func = () => {
+            KDSU.doWhile[IngestionStatus](
+              () => {
                 finalRes = partitionResult.ingestionResult.getIngestionStatusCollection.get(0); finalRes
               },
               0,
