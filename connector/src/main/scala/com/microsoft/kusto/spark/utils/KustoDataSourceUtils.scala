@@ -30,8 +30,6 @@ object KustoDataSourceUtils {
   val sasPattern: Regex = raw"(?:https://)?([^.]+).blob.core.windows.net/([^?]+)?(.+)".r
 
   val ClientName = "Kusto.Spark.Connector"
-  val DefaultTimeoutLongRunning: FiniteDuration = 90 minutes
-  val DefaultPeriodicSamplePeriod: FiniteDuration = 2 seconds
   val NewLine = sys.props("line.separator")
   val MaxWaitTime: FiniteDuration = 1 minute
 
@@ -153,7 +151,7 @@ object KustoDataSourceUtils {
       case _: java.lang.IllegalArgumentException => throw new InvalidParameterException(s"KUSTO_WRITE_ENABLE_ASYNC is expecting either 'true' or 'false', got: '$isAsyncParam'")
     }
 
-    val timeout = new FiniteDuration(parameters.getOrElse(KustoSinkOptions.KUSTO_TIMEOUT_LIMIT, KCONST.nonWaitingConst).toLong, TimeUnit.SECONDS)
+    val timeout = new FiniteDuration(parameters.getOrElse(KustoSinkOptions.KUSTO_TIMEOUT_LIMIT, KCONST.defaultWaitingIntervalLongRunning).toLong, TimeUnit.SECONDS)
 
     val ingestionPropertiesAsJson = parameters.get(KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON)
 
@@ -198,13 +196,12 @@ object KustoDataSourceUtils {
     val databaseDesc = if (database.isEmpty) "" else s", database: '$database'"
     val tableDesc = if (table.isEmpty) "" else s", table: '$table'"
 
-    if (shouldNotThrow) {
-      logWarn(reporter, s"caught exception $whatFailed$clusterDesc$databaseDesc$tableDesc, exception ignored.${NewLine}EXCEPTION: ${ExceptionUtils.getStackTrace(exception)}")
-
-    } else {
+    if (!shouldNotThrow) {
       logError(reporter, s"caught exception $whatFailed$clusterDesc$databaseDesc$tableDesc.${NewLine}EXCEPTION: ${ExceptionUtils.getStackTrace(exception)}")
       throw exception
     }
+
+    logWarn(reporter, s"caught exception $whatFailed$clusterDesc$databaseDesc$tableDesc, exception ignored.${NewLine}EXCEPTION: ${ExceptionUtils.getStackTrace(exception)}")
   }
 
   private def getClusterNameFromUrlIfNeeded(url: String): String = {
@@ -237,24 +234,24 @@ object KustoDataSourceUtils {
     * @param doWhile            - stop jobs if condition holds for the func.apply output
     * @param finalWork          - do final work with the last func.apply output
     */
-  def runSequentially[A](func: () => A, delay: Long, runEvery: Int, numberOfTimesToRun: Int, doWhile: A => Boolean, finalWork: A => Unit): CountDownLatch = {
-    val latch = new CountDownLatch(if (numberOfTimesToRun > 0) numberOfTimesToRun else 1)
+    def runSequentially[A](func: () => A, delayBeforeStart: Long, delayBeforeEach: Int, timesToRun: Int, stopCondition: A => Boolean, finalWork: A => Unit): CountDownLatch = {
+    val latch = new CountDownLatch(if (timesToRun > 0) timesToRun else 1)
     val t = new Timer()
-    var currentWaitTime = runEvery
+    var currentWaitTime = delayBeforeEach
 
     class ExponentialBackoffTask extends TimerTask {
       def run(): Unit = {
         try {
           val res = func.apply()
-          if (numberOfTimesToRun > 0) {
+          if (timesToRun > 0) {
             latch.countDown()
           }
 
           if (latch.getCount == 0) {
-            throw new TimeoutException(s"runSequentially: timed out based on maximal allowed repetitions ($numberOfTimesToRun), aborting")
+            throw new TimeoutException(s"runSequentially: timed out based on maximal allowed repetitions ($timesToRun), aborting")
           }
 
-          if (!doWhile.apply(res)) {
+          if (!stopCondition.apply(res)) {
             finalWork.apply(res)
             while (latch.getCount > 0) latch.countDown()
           } else {
@@ -270,7 +267,7 @@ object KustoDataSourceUtils {
     }
 
     val task: TimerTask = new ExponentialBackoffTask()
-    t.schedule(task, delay)
+    t.schedule(task, delayBeforeStart)
     latch
   }
 
@@ -295,8 +292,8 @@ object KustoDataSourceUtils {
     var lastResponse: Option[util.ArrayList[String]] = None
     val task = runSequentially[util.ArrayList[String]](
       func = () => client.execute(database, operationsShowCommand).getValues.get(0),
-      delay = 0, runEvery = delayPeriodBetweenCalls, numberOfTimesToRun = timesToRun,
-      doWhile = result => {
+      delayBeforeStart = 0, delayBeforeEach = delayPeriodBetweenCalls, timesToRun = timesToRun,
+      stopCondition = result => {
         result.get(stateIdx) == "InProgress"
       },
       finalWork = result => {

@@ -108,7 +108,7 @@ class DefaultSource extends CreatableRelationProvider
           storageSecretIsAccountKey))
       }
 
-    val timeout = new FiniteDuration(parameters.getOrElse(KustoSourceOptions.KUSTO_TIMEOUT_LIMIT, KCONST.nonWaitingConst).toLong, TimeUnit.SECONDS)
+    val timeout = new FiniteDuration(parameters.getOrElse(KustoSourceOptions.KUSTO_TIMEOUT_LIMIT, KCONST.defaultWaitingIntervalLongRunning).toLong, TimeUnit.SECONDS)
 
     KDSU.logInfo(myName, "Finished serializing parameters for reading")
 

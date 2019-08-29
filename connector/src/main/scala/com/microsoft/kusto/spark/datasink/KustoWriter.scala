@@ -148,7 +148,7 @@ object KustoWriter {
     ingestionProperties.setReportMethod(IngestionProperties.IngestionReportMethod.Table)
     ingestionProperties.setReportLevel(IngestionProperties.IngestionReportLevel.FailuresAndSuccesses)
 
-    val tasks = serializeRowsAndIngest(rows, parameters, ingestClient, ingestionProperties, partitionsResults)
+    val tasks = ingestRows(rows, parameters, ingestClient, ingestionProperties, partitionsResults)
 
     KDSU.logWarn(myName, s"Ingesting using ingest client - partition: ${TaskContext.getPartitionId()}")
 
@@ -190,11 +190,11 @@ object KustoWriter {
   }
 
   @throws[IOException]
-  private[kusto] def serializeRowsAndIngest(rows: Iterator[InternalRow],
-                                            parameters: KustoWriteResource,
-                                            ingestClient: IngestClient,
-                                            ingestionProperties: IngestionProperties,
-                                            partitionsResults: CollectionAccumulator[PartitionResult]): util.ArrayList[Future[Unit]]
+  private[kusto] def ingestRows(rows: Iterator[InternalRow],
+                                parameters: KustoWriteResource,
+                                ingestClient: IngestClient,
+                                ingestionProperties: IngestionProperties,
+                                partitionsResults: CollectionAccumulator[PartitionResult]): util.ArrayList[Future[Unit]]
   = {
     def ingest(blob: CloudBlockBlob, size: Long, sas: String): Future[Unit] = {
       Future {

@@ -4,12 +4,12 @@ import java.util.StringJoiner
 import java.util.concurrent.TimeUnit
 
 import com.microsoft.azure.kusto.data.{Client, ClientFactory, ConnectionStringBuilder}
-import com.microsoft.azure.kusto.ingest.{IngestClient, IngestClientFactory}
 import com.microsoft.azure.kusto.ingest.result.{IngestionStatus, OperationStatus}
-import com.microsoft.kusto.spark.datasink.{PartitionResult, SinkTableCreationMode}
-import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
+import com.microsoft.azure.kusto.ingest.{IngestClient, IngestClientFactory}
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.KustoWriter.delayPeriodBetweenCalls
+import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
+import com.microsoft.kusto.spark.datasink.{PartitionResult, SinkTableCreationMode}
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.KustoDataSourceUtils.extractSchemaFromResultTable
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
@@ -18,10 +18,9 @@ import org.apache.spark.util.CollectionAccumulator
 import org.joda.time.{DateTime, DateTimeZone, Period}
 import shaded.parquet.org.codehaus.jackson.map.ObjectMapper
 
-import scala.concurrent.duration._
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.collection.JavaConverters._
-import scala.concurrent.duration.FiniteDuration
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration.{FiniteDuration, _}
 import scala.concurrent.{Await, Future}
 
 class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuilder, val ingestKcsb: ConnectionStringBuilder) {
@@ -78,7 +77,9 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
       new Period(new DateTime(DateTimeZone.UTC), lastRefresh).getMinutes > KustoConstants.storageExpiryMinutes) {
 
       val res = dmClient.execute(generateCreateTmpStorageCommand())
-      val storage = res.getValues.asScala.map(row => { val parts = row.get(0).split('?'); ContainerAndSas(parts(0), '?' + parts(1))})
+      val storage = res.getValues.asScala.map(row => {
+        val parts = row.get(0).split('?'); ContainerAndSas(parts(0), '?' + parts(1))
+      })
 
       if (storage.isEmpty) {
         KDSU.reportExceptionAndThrow(myName, new RuntimeException("Failed to allocate temporary storage"), "writing to Kusto", clusterAlias)
@@ -104,12 +105,6 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
                                                            isAsync: Boolean = false): Unit = {
     import coordinates._
 
-    val realTimeout = if(timeout <= (0 seconds)){
-      90 days
-    }else{
-      timeout
-    }
-
     val mergeTask = Future {
       KDSU.logInfo(myName, s"Polling on ingestion results, will merge data to destination table when finished")
 
@@ -118,12 +113,14 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
           partitionResult => {
             var finalRes: IngestionStatus = null
             KDSU.runSequentially[IngestionStatus](
-              func = () => {finalRes = partitionResult.ingestionResult.getIngestionStatusCollection.get(0); finalRes},
+              func = () => {
+                finalRes = partitionResult.ingestionResult.getIngestionStatusCollection.get(0); finalRes
+              },
               0,
               delayPeriodBetweenCalls,
-              (realTimeout.toMillis / delayPeriodBetweenCalls + 5).toInt,
+              (timeout.toMillis / delayPeriodBetweenCalls + 5).toInt,
               res => res.status == OperationStatus.Pending,
-              res => finalRes = res).await(realTimeout.toMillis, TimeUnit.MILLISECONDS)
+              res => finalRes = res).await(timeout.toMillis, TimeUnit.MILLISECONDS)
 
             finalRes.status match {
               case OperationStatus.Pending =>
@@ -142,11 +139,15 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
           }
         }
 
-        // Move data to real table
-        // Protect tmp table from merge/rebuild and move data to the table requested by customer. This operation is atomic.
-        kustoAdminClient.execute(database, generateTableAlterMergePolicyCommand(tmpTableName, allowMerge = false, allowRebuild = false))
-        kustoAdminClient.execute(database, generateTableMoveExtentsCommand(tmpTableName, table.get))
-        KDSU.logInfo(myName, s"write to Kusto table '${table.get}' finished successfully $batchIdIfExists")
+        if (partitionsResults.value.size > 0) {
+          // Move data to real table
+          // Protect tmp table from merge/rebuild and move data to the table requested by customer. This operation is atomic.
+          kustoAdminClient.execute(database, generateTableAlterMergePolicyCommand(tmpTableName, allowMerge = false, allowRebuild = false))
+          kustoAdminClient.execute(database, generateTableMoveExtentsCommand(tmpTableName, table.get))
+          KDSU.logInfo(myName, s"write to Kusto table '${table.get}' finished successfully $batchIdIfExists")
+        } else {
+          KDSU.logWarn(myName, s"write to Kusto table '${table.get}' finished with no data written")
+        }
       } catch {
         case ex: Exception =>
           KDSU.reportExceptionAndThrow(
@@ -159,8 +160,8 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
       }
     }
 
-    if(!isAsync) {
-      Await.result(mergeTask, realTimeout)
+    if (!isAsync) {
+      Await.result(mergeTask, timeout)
     }
   }
 

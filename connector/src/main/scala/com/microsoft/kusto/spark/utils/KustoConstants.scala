@@ -3,7 +3,8 @@ package com.microsoft.kusto.spark.utils
 import scala.concurrent.duration._
 
 object KustoConstants {
-  val nonWaitingConst: String = (-1 seconds).toSeconds.toString
+  // Setting high value to have no timeout on Await commands
+  val defaultWaitingIntervalLongRunning: String = (2 days).toSeconds.toString
   val defaultPeriodicSamplePeriod: FiniteDuration = 1 seconds
   val defaultIngestionTaskTime: FiniteDuration = 10 seconds
   val clientName = "Kusto.Spark.Connector"
