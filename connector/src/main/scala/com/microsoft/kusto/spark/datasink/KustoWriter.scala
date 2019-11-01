@@ -267,14 +267,17 @@ object KustoWriter {
   // This method does not check for null at the current row idx and should be checked before !
   private def writeField(row: SpecializedGetters, fieldIndexInRow: Int, dataType: DataType, dateFormat: FastDateFormat, csvWriter: CountingCsvWriter, nested: Boolean): Unit = {
     dataType match {
-      case DateType => csvWriter.write(DateTimeUtils.toJavaDate(row.getInt(fieldIndexInRow)).toString)
-      case TimestampType => csvWriter.write(dateFormat.format(DateTimeUtils.toJavaTimestamp(row.getLong(fieldIndexInRow))))
+      case DateType => csvWriter.writeStringField(DateTimeUtils.toJavaDate(row.getInt(fieldIndexInRow)).toString, nested)
+      case TimestampType => csvWriter.writeStringField(dateFormat.format(DateTimeUtils.toJavaTimestamp(row.getLong(fieldIndexInRow))), nested)
       case StringType => GetStringFromUTF8(row.getUTF8String(fieldIndexInRow), nested, csvWriter)
       case BooleanType => csvWriter.write(row.getBoolean(fieldIndexInRow).toString)
       case structType: StructType => convertStructToCsv(row.getStruct(fieldIndexInRow, structType.length), structType, dateFormat, csvWriter, nested)
       case arrType: ArrayType => convertArrayToCsv(row.getArray(fieldIndexInRow), arrType.elementType, dateFormat, csvWriter, nested)
       case mapType: MapType => convertMapToCsv(row.getMap(fieldIndexInRow), mapType, dateFormat, csvWriter, nested)
-      case _ => csvWriter.write(row.get(fieldIndexInRow, dataType).toString)
+      case ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType =>
+        csvWriter.write(row.get(fieldIndexInRow, dataType).toString)
+      case _: DecimalType => csvWriter.write(row.get(fieldIndexInRow, dataType).toString)
+      case _ => csvWriter.writeStringField(row.get(fieldIndexInRow, dataType).toString, nested)
     }
   }
 
