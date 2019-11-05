@@ -22,10 +22,10 @@ that is using it. Please verify the following before using Kusto connector:
  
  Kusto connector implements Spark 'Datasource V1' API. 
  Kusto data source identifier is "com.microsoft.kusto.spark.datasource". 
- Dataframe schema is translated into kusto schema as explained in [DataTypes](Spark-Kusto DataTypes mapping.md).
+ Dataframe schema is translated into kusto schema as explained in [DataTypes](Spark-Kusto%20DataTypes%20mapping.md).
  
  ### Command Syntax
- ```
+ ```scala
  <dataframe-object>
  .write
  .format("com.microsoft.kusto.spark.datasource")
@@ -88,21 +88,21 @@ that is using it. Please verify the following before using Kusto connector:
    Default: '5400' (90 minutes)
 
 * **KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON**:
-    A json representation of a SparkIngestionProperties (use toString to make a json of an instance).
+    A json representation of a `SparkIngestionProperties` (use `toString` to make a json of an instance).
     
     Properties:
         
-    dropByTags,ingestByTags, additionalTags, ingestIfNotExists: util.ArrayList[String] - 
+    - dropByTags, ingestByTags, additionalTags, ingestIfNotExists: util.ArrayList[String] - 
     Tags list to add to the extents. Read [kusto docs - extents](https://docs.microsoft.com/en-us/azure/kusto/management/extents-overview#ingest-by-extent-tags)
     
-    creationTime: DateTime - sets the extents creationTime value to this date
+    - creationTime: DateTime - sets the extents creationTime value to this date
     
-    csvMapping: String - a full json representation of a csvMapping (the connector always upload csv files to Kusto), 
+    - csvMapping: String - a full json representation of a csvMapping (the connector always upload csv files to Kusto), 
     see here [kusto docs - mappings](https://docs.microsoft.com/en-us/azure/kusto/management/mappings)
     
-    csvMappingNameReference: String - a reference to a name of a csvMapping pre-created for the table  
+    - csvMappingNameReference: String - a reference to a name of a csvMapping pre-created for the table  
     
-    flushImmediately: Boolean - use with caution - flushes the data immidiatly upon ingestion without aggregation.
+    - flushImmediately: Boolean - use with caution - flushes the data immidiatly upon ingestion without aggregation.
 
  >**Note:**
  For both synchronous and asynchronous operation, 'write' is an atomic transaction, i.e. 
@@ -121,7 +121,7 @@ For more details and command reference, please see [Ingestion Batching Policy co
 ### Examples
 
 Synchronous mode, table already exists:
-```
+```scala
 df.write
   .format("com.microsoft.kusto.spark.datasource")
   .option(KustoSinkOptions.KUSTO_CLUSTER, "MyCluster.RegionName")
@@ -135,7 +135,7 @@ df.write
 ``` 
 
 IngestionProperties and short scala usage:
-```
+```scala
 val sp = new SparkIngestionProperties
 var tags = new util.ArrayList[String]()
 tags.add("newTag")
@@ -149,7 +149,7 @@ df.write.kusto(cluster,
 ```
 
 Asynchronous mode, table may not exist and will be created:
-```
+```scala
 df.write
   .format("com.microsoft.kusto.spark.datasource")
   .option(KustoOptions.KUSTO_CLUSTER, "MyCluster.RegionName")
@@ -169,7 +169,7 @@ df.write
  Kusto sink connector was adapted to support writing from a streaming source to a Kusto table.
  
  ### Command Syntax
-  ```
+  ```scala
   <queue-name> = <streaming-source-name>
    .writeStream
    .format("com.microsoft.kusto.spark.datasink.KustoSinkProvider")
@@ -180,7 +180,7 @@ df.write
    .trigger(Trigger.Once)
   ```
  ### Example
- ```
+ ```scala
  var customSchema = new StructType().add("colA", StringType, nullable = true).add("colB", IntegerType, nullable = true)
  
  // Read data to stream 
