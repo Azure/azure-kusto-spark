@@ -30,9 +30,9 @@ For Scala/Java applications using Maven project definitions,
 link your application with the artifact below in order to use the Azure Data Explorer connector for Spark. 
 
 ```
-groupId = com.microsoft.azure
+groupId = com.microsoft.azure.kusto
 artifactId = spark-kusto-connector
-version = 1.0.0-Beta-03 
+version = 1.0.0-BETA-06
 ```
 
 **In Maven**:
@@ -43,10 +43,18 @@ or use the corresponding [released package](https://github.com/Azure/azure-kusto
 
  ```
    <dependency>
-     <groupId>com.microsoft.azure</groupId>
+     <groupId>com.microsoft.azure.kusto</groupId>
      <artifactId>spark-kusto-connector</artifactId>
-     <version>1.0.0-Beta-03</version>
+     <version>1.0.0-BETA-06</version>
    </dependency>
+```
+
+**In Databricks**:
+
+Create Library -> Maven with the following coordinates:
+
+```
+com.microsoft.azure.kusto:spark-kusto-connector:1.0.0-BETA-06
 ```
 
 #### Building Samples Module
