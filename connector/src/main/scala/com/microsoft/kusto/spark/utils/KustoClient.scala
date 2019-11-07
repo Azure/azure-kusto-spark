@@ -86,7 +86,7 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
       }
 
       lastRefresh = new DateTime(DateTimeZone.UTC)
-      storageUris = storage
+      storageUris = scala.util.Random.shuffle(storage)
       roundRobinIdx = 0
       storage(roundRobinIdx)
     }

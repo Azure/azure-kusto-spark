@@ -18,7 +18,7 @@ import org.apache.log4j.{Level, Logger}
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types.StructType
-import org.json.JSONObject
+import java.util.Properties
 
 import scala.collection.JavaConversions._
 import scala.concurrent.duration._
@@ -29,9 +29,21 @@ object KustoDataSourceUtils {
   val urlPattern: Regex = raw"https://(?:ingest-)?(.+).kusto.windows.net(?::443)?".r
   val sasPattern: Regex = raw"(?:https://)?([^.]+).blob.core.windows.net/([^?]+)?(.+)".r
 
-  val ClientName = "Kusto.Spark.Connector"
+
+  var ClientName = "Kusto.Spark.Connector"
   val NewLine = sys.props("line.separator")
   val MaxWaitTime: FiniteDuration = 1 minute
+
+  try {
+    val input = getClass.getClassLoader.getResourceAsStream("app.properties")
+    val prop = new Properties( )
+    prop.load(input)
+    val version = prop.getProperty("application.version")
+    ClientName = s"$ClientName:$version"
+  } catch {
+    case x: Throwable =>
+      klog.warn("Couldn't parse the connector's version:" + x)
+  }
 
   def setLoggingLevel(level: String): Unit = {
     setLoggingLevel(Level.toLevel(level))
