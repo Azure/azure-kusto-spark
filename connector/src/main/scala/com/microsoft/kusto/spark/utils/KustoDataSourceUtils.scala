@@ -335,7 +335,7 @@ object KustoDataSourceUtils {
 
   private[kusto] def parseSas(url: String): KustoStorageParameters = {
     url match {
-      case sasPattern(storageAccountId, container, sasKey) => KustoStorageParameters(storageAccountId, sasKey.substring(1), container, secretIsAccountKey = false)
+      case sasPattern(storageAccountId, container, sasKey) => KustoStorageParameters(storageAccountId, sasKey, container, secretIsAccountKey = false)
       case _ => throw new InvalidParameterException(
         "SAS url couldn't be parsed. Should be https://<storage-account>.blob.core.windows.net/<container>?<SAS-Token>"
       )
