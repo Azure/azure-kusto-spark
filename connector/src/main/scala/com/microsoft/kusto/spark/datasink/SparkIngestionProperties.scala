@@ -69,6 +69,19 @@ class SparkIngestionProperties(var flushImmediately: Boolean = false,
 }
 
 object SparkIngestionProperties {
+  def cloneIngestionProperties(ingestionProperties: IngestionProperties): IngestionProperties = {
+    val cloned = new IngestionProperties(ingestionProperties.getDatabaseName, ingestionProperties.getTableName)
+    cloned.setReportLevel(ingestionProperties.getReportLevel)
+    cloned.setReportMethod(ingestionProperties.getReportMethod)
+    cloned.setAdditionalTags(cloned.getAdditionalTags)
+    cloned.setDropByTags(ingestionProperties.getDropByTags)
+    cloned.setIngestByTags(cloned.getIngestByTags)
+    cloned.setIngestIfNotExists(ingestionProperties.getIngestIfNotExists)
+    cloned.setDataFormat(ingestionProperties.getDataFormat)
+    cloned.setIngestionMapping(ingestionProperties.getIngestionMapping)
+    cloned
+  }
+
   private[kusto] def fromString(json: String): SparkIngestionProperties = {
     new ObjectMapper().setVisibility(JsonMethod.FIELD, Visibility.ANY).readValue(json, classOf[SparkIngestionProperties])
   }

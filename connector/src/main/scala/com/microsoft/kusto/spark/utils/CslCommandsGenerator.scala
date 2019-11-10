@@ -94,4 +94,12 @@ private[kusto] object CslCommandsGenerator {
   def generateTableAlterRetentionPolicy(tmpTableName: String, period: String, recoverable: Boolean): String = {
     s""".alter table $tmpTableName policy retention '{ "SoftDeletePeriod": "$period", "Recoverability":"${if (recoverable) "Enabled" else "Disabled"}" }' """
   }
+
+  def generateShowTableMappingsCommand(tableName: String, kind: String): String = {
+    s""".show table $tableName ingestion $kind mappings"""
+  }
+
+  def generateCreateTableMappingCommand(tableName: String, kind: String, name:String, mappingAsJson: String): String = {
+    s""".create table $tableName ingestion $kind mapping "$name" @"$mappingAsJson""""
+  }
 }
