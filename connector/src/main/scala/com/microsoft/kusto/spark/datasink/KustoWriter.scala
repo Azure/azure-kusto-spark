@@ -151,7 +151,7 @@ object KustoWriter {
 
     KDSU.logWarn(myName, s"Ingesting using ingest client - partition: ${TaskContext.getPartitionId()}")
 
-    tasks.asScala.foreach(t => try{
+    tasks.asScala.foreach(t => try {
       Await.result(t, KCONST.defaultIngestionTaskTime)
     } catch {
       case _: TimeoutException => KDSU.logWarn(myName, s"Timed out trying to ingest, no need to fail as the ingest might succeed")

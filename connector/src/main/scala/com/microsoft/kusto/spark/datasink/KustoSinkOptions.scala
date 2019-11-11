@@ -28,8 +28,8 @@ object KustoSinkOptions extends KustoOptions{
   val NONE_RESULT_LIMIT = "none"
 
   // A limit indicating the size in MB of the aggregated data before ingested to Kusto. Note that this is done for each
-  // partition. The ingestion Kusto also aggregates data, default suggested by Kusto is 1GB but here we suggest to cut
-  // it at 100MG to adjust it to spark pulling of data.
+  // partition. Kusto's ingestion also aggregates data, default suggested by Kusto is 1GB but here we suggest to cut
+  // it at 100MB to adjust it to spark pulling of data.
   val KUSTO_CLIENT_BATCHING_LIMIT: String = newOption("clientBatchingLimit")
 
 }
