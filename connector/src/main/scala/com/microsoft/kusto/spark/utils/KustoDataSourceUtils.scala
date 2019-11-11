@@ -249,11 +249,11 @@ object KustoDataSourceUtils {
     * Returns a CountDownLatch object used to count down iterations and await on it synchronously if needed
     *
     * @param func               - the function to run
-    * @param delay              - delay before first job
-    * @param runEvery           - delay between jobs
-    * @param numberOfTimesToRun - stop jobs after numberOfTimesToRun.
+    * @param delayBeforeStart              - delay before first job
+    * @param delayBeforeEach           - delay between jobs
+    * @param timesToRun - stop jobs after numberOfTimesToRun.
     *                           set negative value to run infinitely
-    * @param doWhile            - stop jobs if condition holds for the func.apply output
+    * @param stopCondition            - stop jobs if condition holds for the func.apply output
     * @param finalWork          - do final work with the last func.apply output
     */
     def doWhile[A](func: () => A, delayBeforeStart: Long, delayBeforeEach: Int, timesToRun: Int, stopCondition: A => Boolean, finalWork: A => Unit): CountDownLatch = {
@@ -325,7 +325,8 @@ object KustoDataSourceUtils {
     if (timeOut < FiniteDuration.apply(0, SECONDS)) {
       task.await()
     } else {
-      if (task.await(timeoutInMillis, TimeUnit.SECONDS)) {
+      if (!task.await(timeoutInMillis, TimeUnit.SECONDS)) {
+        // Timed out
         success = false
       }
     }

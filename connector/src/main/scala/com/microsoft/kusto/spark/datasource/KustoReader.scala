@@ -86,7 +86,7 @@ private[kusto] object KustoReader {
 
     val path = s"wasbs://${storage.container}@${storage.account}.blob.core.windows.net/$directory"
     val rdd = try {
-      request.sparkSession.read.parquet(s"$path").queryExecution.executedPlan.execute().asInstanceOf[RDD[Row]]
+      request.sparkSession.read.parquet(s"$path").rdd
     } catch {
       case ex: Exception =>
         // Check whether the result is empty, causing an IO exception on reading empty parquet file
