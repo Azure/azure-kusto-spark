@@ -37,7 +37,7 @@ object KustoWriter {
   val TempIngestionTablePrefix = "_tmpTable"
   val delayPeriodBetweenCalls: Int = KCONST.defaultPeriodicSamplePeriod.toMillis.toInt
   val GZIP_BUFFER_SIZE: Int = KCONST.defaultBufferSize
-  var maxBlobSize: Int = 100 * KCONST.oneMega
+  var maxBlobSize: Int = KCONST.oneMega * KCONST.oneMega
 
   private[kusto] def write(batchId: Option[Long],
                            data: DataFrame,

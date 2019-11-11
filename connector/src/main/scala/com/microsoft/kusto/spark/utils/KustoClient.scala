@@ -181,8 +181,8 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
     if (StringUtils.isNotBlank(mappingReferenceName)) {
       val mappingKind = mapping.getIngestionMappingKind.toString
       val cmd = generateShowTableMappingsCommand(originalTable, mappingKind)
-      val policies = engineClient.execute(ingestionProperties.getDatabaseName, cmd).getValues
-      val it = policies.iterator()
+      val mappings = engineClient.execute(ingestionProperties.getDatabaseName, cmd).getValues
+      val it = mappings.iterator()
       var found = false
       while (it.hasNext && !found){
         val policy = it.next()
