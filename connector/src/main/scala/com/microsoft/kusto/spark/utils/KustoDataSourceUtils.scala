@@ -187,10 +187,9 @@ object KustoDataSourceUtils {
       throw new InvalidParameterException("KUSTO_TABLE parameter is missing. Must provide a destination table name")
     }
 
-    val writeOptionsForLog = new ObjectMapper()
-      .writerWithDefaultPrettyPrinter
-      .writeValueAsString(writeOptions)
-    logInfo("parseSinkParameters", s"Parsed write options for sink: $writeOptionsForLog")
+    logInfo("parseSinkParameters", s"Parsed write options for sink: {'timeout': ${writeOptions.timeout}, 'async': ${writeOptions.isAsync}, " +
+      s"'tableCreationMode': ${writeOptions.tableCreateOptions}, 'writeLimit': ${writeOptions.writeResultLimit}, 'batchLimit': ${writeOptions.batchLimit}" +
+      s", 'timeout': ${writeOptions.timeout}, 'timezone': ${writeOptions.timeZone}, 'ingestionProperties': $ingestionPropertiesAsJson}")
 
     SinkParameters(writeOptions, sourceParameters)
   }
