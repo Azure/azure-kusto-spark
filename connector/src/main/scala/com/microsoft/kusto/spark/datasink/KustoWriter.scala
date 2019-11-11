@@ -37,14 +37,14 @@ object KustoWriter {
   val TempIngestionTablePrefix = "_tmpTable"
   val delayPeriodBetweenCalls: Int = KCONST.defaultPeriodicSamplePeriod.toMillis.toInt
   val GZIP_BUFFER_SIZE: Int = KCONST.defaultBufferSize
-  val maxBlobSize: Int = 100 * KCONST.oneMega
+  var maxBlobSize: Int = 100 * KCONST.oneMega
 
   private[kusto] def write(batchId: Option[Long],
                            data: DataFrame,
                            tableCoordinates: KustoCoordinates,
                            authentication: KustoAuthentication,
                            writeOptions: WriteOptions): Unit = {
-
+    maxBlobSize = writeOptions.batchLimit * KCONST.oneMega
     val batchIdIfExists = batchId.filter(_ != 0).map(_.toString).getOrElse("")
     val kustoClient = KustoClientCache.getClient(tableCoordinates.cluster, authentication)
 
@@ -69,7 +69,9 @@ object KustoWriter {
 
     val ingestionProperties = getIngestionProperties(writeOptions, parameters)
     kustoClient.setMappingOnStagingTableIfNeeded(ingestionProperties, table)
-
+    if (ingestionProperties.getFlushImmediately){
+      KDSU.logWarn(myName, "Its not recommended to set flushImmediately to true")
+    }
     val rdd = data.queryExecution.toRdd
     val partitionsResults = rdd.sparkContext.collectionAccumulator[PartitionResult]
 
@@ -86,8 +88,7 @@ object KustoWriter {
           KDSU.reportExceptionAndThrow(myName, exception, "writing data", tableCoordinates.cluster, tableCoordinates.database, table, shouldNotThrow = true)
           KDSU.logError(myName, "The exception is not visible in the driver since we're in async mode")
       }
-    }
-    else {
+    } else {
       try
         rdd.foreachPartition { rows => ingestRowsIntoTempTbl(rows, batchIdIfExists, partitionsResults) }
       catch {
@@ -156,7 +157,7 @@ object KustoWriter {
       case _: TimeoutException => KDSU.logWarn(myName, s"Timed out trying to ingest, no need to fail as the ingest might succeed")
     })
   }
-  
+
   private def getIngestionProperties(writeOptions: WriteOptions, parameters: KustoWriteResource): IngestionProperties = {
     if (writeOptions.IngestionProperties.isDefined) {
       SparkIngestionProperties.fromString(writeOptions.IngestionProperties.get).toIngestionProperties(parameters.coordinates.database, parameters.tmpTableName)

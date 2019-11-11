@@ -20,6 +20,8 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types.StructType
 import java.util.Properties
 
+import shaded.parquet.org.codehaus.jackson.map.ObjectMapper
+
 import scala.collection.JavaConversions._
 import scala.concurrent.duration._
 import scala.util.matching.Regex
@@ -152,12 +154,14 @@ object KustoDataSourceUtils {
     var tableCreationParam: Option[String] = None
     var isAsync: Boolean = false
     var isAsyncParam: String = ""
+    var batchLimit: Int = 0
 
     try {
       isAsyncParam = parameters.getOrElse(KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC, "false")
       isAsync = parameters.getOrElse(KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC, "false").trim.toBoolean
       tableCreationParam = parameters.get(KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS)
       tableCreation = if (tableCreationParam.isEmpty) SinkTableCreationMode.FailIfNotExist else SinkTableCreationMode.withName(tableCreationParam.get)
+      batchLimit = parameters.getOrElse(KustoSinkOptions.KUSTO_CLIENT_BATCHING_LIMIT, "100").trim.toInt
     } catch {
       case _: NoSuchElementException => throw new InvalidParameterException(s"No such SinkTableCreationMode option: '${tableCreationParam.get}'")
       case _: java.lang.IllegalArgumentException => throw new InvalidParameterException(s"KUSTO_WRITE_ENABLE_ASYNC is expecting either 'true' or 'false', got: '$isAsyncParam'")
@@ -173,7 +177,8 @@ object KustoDataSourceUtils {
       parameters.getOrElse(KustoSinkOptions.KUSTO_WRITE_RESULT_LIMIT, "1"),
       parameters.getOrElse(DateTimeUtils.TIMEZONE_OPTION, "UTC"),
       timeout,
-      ingestionPropertiesAsJson
+      ingestionPropertiesAsJson,
+      batchLimit
     )
 
     val sourceParameters = parseSourceParameters(parameters)
@@ -181,6 +186,12 @@ object KustoDataSourceUtils {
     if (sourceParameters.kustoCoordinates.table.isEmpty) {
       throw new InvalidParameterException("KUSTO_TABLE parameter is missing. Must provide a destination table name")
     }
+
+    val writeOptionsForLog = new ObjectMapper()
+      .writerWithDefaultPrettyPrinter
+      .writeValueAsString(writeOptions)
+    logInfo("parseSinkParameters", s"Parsed write options for sink: $writeOptionsForLog")
+
     SinkParameters(writeOptions, sourceParameters)
   }
 
