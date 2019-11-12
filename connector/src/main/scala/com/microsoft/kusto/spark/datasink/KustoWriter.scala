@@ -67,9 +67,9 @@ object KustoWriter {
     kustoClient.createTmpTableWithSameSchema(tableCoordinates, tmpTableName, writeOptions.tableCreateOptions, data.schema)
     KDSU.logInfo(myName, s"Successfully created temporary table $tmpTableName, will be deleted after completing the operation")
 
-    val ingestionProperties = getIngestionProperties(writeOptions, parameters)
-    kustoClient.setMappingOnStagingTableIfNeeded(ingestionProperties, table)
-    if (ingestionProperties.getFlushImmediately){
+    val stagingTableIngestionProperties = getIngestionProperties(writeOptions, parameters)
+    kustoClient.setMappingOnStagingTableIfNeeded(stagingTableIngestionProperties, table)
+    if (stagingTableIngestionProperties.getFlushImmediately){
       KDSU.logWarn(myName, "Its not recommended to set flushImmediately to true")
     }
     val rdd = data.queryExecution.toRdd
@@ -285,9 +285,9 @@ object KustoWriter {
   // This method does not check for null at the current row idx and should be checked before !
   private def writeField(row: SpecializedGetters, fieldIndexInRow: Int, dataType: DataType, dateFormat: FastDateFormat, csvWriter: CountingCsvWriter, nested: Boolean): Unit = {
     dataType match {
+      case StringType => GetStringFromUTF8(row.getUTF8String(fieldIndexInRow), nested, csvWriter)
       case DateType => csvWriter.writeStringField(DateTimeUtils.toJavaDate(row.getInt(fieldIndexInRow)).toString, nested)
       case TimestampType => csvWriter.writeStringField(dateFormat.format(DateTimeUtils.toJavaTimestamp(row.getLong(fieldIndexInRow))), nested)
-      case StringType => GetStringFromUTF8(row.getUTF8String(fieldIndexInRow), nested, csvWriter)
       case BooleanType => csvWriter.write(row.getBoolean(fieldIndexInRow).toString)
       case structType: StructType => convertStructToCsv(row.getStruct(fieldIndexInRow, structType.length), structType, dateFormat, csvWriter, nested)
       case arrType: ArrayType => convertArrayToCsv(row.getArray(fieldIndexInRow), arrType.elementType, dateFormat, csvWriter, nested)

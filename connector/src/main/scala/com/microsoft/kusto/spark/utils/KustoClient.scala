@@ -175,21 +175,21 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
     }
   }
 
-  private[kusto] def setMappingOnStagingTableIfNeeded(ingestionProperties: IngestionProperties, originalTable: String): Unit = {
-    val mapping = ingestionProperties.getIngestionMapping
+  private[kusto] def setMappingOnStagingTableIfNeeded(stagingTableIngestionProperties: IngestionProperties, originalTable: String): Unit = {
+    val mapping = stagingTableIngestionProperties.getIngestionMapping
     val mappingReferenceName = mapping.getIngestionMappingReference
     if (StringUtils.isNotBlank(mappingReferenceName)) {
       val mappingKind = mapping.getIngestionMappingKind.toString
       val cmd = generateShowTableMappingsCommand(originalTable, mappingKind)
-      val mappings = engineClient.execute(ingestionProperties.getDatabaseName, cmd).getValues
+      val mappings = engineClient.execute(stagingTableIngestionProperties.getDatabaseName, cmd).getValues
       val it = mappings.iterator()
       var found = false
       while (it.hasNext && !found){
-        val policy = it.next()
-        if(policy.get(0).equals(mappingReferenceName)){
-          val policyJson = policy.get(2).replace("\"","'")
-          val c = generateCreateTableMappingCommand(ingestionProperties.getTableName, mappingKind, mappingReferenceName, policyJson)
-          engineClient.execute(ingestionProperties.getDatabaseName, c)
+        val mapping = it.next()
+        if(mapping.get(0).equals(mappingReferenceName)){
+          val policyJson = mapping.get(2).replace("\"","'")
+          val c = generateCreateTableMappingCommand(stagingTableIngestionProperties.getTableName, mappingKind, mappingReferenceName, policyJson)
+          engineClient.execute(stagingTableIngestionProperties.getDatabaseName, c)
           found = true
         }
       }
