@@ -29,7 +29,7 @@ private[kusto] object CslCommandsGenerator {
   // Note: we could project-away Type, but this would result in an exception for non-existing tables,
   // and we rely on getting an empty result in this case
   def generateTableGetSchemaAsRowsCommand(table: String): String = {
-    ".show table " + table + " schema as json | project ColumnsJson=todynamic(Schema).OrderedColumns" +
+    ".show table " + KustoQueryUtils.normalizeTableName(table) + " schema as json | project ColumnsJson=todynamic(Schema).OrderedColumns" +
       "| mv-expand ColumnsJson | evaluate bag_unpack(ColumnsJson)"
   }
 
@@ -46,7 +46,7 @@ private[kusto] object CslCommandsGenerator {
   }
 
   def generateTableAlterMergePolicyCommand(table: String, allowMerge: Boolean, allowRebuild: Boolean): String = {
-    s""".alter table $table policy merge @'{"AllowMerge":"$allowMerge", "AllowRebuild":"$allowRebuild"}'"""
+    s""".alter table ${KustoQueryUtils.normalizeTableName(table)} policy merge @'{"AllowMerge":"$allowMerge", "AllowRebuild":"$allowRebuild"}'"""
   }
 
   def generateOperationsShowCommand(operationId: String): String = {
@@ -93,5 +93,13 @@ private[kusto] object CslCommandsGenerator {
 
   def generateTableAlterRetentionPolicy(tmpTableName: String, period: String, recoverable: Boolean): String = {
     s""".alter table $tmpTableName policy retention '{ "SoftDeletePeriod": "$period", "Recoverability":"${if (recoverable) "Enabled" else "Disabled"}" }' """
+  }
+
+  def generateShowTableMappingsCommand(tableName: String, kind: String): String = {
+    s""".show table ${KustoQueryUtils.normalizeTableName(tableName)} ingestion $kind mappings"""
+  }
+
+  def generateCreateTableMappingCommand(tableName: String, kind: String, name:String, mappingAsJson: String): String = {
+    s""".create table $tableName ingestion $kind mapping "$name" @"$mappingAsJson""""
   }
 }

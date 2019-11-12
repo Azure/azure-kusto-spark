@@ -26,6 +26,12 @@ object KustoSinkOptions extends KustoOptions{
   val KUSTO_SPARK_INGESTION_PROPERTIES_JSON: String = newOption("sparkIngestionPropertiesJson")
 
   val NONE_RESULT_LIMIT = "none"
+
+  // A limit indicating the size in MB of the aggregated data before ingested to Kusto. Note that this is done for each
+  // partition. Kusto's ingestion also aggregates data, default suggested by Kusto is 1GB but here we suggest to cut
+  // it at 100MB to adjust it to spark pulling of data.
+  val KUSTO_CLIENT_BATCHING_LIMIT: String = newOption("clientBatchingLimit")
+
 }
 
 object SinkTableCreationMode extends Enumeration {
@@ -37,4 +43,5 @@ case class WriteOptions(tableCreateOptions: SinkTableCreationMode.SinkTableCreat
                         isAsync: Boolean = false,
                         writeResultLimit: String = KustoSinkOptions.NONE_RESULT_LIMIT,
                         timeZone: String = "UTC", timeout: FiniteDuration,
-                        IngestionProperties: Option[String] = None)
+                        IngestionProperties: Option[String] = None,
+                        batchLimit: Int = 100)

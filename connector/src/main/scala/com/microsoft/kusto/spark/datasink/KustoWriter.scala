@@ -25,26 +25,26 @@ import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils, MapData}
 import org.apache.spark.sql.types.{DateType, StringType, StructType, TimestampType, _}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.CollectionAccumulator
-import org.apache.spark.{FutureAction, TaskContext}
+import org.apache.spark.TaskContext
 
 import scala.collection.Iterator
 import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.{Await, Future}
+import scala.concurrent.{Await, Future, TimeoutException}
 
 object KustoWriter {
   private val myName = this.getClass.getSimpleName
   val TempIngestionTablePrefix = "_tmpTable"
   val delayPeriodBetweenCalls: Int = KCONST.defaultPeriodicSamplePeriod.toMillis.toInt
   val GZIP_BUFFER_SIZE: Int = KCONST.defaultBufferSize
-  val maxBlobSize: Int = KCONST.oneGiga - KCONST.oneMega
+  var maxBlobSize: Int = KCONST.oneMega * KCONST.oneMega
 
   private[kusto] def write(batchId: Option[Long],
                            data: DataFrame,
                            tableCoordinates: KustoCoordinates,
                            authentication: KustoAuthentication,
                            writeOptions: WriteOptions): Unit = {
-
+    maxBlobSize = writeOptions.batchLimit * KCONST.oneMega
     val batchIdIfExists = batchId.filter(_ != 0).map(_.toString).getOrElse("")
     val kustoClient = KustoClientCache.getClient(tableCoordinates.cluster, authentication)
 
@@ -67,11 +67,16 @@ object KustoWriter {
     kustoClient.createTmpTableWithSameSchema(tableCoordinates, tmpTableName, writeOptions.tableCreateOptions, data.schema)
     KDSU.logInfo(myName, s"Successfully created temporary table $tmpTableName, will be deleted after completing the operation")
 
+    val stagingTableIngestionProperties = getIngestionProperties(writeOptions, parameters)
+    kustoClient.setMappingOnStagingTableIfNeeded(stagingTableIngestionProperties, table)
+    if (stagingTableIngestionProperties.getFlushImmediately){
+      KDSU.logWarn(myName, "Its not recommended to set flushImmediately to true")
+    }
     val rdd = data.queryExecution.toRdd
     val partitionsResults = rdd.sparkContext.collectionAccumulator[PartitionResult]
 
     if (writeOptions.isAsync) {
-      val asyncWork: FutureAction[Unit] = rdd.foreachPartitionAsync { rows => ingestRowsIntoTempTbl(rows, batchIdIfExists, partitionsResults) }
+      val asyncWork = rdd.foreachPartitionAsync { rows => ingestRowsIntoTempTbl(rows, batchIdIfExists, partitionsResults) }
       KDSU.logInfo(myName, s"asynchronous write to Kusto table '$table' in progress")
       // This part runs back on the driver
       asyncWork.onSuccess {
@@ -83,11 +88,10 @@ object KustoWriter {
           KDSU.reportExceptionAndThrow(myName, exception, "writing data", tableCoordinates.cluster, tableCoordinates.database, table, shouldNotThrow = true)
           KDSU.logError(myName, "The exception is not visible in the driver since we're in async mode")
       }
-    }
-    else {
-      try {
+    } else {
+      try
         rdd.foreachPartition { rows => ingestRowsIntoTempTbl(rows, batchIdIfExists, partitionsResults) }
-      } catch {
+      catch {
         case exception: Exception =>
           kustoClient.cleanupIngestionByproducts(tableCoordinates.database, kustoClient.engineClient, tmpTableName)
           throw exception
@@ -138,12 +142,7 @@ object KustoWriter {
                          (implicit parameters: KustoWriteResource): Unit = {
     import parameters._
 
-    val ingestionProperties = if (writeOptions.IngestionProperties.isDefined) {
-      SparkIngestionProperties.fromString(writeOptions.IngestionProperties.get).toIngestionProperties(coordinates.database, tmpTableName)
-    } else {
-      new IngestionProperties(coordinates.database, tmpTableName)
-    }
-
+    val ingestionProperties = getIngestionProperties(writeOptions, parameters)
     ingestionProperties.setDataFormat(DATA_FORMAT.csv.name)
     ingestionProperties.setReportMethod(IngestionProperties.IngestionReportMethod.Table)
     ingestionProperties.setReportLevel(IngestionProperties.IngestionReportLevel.FailuresAndSuccesses)
@@ -152,7 +151,19 @@ object KustoWriter {
 
     KDSU.logWarn(myName, s"Ingesting using ingest client - partition: ${TaskContext.getPartitionId()}")
 
-    tasks.asScala.foreach(t => Await.result(t, KCONST.defaultIngestionTaskTime))
+    tasks.asScala.foreach(t => try {
+      Await.result(t, KCONST.defaultIngestionTaskTime)
+    } catch {
+      case _: TimeoutException => KDSU.logWarn(myName, s"Timed out trying to ingest, no need to fail as the ingest might succeed")
+    })
+  }
+
+  private def getIngestionProperties(writeOptions: WriteOptions, parameters: KustoWriteResource): IngestionProperties = {
+    if (writeOptions.IngestionProperties.isDefined) {
+      SparkIngestionProperties.fromString(writeOptions.IngestionProperties.get).toIngestionProperties(parameters.coordinates.database, parameters.tmpTableName)
+    } else {
+      new IngestionProperties(parameters.coordinates.database, parameters.tmpTableName)
+    }
   }
 
   private def ingestToTemporaryTableByWorkers(
@@ -196,12 +207,18 @@ object KustoWriter {
                                 ingestionProperties: IngestionProperties,
                                 partitionsResults: CollectionAccumulator[PartitionResult]): util.ArrayList[Future[Unit]]
   = {
-    def ingest(blob: CloudBlockBlob, size: Long, sas: String): Future[Unit] = {
+    def ingest(blob: CloudBlockBlob, size: Long, sas: String, flushImmediately: Boolean = false): Future[Unit] = {
       Future {
+        var props = ingestionProperties
+        if(!ingestionProperties.getFlushImmediately && flushImmediately){
+          // Need to copy the ingestionProperties so that only this one will be flushed immediately
+          props = SparkIngestionProperties.cloneIngestionProperties(ingestionProperties)
+          props.setFlushImmediately(true)
+        }
         val blobUri = blob.getStorageUri.getPrimaryUri.toString
         val blobPath = blobUri + sas
         val blobSourceInfo = new BlobSourceInfo(blobPath, size)
-        partitionsResults.add(PartitionResult(ingestClient.ingestFromBlob(blobSourceInfo, ingestionProperties), TaskContext.getPartitionId))
+        partitionsResults.add(PartitionResult(ingestClient.ingestFromBlob(blobSourceInfo, props), TaskContext.getPartitionId))
       }
     }
 
@@ -224,8 +241,9 @@ object KustoWriter {
         if (shouldNotCommitBlockBlob) {
           blobWriter
         } else {
+          KDSU.logInfo(myName, s"Sealing blob in partition ${TaskContext.getPartitionId}, number ${ingestionTasks.size}")
           finalizeBlobWrite(blobWriter)
-          val task = ingest(blobWriter.blob, blobWriter.csvWriter.getCounter, blobWriter.sas)
+          val task = ingest(blobWriter.blob, blobWriter.csvWriter.getCounter, blobWriter.sas, flushImmediately = true)
           ingestionTasks.add(task)
           createBlobWriter(schema, coordinates, tmpTableName, kustoClient)
         }
@@ -267,9 +285,9 @@ object KustoWriter {
   // This method does not check for null at the current row idx and should be checked before !
   private def writeField(row: SpecializedGetters, fieldIndexInRow: Int, dataType: DataType, dateFormat: FastDateFormat, csvWriter: CountingCsvWriter, nested: Boolean): Unit = {
     dataType match {
+      case StringType => GetStringFromUTF8(row.getUTF8String(fieldIndexInRow), nested, csvWriter)
       case DateType => csvWriter.writeStringField(DateTimeUtils.toJavaDate(row.getInt(fieldIndexInRow)).toString, nested)
       case TimestampType => csvWriter.writeStringField(dateFormat.format(DateTimeUtils.toJavaTimestamp(row.getLong(fieldIndexInRow))), nested)
-      case StringType => GetStringFromUTF8(row.getUTF8String(fieldIndexInRow), nested, csvWriter)
       case BooleanType => csvWriter.write(row.getBoolean(fieldIndexInRow).toString)
       case structType: StructType => convertStructToCsv(row.getStruct(fieldIndexInRow, structType.length), structType, dateFormat, csvWriter, nested)
       case arrType: ArrayType => convertArrayToCsv(row.getArray(fieldIndexInRow), arrType.elementType, dateFormat, csvWriter, nested)

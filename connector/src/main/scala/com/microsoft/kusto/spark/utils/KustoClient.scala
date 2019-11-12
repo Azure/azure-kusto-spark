@@ -5,7 +5,7 @@ import java.util.concurrent.TimeUnit
 
 import com.microsoft.azure.kusto.data.{Client, ClientFactory, ConnectionStringBuilder}
 import com.microsoft.azure.kusto.ingest.result.{IngestionStatus, OperationStatus}
-import com.microsoft.azure.kusto.ingest.{IngestClient, IngestClientFactory}
+import com.microsoft.azure.kusto.ingest.{IngestClient, IngestClientFactory, IngestionProperties}
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.KustoWriter.delayPeriodBetweenCalls
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
@@ -13,6 +13,7 @@ import com.microsoft.kusto.spark.datasink.{PartitionResult, SinkTableCreationMod
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.KustoDataSourceUtils.extractSchemaFromResultTable
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
+import org.apache.commons.lang3.StringUtils
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.CollectionAccumulator
 import org.joda.time.{DateTime, DateTimeZone, Period}
@@ -20,11 +21,10 @@ import shaded.parquet.org.codehaus.jackson.map.ObjectMapper
 
 import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.duration.{FiniteDuration, _}
+import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{Await, Future}
 
 class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuilder, val ingestKcsb: ConnectionStringBuilder) {
-
   val engineClient: Client = ClientFactory.createClient(engineKcsb)
 
   // Reading process does not require ingest client to start working
@@ -172,6 +172,27 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
     catch {
       case exception: Exception =>
         KDSU.reportExceptionAndThrow(myName, exception, s"deleting temporary table $tmpTableName", database = database, shouldNotThrow = true)
+    }
+  }
+
+  private[kusto] def setMappingOnStagingTableIfNeeded(stagingTableIngestionProperties: IngestionProperties, originalTable: String): Unit = {
+    val mapping = stagingTableIngestionProperties.getIngestionMapping
+    val mappingReferenceName = mapping.getIngestionMappingReference
+    if (StringUtils.isNotBlank(mappingReferenceName)) {
+      val mappingKind = mapping.getIngestionMappingKind.toString
+      val cmd = generateShowTableMappingsCommand(originalTable, mappingKind)
+      val mappings = engineClient.execute(stagingTableIngestionProperties.getDatabaseName, cmd).getValues
+      val it = mappings.iterator()
+      var found = false
+      while (it.hasNext && !found){
+        val mapping = it.next()
+        if(mapping.get(0).equals(mappingReferenceName)){
+          val policyJson = mapping.get(2).replace("\"","'")
+          val c = generateCreateTableMappingCommand(stagingTableIngestionProperties.getTableName, mappingKind, mappingReferenceName, policyJson)
+          engineClient.execute(stagingTableIngestionProperties.getDatabaseName, c)
+          found = true
+        }
+      }
     }
   }
 
