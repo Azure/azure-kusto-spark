@@ -23,7 +23,7 @@ private[kusto] object CslCommandsGenerator {
 
   // Table name must be normalized
   def generateTableCreateCommand(tableName: String, columnsTypesAndNames: String): String = {
-    s".create table $tableName ($columnsTypesAndNames)"
+    s".create table ${KustoQueryUtils.normalizeTableName(tableName)} ($columnsTypesAndNames)"
   }
 
   // Note: we could project-away Type, but this would result in an exception for non-existing tables,
@@ -34,7 +34,7 @@ private[kusto] object CslCommandsGenerator {
   }
 
   def generateTableDropCommand(table: String): String = {
-    s".drop table $table ifexists"
+    s".drop table ${KustoQueryUtils.normalizeTableName(table)} ifexists"
   }
 
   def generateCreateTmpStorageCommand(): String = {
@@ -92,7 +92,7 @@ private[kusto] object CslCommandsGenerator {
   }
 
   def generateTableAlterRetentionPolicy(tmpTableName: String, period: String, recoverable: Boolean): String = {
-    s""".alter table $tmpTableName policy retention '{ "SoftDeletePeriod": "$period", "Recoverability":"${if (recoverable) "Enabled" else "Disabled"}" }' """
+    s""".alter table ${KustoQueryUtils.normalizeTableName(tmpTableName)} policy retention '{ "SoftDeletePeriod": "$period", "Recoverability":"${if (recoverable) "Enabled" else "Disabled"}" }' """
   }
 
   def generateShowTableMappingsCommand(tableName: String, kind: String): String = {

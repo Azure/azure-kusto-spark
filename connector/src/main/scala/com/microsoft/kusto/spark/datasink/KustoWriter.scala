@@ -36,15 +36,13 @@ object KustoWriter {
   private val myName = this.getClass.getSimpleName
   val TempIngestionTablePrefix = "_tmpTable"
   val delayPeriodBetweenCalls: Int = KCONST.defaultPeriodicSamplePeriod.toMillis.toInt
-  val GZIP_BUFFER_SIZE: Int = KCONST.defaultBufferSize
-  var maxBlobSize: Int = KCONST.oneMega * KCONST.oneMega
+  val GZIP_BUFFER_SIZE: Int = 1000 * KCONST.defaultBufferSize
 
   private[kusto] def write(batchId: Option[Long],
                            data: DataFrame,
                            tableCoordinates: KustoCoordinates,
                            authentication: KustoAuthentication,
                            writeOptions: WriteOptions): Unit = {
-    maxBlobSize = writeOptions.batchLimit * KCONST.oneMega
     val batchIdIfExists = batchId.filter(_ != 0).map(_.toString).getOrElse("")
     val kustoClient = KustoClientCache.getClient(tableCoordinates.cluster, authentication)
 
@@ -208,6 +206,7 @@ object KustoWriter {
                                 partitionsResults: CollectionAccumulator[PartitionResult]): util.ArrayList[Future[Unit]]
   = {
     def ingest(blob: CloudBlockBlob, size: Long, sas: String, flushImmediately: Boolean = false): Future[Unit] = {
+      val partitionId = TaskContext.getPartitionId
       Future {
         var props = ingestionProperties
         if(!ingestionProperties.getFlushImmediately && flushImmediately){
@@ -218,14 +217,14 @@ object KustoWriter {
         val blobUri = blob.getStorageUri.getPrimaryUri.toString
         val blobPath = blobUri + sas
         val blobSourceInfo = new BlobSourceInfo(blobPath, size)
-        partitionsResults.add(PartitionResult(ingestClient.ingestFromBlob(blobSourceInfo, props), TaskContext.getPartitionId))
+        partitionsResults.add(PartitionResult(ingestClient.ingestFromBlob(blobSourceInfo, props), partitionId))
       }
     }
 
     import parameters._
 
     val kustoClient = KustoClientCache.getClient(coordinates.cluster, authentication)
-
+    val maxBlobSize = writeOptions.batchLimit * KCONST.oneMega
     //This blobWriter will be used later to write the rows to blob storage from which it will be ingested to Kusto
     val initialBlobWriter: BlobWriteResource = createBlobWriter(schema, coordinates, tmpTableName, kustoClient)
     val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone(writeOptions.timeZone))
@@ -237,11 +236,12 @@ object KustoWriter {
       case (blobWriter, row) =>
         writeRowAsCSV(row, schema, dateFormat, blobWriter.csvWriter)
 
-        val shouldNotCommitBlockBlob = blobWriter.csvWriter.getCounter < maxBlobSize
+        val count = blobWriter.csvWriter.getCounter
+        val shouldNotCommitBlockBlob =  count < maxBlobSize
         if (shouldNotCommitBlockBlob) {
           blobWriter
         } else {
-          KDSU.logInfo(myName, s"Sealing blob in partition ${TaskContext.getPartitionId}, number ${ingestionTasks.size}")
+          KDSU.logInfo(myName, s"Sealing blob in partition ${TaskContext.getPartitionId}, number ${ingestionTasks.size}, with size $count")
           finalizeBlobWrite(blobWriter)
           val task = ingest(blobWriter.blob, blobWriter.csvWriter.getCounter, blobWriter.sas, flushImmediately = true)
           ingestionTasks.add(task)
