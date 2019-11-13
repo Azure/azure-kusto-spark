@@ -23,7 +23,7 @@ private[kusto] object CslCommandsGenerator {
 
   // Table name must be normalized
   def generateTableCreateCommand(tableName: String, columnsTypesAndNames: String): String = {
-    s".create table ${KustoQueryUtils.normalizeTableName(tableName)} ($columnsTypesAndNames)"
+    s".create table $tableName ($columnsTypesAndNames)"
   }
 
   // Note: we could project-away Type, but this would result in an exception for non-existing tables,
@@ -100,6 +100,6 @@ private[kusto] object CslCommandsGenerator {
   }
 
   def generateCreateTableMappingCommand(tableName: String, kind: String, name:String, mappingAsJson: String): String = {
-    s""".create table $tableName ingestion $kind mapping "$name" @"$mappingAsJson""""
+    s""".create table ${KustoQueryUtils.normalizeTableName(tableName)} ingestion $kind mapping "$name" @"$mappingAsJson""""
   }
 }
