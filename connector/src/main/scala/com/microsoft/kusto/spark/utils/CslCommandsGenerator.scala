@@ -34,7 +34,7 @@ private[kusto] object CslCommandsGenerator {
   }
 
   def generateTableDropCommand(table: String): String = {
-    s".drop table $table ifexists"
+    s".drop table ${KustoQueryUtils.normalizeTableName(table)} ifexists"
   }
 
   def generateCreateTmpStorageCommand(): String = {
@@ -92,7 +92,7 @@ private[kusto] object CslCommandsGenerator {
   }
 
   def generateTableAlterRetentionPolicy(tmpTableName: String, period: String, recoverable: Boolean): String = {
-    s""".alter table $tmpTableName policy retention '{ "SoftDeletePeriod": "$period", "Recoverability":"${if (recoverable) "Enabled" else "Disabled"}" }' """
+    s""".alter table ${KustoQueryUtils.normalizeTableName(tmpTableName)} policy retention '{ "SoftDeletePeriod": "$period", "Recoverability":"${if (recoverable) "Enabled" else "Disabled"}" }' """
   }
 
   def generateShowTableMappingsCommand(tableName: String, kind: String): String = {
@@ -100,6 +100,6 @@ private[kusto] object CslCommandsGenerator {
   }
 
   def generateCreateTableMappingCommand(tableName: String, kind: String, name:String, mappingAsJson: String): String = {
-    s""".create table $tableName ingestion $kind mapping "$name" @"$mappingAsJson""""
+    s""".create table ${KustoQueryUtils.normalizeTableName(tableName)} ingestion $kind mapping "$name" @"$mappingAsJson""""
   }
 }
