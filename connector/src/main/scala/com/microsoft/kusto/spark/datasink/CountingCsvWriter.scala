@@ -33,13 +33,40 @@ case class CountingCsvWriter(out: Writer) {
 
       bytesCounter += 2
 
-      for (c <- str) {
-        if (c == '"') {
-          out.write("\"\"")
-          bytesCounter += 1
+      // Json does not allow special characters
+      if(nested){
+        for (c <- str) {
+          if (c == '\n') {
+            out.write("\\n")
+            bytesCounter += 1
+          } else if ( c == '\t'){
+            out.write("\\t")
+            bytesCounter += 1
+          } else if (c == '\b'){
+            out.write("\\b")
+            bytesCounter += 1
+          } else if ( c == '\f') {
+            out.write("\\f")
+            bytesCounter += 1
+          } else if (c == '\t'){
+            out.write("\\t")
+            bytesCounter += 1
+          }
+          else if (c == '"') {
+            out.write("\\\"\"")
+            bytesCounter += 1
+          } else {
+            out.write(c)
+          }
         }
-        else {
-          out.write(c)
+      } else {
+        for (c <- str) {
+          if (c == '"') {
+            out.write("\"\"")
+            bytesCounter += 1
+          } else {
+            out.write(c)
+          }
         }
       }
 
