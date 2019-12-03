@@ -39,8 +39,8 @@ case class CountingCsvWriter(out: Writer) {
           if (c == '\n') {
             out.write("\\n")
             bytesCounter += 1
-          } else if ( c == '\t'){
-            out.write("\\t")
+          } else if ( c == '\r'){
+            out.write("\\r")
             bytesCounter += 1
           } else if (c == '\b'){
             out.write("\\b")
