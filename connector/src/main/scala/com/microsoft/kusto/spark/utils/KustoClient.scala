@@ -106,7 +106,7 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
     import coordinates._
 
     val mergeTask = Future {
-      KDSU.logInfo(myName, s"Polling on ingestion results, will merge data to destination table when finished")
+      KDSU.logInfo(myName, s"Polling on ingestion results, will move data to destination table when finished")
 
       try {
         partitionsResults.value.asScala.foreach {

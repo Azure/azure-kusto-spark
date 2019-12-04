@@ -2,11 +2,12 @@ package com.microsoft.kusto.spark
 
 import java.io.{BufferedWriter, ByteArrayOutputStream, OutputStreamWriter}
 import java.nio.charset.StandardCharsets
+import java.sql.{Date, Timestamp}
 import java.util
 import java.util.TimeZone
 import java.util.zip.GZIPOutputStream
 
-import com.microsoft.kusto.spark.datasink.{BlobWriteResource, CountingCsvWriter, KustoWriter}
+import com.microsoft.kusto.spark.datasink.{BlobWriteResource, CountingWriter, KustoWriter}
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.spark.SparkConf
@@ -20,17 +21,18 @@ import org.scalatest.{FlatSpec, Matchers}
 
 
 @RunWith(classOf[JUnitRunner])
-class KustoWriterTests extends FlatSpec with Matchers {
+class WriterTests extends FlatSpec with Matchers {
 
   val lineSep: String = java.security.AccessController.doPrivileged(new sun.security.action.GetPropertyAction("line.separator"))
+  val sparkConf: SparkConf = new SparkConf().set("spark.testing", "true")
+    .set("spark.ui.enabled", "false")
+    .setAppName("SimpleKustoDataSink")
+    .setMaster("local[*]")
+  val sparkSession: SparkSession = SparkSession.builder().config(sparkConf).getOrCreate()
 
   def getDF(isNestedSchema: Boolean): DataFrame = {
 
-    val sparkConf: SparkConf = new SparkConf().set("spark.testing", "true")
-      .set("spark.ui.enabled", "false")
-      .setAppName("SimpleKustoDataSink")
-      .setMaster("local[*]")
-    val sparkSession: SparkSession = SparkSession.builder().config(sparkConf).getOrCreate()
+
     val customSchema = if (isNestedSchema) StructType(Array(StructField("Name", StringType, nullable = true), StructField("Number", IntegerType, nullable = true))) else null
     if (isNestedSchema) sparkSession.read.format("csv").option("header", "false").schema(customSchema).load("src/test/resources/ShortTestData/ShortTestData.csv")
     else sparkSession.read.format("json").option("header", "true").load("src/test/resources/TestData/TestDynamicFields.json")
@@ -43,7 +45,7 @@ class KustoWriterTests extends FlatSpec with Matchers {
     val byteArrayOutputStream = new ByteArrayOutputStream()
     val streamWriter = new OutputStreamWriter(byteArrayOutputStream)
     val writer = new BufferedWriter(streamWriter)
-    val csvWriter = CountingCsvWriter(writer)
+    val csvWriter = CountingWriter(writer)
     KustoWriter.writeRowAsCSV(dfRow, df.schema, dateFormat, csvWriter)
     writer.flush()
     writer.close()
@@ -59,7 +61,7 @@ class KustoWriterTests extends FlatSpec with Matchers {
     val byteArrayOutputStream = new ByteArrayOutputStream()
     val streamWriter = new OutputStreamWriter(byteArrayOutputStream)
     val writer = new BufferedWriter(streamWriter)
-    var csvWriter = CountingCsvWriter(writer)
+    var csvWriter = CountingWriter(writer)
     KustoWriter.writeRowAsCSV(dfRow, df.schema, dateFormat, csvWriter)
     writer.flush()
     val got = byteArrayOutputStream.toString()
@@ -75,7 +77,7 @@ class KustoWriterTests extends FlatSpec with Matchers {
     val byteArrayOutputStream = new ByteArrayOutputStream()
     val streamWriter = new OutputStreamWriter(byteArrayOutputStream)
     val writer = new BufferedWriter(streamWriter)
-    val csvWriter = CountingCsvWriter(writer)
+    val csvWriter = CountingWriter(writer)
 
     KustoWriter.writeRowAsCSV(dfRow, df.schema, dateFormat, csvWriter)
     writer.flush()
@@ -86,7 +88,7 @@ class KustoWriterTests extends FlatSpec with Matchers {
   "finalizeFileWrite" should "should flush and close buffers" in {
     val gzip = mock(classOf[GZIPOutputStream])
     val buffer = mock(classOf[BufferedWriter])
-    val csvWriter = CountingCsvWriter(buffer)
+    val csvWriter = CountingWriter(buffer)
 
     val fileWriteResource = BlobWriteResource(buffer, gzip, csvWriter, null, null)
     KustoWriter.finalizeBlobWrite(fileWriteResource)
@@ -127,7 +129,7 @@ class KustoWriterTests extends FlatSpec with Matchers {
     parsedSchema shouldEqual "['SubscriptionGuid']:string,['Identifier']:string,['SomeNumber']:long"
   }
 
-  "convertRowToCsv" should "convert the row as expected with maps" in {
+  "convertRowToCsv" should "convert the row as expected with maps and right escaping" in {
     val sparkConf: SparkConf = new SparkConf().set("spark.testing", "true")
       .set("spark.ui.enabled", "false")
       .setAppName("SimpleKustoDataSink")
@@ -135,16 +137,16 @@ class KustoWriterTests extends FlatSpec with Matchers {
     val sparkSession: SparkSession = SparkSession.builder().config(sparkConf).getOrCreate()
 
     val someData = List(
-      Map("asd" -> Row(Array("stringVal")),
-        "asd2" -> Row(Array("stringVal2")))
+      Map("asd" -> Row(Array("stringVal\n\r\\\"")),
+        "asd2" -> Row(Array("stringVal2\b\f")))
     )
     val someSchema = List(
       StructField("mapToArray", MapType(StringType, new StructType().add("arrayStrings", ArrayType(StringType, containsNull = true), nullable = true), valueContainsNull = true), nullable = true)
     )
 
     val df = sparkSession.createDataFrame(
-      sparkSession.sparkContext.parallelize(KustoWriterTests.asRows(someData)),
-      StructType(KustoWriterTests.asSchema(someSchema))
+      sparkSession.sparkContext.parallelize(WriterTests.asRows(someData)),
+      StructType(WriterTests.asSchema(someSchema))
     )
 
     val dfRow: InternalRow = df.queryExecution.toRdd.collect().head
@@ -152,7 +154,7 @@ class KustoWriterTests extends FlatSpec with Matchers {
     val byteArrayOutputStream = new ByteArrayOutputStream()
     val streamWriter = new OutputStreamWriter(byteArrayOutputStream)
     val writer = new BufferedWriter(streamWriter)
-    val csvWriter = CountingCsvWriter(writer)
+    val csvWriter = CountingWriter(writer)
 
     KustoWriter.writeRowAsCSV(dfRow, df.schema, dateFormat, csvWriter)
     writer.flush()
@@ -161,7 +163,7 @@ class KustoWriterTests extends FlatSpec with Matchers {
   }
 }
 
-object KustoWriterTests {
+object WriterTests {
   def asRows[U](values: List[U]): List[Row] = {
     values.map {
       case row: Row => row.asInstanceOf[Row]
