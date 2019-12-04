@@ -140,8 +140,15 @@ class WriterTests extends FlatSpec with Matchers {
       Map("asd" -> Row(Array("stringVal\n\r\\\"")),
         "asd2" -> Row(Array("stringVal2\b\f")))
     )
+    val someData2 = List(
+      Map("asd" -> Row(Date.valueOf("1991-09-07"), Timestamp.valueOf("2018-06-18 19:04:00"), false, java.math.BigDecimal.valueOf(1/100000.toDouble)))
+    )
+
     val someSchema = List(
       StructField("mapToArray", MapType(StringType, new StructType().add("arrayStrings", ArrayType(StringType, containsNull = true), nullable = true), valueContainsNull = true), nullable = true)
+    )
+    val someSchema2 = List(
+      StructField("mapToStruct", MapType(StringType, new StructType().add("date", DateType, nullable = true).add("time", TimestampType).add("booly", BooleanType).add("deci", DataTypes.createDecimalType(20,14)), valueContainsNull = true), nullable = true)
     )
 
     val df = sparkSession.createDataFrame(
@@ -149,7 +156,13 @@ class WriterTests extends FlatSpec with Matchers {
       StructType(WriterTests.asSchema(someSchema))
     )
 
+    val df2 = sparkSession.createDataFrame(
+      sparkSession.sparkContext.parallelize(WriterTests.asRows(someData2)),
+      StructType(WriterTests.asSchema(someSchema2))
+    )
+
     val dfRow: InternalRow = df.queryExecution.toRdd.collect().head
+    val dfRow2 = df2.queryExecution.toRdd.collect.head
     val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone("UTC"))
     val byteArrayOutputStream = new ByteArrayOutputStream()
     val streamWriter = new OutputStreamWriter(byteArrayOutputStream)
@@ -157,9 +170,15 @@ class WriterTests extends FlatSpec with Matchers {
     val csvWriter = CountingWriter(writer)
 
     KustoWriter.writeRowAsCSV(dfRow, df.schema, dateFormat, csvWriter)
+
+    writer.flush()
+    byteArrayOutputStream.toString shouldEqual "\"{\"\"asd\"\":{\"\"arrayStrings\"\":[\"\"stringVal\\n\\r\\\\\\\"\"\"\"]},\"\"asd2\"\":{\"\"arrayStrings\"\":[\"\"stringVal2\\b\\f\"\"]}}\"" + lineSep
+
+    byteArrayOutputStream.reset()
+    KustoWriter.writeRowAsCSV(dfRow2, df2.schema, dateFormat, csvWriter)
     writer.flush()
     writer.close()
-    byteArrayOutputStream.toString shouldEqual "\"{\"\"asd\"\":{\"\"arrayStrings\"\":[\"\"stringVal\"\"]},\"\"asd2\"\":{\"\"arrayStrings\"\":[\"\"stringVal2\"\"]}}\"" + lineSep
+    byteArrayOutputStream.toString shouldEqual "\"{\"\"asd\"\":{\"\"date\"\":\"\"1991-09-07\"\",\"\"time\"\":\"\"2018-06-18T16:04:00.000Z\"\",\"\"booly\"\":false,\"\"deci\"\":0.00001000000000}}\"" + lineSep
   }
 }
 
