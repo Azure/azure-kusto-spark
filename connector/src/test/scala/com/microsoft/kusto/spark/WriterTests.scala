@@ -140,8 +140,12 @@ class WriterTests extends FlatSpec with Matchers {
       Map("asd" -> Row(Array("stringVal\n\r\\\"")),
         "asd2" -> Row(Array("stringVal2\b\f")))
     )
+
+    // 2018-06-18 16:04:00.0 in GMT
+    val ts = new java.sql.Timestamp(1529337840000l)
+
     val someData2 = List(
-      Map("asd" -> Row(Date.valueOf("1991-09-07"), Timestamp.valueOf("2018-06-18 19:04:00"), false, java.math.BigDecimal.valueOf(1/100000.toDouble)))
+      Map("asd" -> Row(Date.valueOf("1991-09-07"), ts, false, java.math.BigDecimal.valueOf(1/100000.toDouble)))
     )
 
     val someSchema = List(
@@ -163,7 +167,8 @@ class WriterTests extends FlatSpec with Matchers {
 
     val dfRow: InternalRow = df.queryExecution.toRdd.collect().head
     val dfRow2 = df2.queryExecution.toRdd.collect.head
-    val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone("UTC"))
+    val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone("GMT"))
+
     val byteArrayOutputStream = new ByteArrayOutputStream()
     val streamWriter = new OutputStreamWriter(byteArrayOutputStream)
     val writer = new BufferedWriter(streamWriter)
@@ -178,6 +183,7 @@ class WriterTests extends FlatSpec with Matchers {
     KustoWriter.writeRowAsCSV(dfRow2, df2.schema, dateFormat, csvWriter)
     writer.flush()
     writer.close()
+    byteArrayOutputStream.size()
     byteArrayOutputStream.toString shouldEqual "\"{\"\"asd\"\":{\"\"date\"\":\"\"1991-09-07\"\",\"\"time\"\":\"\"2018-06-18T16:04:00.000Z\"\",\"\"booly\"\":false,\"\"deci\"\":0.00001000000000}}\"" + lineSep
   }
 }
