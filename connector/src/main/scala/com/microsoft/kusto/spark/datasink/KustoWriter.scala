@@ -293,7 +293,7 @@ object KustoWriter {
   // This method does not check for null at the current row idx and should be checked before !
   private def writeField(row: SpecializedGetters, fieldIndexInRow: Int, dataType: DataType, dateFormat: FastDateFormat, writer: Writer, nested: Boolean): Unit = {
     dataType match {
-      case StringType => GetStringFromUTF8(row.getUTF8String(fieldIndexInRow), writer)
+      case StringType => writeStringFromUTF8(row.getUTF8String(fieldIndexInRow), writer)
       case DateType => writer.writeStringField(DateTimeUtils.toJavaDate(row.getInt(fieldIndexInRow)).toString)
       case TimestampType => writer.writeStringField(dateFormat.format(DateTimeUtils.toJavaTimestamp(row.getLong(fieldIndexInRow))))
       case BooleanType => writer.write(row.getBoolean(fieldIndexInRow).toString)
@@ -311,7 +311,6 @@ object KustoWriter {
     val fields = schema.fields
     if (fields.length != 0) {
       val writer = EscapedWriter(new CharArrayWriter())
-
       writer.write('{')
 
       var x = 0
@@ -397,7 +396,7 @@ object KustoWriter {
     writer.out.toString
   }
 
-  private def GetStringFromUTF8(str: UTF8String, writer: Writer): Unit = {
+  private def writeStringFromUTF8(str: UTF8String, writer: Writer): Unit = {
     writer.writeStringField(str.toString)
   }
 }
