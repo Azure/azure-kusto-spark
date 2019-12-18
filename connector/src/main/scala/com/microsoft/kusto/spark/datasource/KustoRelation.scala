@@ -12,7 +12,6 @@ import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, Row, SQLContext, SparkSession}
 
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
 import java.util.concurrent.{TimeUnit, TimeoutException}
@@ -35,7 +34,6 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
 
   private val normalizedQuery = KustoQueryUtils.normalizeQuery(query)
   var cachedSchema: StructType = _
-  val timeoutForCountCheck : FiniteDuration = 10 seconds
 
   override def sqlContext: SQLContext = sparkSession.sqlContext
 
@@ -55,20 +53,12 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
 
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
     val kustoClient = KustoClientCache.getClient(kustoCoordinates.cluster, authentication).engineClient
-    var count = 0
-    var timedOutCounting = false
-    try {
-      count = Await.result(Future(KDSU.countRows(kustoClient, query, kustoCoordinates.database)), timeoutForCountCheck)
-    } catch {
-      // Count must be high if took more than 10 seconds
-      case _: TimeoutException => timedOutCounting = true
-    }
-
-    if (count == 0 && !timedOutCounting) {
+    val (count, timedOut) = KDSU.tryEstimateRowsCount(kustoClient, query, kustoCoordinates.database)
+    if (count == 0 && !timedOut) {
       sparkSession.emptyDataFrame.rdd
     }
     else {
-      val useLeanMode = KDSU.shouldUseLeanReadMode(count, storageParameters.isDefined, readOptions.forcedReadMode, timedOutCounting)
+      val useLeanMode = KDSU.shouldUseLeanReadMode(count, storageParameters.isDefined, readOptions.forcedReadMode, timedOut)
       if (useLeanMode) {
         KustoReader.leanBuildScan(
           kustoClient,

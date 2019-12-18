@@ -87,6 +87,10 @@ private[kusto] object CslCommandsGenerator {
     query + "| count"
   }
 
+  def generateEstimateRowsCountQuery(query: String): String = {
+    query + "| evaluate estimate_rows_count()"
+  }
+
   def generateTableCount(table: String): String = {
     s".show tables | where TableName == '$table' | count"
   }
