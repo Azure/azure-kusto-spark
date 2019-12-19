@@ -470,7 +470,7 @@ object KustoDataSourceUtils {
         // Estimation can be empty for certain cases
         val justCountResult = Await.result(Future(
           client.execute(database, generateCountQuery(query)).getValues.get(0)), KustoConstants.timeoutForCountCheck)
-        count = justCountResult.get(1).toInt
+        count = justCountResult.get(0).toInt
       } else {
         // Zero estimation count does not indicate zero results, therefore we add 1 here so that we won't return an empty RDD
         count = estimationResult.get(1).toInt + 1

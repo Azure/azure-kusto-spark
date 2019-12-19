@@ -12,9 +12,8 @@ import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, Row, SQLContext, SparkSession}
 
-import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
-import java.util.concurrent.{TimeUnit, TimeoutException}
+import java.util.concurrent.TimeUnit
 
 import com.microsoft.kusto.spark.datasink.{KustoWriter, WriteOptions}
 
@@ -59,21 +58,32 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
     }
     else {
       val useLeanMode = KDSU.shouldUseLeanReadMode(count, storageParameters.isDefined, readOptions.forcedReadMode, timedOut)
+      var exception: Option[Exception] = None
+      var res: Option[RDD[Row]] = None
       if (useLeanMode) {
-        KustoReader.leanBuildScan(
-          kustoClient,
-          KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication, timeout, clientRequestProperties),
-          KustoFiltering(requiredColumns, filters)
+        try {
+          res = Some(KustoReader.leanBuildScan(
+            kustoClient,
+            KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication, timeout, clientRequestProperties),
+            KustoFiltering(requiredColumns, filters)))
+        } catch {
+          case ex: Exception => exception = Some(ex)
+        }
+      }
+      if(!useLeanMode || (exception.isDefined  && storageParameters.isDefined)) {
+          res = Some(KustoReader.scaleBuildScan(
+            kustoClient,
+            KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication, timeout, clientRequestProperties),
+            storageParameters.get,
+            KustoPartitionParameters(numPartitions, getPartitioningColumn, getPartitioningMode),
+            readOptions,
+            KustoFiltering(requiredColumns, filters))
         )
+      }
+      if(res.isEmpty && exception.isDefined){
+        throw exception.get
       } else {
-        KustoReader.scaleBuildScan(
-          kustoClient,
-          KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication, timeout, clientRequestProperties),
-          storageParameters.get,
-          KustoPartitionParameters(numPartitions, getPartitioningColumn, getPartitioningMode),
-          readOptions,
-          KustoFiltering(requiredColumns, filters)
-        )
+        res.get
       }
     }
   }
