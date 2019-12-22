@@ -460,26 +460,21 @@ object KustoDataSourceUtils {
     client.execute(database, generateCountQuery(query)).getValues.get(0).get(0).toInt
   }
 
-  private[kusto] def tryEstimateRowsCount(client: Client, query: String, database: String): (Int, Boolean) = {
+  private[kusto] def estimateRowsCount(client: Client, query: String, database: String): Int = {
     var count = 0
-    var timedOutCounting = false
-    try {
-      val estimationResult: util.ArrayList[String] = Await.result(Future(
-        client.execute(database, generateEstimateRowsCountQuery(query)).getValues.get(0)), KustoConstants.timeoutForCountCheck)
-      if(StringUtils.isBlank(estimationResult.get(1))){
-        // Estimation can be empty for certain cases
-        val justCountResult = Await.result(Future(
-          client.execute(database, generateCountQuery(query)).getValues.get(0)), KustoConstants.timeoutForCountCheck)
-        count = justCountResult.get(0).toInt
-      } else {
-        // Zero estimation count does not indicate zero results, therefore we add 1 here so that we won't return an empty RDD
-        count = estimationResult.get(1).toInt + 1
-      }
-    } catch {
-      // Assume count is high if estimation took more than 10 seconds
-      case _: Exception => timedOutCounting = true
+    val estimationResult: util.ArrayList[String] = Await.result(Future(
+      client.execute(database, generateEstimateRowsCountQuery(query)).getValues.get(0)), KustoConstants.timeoutForCountCheck)
+    if(StringUtils.isBlank(estimationResult.get(1))){
+      // Estimation can be empty for certain cases
+      val justCountResult = Await.result(Future(
+        client.execute(database, generateCountQuery(query)).getValues.get(0)), KustoConstants.timeoutForCountCheck)
+      count = justCountResult.get(0).toInt
+    } else {
+      // Zero estimation count does not indicate zero results, therefore we add 1 here so that we won't return an empty RDD
+      count = estimationResult.get(1).toInt + 1
     }
-    (count, timedOutCounting)
+
+    count
   }
 
   private[kusto] def shouldUseLeanReadMode(numberOfRows: Int, storageAccessProvided: Boolean, forcedMode: String, timedOutCounting: Boolean): Boolean = {
