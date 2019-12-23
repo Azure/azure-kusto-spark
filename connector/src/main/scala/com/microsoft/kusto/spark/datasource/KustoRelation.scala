@@ -12,10 +12,8 @@ import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, Row, SQLContext, SparkSession}
 
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
-import java.util.concurrent.{TimeUnit, TimeoutException}
+import java.util.concurrent.TimeUnit
 
 import com.microsoft.kusto.spark.datasink.{KustoWriter, WriteOptions}
 
@@ -35,7 +33,6 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
 
   private val normalizedQuery = KustoQueryUtils.normalizeQuery(query)
   var cachedSchema: StructType = _
-  val timeoutForCountCheck : FiniteDuration = 10 seconds
 
   override def sqlContext: SQLContext = sparkSession.sqlContext
 
@@ -55,35 +52,45 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
 
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
     val kustoClient = KustoClientCache.getClient(kustoCoordinates.cluster, authentication).engineClient
-    var count = 0
     var timedOutCounting = false
+    var count = 0
     try {
-      count = Await.result(Future(KDSU.countRows(kustoClient, query, kustoCoordinates.database)), timeoutForCountCheck)
-    } catch {
-      // Count must be high if took more than 10 seconds
-      case _: TimeoutException => timedOutCounting = true
+      count = KDSU.estimateRowsCount(kustoClient, query, kustoCoordinates.database)
+    }catch {
+      // Assume count is high if estimation took more than 10 seconds
+      case _: Exception => timedOutCounting = true
     }
-
     if (count == 0 && !timedOutCounting) {
       sparkSession.emptyDataFrame.rdd
     }
     else {
       val useLeanMode = KDSU.shouldUseLeanReadMode(count, storageParameters.isDefined, readOptions.forcedReadMode, timedOutCounting)
+      var exception: Option[Exception] = None
+      var res: Option[RDD[Row]] = None
       if (useLeanMode) {
-        KustoReader.leanBuildScan(
-          kustoClient,
-          KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication, timeout, clientRequestProperties),
-          KustoFiltering(requiredColumns, filters)
+        try {
+          res = Some(KustoReader.leanBuildScan(
+            kustoClient,
+            KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication, timeout, clientRequestProperties),
+            KustoFiltering(requiredColumns, filters)))
+        } catch {
+          case ex: Exception => exception = Some(ex)
+        }
+      }
+      if(!useLeanMode || (exception.isDefined  && storageParameters.isDefined)) {
+          res = Some(KustoReader.scaleBuildScan(
+            kustoClient,
+            KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication, timeout, clientRequestProperties),
+            storageParameters.get,
+            KustoPartitionParameters(numPartitions, getPartitioningColumn, getPartitioningMode),
+            readOptions,
+            KustoFiltering(requiredColumns, filters))
         )
+      }
+      if(res.isEmpty && exception.isDefined){
+        throw exception.get
       } else {
-        KustoReader.scaleBuildScan(
-          kustoClient,
-          KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication, timeout, clientRequestProperties),
-          storageParameters.get,
-          KustoPartitionParameters(numPartitions, getPartitioningColumn, getPartitioningMode),
-          readOptions,
-          KustoFiltering(requiredColumns, filters)
-        )
+        res.get
       }
     }
   }
