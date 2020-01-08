@@ -6,6 +6,7 @@ import java.util.UUID
 import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties}
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
+import com.microsoft.kusto.spark.datasource.ReadMode.ReadMode
 import com.microsoft.kusto.spark.utils.{CslCommandsGenerator, KustoAzureFsSetupCache, KustoBlobStorageUtils, KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.spark.Partition
 import org.apache.spark.rdd.RDD
@@ -37,7 +38,7 @@ private[kusto] case class KustoReadRequest(sparkSession: SparkSession,
                                            timeout: FiniteDuration,
                                            clientRequestProperties: Option[ClientRequestProperties])
 
-private[kusto] case class KustoReadOptions(forcedReadMode: String = "",
+private[kusto] case class KustoReadOptions(readMode: ReadMode = ReadMode.Default,
                                            shouldCompressOnExport: Boolean = true,
                                            exportSplitLimitMb: Long = 1024)
 

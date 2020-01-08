@@ -16,5 +16,5 @@ object KustoConstants {
   val oneGiga: Int = oneMega * 1024
   // We might want to reduce this - as it actually depends on row size 
   val directQueryUpperBoundRows = 5000
-  val timeoutForCountCheck : FiniteDuration = 10 seconds
+  val timeoutForCountCheck : FiniteDuration = 1 seconds
 }

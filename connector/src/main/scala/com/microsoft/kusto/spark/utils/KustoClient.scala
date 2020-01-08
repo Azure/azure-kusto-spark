@@ -10,13 +10,13 @@ import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.KustoWriter.delayPeriodBetweenCalls
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
 import com.microsoft.kusto.spark.datasink.{PartitionResult, SinkTableCreationMode}
+import com.microsoft.kusto.spark.datasource.KustoStorageParameters
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.KustoDataSourceUtils.extractSchemaFromResultTable
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import org.apache.commons.lang3.StringUtils
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.CollectionAccumulator
-import org.joda.time.{DateTime, DateTimeZone, Period}
 import shaded.parquet.org.codehaus.jackson.map.ObjectMapper
 
 import scala.collection.JavaConverters._
@@ -30,6 +30,10 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
   // Reading process does not require ingest client to start working
   lazy val dmClient: Client = ClientFactory.createClient(ingestKcsb)
   lazy val ingestClient: IngestClient = IngestClientFactory.createClient(ingestKcsb)
+
+  private lazy val exportCacheEntryCreator = (c: ContainerAndSas) => KDSU.parseSas(c.containerUrl + c.sas)
+  private lazy val  ingestContainersCache = new ContainersCache(dmClient, clusterAlias, generateCreateTmpStorageCommand(), (c: ContainerAndSas) => c)
+  private lazy val  exportContainersCache = new ContainersCache(dmClient, clusterAlias, generateGetExportContainersCommand(), exportCacheEntryCreator)
 
   private val myName = this.getClass.getSimpleName
 
@@ -67,33 +71,14 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
     engineClient.execute(database, generateTableAlterRetentionPolicy(tmpTableName, "001:00:00:00", recoverable = false))
   }
 
-  private var roundRobinIdx = 0
-  private var storageUris: Seq[ContainerAndSas] = Seq.empty
-  private var lastRefresh: DateTime = new DateTime(DateTimeZone.UTC)
+
 
   def getNewTempBlobReference: ContainerAndSas = {
-    // Refresh if storageExpiryMinutes have passed since last refresh for this cluster as SAS should be valid for at least 120 minutes
-    if (storageUris.isEmpty ||
-      new Period(new DateTime(DateTimeZone.UTC), lastRefresh).getMinutes > KustoConstants.storageExpiryMinutes) {
+    ingestContainersCache.getContainer
+  }
 
-      val res = dmClient.execute(generateCreateTmpStorageCommand())
-      val storage = res.getValues.asScala.map(row => {
-        val parts = row.get(0).split('?'); ContainerAndSas(parts(0), '?' + parts(1))
-      })
-
-      if (storage.isEmpty) {
-        KDSU.reportExceptionAndThrow(myName, new RuntimeException("Failed to allocate temporary storage"), "writing to Kusto", clusterAlias)
-      }
-
-      lastRefresh = new DateTime(DateTimeZone.UTC)
-      storageUris = scala.util.Random.shuffle(storage)
-      roundRobinIdx = 0
-      storage(roundRobinIdx)
-    }
-    else {
-      roundRobinIdx = (roundRobinIdx + 1) % storageUris.size
-      storageUris(roundRobinIdx)
-    }
+  def getTempBlobForExport: KustoStorageParameters = {
+    exportContainersCache.getContainer
   }
 
   private[kusto] def finalizeIngestionWhenWorkersSucceeded(coordinates: KustoCoordinates,

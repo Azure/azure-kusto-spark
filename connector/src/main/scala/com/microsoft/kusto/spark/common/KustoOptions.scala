@@ -33,11 +33,6 @@ trait KustoOptions {
 
   // An integer number corresponding to the period in seconds after which the operation will timeout. Default: '5400' (90 minutes)
   val KUSTO_TIMEOUT_LIMIT: String = newOption("timeoutLimit")
-
-  object SinkTableCreationMode extends Enumeration {
-    type SinkTableCreationMode = Value
-    val CreateIfNotExist, FailIfNotExist = Value
-  }
 }
 
 case class KustoCoordinates(cluster: String, database: String, table: Option[String] = None)
@@ -56,11 +51,6 @@ private[kusto] object KustoDebugOptions {
     name
   }
 
-  // Reading method is determined internally by the connector
-  // This option allows to override connector heuristics and force a specific mode.
-  // Recommended to use only for debug and testing purposes
-  // Supported values: Empty string (""), 'lean' (direct query), 'scale' (via blob). Default: empty
-  val KUSTO_DBG_FORCE_READ_MODE: String = newOption("dbgForceReadMode")
   // When reading via blob storage, compresses the data upon export from Kusto to Blob
   // This feature is experimental, in order to measure performance impact w/wo compression
   // Default: 'true'

@@ -6,7 +6,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import com.microsoft.azure.kusto.data.{ClientFactory, ConnectionStringBuilder}
 import com.microsoft.kusto.spark.common.KustoDebugOptions
 import com.microsoft.kusto.spark.datasink.KustoSinkOptions
-import com.microsoft.kusto.spark.datasource.KustoSourceOptions
+import com.microsoft.kusto.spark.datasource.{KustoSourceOptions, ReadMode}
 import com.microsoft.kusto.spark.sql.extension.SparkExtension._
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils => KDSU}
@@ -60,7 +60,7 @@ class KustoPruneAndFilterE2E extends FlatSpec with BeforeAndAfterAll {
     val conf = Map(
       KustoSourceOptions.KUSTO_AAD_CLIENT_ID -> appId,
       KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
-      KustoDebugOptions.KUSTO_DBG_FORCE_READ_MODE -> "lean"
+      KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceLeanMode.toString
     )
 
     val df = spark.read.kusto(cluster, database, query, conf).select("ColA")

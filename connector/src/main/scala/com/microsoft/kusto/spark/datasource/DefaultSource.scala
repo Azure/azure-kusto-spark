@@ -81,6 +81,7 @@ class DefaultSource extends CreatableRelationProvider
     }
 
     if (authenticationParameters.isEmpty) {
+      // Parse parameters if haven't got parsed before
       val sourceParameters = KDSU.parseSourceParameters(parameters)
       authenticationParameters = Some(sourceParameters.authenticationParameters)
       kustoCoordinates = sourceParameters.kustoCoordinates
@@ -109,6 +110,7 @@ class DefaultSource extends CreatableRelationProvider
       }
 
     val timeout = new FiniteDuration(parameters.getOrElse(KustoSourceOptions.KUSTO_TIMEOUT_LIMIT, KCONST.defaultWaitingIntervalLongRunning).toLong, TimeUnit.SECONDS)
+    val readModeOption = parameters.getOrElse(KustoSourceOptions.KUSTO_READ_MODE, ReadMode.Default.toString)
 
     KDSU.logInfo(myName, "Finished serializing parameters for reading")
 
@@ -116,7 +118,7 @@ class DefaultSource extends CreatableRelationProvider
       kustoCoordinates,
       kustoAuthentication.get,
       parameters.getOrElse(KustoSourceOptions.KUSTO_QUERY, ""),
-      KustoReadOptions(parameters.getOrElse(KustoDebugOptions.KUSTO_DBG_FORCE_READ_MODE, ""), shouldCompressOnExport, exportSplitLimitMb),
+      KustoReadOptions(ReadMode.withName(readModeOption), shouldCompressOnExport, exportSplitLimitMb),
       timeout,
       numPartitions,
       parameters.get(KustoDebugOptions.KUSTO_PARTITION_COLUMN),

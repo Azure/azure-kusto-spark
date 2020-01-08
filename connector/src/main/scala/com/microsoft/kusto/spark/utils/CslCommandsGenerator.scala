@@ -41,6 +41,10 @@ private[kusto] object CslCommandsGenerator {
     s".create tempstorage"
   }
 
+  def generateGetExportContainersCommand(): String = {
+    s".show export containers"
+  }
+
   def generateTableMoveExtentsCommand(sourceTableName: String, destinationTableName: String): String = {
     s".move extents all from table $sourceTableName to table $destinationTableName"
   }
