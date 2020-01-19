@@ -73,11 +73,11 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
 
 
 
-  def getNewTempBlobReference: ContainerAndSas = {
+  def getTempBlobInfoForIngestion: ContainerAndSas = {
     ingestContainersCache.getContainer
   }
 
-  def getTempBlobForExport: KustoStorageParameters = {
+  def getTempBlobInfoForExport: KustoStorageParameters = {
     exportContainersCache.getContainer
   }
 
