@@ -115,10 +115,10 @@ object KustoWriter {
           .getOrElse(Seq())
 
       // Try delete temporary tablesToCleanup created and not used
-      val tempTablesCurr= kustoClient.engineClient.execute(coordinates.database, generateFindCurrentTempTablesCommand(TempIngestionTablePrefix))
+      val tempTablesCurr: Seq[String] = kustoClient.engineClient.execute(coordinates.database, generateFindCurrentTempTablesCommand(TempIngestionTablePrefix))
+        .getValues.get(0).asScala
 
-
-      val tablesToCleanup: Seq[String] = tempTablesOld.intersect(tempTablesCurr.getValues.get(0).asScala)
+      val tablesToCleanup: Seq[String] = tempTablesOld.intersect(tempTablesCurr)
 
       if (tablesToCleanup.nonEmpty) {
         kustoClient.engineClient.execute(coordinates.database, generateDropTablesCommand(tablesToCleanup.mkString(",")))
