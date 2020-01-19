@@ -186,7 +186,7 @@ object KustoWriter {
                        client: KustoClient): BlobWriteResource = {
     val blobName = s"${tableCoordinates.database}_${tmpTableName}_${UUID.randomUUID.toString}_spark.csv.gz"
 
-    val containerAndSas = client.getNewTempBlobReference
+    val containerAndSas = client.getTempBlobInfoForIngestion
     val currentBlob = new CloudBlockBlob(new URI(containerAndSas.containerUrl + '/' + blobName + containerAndSas.sas))
     val currentSas = containerAndSas.sas
     val gzip: GZIPOutputStream = new GZIPOutputStream(currentBlob.openOutputStream())

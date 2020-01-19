@@ -61,6 +61,7 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
       KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
       KustoDebugOptions.KUSTO_DBG_FORCE_READ_MODE -> "lean"
     )
+        import spark.implicits._
 
     val df = spark.read.kusto(cluster, database, query, conf)
     df.show()

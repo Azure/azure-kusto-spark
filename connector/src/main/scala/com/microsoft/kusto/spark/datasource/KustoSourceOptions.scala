@@ -29,7 +29,7 @@ object KustoSourceOptions extends KustoOptions {
   // query is made, else - if storage params were provided they are used for scale reading and if not - the connector
   // tries to use storage from the kusto ingest service.
   // This option allows to override these connector heuristics.
-  // In any way if a lean mode fails - there is a fallback to scale mode
+  // In default mode if a lean mode was chosen and failed - there is a fallback to scale mode
   // See https://docs.microsoft.com/en-us/azure/kusto/concepts/querylimits#limit-on-result-set-size-result-truncation
   // for hard limit on query size using lean mode
   val KUSTO_READ_MODE: String = newOption("readMode")

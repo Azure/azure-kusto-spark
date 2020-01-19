@@ -61,13 +61,19 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
         count = KDSU.estimateRowsCount(kustoClient, query, kustoCoordinates.database)
       }catch {
         // Assume count is high if estimation got timed out
-        case _: Exception => timedOutCounting = true
+        case e: Exception =>
+          KDSU.logError("here",e.getMessage)
+          if(readOptions.readMode == ReadMode.ForceLeanMode){
+            throw e
+          }
+          // By default we fallback to scale mode
+          timedOutCounting = true
       }
       if (count == 0 && !timedOutCounting) {
         res = Some(sparkSession.emptyDataFrame.rdd)
       } else {
-        // Use scale mode if storage parameters are defined and count is high or timed out
-        useLeanMode =  !(storageParameters.isDefined && (timedOutCounting || count > KustoConstants.directQueryUpperBoundRows))
+        // Use scale mode if count is high or in case of a time out
+        useLeanMode =  !(timedOutCounting || count > KustoConstants.directQueryUpperBoundRows)
       }
     }
 
@@ -85,11 +91,14 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
       }
 
       if (!useLeanMode || exception.isDefined) {
+        if(exception.isDefined){
+            KDSU.logError("KustoRelation",s"Failed with lean mode, falling back to scale mode. Exception : ${exception.get.getMessage}")
+        }
         res = Some(KustoReader.scaleBuildScan(
           kustoClient,
           KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication, timeout, clientRequestProperties),
-          if (storageParameters.isEmpty) storageParameters.get else
-            KustoClientCache.getClient(kustoCoordinates.cluster, authentication).getTempBlobForExport,
+          if (storageParameters.isDefined) storageParameters.get else
+            KustoClientCache.getClient(kustoCoordinates.cluster, authentication).getTempBlobInfoForExport,
           KustoPartitionParameters(numPartitions, getPartitioningColumn, getPartitioningMode),
           readOptions,
           KustoFiltering(requiredColumns, filters))

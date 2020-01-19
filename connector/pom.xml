@@ -89,6 +89,7 @@
             <artifactId>azure-keyvault-webkey</artifactId>
             <version>1.1</version>
         </dependency>
+        <!--might need 2.7 here for local run-->
         <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-azure</artifactId>
