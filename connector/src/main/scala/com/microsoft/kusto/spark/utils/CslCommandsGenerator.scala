@@ -22,8 +22,8 @@ private[kusto] object CslCommandsGenerator {
   }
 
   // Table name must be normalized
-  def generateTableCreateCommand(tableName: String, columnsTypesAndNames: String): String = {
-    s".create table $tableName ($columnsTypesAndNames)"
+  def generateTableCreateCommand(tableName: String, columnsTypesAndNames: String, hidden: Boolean): String = {
+    s".create table $tableName ($columnsTypesAndNames)${if (hidden) " with(hidden=true)" else ""}"
   }
 
   // Note: we could project-away Type, but this would result in an exception for non-existing tables,

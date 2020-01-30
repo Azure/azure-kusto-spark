@@ -157,7 +157,7 @@ class KustoSinkBatchE2E extends FlatSpec with BeforeAndAfterAll{
     val table = KustoQueryUtils.simplifyName(s"${prefix}_${UUID.randomUUID()}")
     val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://$cluster.kusto.windows.net", appId, appKey, authority)
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
-    kustoAdminClient.execute(database, generateTableCreateCommand(table, columnsTypesAndNames = "ColA:string, ColB:int"))
+    kustoAdminClient.execute(database, generateTableCreateCommand(table, columnsTypesAndNames = "ColA:string, ColB:int", hidden = true))
 
     df.write
       .format("com.microsoft.kusto.spark.datasource")
@@ -184,7 +184,7 @@ class KustoSinkBatchE2E extends FlatSpec with BeforeAndAfterAll{
     val table = KustoQueryUtils.simplifyName(s"${prefix}_${UUID.randomUUID()}")
     val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://$cluster.kusto.windows.net", appId, appKey, authority)
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
-    kustoAdminClient.execute(database, generateTableCreateCommand(table, columnsTypesAndNames = "ColA:string, ColB:int"))
+    kustoAdminClient.execute(database, generateTableCreateCommand(table, columnsTypesAndNames = "ColA:string, ColB:int", hidden = true))
 
     df.write
       .format("com.microsoft.kusto.spark.datasource")

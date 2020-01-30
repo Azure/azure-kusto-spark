@@ -55,7 +55,7 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
           tableSchemaBuilder.add(s"['${field.name}']:$fieldType")
         }
         tmpTableSchema = tableSchemaBuilder.toString
-        engineClient.execute(database, generateTableCreateCommand(table, tmpTableSchema))
+        engineClient.execute(database, generateTableCreateCommand(table, tmpTableSchema, hidden = false))
       }
     } else {
       // Table exists. Parse kusto table schema and check if it matches the dataframes schema
@@ -63,7 +63,7 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
     }
 
     //  Create a temporary table with the kusto or dataframe parsed schema with 1 day retention
-    engineClient.execute(database, generateTableCreateCommand(tmpTableName, tmpTableSchema))
+    engineClient.execute(database, generateTableCreateCommand(tmpTableName, tmpTableSchema, hidden = true))
     engineClient.execute(database, generateTableAlterRetentionPolicy(tmpTableName, "001:00:00:00", recoverable = false))
   }
 
