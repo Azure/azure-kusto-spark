@@ -45,7 +45,7 @@ or use the corresponding [released package](https://github.com/Azure/azure-kusto
    <dependency>
      <groupId>com.microsoft.azure.kusto</groupId>
      <artifactId>spark-kusto-connector</artifactId>
-     <version>1.0.0-BETA-06</version>
+     <version>1.0.2</version>
    </dependency>
 ```
 
@@ -54,7 +54,7 @@ or use the corresponding [released package](https://github.com/Azure/azure-kusto
 Create Library -> Maven with the following coordinates:
 
 ```
-com.microsoft.azure.kusto:spark-kusto-connector:1.0.0-BETA-06
+com.microsoft.azure.kusto:spark-kusto-connector:1.0.2
 ```
 
 #### Building Samples Module
@@ -108,8 +108,8 @@ on [Microsoft Azure SDK For Key Vault](https://mvnrepository.com/artifact/com.mi
 
 > **Note:** When working with Databricks, Azure Data Explorer connector requires Azure Data Explorer java client libraries (and azure key-vault library if used) to be installed.
 This can be done by accessing Databricks Create Library -> Maven and specifying the following coordinates:
-- com.microsoft.azure.kusto:kusto-data:1.0.0-BETA-04
-- com.microsoft.azure.kusto:kusto-ingest:1.0.0-BETA-04
+- com.microsoft.azure.kusto:spark-kusto-connector:1.0.2
+- com.microsoft.azure.kusto:spark-kusto-connector:1.0.2
 
 ## Documentation
 
