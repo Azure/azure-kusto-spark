@@ -32,14 +32,18 @@ link your application with the artifact below in order to use the Azure Data Exp
 ```
 groupId = com.microsoft.azure.kusto
 artifactId = spark-kusto-connector
-version = 1.0.0-BETA-06
+version = 1.0.2
 ```
 
 **In Maven**:
 
-> Note that the jar is in beta and not available yet in public maven. 
-Clone this repository and build it locally to add it to your local maven repository, 
-or use the corresponding [released package](https://github.com/Azure/azure-kusto-spark/releases)
+Look for the following coordinates: 
+```
+com.microsoft.azure.kusto:spark-kusto-connector:1.0.2
+```
+
+Or clone this repository and build it locally to add it to your local maven repository, 
+the jar can also be found under the [released package](https://github.com/Azure/azure-kusto-spark/releases)
 
  ```
    <dependency>
