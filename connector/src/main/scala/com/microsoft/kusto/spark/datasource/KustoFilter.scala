@@ -52,12 +52,12 @@ private[kusto] object KustoFilter {
 
   private def binaryScalarOperatorFilter(schema: StructType, attr: String, value: Any, operator: String): Option[String] = {
     getType(schema, attr).map {
-      dataType => s"$attr $operator ${format(value, dataType)}"
+      dataType => s"['$attr'] $operator ${format(value, dataType)}"
     }
   }
 
   private def unaryScalarOperatorFilter(attr: String, function: String): Option[String] = {
-    Some(s"$function($attr)")
+    Some(s"$function(['$attr'])")
   }
 
   private def binaryLogicalOperatorFilter(schema: StructType, leftFilter: Filter, rightFilter: Filter, operator: String): Option[String] = {
@@ -75,7 +75,7 @@ private[kusto] object KustoFilter {
   private  def stringOperatorFilter(schema: StructType, attr: String, value: String, operator: String): Option[String] = {
     // Will return 'None' if 'attr' is not part of the 'schema'
     getType(schema, attr).map {
-      _ => s"""$attr $operator '$value'"""
+      _ => s"""['$attr'] $operator '$value'"""
     }
   }
 
@@ -85,7 +85,7 @@ private[kusto] object KustoFilter {
 
   private def unaryOperatorOnValueSetFilter(schema: StructType, attr: String, value: Array[Any], operator: String): Option[String] = {
     getType(schema, attr).map {
-      dataType => s"$attr $operator (${toStringList(value, dataType)})"
+      dataType => s"['$attr'] $operator (${toStringList(value, dataType)})"
     }
   }
 
