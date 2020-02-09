@@ -18,7 +18,7 @@ private[kusto] object KustoFilter {
 
   def buildColumnsClause(columns: Array[String]): String = {
     if(columns.isEmpty) "" else {
-      " | project " + columns.mkString(", ")
+      " | project " + columns.map(col=>s"['$col']").mkString(", ")
     }
   }
 
