@@ -20,8 +20,6 @@ import scala.collection.immutable
 
 @RunWith(classOf[JUnitRunner])
 class KustoPruneAndFilterE2E extends FlatSpec with BeforeAndAfterAll {
-  private val myName = this.getClass.getSimpleName
-
   private val nofExecutors = 4
   private val spark: SparkSession = SparkSession.builder()
     .appName("KustoSink")
