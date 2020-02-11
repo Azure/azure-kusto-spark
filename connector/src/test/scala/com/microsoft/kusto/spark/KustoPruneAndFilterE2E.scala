@@ -20,8 +20,6 @@ import scala.collection.immutable
 
 @RunWith(classOf[JUnitRunner])
 class KustoPruneAndFilterE2E extends FlatSpec with BeforeAndAfterAll {
-  private val myName = this.getClass.getSimpleName
-
   private val nofExecutors = 4
   private val spark: SparkSession = SparkSession.builder()
     .appName("KustoSink")
@@ -76,7 +74,7 @@ class KustoPruneAndFilterE2E extends FlatSpec with BeforeAndAfterAll {
     val blobKey: String = System.getProperty("blobKey")
     val blobSas: String = System.getProperty("blobSas")
 
-    val conf = if (blobSas.isEmpty) {
+    val conf = if (blobSas == null) {
       Map(KustoSourceOptions.KUSTO_AAD_CLIENT_ID -> appId,
         KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
         KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME -> storageAccount,
@@ -214,7 +212,7 @@ class KustoPruneAndFilterE2E extends FlatSpec with BeforeAndAfterAll {
 
     val dfResult = spark.read.kusto(cluster, database, query, conf)
     val dfFiltered = dfResult
-      .where(dfResult.col("ColA").startsWith("row-2"))
+      .where(dfResult.col("ColA']").startsWith("row-2"))
       .filter("ColB > 12")
       .filter("ColB <= 21")
       .collect().sortBy(x => x.getAs[Int](1))
