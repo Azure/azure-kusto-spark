@@ -5,10 +5,9 @@ import java.util.UUID
 
 import com.microsoft.azure.kusto.data.{ClientFactory, ConnectionStringBuilder}
 import com.microsoft.kusto.spark.datasink.KustoSinkOptions
-import com.microsoft.kusto.spark.datasource.{KustoResponseDeserializer, KustoSourceOptions}
+import com.microsoft.kusto.spark.datasource.{KustoResponseDeserializer, KustoSourceOptions, KustoStorageParameters}
 import com.microsoft.kusto.spark.utils.{CslCommandsGenerator, KustoBlobStorageUtils, KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import com.microsoft.kusto.spark.sql.extension.SparkExtension._
-
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{SQLContext, SparkSession}
 import org.junit.runner.RunWith
@@ -121,12 +120,9 @@ class KustoBlobAccessE2E extends FlatSpec with BeforeAndAfterAll {
 
     val exportCommand = CslCommandsGenerator.generateExportDataCommand(
       myTable,
-      storageAccount,
-      container,
       directory,
-      secret,
-      useKeyNotSas,
       partitionId,
+      Seq(KustoStorageParameters(storageAccount, secret, container, useKeyNotSas)),
       Some(partitionPredicate),
       None
     )

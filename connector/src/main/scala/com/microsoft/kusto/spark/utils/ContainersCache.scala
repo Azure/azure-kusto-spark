@@ -18,7 +18,22 @@ class ContainersCache[A](val dmClient: Client, val clusterAlias: String, val com
     // Refresh if storageExpiryMinutes have passed since last refresh for this cluster as SAS should be valid for at least 120 minutes
     if (storageUris.isEmpty ||
       new Period(new DateTime(DateTimeZone.UTC), lastRefresh).getMinutes > KustoConstants.storageExpiryMinutes) {
+      refresh
+    } else {
+      roundRobinIdx = (roundRobinIdx + 1) % storageUris.size
+      storageUris(roundRobinIdx)
+    }
+  }
 
+  def getAllContainers = {
+    if (storageUris.isEmpty ||
+      new Period(new DateTime(DateTimeZone.UTC), lastRefresh).getMinutes > KustoConstants.storageExpiryMinutes){
+      refresh
+    }
+    storageUris
+  }
+
+  private def refresh = {
       val res = dmClient.execute(command)
       val storage = res.getValues.asScala.map(row => {
         val parts = row.get(0).split('?')
@@ -33,10 +48,5 @@ class ContainersCache[A](val dmClient: Client, val clusterAlias: String, val com
       storageUris = scala.util.Random.shuffle(storage)
       roundRobinIdx = 0
       storage(roundRobinIdx)
-    }
-    else {
-      roundRobinIdx = (roundRobinIdx + 1) % storageUris.size
-      storageUris(roundRobinIdx)
-    }
   }
 }

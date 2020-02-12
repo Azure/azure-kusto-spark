@@ -97,8 +97,8 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
         res = Some(KustoReader.scaleBuildScan(
           kustoClient,
           KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication, timeout, clientRequestProperties),
-          if (storageParameters.isDefined) storageParameters.get else
-            KustoClientCache.getClient(kustoCoordinates.cluster, authentication).getTempBlobInfoForExport,
+          if (storageParameters.isDefined) Seq(storageParameters.get) else
+            KustoClientCache.getClient(kustoCoordinates.cluster, authentication).getTempBlobsInfoForExport,
           KustoPartitionParameters(numPartitions, getPartitioningColumn, getPartitioningMode),
           readOptions,
           KustoFiltering(requiredColumns, filters))

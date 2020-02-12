@@ -71,14 +71,12 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
     engineClient.execute(database, generateTableAlterRetentionPolicy(tmpTableName, "001:00:00:00", recoverable = false))
   }
 
-
-
   def getTempBlobInfoForIngestion: ContainerAndSas = {
     ingestContainersCache.getContainer
   }
 
-  def getTempBlobInfoForExport: KustoStorageParameters = {
-    exportContainersCache.getContainer
+  def getTempBlobsInfoForExport: Seq[KustoStorageParameters] = {
+    exportContainersCache.getAllContainers
   }
 
   private[kusto] def finalizeIngestionWhenWorkersSucceeded(coordinates: KustoCoordinates,
