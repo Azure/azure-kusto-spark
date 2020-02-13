@@ -67,7 +67,7 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
     }
 
     //  Create a temporary table with the kusto or dataframe parsed schema with 1 day retention
-    engineClient.execute(database, generateTableCreateCommand(tmpTableName, tmpTableSchema))
+    engineClient.execute(database, generateTempTableCreateCommand(tmpTableName, tmpTableSchema))
     engineClient.execute(database, generateTableAlterRetentionPolicy(tmpTableName, "001:00:00:00", recoverable = false))
   }
 

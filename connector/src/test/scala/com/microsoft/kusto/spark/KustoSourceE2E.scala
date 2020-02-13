@@ -100,7 +100,7 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
     // Create a new table.
     val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://$cluster.kusto.windows.net", appId, appKey, authority)
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
-    kustoAdminClient.execute(database, generateTableCreateCommand(table, columnsTypesAndNames = "ColA:string, ColB:int"))
+    kustoAdminClient.execute(database, generateTempTableCreateCommand(table, columnsTypesAndNames = "ColA:string, ColB:int"))
 
     dfOrig.write
       .format("com.microsoft.kusto.spark.datasource")
