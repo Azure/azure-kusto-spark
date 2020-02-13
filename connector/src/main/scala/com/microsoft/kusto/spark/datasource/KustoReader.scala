@@ -1,9 +1,12 @@
 package com.microsoft.kusto.spark.datasource
 
+import java.net.URI
 import java.security.InvalidParameterException
 import java.util.UUID
 
 import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties}
+import com.microsoft.azure.storage.StorageCredentialsAccountAndKey
+import com.microsoft.azure.storage.blob.CloudBlobContainer
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasource.ReadMode.ReadMode
@@ -81,9 +84,16 @@ private[kusto] object KustoReader {
         filtering,
         request.clientRequestProperties)
     }
-    val paths: Seq[String] = storage
-      .map(params=>s"wasbs://${params.container}@${params.account}.blob.core.windows.net/$directory")
 
+    val directoryExists = (params: KustoStorageParameters) => {
+      val container = if (params.secretIsAccountKey) {
+        new CloudBlobContainer(new URI(s"https://${params.account}.blob.core.windows.net/${params.container}"), new StorageCredentialsAccountAndKey(params.account,params.secret))
+      } else {
+        new CloudBlobContainer(new URI(s"https://${params.account}.blob.core.windows.net/${params.container}?${params.secret}"))
+      }
+      container.getDirectoryReference(directory).listBlobsSegmented().getLength > 0
+    }
+    val paths = storage.filter(directoryExists).map(params => s"wasbs://${params.container}@${params.account}.blob.core.windows.net/$directory")
     KDSU.logInfo(myName, s"Finished exporting from Kusto to '$paths'" +
       s", will start parquet reading now")
 
