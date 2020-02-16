@@ -59,7 +59,7 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
     val conf: Map[String, String] = Map(
       KustoSourceOptions.KUSTO_AAD_CLIENT_ID -> appId,
       KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
-      KustoDebugOptions.KUSTO_DBG_FORCE_READ_MODE -> "lean"
+      KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceLeanMode.toString
     )
 
     val df = spark.read.kusto(cluster, database, query, conf)
