@@ -57,9 +57,9 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
     val query: String = System.getProperty(KustoSourceOptions.KUSTO_QUERY, s"$table | where (toint(ColB) % 1000 == 0) | distinct ColA ")
 
     val conf: Map[String, String] = Map(
+      KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceLeanMode.toString,
       KustoSourceOptions.KUSTO_AAD_CLIENT_ID -> appId,
-      KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
-      KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceLeanMode.toString
+      KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey
     )
 
     val df = spark.read.kusto(cluster, database, query, conf)
