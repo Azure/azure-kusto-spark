@@ -53,7 +53,8 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
     val kustoClient = KustoClientCache.getClient(kustoCoordinates.cluster, authentication).engineClient
     var timedOutCounting = false
-    var useLeanMode = readOptions.readMode.isDefined && readOptions.readMode.get == ReadMode.ForceLeanMode
+    val forceLeanMode = readOptions.readMode.isDefined && readOptions.readMode.get == ReadMode.ForceSingleMode
+    var useLeanMode = forceLeanMode
     var res: Option[RDD[Row]] = None
     if (readOptions.readMode.isEmpty){
       var count = 0
@@ -62,8 +63,8 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
       }catch {
         // Assume count is high if estimation got timed out
         case e: Exception =>
-          KDSU.logError("here",e.getMessage)
-          if(readOptions.readMode.isDefined && readOptions.readMode.get == ReadMode.ForceLeanMode){
+          if (forceLeanMode) {
+            // Throw in case user forced LeanMode
             throw e
           }
           // By default we fallback to scale mode

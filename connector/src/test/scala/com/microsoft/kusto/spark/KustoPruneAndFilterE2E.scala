@@ -58,7 +58,7 @@ class KustoPruneAndFilterE2E extends FlatSpec with BeforeAndAfterAll {
     val conf = Map(
       KustoSourceOptions.KUSTO_AAD_CLIENT_ID -> appId,
       KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
-      KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceLeanMode.toString
+      KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceSingleMode.toString
     )
 
     val df = spark.read.kusto(cluster, database, query, conf).select("ColA")
