@@ -31,9 +31,10 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
   lazy val dmClient: Client = ClientFactory.createClient(ingestKcsb)
   lazy val ingestClient: IngestClient = IngestClientFactory.createClient(ingestKcsb)
 
-  private lazy val exportCacheEntryCreator = (c: ContainerAndSas) => KDSU.parseSas(c.containerUrl + c.sas)
-  private lazy val  ingestContainersCache = new ContainersCache(dmClient, clusterAlias, generateCreateTmpStorageCommand(), (c: ContainerAndSas) => c)
-  private lazy val  exportContainersCache = new ContainersCache(dmClient, clusterAlias, generateGetExportContainersCommand(), exportCacheEntryCreator)
+  private val exportProviderEntryCreator = (c: ContainerAndSas) => KDSU.parseSas(c.containerUrl + c.sas)
+  private val ingestProviderEntryCreator = (c: ContainerAndSas) => c
+  private lazy val  ingestContainersContainerProvider = new ContainerProvider(dmClient, clusterAlias, generateCreateTmpStorageCommand(), ingestProviderEntryCreator)
+  private lazy val  exportContainersContainerProvider = new ContainerProvider(dmClient, clusterAlias, generateGetExportContainersCommand(), exportProviderEntryCreator)
 
   private val myName = this.getClass.getSimpleName
 
@@ -71,12 +72,12 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
     engineClient.execute(database, generateTableAlterRetentionPolicy(tmpTableName, "001:00:00:00", recoverable = false))
   }
 
-  def getTempBlobInfoForIngestion: ContainerAndSas = {
-    ingestContainersCache.getContainer
+  def getTempBlobForIngestion: ContainerAndSas = {
+    ingestContainersContainerProvider.getContainer
   }
 
-  def getTempBlobsInfoForExport: Seq[KustoStorageParameters] = {
-    exportContainersCache.getAllContainers
+  def getTempBlobsForExport: Seq[KustoStorageParameters] = {
+    exportContainersContainerProvider.getAllContainers
   }
 
   private[kusto] def finalizeIngestionWhenWorkersSucceeded(coordinates: KustoCoordinates,

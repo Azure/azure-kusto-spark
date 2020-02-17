@@ -8,7 +8,7 @@ import org.joda.time.{DateTime, DateTimeZone, Period}
 
 import scala.collection.JavaConverters._
 
-class ContainersCache[A](val dmClient: Client, val clusterAlias: String, val command: String, cacheEntryCreator: ContainerAndSas => A) {
+class ContainerProvider[A](val dmClient: Client, val clusterAlias: String, val command: String, cacheEntryCreator: ContainerAndSas => A) {
   private var roundRobinIdx = 0
   private var storageUris: Seq[A] = Seq.empty
   private var lastRefresh: DateTime = new DateTime(DateTimeZone.UTC)
