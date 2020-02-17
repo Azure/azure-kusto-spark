@@ -5,7 +5,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import com.microsoft.azure.kusto.data.{ClientFactory, ConnectionStringBuilder}
 import com.microsoft.kusto.spark.common.KustoDebugOptions
 import com.microsoft.kusto.spark.datasink.KustoSinkOptions
-import com.microsoft.kusto.spark.datasource.KustoSourceOptions
+import com.microsoft.kusto.spark.datasource.{KustoSourceOptions, ReadMode}
 import com.microsoft.kusto.spark.sql.extension.SparkExtension._
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils => KDSU}
@@ -115,8 +115,7 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
 
     val conf: Map[String, String] = Map(
       KustoSinkOptions.KUSTO_AAD_CLIENT_ID -> appId,
-      KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
-      KustoDebugOptions.KUSTO_DBG_FORCE_READ_MODE -> "lean"
+      KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey
     )
 
     val dfResult = spark.read.kusto(cluster, database, table, conf)

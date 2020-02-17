@@ -37,6 +37,6 @@ object KustoSourceOptions extends KustoOptions {
 
 object ReadMode extends Enumeration {
   type ReadMode = Value
-  val Default, ForceLeanMode, ForceScaleMode = Value
+  val ForceLeanMode, ForceScaleMode = Value
 
 }

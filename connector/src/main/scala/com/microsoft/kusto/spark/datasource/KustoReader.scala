@@ -41,7 +41,7 @@ private[kusto] case class KustoReadRequest(sparkSession: SparkSession,
                                            timeout: FiniteDuration,
                                            clientRequestProperties: Option[ClientRequestProperties])
 
-private[kusto] case class KustoReadOptions(readMode: ReadMode = ReadMode.Default,
+private[kusto] case class KustoReadOptions(readMode: Option[ReadMode] = None,
                                            shouldCompressOnExport: Boolean = true,
                                            exportSplitLimitMb: Long = 1024)
 
