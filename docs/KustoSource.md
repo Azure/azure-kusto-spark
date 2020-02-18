@@ -35,7 +35,7 @@ that is using it. Please verify the following before using Kusto connector:
  **Simplified Command Syntax**: 
   ```
  <dataframe-name> = 
- spark.read.kusto(<cluster-name.region-name>, <database-name>, <kusto-query>, <parameters map>)
+ spark.read.kusto(<cluster-name.region-name>, <database-name>, <kusto-query>, <parameters map>, <ClientRequestProperties>)
   ```
  where:
  * **Kusto-query** is any valid Kusto query. For details, please refer to [Query statements documentation](https://docs.microsoft.com/en-us/azure/kusto/query/statements). To read the whole table, just provide the table name as query.
@@ -43,7 +43,8 @@ that is using it. Please verify the following before using Kusto connector:
  Kusto commands  cannot be executed via the connector.
  * **Parameters map** is a set of key-value pairs, where the key is the parameter name. See [Supported Options](#supported-options)
  section for details
- 
+ * **ClientRequestProperties** is a json of [ClientRequestProperties](https://github.com/Azure/azure-kusto-java/blob/master/data/src/main/java/com/microsoft/azure/kusto/data/ClientRequestProperties.java) object - 
+ optional. Parameters described [here](https://docs.microsoft.com/en-us/azure/kusto/api/netfx/request-properties).
   
 **Elaborate Command Syntax**: 
 ```
