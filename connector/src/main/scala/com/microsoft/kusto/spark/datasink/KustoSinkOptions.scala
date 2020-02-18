@@ -31,7 +31,6 @@ object KustoSinkOptions extends KustoOptions{
   // partition. Kusto's ingestion also aggregates data, default suggested by Kusto is 1GB but here we suggest to cut
   // it at 100MB to adjust it to spark pulling of data.
   val KUSTO_CLIENT_BATCHING_LIMIT: String = newOption("clientBatchingLimit")
-
 }
 
 object SinkTableCreationMode extends Enumeration {

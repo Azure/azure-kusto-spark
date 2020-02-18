@@ -1,11 +1,15 @@
 package com.microsoft.kusto.spark.datasource
 
+import java.net.URI
 import java.security.InvalidParameterException
 import java.util.UUID
 
 import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties}
+import com.microsoft.azure.storage.StorageCredentialsAccountAndKey
+import com.microsoft.azure.storage.blob.CloudBlobContainer
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
+import com.microsoft.kusto.spark.datasource.ReadMode.ReadMode
 import com.microsoft.kusto.spark.utils.{CslCommandsGenerator, KustoAzureFsSetupCache, KustoBlobStorageUtils, KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.spark.Partition
 import org.apache.spark.rdd.RDD
@@ -37,16 +41,16 @@ private[kusto] case class KustoReadRequest(sparkSession: SparkSession,
                                            timeout: FiniteDuration,
                                            clientRequestProperties: Option[ClientRequestProperties])
 
-private[kusto] case class KustoReadOptions(forcedReadMode: String = "",
+private[kusto] case class KustoReadOptions(readMode: Option[ReadMode] = None,
                                            shouldCompressOnExport: Boolean = true,
                                            exportSplitLimitMb: Long = 1024)
 
 private[kusto] object KustoReader {
   private val myName = this.getClass.getSimpleName
 
-  private[kusto] def leanBuildScan(kustoClient: Client,
-                                   request: KustoReadRequest,
-                                   filtering: KustoFiltering): RDD[Row] = {
+  private[kusto] def singleBuildScan(kustoClient: Client,
+                                     request: KustoReadRequest,
+                                     filtering: KustoFiltering): RDD[Row] = {
 
     val filteredQuery = KustoFilter.pruneAndFilter(request.schema, request.query, filtering)
     val kustoResult = kustoClient.execute(request.kustoCoordinates.database,
@@ -57,12 +61,12 @@ private[kusto] object KustoReader {
     request.sparkSession.createDataFrame(serializer.toRows, serializer.getSchema).rdd
   }
 
-  private[kusto] def scaleBuildScan(kustoClient: Client,
-                                    request: KustoReadRequest,
-                                    storage: KustoStorageParameters,
-                                    partitionInfo: KustoPartitionParameters,
-                                    options: KustoReadOptions,
-                                    filtering: KustoFiltering): RDD[Row] = {
+  private[kusto] def distributedBuildScan(kustoClient: Client,
+                                          request: KustoReadRequest,
+                                          storage: Seq[KustoStorageParameters],
+                                          partitionInfo: KustoPartitionParameters,
+                                          options: KustoReadOptions,
+                                          filtering: KustoFiltering): RDD[Row] = {
     KDSU.logInfo(myName, "Starting exporting data from Kusto to blob storage")
 
     setupBlobAccess(request, storage)
@@ -81,12 +85,20 @@ private[kusto] object KustoReader {
         request.clientRequestProperties)
     }
 
-    KDSU.logInfo(myName, s"Finished exporting from Kusto to '${storage.account}/${storage.container}/$directory'" +
+    val directoryExists = (params: KustoStorageParameters) => {
+      val container = if (params.secretIsAccountKey) {
+        new CloudBlobContainer(new URI(s"https://${params.account}.blob.core.windows.net/${params.container}"), new StorageCredentialsAccountAndKey(params.account,params.secret))
+      } else {
+        new CloudBlobContainer(new URI(s"https://${params.account}.blob.core.windows.net/${params.container}?${params.secret}"))
+      }
+      container.getDirectoryReference(directory).listBlobsSegmented().getLength > 0
+    }
+    val paths = storage.filter(directoryExists).map(params => s"wasbs://${params.container}@${params.account}.blob.core.windows.net/$directory")
+    KDSU.logInfo(myName, s"Finished exporting from Kusto to '$paths'" +
       s", will start parquet reading now")
 
-    val path = s"wasbs://${storage.container}@${storage.account}.blob.core.windows.net/$directory"
     val rdd = try {
-      request.sparkSession.read.parquet(s"$path").rdd
+      request.sparkSession.read.parquet(paths:_*).rdd
     } catch {
       case ex: Exception =>
         // Check whether the result is empty, causing an IO exception on reading empty parquet file
@@ -101,9 +113,7 @@ private[kusto] object KustoReader {
         }
     }
 
-    KDSU.logInfo(myName, "Transaction data written to blob storage account " +
-      storage.account + ", container " + storage.container + ", directory " + directory)
-
+    KDSU.logInfo(myName, "Transaction data written to blob storage, paths:" + paths)
     rdd
   }
 
@@ -117,22 +127,24 @@ private[kusto] object KustoReader {
     }
   }
 
-  private[kusto] def setupBlobAccess(request: KustoReadRequest, storage: KustoStorageParameters): Unit = {
+  private[kusto] def setupBlobAccess(request: KustoReadRequest, storageParameters: Seq[KustoStorageParameters]): Unit = {
     val config = request.sparkSession.conf
     val now = new DateTime(DateTimeZone.UTC)
-    if (storage.secretIsAccountKey) {
-      if (!KustoAzureFsSetupCache.updateAndGetPrevStorageAccountAccess(storage.account, storage.secret, now)) {
-        config.set(s"fs.azure.account.key.${storage.account}.blob.core.windows.net", s"${storage.secret}")
+    for(storage <- storageParameters) {
+      if (storage.secretIsAccountKey) {
+        if (!KustoAzureFsSetupCache.updateAndGetPrevStorageAccountAccess(storage.account, storage.secret, now)) {
+          config.set(s"fs.azure.account.key.${storage.account}.blob.core.windows.net", s"${storage.secret}")
+        }
       }
-    }
-    else {
-      if (!KustoAzureFsSetupCache.updateAndGetPrevSas(storage.container, storage.account, storage.secret, now)) {
-        config.set(s"fs.azure.sas.${storage.container}.${storage.account}.blob.core.windows.net", s"${storage.secret}")
+      else {
+        if (!KustoAzureFsSetupCache.updateAndGetPrevSas(storage.container, storage.account, storage.secret, now)) {
+          config.set(s"fs.azure.sas.${storage.container}.${storage.account}.blob.core.windows.net", s"${storage.secret}")
+        }
       }
-    }
 
-    if (!KustoAzureFsSetupCache.updateAndGetPrevNativeAzureFs(now)) {
-      config.set("fs.azure", "org.apache.hadoop.fs.azure.NativeAzureFileSystem")
+      if (!KustoAzureFsSetupCache.updateAndGetPrevNativeAzureFs(now)) {
+        config.set("fs.azure", "org.apache.hadoop.fs.azure.NativeAzureFileSystem")
+      }
     }
   }
 
@@ -156,14 +168,14 @@ private[kusto] object KustoReader {
   }
 }
 
-private[kusto] class KustoReader(client: Client, request: KustoReadRequest, storage: KustoStorageParameters) {
+private[kusto] class KustoReader(client: Client, request: KustoReadRequest, storage: Seq[KustoStorageParameters]) {
   private val myName = this.getClass.getSimpleName
 
   // Export a single partition from Kusto to transient Blob storage.
   // Returns the directory path for these blobs
   private[kusto] def exportPartitionToBlob(partition: KustoPartition,
                                            request: KustoReadRequest,
-                                           storage: KustoStorageParameters,
+                                           storage: Seq[KustoStorageParameters],
                                            directory: String,
                                            options: KustoReadOptions,
                                            filtering: KustoFiltering,
@@ -173,12 +185,9 @@ private[kusto] class KustoReader(client: Client, request: KustoReadRequest, stor
 
     val exportCommand = CslCommandsGenerator.generateExportDataCommand(
       KustoFilter.pruneAndFilter(request.schema, request.query, filtering),
-      storage.account,
-      storage.container,
       directory,
-      storage.secret,
-      storage.secretIsAccountKey,
       partition.idx,
+      storage,
       partition.predicate,
       limit,
       isCompressed = options.shouldCompressOnExport

@@ -7,6 +7,7 @@ import com.microsoft.azure.kusto.data.ClientRequestProperties
 import com.microsoft.kusto.spark.authentication.{KeyVaultAuthentication, KustoAuthentication}
 import com.microsoft.kusto.spark.common.{KustoCoordinates, KustoDebugOptions}
 import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, KustoWriter}
+import com.microsoft.kusto.spark.datasource.ReadMode.ReadMode
 import com.microsoft.kusto.spark.utils.{KeyVaultUtils, KustoQueryUtils, KustoConstants => KCONST, KustoDataSourceUtils => KDSU}
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister, RelationProvider}
 import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode}
@@ -81,6 +82,7 @@ class DefaultSource extends CreatableRelationProvider
     }
 
     if (authenticationParameters.isEmpty) {
+      // Parse parameters if haven't got parsed before
       val sourceParameters = KDSU.parseSourceParameters(parameters)
       authenticationParameters = Some(sourceParameters.authenticationParameters)
       kustoCoordinates = sourceParameters.kustoCoordinates
@@ -109,6 +111,12 @@ class DefaultSource extends CreatableRelationProvider
       }
 
     val timeout = new FiniteDuration(parameters.getOrElse(KustoSourceOptions.KUSTO_TIMEOUT_LIMIT, KCONST.defaultWaitingIntervalLongRunning).toLong, TimeUnit.SECONDS)
+    val readModeOption = parameters.get(KustoSourceOptions.KUSTO_READ_MODE)
+    val readMode: Option[ReadMode]  = if (readModeOption.isDefined){
+      Some(ReadMode.withName(readModeOption.get))
+    } else {
+      None
+    }
 
     KDSU.logInfo(myName, "Finished serializing parameters for reading")
 
@@ -116,7 +124,7 @@ class DefaultSource extends CreatableRelationProvider
       kustoCoordinates,
       kustoAuthentication.get,
       parameters.getOrElse(KustoSourceOptions.KUSTO_QUERY, ""),
-      KustoReadOptions(parameters.getOrElse(KustoDebugOptions.KUSTO_DBG_FORCE_READ_MODE, ""), shouldCompressOnExport, exportSplitLimitMb),
+      KustoReadOptions(readMode, shouldCompressOnExport, exportSplitLimitMb),
       timeout,
       numPartitions,
       parameters.get(KustoDebugOptions.KUSTO_PARTITION_COLUMN),

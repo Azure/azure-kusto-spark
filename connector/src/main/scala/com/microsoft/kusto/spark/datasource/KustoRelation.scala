@@ -53,23 +53,36 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
     val kustoClient = KustoClientCache.getClient(kustoCoordinates.cluster, authentication).engineClient
     var timedOutCounting = false
-    var count = 0
-    try {
-      count = KDSU.estimateRowsCount(kustoClient, query, kustoCoordinates.database)
-    }catch {
-      // Assume count is high if estimation took more than 10 seconds
-      case _: Exception => timedOutCounting = true
+    val forceSingleMode = readOptions.readMode.isDefined && readOptions.readMode.get == ReadMode.ForceSingleMode
+    var useSingleMode = forceSingleMode
+    var res: Option[RDD[Row]] = None
+    if (readOptions.readMode.isEmpty){
+      var count = 0
+      try {
+        count = KDSU.estimateRowsCount(kustoClient, query, kustoCoordinates.database)
+      }catch {
+        // Assume count is high if estimation got timed out
+        case e: Exception =>
+          if (forceSingleMode) {
+            // Throw in case user forced LeanMode
+            throw e
+          }
+          // By default we fallback to distributed mode
+          timedOutCounting = true
+      }
+      if (count == 0 && !timedOutCounting) {
+        res = Some(sparkSession.emptyDataFrame.rdd)
+      } else {
+        // Use distributed mode if count is high or in case of a time out
+        useSingleMode =  !(timedOutCounting || count > KustoConstants.directQueryUpperBoundRows)
+      }
     }
-    if (count == 0 && !timedOutCounting) {
-      sparkSession.emptyDataFrame.rdd
-    }
-    else {
-      val useLeanMode = KDSU.shouldUseLeanReadMode(count, storageParameters.isDefined, readOptions.forcedReadMode, timedOutCounting)
-      var exception: Option[Exception] = None
-      var res: Option[RDD[Row]] = None
-      if (useLeanMode) {
+
+    var exception: Option[Exception] = None
+    if(res.isEmpty) {
+      if (useSingleMode) {
         try {
-          res = Some(KustoReader.leanBuildScan(
+          res = Some(KustoReader.singleBuildScan(
             kustoClient,
             KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication, timeout, clientRequestProperties),
             KustoFiltering(requiredColumns, filters)))
@@ -77,22 +90,28 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
           case ex: Exception => exception = Some(ex)
         }
       }
-      if(!useLeanMode || (exception.isDefined  && storageParameters.isDefined)) {
-          res = Some(KustoReader.scaleBuildScan(
-            kustoClient,
-            KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication, timeout, clientRequestProperties),
-            storageParameters.get,
-            KustoPartitionParameters(numPartitions, getPartitioningColumn, getPartitioningMode),
-            readOptions,
-            KustoFiltering(requiredColumns, filters))
+
+      if (!useSingleMode || exception.isDefined) {
+        if(exception.isDefined){
+            KDSU.logError("KustoRelation",s"Failed with lean mode, falling back to distributed mode. Exception : ${exception.get.getMessage}")
+        }
+        res = Some(KustoReader.distributedBuildScan(
+          kustoClient,
+          KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication, timeout, clientRequestProperties),
+          if (storageParameters.isDefined) Seq(storageParameters.get) else
+            KustoClientCache.getClient(kustoCoordinates.cluster, authentication).getTempBlobsForExport,
+          KustoPartitionParameters(numPartitions, getPartitioningColumn, getPartitioningMode),
+          readOptions,
+          KustoFiltering(requiredColumns, filters))
         )
       }
+
       if(res.isEmpty && exception.isDefined){
         throw exception.get
-      } else {
-        res.get
       }
     }
+
+    res.get
   }
 
   private def getSchema: StructType = {

@@ -1,6 +1,7 @@
 package com.microsoft.kusto.spark.utils
 
 import com.microsoft.kusto.spark.datasink.KustoWriter.TempIngestionTablePrefix
+import com.microsoft.kusto.spark.datasource.KustoStorageParameters
 
 private[kusto] object CslCommandsGenerator {
 
@@ -45,6 +46,10 @@ private[kusto] object CslCommandsGenerator {
     s".create tempstorage"
   }
 
+  def generateGetExportContainersCommand(): String = {
+    s".show export containers"
+  }
+
   def generateTableMoveExtentsCommand(sourceTableName: String, destinationTableName: String): String = {
     s".move extents all from table $sourceTableName to table $destinationTableName"
   }
@@ -60,25 +65,26 @@ private[kusto] object CslCommandsGenerator {
   // Export data to blob
   def generateExportDataCommand(
                                  query: String,
-                                 storageAccountName: String,
-                                 container: String,
                                  directory: String,
-                                 secret: String,
-                                 useKeyNotSas: Boolean = true,
                                  partitionId: Int,
+                                 storageParameters: Seq[KustoStorageParameters],
                                  partitionPredicate: Option[String] = None,
                                  sizeLimit: Option[Long],
                                  isAsync: Boolean = true,
                                  isCompressed: Boolean = false): String = {
+    val getFullUrlFromParams = (storage: KustoStorageParameters) => {
+      val secret = storage.secret
+      val secretString = if (storage.secretIsAccountKey) s""";" h@"$secret"""" else if (secret(0) == '?') s"""" h@"$secret"""" else s"""?" h@"$secret""""
+      val blobUri = s"https://${storage.account}.blob.core.windows.net"
+      s"$blobUri/${storage.container}$secretString"
+    }
 
-    val secretString = if (useKeyNotSas) s""";" h@"$secret"""" else if (secret(0) == '?') s"""" h@"$secret"""" else s"""?" h@"$secret""""
-    val blobUri = s"https://$storageAccountName.blob.core.windows.net"
     val async = if (isAsync) "async " else ""
     val compress = if (isCompressed) "compressed " else ""
     val sizeLimitIfDefined = if (sizeLimit.isDefined) s"sizeLimit=${sizeLimit.get * 1024 * 1024}, " else ""
 
     var command =
-      s""".export $async${compress}to parquet ("$blobUri/$container$secretString)""" +
+      s""".export $async${compress}to parquet ("${storageParameters.map(getFullUrlFromParams).reduce((s,s1)=>s+",\"" + s1)})""" +
         s""" with (${sizeLimitIfDefined}namePrefix="${directory}part$partitionId", compressionType=snappy) <| $query"""
 
     if (partitionPredicate.nonEmpty) {

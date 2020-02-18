@@ -3,9 +3,8 @@ import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 
 import com.microsoft.azure.kusto.data.{ClientFactory, ConnectionStringBuilder}
-import com.microsoft.kusto.spark.common.KustoDebugOptions
 import com.microsoft.kusto.spark.datasink.KustoSinkOptions
-import com.microsoft.kusto.spark.datasource.KustoSourceOptions
+import com.microsoft.kusto.spark.datasource.{KustoSourceOptions, ReadMode}
 import com.microsoft.kusto.spark.sql.extension.SparkExtension._
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils => KDSU}
@@ -52,21 +51,21 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
   private val loggingLevel: Option[String] = Option(System.getProperty("logLevel"))
   if (loggingLevel.isDefined) KDSU.setLoggingLevel(loggingLevel.get)
 
-  "KustoSource" should "execute a read query on Kusto cluster in lean mode" taggedAs KustoE2E in {
+  "KustoSource" should "execute a read query on Kusto cluster in single mode" taggedAs KustoE2E in {
     val table: String = System.getProperty(KustoSinkOptions.KUSTO_TABLE)
     val query: String = System.getProperty(KustoSourceOptions.KUSTO_QUERY, s"$table | where (toint(ColB) % 1000 == 0) | distinct ColA ")
 
     val conf: Map[String, String] = Map(
+      KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceSingleMode.toString,
       KustoSourceOptions.KUSTO_AAD_CLIENT_ID -> appId,
-      KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
-      KustoDebugOptions.KUSTO_DBG_FORCE_READ_MODE -> "lean"
+      KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey
     )
 
     val df = spark.read.kusto(cluster, database, query, conf)
     df.show()
   }
 
-  "KustoSource" should "execute a read query on Kusto cluster in scale mode" taggedAs KustoE2E in {
+  "KustoSource" should "execute a read query on Kusto cluster in distributed mode" taggedAs KustoE2E in {
     val table: String = System.getProperty(KustoSinkOptions.KUSTO_TABLE)
     val query: String = System.getProperty(KustoSourceOptions.KUSTO_QUERY, s"$table | where (toint(ColB) % 1 == 0)")
 
@@ -87,7 +86,7 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
     spark.read.kusto(cluster, database, query, conf).show(20)
   }
 
-  "KustoConnector" should "write to a kusto table and read it back in lean mode" taggedAs KustoE2E in {
+  "KustoConnector" should "write to a kusto table and read it back in default mode" taggedAs KustoE2E in {
     import spark.implicits._
 
     val rowId = new AtomicInteger(1)
@@ -115,8 +114,7 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
 
     val conf: Map[String, String] = Map(
       KustoSinkOptions.KUSTO_AAD_CLIENT_ID -> appId,
-      KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
-      KustoDebugOptions.KUSTO_DBG_FORCE_READ_MODE -> "lean"
+      KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey
     )
 
     val dfResult = spark.read.kusto(cluster, database, table, conf)
