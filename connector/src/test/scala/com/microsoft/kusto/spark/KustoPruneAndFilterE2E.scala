@@ -51,7 +51,7 @@ class KustoPruneAndFilterE2E extends FlatSpec with BeforeAndAfterAll {
   private val loggingLevel: Option[String] = Option(System.getProperty("logLevel"))
   if (loggingLevel.isDefined) KDSU.setLoggingLevel(loggingLevel.get)
 
-  "KustoSource" should "apply pruning and filtering when reading in lean mode" taggedAs KustoE2E in {
+  "KustoSource" should "apply pruning and filtering when reading in single mode" taggedAs KustoE2E in {
     val table: String = System.getProperty(KustoSinkOptions.KUSTO_TABLE)
     val query: String = System.getProperty(KustoSourceOptions.KUSTO_QUERY, s"$table | where (toint(ColB) % 1000 == 0) ")
 
@@ -165,7 +165,7 @@ class KustoPruneAndFilterE2E extends FlatSpec with BeforeAndAfterAll {
     KustoTestUtils.tryDropAllTablesByPrefix(kustoAdminClient, database, "KustoSparkReadWriteWithFiltersTest")
   }
 
-  "KustoConnector" should "write to a kusto table and read it back in scale mode with filtering" taggedAs KustoE2E in {
+  "KustoConnector" should "write to a kusto table and read it back in distributed mode with filtering" taggedAs KustoE2E in {
     import spark.implicits._
 
     val rowId = new AtomicInteger(1)

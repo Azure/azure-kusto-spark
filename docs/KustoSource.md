@@ -22,6 +22,11 @@ that is using it. Please verify the following before using Kusto connector:
  Kusto connector implements Spark 'Datasource V1' API. 
  Kusto data source identifier is "com.microsoft.kusto.spark.datasource". 
  Kusto table schema is translated into a spark as explained in [DataTypes](Spark-Kusto DataTypes mapping.md).
+ The reading is done in one of two modes: 'Single' and 'Distributed'. By default if the user did not override the read mode - an estimated
+ count for the query is made; for small row count - a 'Single' mode is chosen with a fallback to the 'Distributed' mode (as the first might
+ fail due to [kusto limit policy](https://docs.microsoft.com/en-us/azure/kusto/concepts/querylimits)). In 'Distributed' mode, a distributed
+ [export command](https://docs.microsoft.com/en-us/azure/kusto/management/data-export/export-data-to-storage) is called followed by a
+ distributed spark Parquet read.  
  
  ### Command Syntax
  
@@ -84,17 +89,17 @@ All the options that can be use in the Kusto source are under the object KustoSo
     
 * **KUSTO_CLIENT_REQUEST_PROPERTIES_JSON**:
   A json representation for [ClientRequestProperties](https://github.com/Azure/azure-kusto-java/blob/master/data/src/main/java/com/microsoft/azure/kusto/data/ClientRequestProperties.java)
-   used in the call for reading from kusto (or the export command for 'scale' mode). Use toString to make the json.
+   used in the call for reading from kusto (used in the single query for 'single' mode or for the export command for 'distributed' mode). Use toString to create the json.
     
     
 #### Transient Storage Parameters
-When reading data from Kusto in 'scale' mode, the data is exported from Kusto into a blob storage every time the corresponding RDD is materialized.
-In order to allow working in 'scale' mode, storage parameters must be provided by the caller. 
+When reading data from Kusto in 'distributed' mode, the data is exported from Kusto into a blob storage every time the corresponding RDD is materialized. 
+If the user does'nt specify storage parameters and a 'Distributed' read mode is chosen - the storage used will be provided by Kusto ingest service. 
 
->Note: maintenance of the blob storage is the caller responsibility. This includes provisioning the storage, rotating access keys, 
+>Note: If the user provides the blob storage - the blobs created are under the caller responsibility. This includes provisioning the storage, rotating access keys, 
 deleting transient artifacts etc. KustoBlobStorageUtils module contains helper functions for deleting blobs based on either account and container 
 coordinates and account credentials, or a full SAS URL with write, read and list permissions. Once the corresponding RDD is no longer needed. Each transaction stores transient blob 
-artifacts in a separate directory. This directory is captured as part of read-transaction information logs reported on Spark Driver node 
+artifacts in a separate directory. This directory is captured as part of read-transaction information logs reported on the Spark Driver node 
 
 * **KUSTO_BLOB_STORAGE_ACCOUNT_NAME**
 Transient storage account name. Either this, or a SAS url, must be provided in order to access the storage account
@@ -109,6 +114,11 @@ Once the RDD is no longer required by the caller application, the container and/
 * **KUSTO_BLOB_STORAGE_SAS_URL**
 SAS access url: a complete url of the SAS to the container. Either this, or a storage account name and key, must be provided
   in order to access the storage account
+  
+* **KUSTO_READ_MODE**
+Override the connector heuristic to choose between 'Single' and 'Distributed' mode.
+Options are - 'ForceSingleMode', 'ForceDistributedMode'.
+Scala and java users may take these options from com.microsoft.kusto.spark.datasource.ReadMode.
   
  ### Examples
  

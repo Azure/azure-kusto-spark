@@ -12,7 +12,7 @@ object KustoSourceOptions extends KustoOptions {
   // A json representation of the ClientRequestProperties object used for reading from Kusto
   var KUSTO_CLIENT_REQUEST_PROPERTIES_JSON: String = newOption("clientRequestPropertiesJson")
 
-  // Blob Storage access parameters for source connector when working in 'scale' mode (read)
+  // Blob Storage access parameters for source connector when working in 'distributed' mode (read)
   // These parameters will not be needed once we move to automatic blob provisioning
 
   // Transient storage account when reading from Kusto
@@ -26,12 +26,12 @@ object KustoSourceOptions extends KustoOptions {
   val KUSTO_BLOB_CONTAINER: String = newOption("blobContainer")
 
   // By default an estimation of the rows count is first being made, if the count is lower than 5000 records a simple
-  // query is made, else - if storage params were provided they are used for scale reading and if not - the connector
+  // query is made, else - if storage params were provided they are used for 'distributed' reading and if not - the connector
   // tries to use storage from the kusto ingest service.
   // This option allows to override these connector heuristics.
-  // In default mode if a lean mode was chosen and failed - there is a fallback to scale mode
+  // By default if the single mode was chosen and failed - there is a fallback to 'distributed' mode
   // See https://docs.microsoft.com/en-us/azure/kusto/concepts/querylimits#limit-on-result-set-size-result-truncation
-  // for hard limit on query size using lean mode
+  // for hard limit on query size using single mode
   val KUSTO_READ_MODE: String = newOption("readMode")
 }
 

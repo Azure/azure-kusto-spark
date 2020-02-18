@@ -48,9 +48,9 @@ private[kusto] case class KustoReadOptions(readMode: Option[ReadMode] = None,
 private[kusto] object KustoReader {
   private val myName = this.getClass.getSimpleName
 
-  private[kusto] def leanBuildScan(kustoClient: Client,
-                                   request: KustoReadRequest,
-                                   filtering: KustoFiltering): RDD[Row] = {
+  private[kusto] def singleBuildScan(kustoClient: Client,
+                                     request: KustoReadRequest,
+                                     filtering: KustoFiltering): RDD[Row] = {
 
     val filteredQuery = KustoFilter.pruneAndFilter(request.schema, request.query, filtering)
     val kustoResult = kustoClient.execute(request.kustoCoordinates.database,
@@ -61,12 +61,12 @@ private[kusto] object KustoReader {
     request.sparkSession.createDataFrame(serializer.toRows, serializer.getSchema).rdd
   }
 
-  private[kusto] def scaleBuildScan(kustoClient: Client,
-                                    request: KustoReadRequest,
-                                    storage: Seq[KustoStorageParameters],
-                                    partitionInfo: KustoPartitionParameters,
-                                    options: KustoReadOptions,
-                                    filtering: KustoFiltering): RDD[Row] = {
+  private[kusto] def distributedBuildScan(kustoClient: Client,
+                                          request: KustoReadRequest,
+                                          storage: Seq[KustoStorageParameters],
+                                          partitionInfo: KustoPartitionParameters,
+                                          options: KustoReadOptions,
+                                          filtering: KustoFiltering): RDD[Row] = {
     KDSU.logInfo(myName, "Starting exporting data from Kusto to blob storage")
 
     setupBlobAccess(request, storage)
