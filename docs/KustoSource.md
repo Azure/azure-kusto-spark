@@ -21,7 +21,7 @@ that is using it. Please verify the following before using Kusto connector:
  
  Kusto connector implements Spark 'Datasource V1' API. 
  Kusto data source identifier is "com.microsoft.kusto.spark.datasource". 
- Kusto table schema is translated into a spark as explained in [Spark-Kusto DataTypes](mapping.md).
+ Kusto table schema is translated into a spark schema as explained in [Spark-Kusto DataTypes](mapping.md).
  The reading is done in one of two modes: 'Single' and 'Distributed'. By default if the user did not override the read mode - an estimated
  count for the query is made; for small row count - a 'Single' mode is chosen with a fallback to the 'Distributed' mode (as the first might
  fail due to [kusto limit policy](https://docs.microsoft.com/en-us/azure/kusto/concepts/querylimits)). In 'Distributed' mode, a distributed
@@ -43,8 +43,6 @@ that is using it. Please verify the following before using Kusto connector:
  Kusto commands  cannot be executed via the connector.
  * **Parameters map** is a set of key-value pairs, where the key is the parameter name. See [Supported Options](#supported-options)
  section for details
- * **ClientRequestProperties** is a json of [ClientRequestProperties](https://github.com/Azure/azure-kusto-java/blob/master/data/src/main/java/com/microsoft/azure/kusto/data/ClientRequestProperties.java) object - 
- optional. Parameters described [here](https://docs.microsoft.com/en-us/azure/kusto/api/netfx/request-properties).
   
 **Elaborate Command Syntax**: 
 ```
@@ -90,7 +88,7 @@ All the options that can be use in the Kusto source are under the object KustoSo
     
 * **KUSTO_CLIENT_REQUEST_PROPERTIES_JSON**:
   A json representation for [ClientRequestProperties](https://github.com/Azure/azure-kusto-java/blob/master/data/src/main/java/com/microsoft/azure/kusto/data/ClientRequestProperties.java)
-   used in the call for reading from kusto (used in the single query for 'single' mode or for the export command for 'distributed' mode). Use toString to create the json.
+   used in the call for reading from Kusto (used in the single query for 'single' mode or for the export command for 'distributed' mode). Use toString to create the json.
     
     
 #### Transient Storage Parameters
