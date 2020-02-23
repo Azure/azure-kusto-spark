@@ -21,7 +21,7 @@ that is using it. Please verify the following before using Kusto connector:
  
  Kusto connector implements Spark 'Datasource V1' API. 
  Kusto data source identifier is "com.microsoft.kusto.spark.datasource". 
- Kusto table schema is translated into a spark as explained in [DataTypes](Spark-Kusto DataTypes mapping.md).
+ Kusto table schema is translated into a spark as explained in [Spark-Kusto DataTypes](mapping.md).
  The reading is done in one of two modes: 'Single' and 'Distributed'. By default if the user did not override the read mode - an estimated
  count for the query is made; for small row count - a 'Single' mode is chosen with a fallback to the 'Distributed' mode (as the first might
  fail due to [kusto limit policy](https://docs.microsoft.com/en-us/azure/kusto/concepts/querylimits)). In 'Distributed' mode, a distributed
