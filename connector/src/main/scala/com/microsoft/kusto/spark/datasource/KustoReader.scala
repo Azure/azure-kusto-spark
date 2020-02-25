@@ -15,10 +15,8 @@ import org.apache.spark.Partition
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.{DataFrame, Row, SparkSession}
+import org.apache.spark.sql.{Row, SparkSession}
 import org.joda.time.{DateTime, DateTimeZone}
-import org.apache.commons.lang3.time.DurationFormatUtils
-import org.apache.spark.sql.functions._
 
 import scala.concurrent.duration.FiniteDuration
 
@@ -52,21 +50,12 @@ private[kusto] object KustoReader {
   private val minutesComp:Long = 10000000/60 //%60
 
   private val myName = this.getClass.getSimpleName
-  private val udfToTimestamp = udf((longVal: Long) => {
-    val nanoSuffix = longVal % 10000000
-    val seconds = longVal / 10000000
-    val days = longVal / daysComp
-    val hours = (longVal / hoursComp) % 24
-    val minutes = (longVal / minutesComp) % 60
-
-    s"$days:${if(hours<10) 0 else ""}$hours:${if(minutes<10) 0 else ""}$minutes:${if(seconds<10) 0 else ""}$seconds${if(nanoSuffix > 0) s".$nanoSuffix" else ""}"
-  })
 
   private[kusto] def singleBuildScan(kustoClient: Client,
                                      request: KustoReadRequest,
                                      filtering: KustoFiltering): RDD[Row] = {
 
-    val filteredQuery = KustoFilter.pruneAndFilter(request.schema, request.query, filtering)
+    val filteredQuery = KustoFilter.pruneAndFilter(KustoSchema(request.schema, Set()), request.query, filtering)
     val kustoResult = kustoClient.execute(request.kustoCoordinates.database,
       filteredQuery,
       request.clientRequestProperties.orNull)
@@ -97,7 +86,8 @@ private[kusto] object KustoReader {
         directory,
         options,
         filtering,
-        request.clientRequestProperties)
+        request.clientRequestProperties,
+        timespanColumns)
     }
 
     val directoryExists = (params: KustoStorageParameters) => {
@@ -111,24 +101,13 @@ private[kusto] object KustoReader {
     val paths = storage.filter(directoryExists).map(params => s"wasbs://${params.container}@${params.account}.blob.core.windows.net/$directory")
     KDSU.logInfo(myName, s"Finished exporting from Kusto to '$paths'" +
       s", will start parquet reading now")
-    import org.apache.spark.sql.CustomFunctions.timespanNativeFunction
-
     val rdd = try {
-      //TODO : maybe better use create an expression that extends UnaryExpression
-      val df: DataFrame = request.sparkSession.read.parquet(paths:_*)
-      df.select(df.columns.map{ c=> {
-        if (timespanColumns.contains(c)) {
-          timespanNativeFunction(df.col(c))
-        } else {
-          df.col(c)
-        }
-      }
-      }: _*).rdd
+      request.sparkSession.read.parquet(paths:_*).rdd
     } catch {
       case ex: Exception =>
         // Check whether the result is empty, causing an IO exception on reading empty parquet file
         // We don't mind generating the filtered query again - it only happens upon exception
-        val filteredQuery = KustoFilter.pruneAndFilter(request.schema, request.query, filtering)
+        val filteredQuery = KustoFilter.pruneAndFilter(KustoSchema(request.schema,timespanColumns), request.query, filtering)
         val count = KDSU.countRows(kustoClient, filteredQuery, request.kustoCoordinates.database)
 
         if (count == 0) {
@@ -142,10 +121,6 @@ private[kusto] object KustoReader {
     rdd
   }
 
-
-  private def longToTimespanString(long: Long): String = {
-    DurationFormatUtils.formatDuration(long / 10000L, "d:H:m:s")
-  }
   private[kusto] def deleteTransactionBlobsSafe(storage: KustoStorageParameters, directory: String): Unit = {
     try {
       KustoBlobStorageUtils.deleteFromBlob(storage.account, directory, storage.container, storage.secret, !storage.secretIsAccountKey)
@@ -208,12 +183,13 @@ private[kusto] class KustoReader(client: Client, request: KustoReadRequest, stor
                                            directory: String,
                                            options: KustoReadOptions,
                                            filtering: KustoFiltering,
-                                           clientRequestProperties: Option[ClientRequestProperties]): Unit = {
+                                           clientRequestProperties: Option[ClientRequestProperties],
+                                           timespanColumns: Set[String]): Unit = {
 
     val limit = if (options.exportSplitLimitMb <= 0) None else Some(options.exportSplitLimitMb)
 
     val exportCommand = CslCommandsGenerator.generateExportDataCommand(
-      KustoFilter.pruneAndFilter(request.schema, request.query, filtering),
+      KustoFilter.pruneAndFilter(KustoSchema(request.schema,timespanColumns), request.query, filtering),
       directory,
       partition.idx,
       storage,

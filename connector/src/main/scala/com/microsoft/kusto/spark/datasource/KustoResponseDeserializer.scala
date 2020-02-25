@@ -18,6 +18,9 @@ object KustoResponseDeserializer {
   def apply(kustoResult: Results): KustoResponseDeserializer = new KustoResponseDeserializer(kustoResult)
 }
 
+// Timespan columns are casted to strings in kusto side. A simple test to compare the translation to a Duration string
+// in the format of timespan resulted in less performance. One way was using a new expression that extends UnaryExpression,
+// second was by a udf function, both were less performant.
 case class KustoSchema(sparkSchema: StructType, timespanColumns: Set[String])
 
 class KustoResponseDeserializer(val kustoResult: Results) {
