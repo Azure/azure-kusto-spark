@@ -46,13 +46,20 @@ private[kusto] case class KustoReadRequest(sparkSession: SparkSession,
 private[kusto] case class KustoReadOptions(readMode: Option[ReadMode] = None,
                                            shouldCompressOnExport: Boolean = true,
                                            exportSplitLimitMb: Long = 1024)
-
 private[kusto] object KustoReader {
+  private val daysComp:Long = 10000000/3600/24
+  private val hoursComp:Long = 10000000/3600 //%24
+  private val minutesComp:Long = 10000000/60 //%60
+
   private val myName = this.getClass.getSimpleName
   private val udfToTimestamp = udf((longVal: Long) => {
     val nanoSuffix = longVal % 10000000
-    DurationFormatUtils.formatDuration(longVal / 10000L, "d:HH:mm:ss") +
-      (if(nanoSuffix > 0) s".$nanoSuffix" else "")
+    val seconds = longVal / 10000000
+    val days = longVal / daysComp
+    val hours = (longVal / hoursComp) % 24
+    val minutes = (longVal / minutesComp) % 60
+
+    s"$days:${if(hours<10) 0 else ""}$hours:${if(minutes<10) 0 else ""}$minutes:${if(seconds<10) 0 else ""}$seconds${if(nanoSuffix > 0) s".$nanoSuffix" else ""}"
   })
 
   private[kusto] def singleBuildScan(kustoClient: Client,
