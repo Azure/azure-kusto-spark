@@ -104,13 +104,14 @@ private[kusto] object KustoReader {
     val paths = storage.filter(directoryExists).map(params => s"wasbs://${params.container}@${params.account}.blob.core.windows.net/$directory")
     KDSU.logInfo(myName, s"Finished exporting from Kusto to '$paths'" +
       s", will start parquet reading now")
+    import org.apache.spark.sql.CustomFunctions.timespanNativeFunction
 
     val rdd = try {
       //TODO : maybe better use create an expression that extends UnaryExpression
       val df: DataFrame = request.sparkSession.read.parquet(paths:_*)
       df.select(df.columns.map{ c=> {
         if (timespanColumns.contains(c)) {
-          udfToTimestamp(df.col(c))
+          timespanNativeFunction(df.col(c))
         } else {
           df.col(c)
         }
