@@ -45,10 +45,6 @@ private[kusto] case class KustoReadOptions(readMode: Option[ReadMode] = None,
                                            shouldCompressOnExport: Boolean = true,
                                            exportSplitLimitMb: Long = 1024)
 private[kusto] object KustoReader {
-  private val daysComp:Long = 10000000/3600/24
-  private val hoursComp:Long = 10000000/3600 //%24
-  private val minutesComp:Long = 10000000/60 //%60
-
   private val myName = this.getClass.getSimpleName
 
   private[kusto] def singleBuildScan(kustoClient: Client,
