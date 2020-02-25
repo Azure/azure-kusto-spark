@@ -92,9 +92,9 @@ class KustoBlobAccessE2E extends FlatSpec with BeforeAndAfterAll {
     val schema = KustoResponseDeserializer(kustoAdminClient.execute(database, KustoQueryUtils.getQuerySchemaQuery(myTable))).getSchema
 
     val firstColumn =
-    if (schema.nonEmpty)
+    if (schema.sparkSchema.nonEmpty)
     {
-      schema.head.name
+      schema.sparkSchema.head.name
     }
     else
     {

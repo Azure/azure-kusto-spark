@@ -32,18 +32,19 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
   extends BaseRelation with TableScan with PrunedFilteredScan with Serializable with InsertableRelation  {
 
   private val normalizedQuery = KustoQueryUtils.normalizeQuery(query)
-  var cachedSchema: StructType = _
+  var cachedSchema: KustoSchema = _
 
   override def sqlContext: SQLContext = sparkSession.sqlContext
 
   override def schema: StructType = {
     if (cachedSchema == null) {
       cachedSchema = if (customSchema.isDefined) {
-        StructType.fromDDL(customSchema.get)
+        val schema = StructType.fromDDL(customSchema.get)
+        KustoSchema(schema, Set())
       }
       else getSchema
     }
-    cachedSchema
+    cachedSchema.sparkSchema
   }
 
   override def buildScan(): RDD[Row] = {
@@ -102,7 +103,8 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
             KustoClientCache.getClient(kustoCoordinates.cluster, authentication).getTempBlobsForExport,
           KustoPartitionParameters(numPartitions, getPartitioningColumn, getPartitioningMode),
           readOptions,
-          KustoFiltering(requiredColumns, filters))
+          KustoFiltering(requiredColumns, filters),
+          cachedSchema.timespanColumns)
         )
       }
 
@@ -114,7 +116,7 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
     res.get
   }
 
-  private def getSchema: StructType = {
+  private def getSchema: KustoSchema = {
     if (query.isEmpty) {
       throw new InvalidParameterException("Query is empty")
     }

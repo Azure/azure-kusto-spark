@@ -11,7 +11,7 @@ import com.microsoft.kusto.spark.authentication._
 import com.microsoft.kusto.spark.common.{KustoCoordinates, KustoDebugOptions}
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
 import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode, WriteOptions}
-import com.microsoft.kusto.spark.datasource.{KustoResponseDeserializer, KustoSourceOptions, KustoStorageParameters}
+import com.microsoft.kusto.spark.datasource.{KustoResponseDeserializer, KustoSchema, KustoSourceOptions, KustoStorageParameters}
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
 import org.apache.commons.lang3.exception.ExceptionUtils
@@ -85,7 +85,7 @@ object KustoDataSourceUtils {
     tableSchemaBuilder.toString
   }
 
-  private[kusto] def getSchema(database: String, query: String, client: Client): StructType = {
+  private[kusto] def getSchema(database: String, query: String, client: Client): KustoSchema = {
     KustoResponseDeserializer(client.execute(database, query)).getSchema
   }
 

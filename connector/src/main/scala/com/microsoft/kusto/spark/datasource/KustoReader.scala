@@ -15,8 +15,10 @@ import org.apache.spark.Partition
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 import org.joda.time.{DateTime, DateTimeZone}
+import org.apache.commons.lang3.time.DurationFormatUtils
+import org.apache.spark.sql.functions._
 
 import scala.concurrent.duration.FiniteDuration
 
@@ -47,6 +49,11 @@ private[kusto] case class KustoReadOptions(readMode: Option[ReadMode] = None,
 
 private[kusto] object KustoReader {
   private val myName = this.getClass.getSimpleName
+  private val udfToTimestamp = udf((longVal: Long) => {
+    val nanoSuffix = longVal % 10000000
+    DurationFormatUtils.formatDuration(longVal / 10000L, "d:HH:mm:ss") +
+      (if(nanoSuffix > 0) s".$nanoSuffix" else "")
+  })
 
   private[kusto] def singleBuildScan(kustoClient: Client,
                                      request: KustoReadRequest,
@@ -58,7 +65,7 @@ private[kusto] object KustoReader {
       request.clientRequestProperties.orNull)
 
     val serializer = KustoResponseDeserializer(kustoResult)
-    request.sparkSession.createDataFrame(serializer.toRows, serializer.getSchema).rdd
+    request.sparkSession.createDataFrame(serializer.toRows, serializer.getSchema.sparkSchema).rdd
   }
 
   private[kusto] def distributedBuildScan(kustoClient: Client,
@@ -66,7 +73,8 @@ private[kusto] object KustoReader {
                                           storage: Seq[KustoStorageParameters],
                                           partitionInfo: KustoPartitionParameters,
                                           options: KustoReadOptions,
-                                          filtering: KustoFiltering): RDD[Row] = {
+                                          filtering: KustoFiltering,
+                                          timespanColumns: Set[String]): RDD[Row] = {
     KDSU.logInfo(myName, "Starting exporting data from Kusto to blob storage")
 
     setupBlobAccess(request, storage)
@@ -98,7 +106,16 @@ private[kusto] object KustoReader {
       s", will start parquet reading now")
 
     val rdd = try {
-      request.sparkSession.read.parquet(paths:_*).rdd
+      //TODO : maybe better use create an expression that extends UnaryExpression
+      val df: DataFrame = request.sparkSession.read.parquet(paths:_*)
+      df.select(df.columns.map{ c=> {
+        if (timespanColumns.contains(c)) {
+          udfToTimestamp(df.col(c))
+        } else {
+          df.col(c)
+        }
+      }
+      }: _*).rdd
     } catch {
       case ex: Exception =>
         // Check whether the result is empty, causing an IO exception on reading empty parquet file
@@ -117,6 +134,10 @@ private[kusto] object KustoReader {
     rdd
   }
 
+
+  private def longToTimespanString(long: Long): String = {
+    DurationFormatUtils.formatDuration(long / 10000L, "d:H:m:s")
+  }
   private[kusto] def deleteTransactionBlobsSafe(storage: KustoStorageParameters, directory: String): Unit = {
     try {
       KustoBlobStorageUtils.deleteFromBlob(storage.account, directory, storage.container, storage.secret, !storage.secretIsAccountKey)
