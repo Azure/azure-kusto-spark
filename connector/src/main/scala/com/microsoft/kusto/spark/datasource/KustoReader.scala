@@ -14,7 +14,6 @@ import com.microsoft.kusto.spark.utils.{CslCommandsGenerator, KustoAzureFsSetupC
 import org.apache.spark.Partition
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.sources.Filter
-import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{Row, SparkSession}
 import org.joda.time.{DateTime, DateTimeZone}
 
@@ -34,7 +33,7 @@ private[kusto] case class KustoStorageParameters(account: String,
 private[kusto] case class KustoFiltering(columns: Array[String] = Array.empty, filters: Array[Filter] = Array.empty)
 
 private[kusto] case class KustoReadRequest(sparkSession: SparkSession,
-                                           schema: StructType,
+                                           schema: KustoSchema,
                                            kustoCoordinates: KustoCoordinates,
                                            query: String,
                                            authentication: KustoAuthentication,
@@ -51,7 +50,7 @@ private[kusto] object KustoReader {
                                      request: KustoReadRequest,
                                      filtering: KustoFiltering): RDD[Row] = {
 
-    val filteredQuery = KustoFilter.pruneAndFilter(KustoSchema(request.schema, Set()), request.query, filtering)
+    val filteredQuery = KustoFilter.pruneAndFilter(KustoSchema(request.schema.sparkSchema, Set()), request.query, filtering)
     val kustoResult = kustoClient.execute(request.kustoCoordinates.database,
       filteredQuery,
       request.clientRequestProperties.orNull)
@@ -65,8 +64,7 @@ private[kusto] object KustoReader {
                                           storage: Seq[KustoStorageParameters],
                                           partitionInfo: KustoPartitionParameters,
                                           options: KustoReadOptions,
-                                          filtering: KustoFiltering,
-                                          timespanColumns: Set[String]): RDD[Row] = {
+                                          filtering: KustoFiltering): RDD[Row] = {
     KDSU.logInfo(myName, "Starting exporting data from Kusto to blob storage")
 
     setupBlobAccess(request, storage)
@@ -83,7 +81,7 @@ private[kusto] object KustoReader {
         options,
         filtering,
         request.clientRequestProperties,
-        timespanColumns)
+        request.schema.toStringCastedColumns)
     }
 
     val directoryExists = (params: KustoStorageParameters) => {
@@ -103,7 +101,7 @@ private[kusto] object KustoReader {
       case ex: Exception =>
         // Check whether the result is empty, causing an IO exception on reading empty parquet file
         // We don't mind generating the filtered query again - it only happens upon exception
-        val filteredQuery = KustoFilter.pruneAndFilter(KustoSchema(request.schema,timespanColumns), request.query, filtering)
+        val filteredQuery = KustoFilter.pruneAndFilter(request.schema, request.query, filtering)
         val count = KDSU.countRows(kustoClient, filteredQuery, request.kustoCoordinates.database)
 
         if (count == 0) {
@@ -185,7 +183,7 @@ private[kusto] class KustoReader(client: Client, request: KustoReadRequest, stor
     val limit = if (options.exportSplitLimitMb <= 0) None else Some(options.exportSplitLimitMb)
 
     val exportCommand = CslCommandsGenerator.generateExportDataCommand(
-      KustoFilter.pruneAndFilter(KustoSchema(request.schema,timespanColumns), request.query, filtering),
+      KustoFilter.pruneAndFilter(request.schema, request.query, filtering),
       directory,
       partition.idx,
       storage,

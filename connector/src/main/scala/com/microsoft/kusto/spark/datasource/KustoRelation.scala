@@ -85,7 +85,7 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
         try {
           res = Some(KustoReader.singleBuildScan(
             kustoClient,
-            KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication, timeout, clientRequestProperties),
+            KustoReadRequest(sparkSession, cachedSchema, kustoCoordinates, query, authentication, timeout, clientRequestProperties),
             KustoFiltering(requiredColumns, filters)))
         } catch {
           case ex: Exception => exception = Some(ex)
@@ -98,13 +98,13 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
         }
         res = Some(KustoReader.distributedBuildScan(
           kustoClient,
-          KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication, timeout, clientRequestProperties),
+          KustoReadRequest(sparkSession, cachedSchema, kustoCoordinates, query, authentication, timeout, clientRequestProperties),
           if (storageParameters.isDefined) Seq(storageParameters.get) else
             KustoClientCache.getClient(kustoCoordinates.cluster, authentication).getTempBlobsForExport,
           KustoPartitionParameters(numPartitions, getPartitioningColumn, getPartitioningMode),
           readOptions,
-          KustoFiltering(requiredColumns, filters),
-          cachedSchema.timespanColumns)
+          KustoFiltering(requiredColumns, filters))
+
         )
       }
 
