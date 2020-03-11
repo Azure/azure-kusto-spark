@@ -80,8 +80,7 @@ private[kusto] object KustoReader {
         directory,
         options,
         filtering,
-        request.clientRequestProperties,
-        request.schema.toStringCastedColumns)
+        request.clientRequestProperties)
     }
 
     val directoryExists = (params: KustoStorageParameters) => {
@@ -177,8 +176,7 @@ private[kusto] class KustoReader(client: Client, request: KustoReadRequest, stor
                                            directory: String,
                                            options: KustoReadOptions,
                                            filtering: KustoFiltering,
-                                           clientRequestProperties: Option[ClientRequestProperties],
-                                           timespanColumns: Set[String]): Unit = {
+                                           clientRequestProperties: Option[ClientRequestProperties]): Unit = {
 
     val limit = if (options.exportSplitLimitMb <= 0) None else Some(options.exportSplitLimitMb)
 
