@@ -32,18 +32,19 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
   extends BaseRelation with TableScan with PrunedFilteredScan with Serializable with InsertableRelation  {
 
   private val normalizedQuery = KustoQueryUtils.normalizeQuery(query)
-  var cachedSchema: StructType = _
+  var cachedSchema: KustoSchema = _
 
   override def sqlContext: SQLContext = sparkSession.sqlContext
 
   override def schema: StructType = {
     if (cachedSchema == null) {
       cachedSchema = if (customSchema.isDefined) {
-        StructType.fromDDL(customSchema.get)
+        val schema = StructType.fromDDL(customSchema.get)
+        KustoSchema(schema, Set())
       }
       else getSchema
     }
-    cachedSchema
+    cachedSchema.sparkSchema
   }
 
   override def buildScan(): RDD[Row] = {
@@ -84,7 +85,7 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
         try {
           res = Some(KustoReader.singleBuildScan(
             kustoClient,
-            KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication, timeout, clientRequestProperties),
+            KustoReadRequest(sparkSession, cachedSchema, kustoCoordinates, query, authentication, timeout, clientRequestProperties),
             KustoFiltering(requiredColumns, filters)))
         } catch {
           case ex: Exception => exception = Some(ex)
@@ -97,12 +98,13 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
         }
         res = Some(KustoReader.distributedBuildScan(
           kustoClient,
-          KustoReadRequest(sparkSession, schema, kustoCoordinates, query, authentication, timeout, clientRequestProperties),
+          KustoReadRequest(sparkSession, cachedSchema, kustoCoordinates, query, authentication, timeout, clientRequestProperties),
           if (storageParameters.isDefined) Seq(storageParameters.get) else
             KustoClientCache.getClient(kustoCoordinates.cluster, authentication).getTempBlobsForExport,
           KustoPartitionParameters(numPartitions, getPartitioningColumn, getPartitioningMode),
           readOptions,
           KustoFiltering(requiredColumns, filters))
+
         )
       }
 
@@ -114,7 +116,7 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
     res.get
   }
 
-  private def getSchema: StructType = {
+  private def getSchema: KustoSchema = {
     if (query.isEmpty) {
       throw new InvalidParameterException("Query is empty")
     }

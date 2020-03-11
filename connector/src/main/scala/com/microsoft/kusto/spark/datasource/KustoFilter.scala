@@ -7,8 +7,8 @@ import org.apache.spark.sql.types._
 
 private[kusto] object KustoFilter {
   // Augment the original query to include column pruning and filtering
-  def pruneAndFilter(originalSchema: StructType, originalQuery: String, filtering: KustoFiltering): String = {
-    originalQuery + KustoFilter.buildFiltersClause(originalSchema, filtering.filters) + KustoFilter.buildColumnsClause(filtering.columns)
+  def pruneAndFilter(kustoSchema: KustoSchema, originalQuery: String, filtering: KustoFiltering): String = {
+    originalQuery + KustoFilter.buildFiltersClause(kustoSchema.sparkSchema, filtering.filters) + KustoFilter.buildColumnsClause(filtering.columns, kustoSchema.toStringCastedColumns)
   }
 
   def pruneSchema(schema: StructType, columns: Array[String]): StructType = {
@@ -16,9 +16,9 @@ private[kusto] object KustoFilter {
     new StructType(columns.map(name => fieldMap(name)))
   }
 
-  def buildColumnsClause(columns: Array[String]): String = {
-    if(columns.isEmpty) "" else {
-      " | project " + columns.map(col=>s"['$col']").mkString(", ")
+  def buildColumnsClause(columns: Array[String], timespanColumns: Set[String]): String = {
+    if (columns.isEmpty) "" else {
+      " | project " + columns.map(col => if (timespanColumns.contains(col)) s"tostring(['$col'])" else s"['$col']").mkString(", ")
     }
   }
 

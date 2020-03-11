@@ -18,8 +18,13 @@ object KustoResponseDeserializer {
   def apply(kustoResult: Results): KustoResponseDeserializer = new KustoResponseDeserializer(kustoResult)
 }
 
+// Timespan columns are casted to strings in kusto side. A simple test to compare the translation to a Duration string
+// in the format of timespan resulted in less performance. One way was using a new expression that extends UnaryExpression,
+// second was by a udf function, both were less performant.
+case class KustoSchema(sparkSchema: StructType, toStringCastedColumns: Set[String])
+
 class KustoResponseDeserializer(val kustoResult: Results) {
-  val schema: StructType = getSchemaFromKustoResult
+  val schema: KustoSchema = getSchemaFromKustoResult
 
   private def getValueTransformer(valueType: String): String => Any = {
 
@@ -38,20 +43,21 @@ class KustoResponseDeserializer(val kustoResult: Results) {
       }
   }
 
-   private def getSchemaFromKustoResult: StructType = {
+   private def getSchemaFromKustoResult: KustoSchema = {
     if (kustoResult.getColumnNameToType.isEmpty) {
-      StructType(List())
+      KustoSchema(StructType(List()), Set())
     } else {
       val columnInOrder = this.getOrderedColumnName
 
       val columnNameToType = kustoResult.getColumnNameToType
-      StructType(
-        columnInOrder
-          .map(key => StructField(key, DataTypeMapping.kustoJavaTypeToSparkTypeMap.getOrElse(columnNameToType.get(key).toLowerCase, StringType))))
+
+      KustoSchema(StructType(columnInOrder.map(key => StructField(key,
+            DataTypeMapping.kustoJavaTypeToSparkTypeMap.getOrElse(columnNameToType.get(key).toLowerCase, StringType)))),
+        columnNameToType.asScala.filter(c => c._2 == "TimeSpan").keys.toSet)
     }
   }
 
-  def getSchema: StructType = { schema }
+  def getSchema: KustoSchema = { schema }
 
   def toRows: java.util.List[Row] = {
     val columnInOrder = this.getOrderedColumnName
@@ -63,7 +69,7 @@ class KustoResponseDeserializer(val kustoResult: Results) {
       val genericRow = row.asInstanceOf[util.ArrayList[String]].toArray().zipWithIndex.map(
         column => if (column._1== null) null else valueTransformers(column._2)(column._1.asInstanceOf[String])
       )
-      value.add(new GenericRowWithSchema(genericRow, schema))
+      value.add(new GenericRowWithSchema(genericRow, schema.sparkSchema))
     })
 
     value

@@ -51,7 +51,7 @@ private[kusto] object CslCommandsGenerator {
   }
 
   def generateTableMoveExtentsCommand(sourceTableName: String, destinationTableName: String): String = {
-    s".move extents all from table $sourceTableName to table $destinationTableName"
+    s".move extents all from table $sourceTableName to table ${KustoQueryUtils.normalizeTableName(destinationTableName)}"
   }
 
   def generateTableAlterMergePolicyCommand(table: String, allowMerge: Boolean, allowRebuild: Boolean): String = {

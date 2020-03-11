@@ -14,7 +14,6 @@ import com.microsoft.kusto.spark.utils.{CslCommandsGenerator, KustoAzureFsSetupC
 import org.apache.spark.Partition
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.sources.Filter
-import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{Row, SparkSession}
 import org.joda.time.{DateTime, DateTimeZone}
 
@@ -34,7 +33,7 @@ private[kusto] case class KustoStorageParameters(account: String,
 private[kusto] case class KustoFiltering(columns: Array[String] = Array.empty, filters: Array[Filter] = Array.empty)
 
 private[kusto] case class KustoReadRequest(sparkSession: SparkSession,
-                                           schema: StructType,
+                                           schema: KustoSchema,
                                            kustoCoordinates: KustoCoordinates,
                                            query: String,
                                            authentication: KustoAuthentication,
@@ -44,7 +43,6 @@ private[kusto] case class KustoReadRequest(sparkSession: SparkSession,
 private[kusto] case class KustoReadOptions(readMode: Option[ReadMode] = None,
                                            shouldCompressOnExport: Boolean = true,
                                            exportSplitLimitMb: Long = 1024)
-
 private[kusto] object KustoReader {
   private val myName = this.getClass.getSimpleName
 
@@ -52,13 +50,13 @@ private[kusto] object KustoReader {
                                      request: KustoReadRequest,
                                      filtering: KustoFiltering): RDD[Row] = {
 
-    val filteredQuery = KustoFilter.pruneAndFilter(request.schema, request.query, filtering)
+    val filteredQuery = KustoFilter.pruneAndFilter(KustoSchema(request.schema.sparkSchema, Set()), request.query, filtering)
     val kustoResult = kustoClient.execute(request.kustoCoordinates.database,
       filteredQuery,
       request.clientRequestProperties.orNull)
 
     val serializer = KustoResponseDeserializer(kustoResult)
-    request.sparkSession.createDataFrame(serializer.toRows, serializer.getSchema).rdd
+    request.sparkSession.createDataFrame(serializer.toRows, serializer.getSchema.sparkSchema).rdd
   }
 
   private[kusto] def distributedBuildScan(kustoClient: Client,
@@ -96,7 +94,6 @@ private[kusto] object KustoReader {
     val paths = storage.filter(directoryExists).map(params => s"wasbs://${params.container}@${params.account}.blob.core.windows.net/$directory")
     KDSU.logInfo(myName, s"Finished exporting from Kusto to '$paths'" +
       s", will start parquet reading now")
-
     val rdd = try {
       request.sparkSession.read.parquet(paths:_*).rdd
     } catch {

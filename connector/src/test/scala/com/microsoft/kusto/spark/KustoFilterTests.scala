@@ -2,7 +2,7 @@ package com.microsoft.kusto.spark
 
 import java.sql.{Date, Timestamp}
 
-import com.microsoft.kusto.spark.datasource.{KustoFilter, KustoFiltering}
+import com.microsoft.kusto.spark.datasource.{KustoFilter, KustoFiltering, KustoSchema}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.junit.runner.RunWith
@@ -156,13 +156,13 @@ class KustoFilterTests extends FlatSpec with MockFactory with Matchers{
   }
 
   "Empty columns filter" should "construct an empty string" in {
-    val expr = KustoFilter.buildColumnsClause(Array.empty)
+    val expr = KustoFilter.buildColumnsClause(Array.empty, Set())
     expr shouldBe empty
   }
 
   "Non-empty columns filter" should "construct a project statement" in {
-    val expr = KustoFilter.buildColumnsClause(Array("ColA", "ColB"))
-    expr shouldBe " | project ['ColA'], ['ColB']"
+    val expr = KustoFilter.buildColumnsClause(Array("ColA", "ColB"), Set("ColB"))
+    expr shouldBe " | project ['ColA'], tostring(['ColB'])"
   }
 
   "Providing multiple filters" should "lead to and-concatenation of these filters" in {
@@ -186,8 +186,8 @@ class KustoFilterTests extends FlatSpec with MockFactory with Matchers{
     val originalQuery = "MyTable | take 100"
     val columns = Array("ColA", "ColB")
     val filters: Array[Filter] = Array(StringEndsWith("ColA", "EndingString"), LessThanOrEqual("ColB", 5))
-    val query = KustoFilter.pruneAndFilter(testSchema, originalQuery, KustoFiltering(columns, filters))
+    val query = KustoFilter.pruneAndFilter(KustoSchema(testSchema, Set("ColA")), originalQuery, KustoFiltering(columns, filters))
 
-    query shouldBe "MyTable | take 100 | where ['ColA'] endswith_cs 'EndingString' and ['ColB'] <= 5 | project ['ColA'], ['ColB']"
+    query shouldBe "MyTable | take 100 | where ['ColA'] endswith_cs 'EndingString' and ['ColB'] <= 5 | project tostring(['ColA']), ['ColB']"
   }
 }
