@@ -14,7 +14,7 @@ import java.awt.datatransfer.DataFlavor
 import scala.util.Try
 
 
-private[kusto] object DeviceAuthentication {
+object DeviceAuthentication {
   // This is the Kusto client id from the java client used for device authentication.
   private val CLIENT_ID = "db662dc1-0cfe-4e1c-a843-19a68e65be58"
 

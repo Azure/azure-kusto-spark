@@ -108,6 +108,7 @@ df.write
   .option(KustoSinkOptions.KUSTO_CLUSTER, "MyCluster")
   .option(KustoSinkOptions.KUSTO_DATABASE, "MyDatabase")
   .option(KustoSinkOptions.KUSTO_TABLE, "MyTable")
+  .option(KustoSinkOptions.KUSTO_ACCESS_TOKEN, "MyAadToken")
   .option(KustoOptions., "MyTable")
   .mode(SaveMode.Append)
   .save()
