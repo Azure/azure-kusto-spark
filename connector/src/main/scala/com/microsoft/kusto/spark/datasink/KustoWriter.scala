@@ -183,7 +183,7 @@ object KustoWriter {
                        tableCoordinates: KustoCoordinates,
                        tmpTableName: String,
                        client: KustoClient): BlobWriteResource = {
-    val blobName = s"${tableCoordinates.database}_${tmpTableName}_${UUID.randomUUID.toString}_spark.csv.gz"
+    val blobName = s"${KustoQueryUtils.simplifyName(tableCoordinates.database)}_${tmpTableName}_${UUID.randomUUID.toString}_spark.csv.gz"
 
     val containerAndSas = client.getTempBlobForIngestion
     val currentBlob = new CloudBlockBlob(new URI(containerAndSas.containerUrl + '/' + blobName + containerAndSas.sas))
