@@ -27,6 +27,7 @@ private[kusto] object CslCommandsGenerator {
     s".create table $tableName ($columnsTypesAndNames)"
   }
 
+  // Table name must be normalized
   def generateTempTableCreateCommand(tableName: String, columnsTypesAndNames: String, hidden: Boolean = true): String = {
     s".create table $tableName ($columnsTypesAndNames)${if (hidden) " with(hidden=true)" else ""}"
   }
