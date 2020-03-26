@@ -148,11 +148,19 @@ class WriterTests extends FlatSpec with Matchers {
       Map("asd" -> Row(Date.valueOf("1991-09-07"), ts, false, java.math.BigDecimal.valueOf(1/100000.toDouble)))
     )
 
+    val someData3 = List(
+      Row(Row(Array(null,""),"")),
+      Row(Row(null,""))
+    )
+
     val someSchema = List(
       StructField("mapToArray", MapType(StringType, new StructType().add("arrayStrings", ArrayType(StringType, containsNull = true), nullable = true), valueContainsNull = true), nullable = true)
     )
     val someSchema2 = List(
       StructField("mapToStruct", MapType(StringType, new StructType().add("date", DateType, nullable = true).add("time", TimestampType).add("booly", BooleanType).add("deci", DataTypes.createDecimalType(20,14)), valueContainsNull = true), nullable = true)
+    )
+    val someSchema3 = List(
+      StructField("emptyStruct", new StructType().add("emptyArray", ArrayType(StringType, containsNull = true), nullable = true).add("emptyString",StringType))
     )
 
     val df = sparkSession.createDataFrame(
@@ -165,8 +173,14 @@ class WriterTests extends FlatSpec with Matchers {
       StructType(WriterTests.asSchema(someSchema2))
     )
 
+    val df3 = sparkSession.createDataFrame(
+      sparkSession.sparkContext.parallelize(WriterTests.asRows(someData3)),
+      StructType(WriterTests.asSchema(someSchema3))
+    )
+
     val dfRow: InternalRow = df.queryExecution.toRdd.collect().head
     val dfRow2 = df2.queryExecution.toRdd.collect.head
+    val dfRows3 = df3.queryExecution.toRdd.collect.take(2)
     val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone("GMT"))
 
     val byteArrayOutputStream = new ByteArrayOutputStream()
@@ -177,14 +191,22 @@ class WriterTests extends FlatSpec with Matchers {
     KustoWriter.writeRowAsCSV(dfRow, df.schema, dateFormat, csvWriter)
 
     writer.flush()
-    byteArrayOutputStream.toString shouldEqual "\"{\"\"asd\"\":{\"\"arrayStrings\"\":[\"\"stringVal\\n\\r\\\\\\\"\"\"\"]},\"\"asd2\"\":{\"\"arrayStrings\"\":[\"\"stringVal2\\b\\f\"\"]}}\"" + lineSep
+    val res1 = byteArrayOutputStream.toString
+    res1 shouldEqual "\"{\"\"asd\"\":{\"\"arrayStrings\"\":[\"\"stringVal\\n\\r\\\\\\\"\"\"\"]},\"\"asd2\"\":{\"\"arrayStrings\"\":[\"\"stringVal2\\b\\f\"\"]}}\"" + lineSep
 
     byteArrayOutputStream.reset()
     KustoWriter.writeRowAsCSV(dfRow2, df2.schema, dateFormat, csvWriter)
     writer.flush()
+    val res2 = byteArrayOutputStream.toString
+    res2 shouldEqual "\"{\"\"asd\"\":{\"\"date\"\":\"\"1991-09-07\"\",\"\"time\"\":\"\"2018-06-18T16:04:00.000Z\"\",\"\"booly\"\":false,\"\"deci\"\":0.00001000000000}}\"" + lineSep
+
+    byteArrayOutputStream.reset()
+    KustoWriter.writeRowAsCSV(dfRows3(0), df3.schema, dateFormat, csvWriter)
+    KustoWriter.writeRowAsCSV(dfRows3(1), df3.schema, dateFormat, csvWriter)
+    writer.flush()
     writer.close()
-    byteArrayOutputStream.size()
-    byteArrayOutputStream.toString shouldEqual "\"{\"\"asd\"\":{\"\"date\"\":\"\"1991-09-07\"\",\"\"time\"\":\"\"2018-06-18T16:04:00.000Z\"\",\"\"booly\"\":false,\"\"deci\"\":0.00001000000000}}\"" + lineSep
+    val res3 = byteArrayOutputStream.toString
+    res3 shouldEqual "\"{\"\"emptyArray\"\":[null,\"\"\"\"],\"\"emptyString\"\":\"\"\"\"}\"" + lineSep + "\"{\"\"emptyString\"\":\"\"\"\"}\"" + lineSep
   }
 }
 
