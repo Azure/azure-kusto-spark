@@ -2,7 +2,7 @@ package com.microsoft.kusto.spark
 
 import java.io.{BufferedWriter, ByteArrayOutputStream, OutputStreamWriter}
 import java.nio.charset.StandardCharsets
-import java.sql.{Date, Timestamp}
+import java.sql.Date
 import java.util
 import java.util.TimeZone
 import java.util.zip.GZIPOutputStream
