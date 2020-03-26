@@ -38,96 +38,96 @@ class WriterTests extends FlatSpec with Matchers {
     else sparkSession.read.format("json").option("header", "true").load("src/test/resources/TestData/TestDynamicFields.json")
   }
 
-//  "convertRowToCsv" should "convert the row as expected" in {
-//    val df: DataFrame = getDF(isNestedSchema = true)
-//    val dfRow: InternalRow = df.queryExecution.toRdd.collect().head
-//    val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone("UTC"))
-//    val byteArrayOutputStream = new ByteArrayOutputStream()
-//    val streamWriter = new OutputStreamWriter(byteArrayOutputStream)
-//    val writer = new BufferedWriter(streamWriter)
-//    val csvWriter = CountingWriter(writer)
-//    KustoWriter.writeRowAsCSV(dfRow, df.schema, dateFormat, csvWriter)
-//    writer.flush()
-//    writer.close()
-//    byteArrayOutputStream.toString() shouldEqual "\"John,\"\" Doe\",1" + lineSep
-//  }
+  "convertRowToCsv" should "convert the row as expected" in {
+    val df: DataFrame = getDF(isNestedSchema = true)
+    val dfRow: InternalRow = df.queryExecution.toRdd.collect().head
+    val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone("UTC"))
+    val byteArrayOutputStream = new ByteArrayOutputStream()
+    val streamWriter = new OutputStreamWriter(byteArrayOutputStream)
+    val writer = new BufferedWriter(streamWriter)
+    val csvWriter = CountingWriter(writer)
+    KustoWriter.writeRowAsCSV(dfRow, df.schema, dateFormat, csvWriter)
+    writer.flush()
+    writer.close()
+    byteArrayOutputStream.toString() shouldEqual "\"John,\"\" Doe\",1" + lineSep
+  }
 
-//  "convertRowToCsv" should "convert the row as expected, including nested types." in {
-//    val df: DataFrame = getDF(isNestedSchema = false)
-//    val dfRow: InternalRow = df.queryExecution.toRdd.collect().head
-//    val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone("UTC"))
-//    val expected = """"[true,false,null]","[1,2,3,null]",,"value","[""a"",""b"",""c"",null]","[[""a"",""b"",""c""],null]","{""bool"":true,""dict_ar"":[{""int"":1,""string"":""a""},{""int"":2,""string"":""b""}],""int"":1,""int_ar"":[1,2,3],""string"":""abc"",""string_ar"":[""a"",""b"",""c""]}"""".concat(lineSep)
-//
-//    val byteArrayOutputStream = new ByteArrayOutputStream()
-//    val streamWriter = new OutputStreamWriter(byteArrayOutputStream)
-//    val writer = new BufferedWriter(streamWriter)
-//    var csvWriter = CountingWriter(writer)
-//    KustoWriter.writeRowAsCSV(dfRow, df.schema, dateFormat, csvWriter)
-//    writer.flush()
-//    val got = byteArrayOutputStream.toString()
-//
-//    got shouldEqual expected
-//  }
-//
-//  "convertRowToCsv" should "calculate row size as expected" in {
-//    val df: DataFrame = getDF(isNestedSchema = true)
-//    val dfRow: InternalRow = df.queryExecution.toRdd.collect().head
-//    val expectedSize = ("\"John,\"\" Doe\",1" + lineSep).getBytes(StandardCharsets.UTF_8).length
-//    val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone("UTC"))
-//    val byteArrayOutputStream = new ByteArrayOutputStream()
-//    val streamWriter = new OutputStreamWriter(byteArrayOutputStream)
-//    val writer = new BufferedWriter(streamWriter)
-//    val csvWriter = CountingWriter(writer)
-//
-//    KustoWriter.writeRowAsCSV(dfRow, df.schema, dateFormat, csvWriter)
-//    writer.flush()
-//    writer.close()
-//    csvWriter.getCounter shouldEqual expectedSize
-//  }
-//
-//  "finalizeFileWrite" should "should flush and close buffers" in {
-//    val gzip = mock(classOf[GZIPOutputStream])
-//    val buffer = mock(classOf[BufferedWriter])
-//    val csvWriter = CountingWriter(buffer)
-//
-//    val fileWriteResource = BlobWriteResource(buffer, gzip, csvWriter, null, null)
-//    KustoWriter.finalizeBlobWrite(fileWriteResource)
-//
-//    verify(gzip, times(1)).flush()
-//    verify(gzip, times(1)).close()
-//
-//    verify(buffer, times(1)).flush()
-//    verify(buffer, times(1)).close()
-//  }
-//
-//  "getColumnsSchema" should "parse table schema correctly" in {
-//    //Verify part of the following schema:
-//    // "{\"Name\":\"Subscriptions\",\"OrderedColumns\":[{\"Name\":\"SubscriptionGuid\",\"Type\":\"System.String\",\"CslType\":\"string\"},{\"Name\":\"Identifier\",\"Type\":\"System.String\",\"CslType\":\"string\"},{\"Name\":\"SomeNumber\",\"Type\":\"System.Int64\",\"CslType\":\"long\"},{\"Name\":\"IsCurrent\",\"Type\":\"System.SByte\",\"CslType\":\"bool\"},{\"Name\":\"LastModifiedOn\",\"Type\":\"System.DateTime\",\"CslType\":\"datetime\"},{\"Name\":\"IntegerValue\",\"Type\":\"System.Int32\",\"CslType\":\"int\"}]}"
-//    val element1 = new util.ArrayList[String]
-//    element1.add("SubscriptionGuid")
-//    element1.add("string")
-//    element1.add("System.String")
-//
-//    val element2 = new util.ArrayList[String]
-//    element2.add("Identifier")
-//    element2.add("string")
-//    element2.add("System.String")
-//
-//    val element3 = new util.ArrayList[String]
-//    element3.add("SomeNumber")
-//    element3.add("long")
-//    element3.add("System.Int64")
-//
-//    val resultTable = new util.ArrayList[util.ArrayList[String]]
-//    resultTable.add(element1)
-//    resultTable.add(element2)
-//    resultTable.add(element3)
-//
-//    //("SubscriptionGuid", "string", "System.String")
-//    val parsedSchema = KDSU.extractSchemaFromResultTable(resultTable)
-//    // We could add new elements for IsCurrent:bool,LastModifiedOn:datetime,IntegerValue:int
-//    parsedSchema shouldEqual "['SubscriptionGuid']:string,['Identifier']:string,['SomeNumber']:long"
-//  }
+  "convertRowToCsv" should "convert the row as expected, including nested types." in {
+    val df: DataFrame = getDF(isNestedSchema = false)
+    val dfRow: InternalRow = df.queryExecution.toRdd.collect().head
+    val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone("UTC"))
+    val expected = """"[true,false,null]","[1,2,3,null]",,"value","[""a"",""b"",""c"",null]","[[""a"",""b"",""c""],null]","{""bool"":true,""dict_ar"":[{""int"":1,""string"":""a""},{""int"":2,""string"":""b""}],""int"":1,""int_ar"":[1,2,3],""string"":""abc"",""string_ar"":[""a"",""b"",""c""]}"""".concat(lineSep)
+
+    val byteArrayOutputStream = new ByteArrayOutputStream()
+    val streamWriter = new OutputStreamWriter(byteArrayOutputStream)
+    val writer = new BufferedWriter(streamWriter)
+    var csvWriter = CountingWriter(writer)
+    KustoWriter.writeRowAsCSV(dfRow, df.schema, dateFormat, csvWriter)
+    writer.flush()
+    val got = byteArrayOutputStream.toString()
+
+    got shouldEqual expected
+  }
+
+  "convertRowToCsv" should "calculate row size as expected" in {
+    val df: DataFrame = getDF(isNestedSchema = true)
+    val dfRow: InternalRow = df.queryExecution.toRdd.collect().head
+    val expectedSize = ("\"John,\"\" Doe\",1" + lineSep).getBytes(StandardCharsets.UTF_8).length
+    val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone("UTC"))
+    val byteArrayOutputStream = new ByteArrayOutputStream()
+    val streamWriter = new OutputStreamWriter(byteArrayOutputStream)
+    val writer = new BufferedWriter(streamWriter)
+    val csvWriter = CountingWriter(writer)
+
+    KustoWriter.writeRowAsCSV(dfRow, df.schema, dateFormat, csvWriter)
+    writer.flush()
+    writer.close()
+    csvWriter.getCounter shouldEqual expectedSize
+  }
+
+  "finalizeFileWrite" should "should flush and close buffers" in {
+    val gzip = mock(classOf[GZIPOutputStream])
+    val buffer = mock(classOf[BufferedWriter])
+    val csvWriter = CountingWriter(buffer)
+
+    val fileWriteResource = BlobWriteResource(buffer, gzip, csvWriter, null, null)
+    KustoWriter.finalizeBlobWrite(fileWriteResource)
+
+    verify(gzip, times(1)).flush()
+    verify(gzip, times(1)).close()
+
+    verify(buffer, times(1)).flush()
+    verify(buffer, times(1)).close()
+  }
+
+  "getColumnsSchema" should "parse table schema correctly" in {
+    //Verify part of the following schema:
+    // "{\"Name\":\"Subscriptions\",\"OrderedColumns\":[{\"Name\":\"SubscriptionGuid\",\"Type\":\"System.String\",\"CslType\":\"string\"},{\"Name\":\"Identifier\",\"Type\":\"System.String\",\"CslType\":\"string\"},{\"Name\":\"SomeNumber\",\"Type\":\"System.Int64\",\"CslType\":\"long\"},{\"Name\":\"IsCurrent\",\"Type\":\"System.SByte\",\"CslType\":\"bool\"},{\"Name\":\"LastModifiedOn\",\"Type\":\"System.DateTime\",\"CslType\":\"datetime\"},{\"Name\":\"IntegerValue\",\"Type\":\"System.Int32\",\"CslType\":\"int\"}]}"
+    val element1 = new util.ArrayList[String]
+    element1.add("SubscriptionGuid")
+    element1.add("string")
+    element1.add("System.String")
+
+    val element2 = new util.ArrayList[String]
+    element2.add("Identifier")
+    element2.add("string")
+    element2.add("System.String")
+
+    val element3 = new util.ArrayList[String]
+    element3.add("SomeNumber")
+    element3.add("long")
+    element3.add("System.Int64")
+
+    val resultTable = new util.ArrayList[util.ArrayList[String]]
+    resultTable.add(element1)
+    resultTable.add(element2)
+    resultTable.add(element3)
+
+    //("SubscriptionGuid", "string", "System.String")
+    val parsedSchema = KDSU.extractSchemaFromResultTable(resultTable)
+    // We could add new elements for IsCurrent:bool,LastModifiedOn:datetime,IntegerValue:int
+    parsedSchema shouldEqual "['SubscriptionGuid']:string,['Identifier']:string,['SomeNumber']:long"
+  }
 
   "convertRowToCsv" should "convert the row as expected with maps and right escaping" in {
     val sparkConf: SparkConf = new SparkConf().set("spark.testing", "true")
