@@ -52,7 +52,6 @@ object KustoWriter {
     }
 
     val table = tableCoordinates.table.get
-
     val tmpTableName: String = KustoQueryUtils.simplifyName(TempIngestionTablePrefix +
       data.sparkSession.sparkContext.appName +
       "_" + table + batchIdIfExists + "_" + UUID.randomUUID().toString)
@@ -313,17 +312,17 @@ object KustoWriter {
       writer.write('{')
 
       var x = 0
-      var isNull = true
-      while (x < fields.length && isNull) {
-        isNull = row.isNullAt(x)
-        if (!isNull) {
+      var isNullOrEmpty = true
+      while (x < fields.length && isNullOrEmpty) {
+        isNullOrEmpty = row.isNullAt(x)
+        if (!isNullOrEmpty) {
           writeStructField(x)
         }
         x += 1
       }
 
       while (x < fields.length) {
-        if (!row.isNullAt(x)) {
+        if (!row.isNullAt(x)){
           writer.write(',')
           writeStructField(x)
         }
