@@ -73,11 +73,9 @@ case class EscapedWriter(out: java.io.Writer) extends Writer {
   }
 
   def writeStringField(str: String): Unit = {
-    if (str.length > 0) {
-      out.write('"')
-      write(str)
-      out.write('"')
-    }
+    out.write('"')
+    write(str)
+    out.write('"')
   }
 }
 
