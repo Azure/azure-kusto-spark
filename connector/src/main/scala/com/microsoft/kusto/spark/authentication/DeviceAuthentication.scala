@@ -16,9 +16,15 @@ object DeviceAuthentication {
   private val CLIENT_ID = "db662dc1-0cfe-4e1c-a843-19a68e65be58"
 
   def acquireDeviceCode(clusterUrl: String, authority: String = "common"): DeviceCode = {
-    val aadAuthorityUri = s"https://login.microsoftonline.com/$authority"
-    val service: ExecutorService =
-      Executors.newSingleThreadExecutor
+    var aadAuthorityUri = ""
+    val aadAuthorityFromEnv = System.getenv("AadAuthorityUri")
+    if (aadAuthorityFromEnv == null) {
+      aadAuthorityUri = String.format("https://login.microsoftonline.com/%s", authority)
+    } else {
+      aadAuthorityUri = String.format("%s%s%s", aadAuthorityFromEnv, if (aadAuthorityFromEnv.endsWith("/")) "" else "/", authority)
+    }
+
+    val service = Executors.newSingleThreadExecutor
     val context: AuthenticationContext =  new AuthenticationContext(aadAuthorityUri, true, service)
 
     context.acquireDeviceCode(CLIENT_ID, clusterUrl, null).get
