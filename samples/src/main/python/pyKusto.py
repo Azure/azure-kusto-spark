@@ -34,7 +34,7 @@ df.write. \
 
 # COMMAND ----------
 
-# Read the data from the kusto table in 'single' mode
+# Read the data from the kusto table with default reading mode
 kustoDf  = pyKusto.read. \
             format("com.microsoft.kusto.spark.datasource"). \
             option("kustoCluster", kustoOptions["kustoCluster"]). \
@@ -45,7 +45,7 @@ kustoDf  = pyKusto.read. \
             option("kustoAADAuthorityID", kustoOptions["kustoAADAuthorityID"]). \
             load()
 
-# Read the data from the kusto table in 'distributed' mode and with advanced options
+# Read the data from the kusto table in forced 'distributed' mode and with advanced options
 # Please refer to https://github.com/Azure/azure-kusto-spark/blob/master/connector/src/main/scala/com/microsoft/kusto/spark/datasource/KustoSourceOptions.scala
 # to get the string representation of the options you need as pyspark does not support usage of scala objects.
 
@@ -143,6 +143,31 @@ kustoQ = csvDf.writeStream. \
   option("kustoAADAuthorityID",kustoOptions["kustoAADAuthorityID"]). \
   trigger(once = True)
 
-
-
 kustoQ.start().awaitTermination(60*8)
+
+#########################
+# Device Authentication #
+#########################
+
+# Device authentication for databricks
+# Acquire a token with device authentication and pass the token to the connector
+# Prints done inside the JVM are not shown in the notebooks, therefore the user has to print himself the device code.
+
+deviceAuth = sc._jvm.com.microsoft.kusto.spark.authentication.DeviceAuthentication(
+               "https://{clusterAlias}.kusto.windows.net".format(clusterAlias=kustoOptions["kustoCluster"]),
+               "common")
+try:
+  deviceCodeMessage = deviceAuth.getDeviceCodeMassage()
+  print(deviceCodeMessage)
+except Exception as e:
+  print(e)
+  deviceAuth.refreshDeviceCode() # Every 15 minutes a device code should be reacquired
+token = deviceAuth.acquireToken()
+
+df  = pyKusto.read. \
+            format("com.microsoft.kusto.spark.datasource"). \
+            option("kustoCluster", kustoOptions["kustoCluster"]). \
+            option("kustoDatabase", kustoOptions["kustoDatabase"]). \
+            option("kustoQuery", kustoOptions["kustoTable"]). \
+            option("accessToken", token). \
+            load()

@@ -212,6 +212,10 @@ df.write
  kustoQ.start().awaitTermination(TimeUnit.MINUTES.toMillis(8))      
  ```
  
-  For more reference code examples please see 
-   [SimpleKustoDataSink](../samples/src/main/scala/SimpleKustoDataSink.scala) and 
-   [KustoConnectorDemo](../samples/src/main/scala/KustoConnectorDemo.scala).
+  For more reference code examples please see: 
+  
+   [SimpleKustoDataSink](../samples/src/main/scala/SimpleKustoDataSink.scala)
+   
+   [KustoConnectorDemo](../samples/src/main/scala/KustoConnectorDemo.scala)
+   
+   [Python samples](../samples/src/main/python/pyKusto.py)

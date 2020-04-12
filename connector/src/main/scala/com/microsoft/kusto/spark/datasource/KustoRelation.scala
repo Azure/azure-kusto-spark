@@ -113,6 +113,7 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
       }
     }
 
+    KDSU.logInfo("KustoRelation", s"Finished reading")
     res.get
   }
 
