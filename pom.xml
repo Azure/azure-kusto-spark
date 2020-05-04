@@ -12,7 +12,7 @@
         <revision>1.1.4</revision>
         <scala.version>2.11</scala.version>
         <specs2.version>3.6.5</specs2.version>
-        <spark.version>[2.4.0,2.5.0)</spark.version>
+        <spark.version>[2.4.5,2.5.0)</spark.version>
         <kusto-sdk.version>1.4.0</kusto-sdk.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven-source-plugin.version>3.0.1</maven-source-plugin.version>
