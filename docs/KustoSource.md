@@ -27,6 +27,7 @@ that is using it. Please verify the following before using Kusto connector:
  fail due to [kusto limit policy](https://docs.microsoft.com/en-us/azure/kusto/concepts/querylimits)). In 'Distributed' mode, a distributed
  [export command](https://docs.microsoft.com/en-us/azure/kusto/management/data-export/export-data-to-storage) is called followed by a
  distributed spark Parquet read.  
+ The connector implements TableScan, PrunedFilteredScan, and InsertableRelation.
  
  ### Command Syntax
  
