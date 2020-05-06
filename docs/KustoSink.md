@@ -9,7 +9,6 @@ Kusto connector uses **Azure Active Directory (AAD)** to authenticate the client
 that is using it. Please verify the following before using Kusto connector:
  * Client application is registered in AAD
  * Client application has 'user' privileges or above on the target database
- * In addition, client application has 'ingestor' privileges on the target database
  * When writing to an existing table, client application has 'admin' privileges on the target table
  
  For details on Kusto principal roles, please refer to [Role-based Authorization](https://docs.microsoft.com/en-us/azure/kusto/management/access-control/role-based-authorization) 
