@@ -157,7 +157,7 @@ deviceAuth = sc._jvm.com.microsoft.kusto.spark.authentication.DeviceAuthenticati
                "https://{clusterAlias}.kusto.windows.net".format(clusterAlias=kustoOptions["kustoCluster"]),
                "common")
 try:
-  deviceCodeMessage = deviceAuth.getDeviceCodeMassage()
+  deviceCodeMessage = deviceAuth.getDeviceCodeMessage()
   print(deviceCodeMessage)
 except Exception as e:
   print(e)
