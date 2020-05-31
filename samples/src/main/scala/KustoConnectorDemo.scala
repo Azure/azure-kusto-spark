@@ -106,10 +106,11 @@ object KustoConnectorDemo {
     // On databricks - this connection will hold without awaitTermination call
     kustoQ.start().awaitTermination(TimeUnit.MINUTES.toMillis(8))
 
-      val conf: Map[String, String] = Map(
-        KustoSourceOptions.KUSTO_AAD_CLIENT_ID -> appId,
-        KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
-        KustoSourceOptions.KUSTO_QUERY -> s"$table | where colB % 50 == 0 | distinct colA"
+    val conf: Map[String, String] = Map(
+      KustoSourceOptions.KUSTO_AAD_CLIENT_ID -> appId,
+      KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+      KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID -> authorityId,
+      KustoSourceOptions.KUSTO_QUERY -> s"$table | where colB % 50 == 0 | distinct colA"
     )
 
     // Simplified syntax flavour
@@ -122,17 +123,18 @@ object KustoConnectorDemo {
       KustoSourceOptions.KUSTO_AAD_CLIENT_ID -> appId,
       KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
       KustoSourceOptions.KUSTO_QUERY -> "StringAndIntTable"
-        )
+    )
 
-        val df3 = spark.sqlContext.read
-          .format("com.microsoft.kusto.spark.datasource")
-          .option(KustoSourceOptions.KUSTO_CLUSTER, cluster)
-          .option(KustoSourceOptions.KUSTO_DATABASE, database)
-          .options(conf2)
-          .load()
+    val df3 = spark.sqlContext.read
+      .format("com.microsoft.kusto.spark.datasource")
+      .option(KustoSourceOptions.KUSTO_CLUSTER, cluster)
+      .option(KustoSourceOptions.KUSTO_DATABASE, database)
+      .options(conf2)
+      .load()
 
-    // GET STORAGE PARAMETERS FOR READING A LARGE DATA SET
-    // NOTE: this is a temporary requirement - future connector versions will provision storage internally
+    // OPTIONAL:
+    // PROVIDE STORAGE PARAMETERS YOURSELF FOR READING A LARGE DATA SET
+    // NOTE: this is not required as the connector will alternatively get temporary storage itself
     // Use either container/account-key/account name, or container SaS
     val container = "Your container name" // Databricks example: dbutils.secrets.get(scope = "KustoDemos", key = "blobContainer")
     val storageAccountKey = "Your storage account key" // Databricks example: dbutils.secrets.get(scope = "KustoDemos", key = "blobStorageAccountKey")
@@ -145,7 +147,7 @@ object KustoConnectorDemo {
     // when using SAS
     // spark.conf.set(s"fs.azure.sas.$container.$storageAccountName.blob.core.windows.net", s"$storageSas")
 
-    // READING LARGE DATA SET: SET UP CONFIGURATION
+    // SET UP CONFIGURATION FOR PROVIDING STORAGE YOURSELF
     val conf3: Map[String, String] = Map(
       KustoSourceOptions.KUSTO_AAD_CLIENT_ID -> appId,
       KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
