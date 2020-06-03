@@ -15,9 +15,6 @@ object SimpleKustoDataSource {
       KustoSourceOptions.KUSTO_AAD_CLIENT_ID -> "Your Client ID",
       KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD -> "Your secret",
       KustoSourceOptions.KUSTO_QUERY -> "Your Kusto query",
-      KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME -> "Your blob storage account",
-      KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_KEY -> "Your storage account key, Alternatively, SAS key can be used",
-      KustoSourceOptions.KUSTO_BLOB_CONTAINER -> "Your blob storage container name"
     )
     val df = sparkSession.read.kusto("Your Kusto Cluster", "Your Kusto Database", "Your Kusto Query in KustoOptions.Kusto_Query", conf)
     df.show
