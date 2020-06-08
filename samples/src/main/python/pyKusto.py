@@ -8,9 +8,7 @@ sc._jvm.com.microsoft.kusto.spark.utils.KustoDataSourceUtils.setLoggingLevel("al
 
 pyKusto = SparkSession.builder.appName("kustoPySpark").getOrCreate()
 kustoOptions = {"kustoCluster":"<cluster-name>", "kustoDatabase" : "<database-name>", "kustoTable" : "<table-name>", "kustoAADClientID":"<AAD-app id>" ,
- "kustoClientAADClientPassword":"<AAD-app key>", "kustoAADAuthorityID":"<AAD authentication authority>",
- "blobStorageAccountName":"<Storage-Account-Name>","blobStorageAccountKey":"<Storage-Account-Key>", "blobContainer":"<Container-Name>", # For distributed read
- "blobStorageSasUrl":"<blob-Storage-Full-Sas-Url>"} # This can replace the above distributed mode options
+ "kustoClientAADClientPassword":"<AAD-app key>", "kustoAADAuthorityID":"<AAD authentication authority>"} # This can replace the above distributed mode options
 # Create a DataFrame for ingestion
 df = spark.createDataFrame([("row-"+str(i),i)for i in range(1000)],["name", "value"])
 
@@ -47,7 +45,7 @@ kustoDf  = pyKusto.read. \
 
 # Read the data from the kusto table in forced 'distributed' mode and with advanced options
 # Please refer to https://github.com/Azure/azure-kusto-spark/blob/master/connector/src/main/scala/com/microsoft/kusto/spark/datasource/KustoSourceOptions.scala
-# to get the string representation of the options you need as pyspark does not support usage of scala objects.
+# in order to get the string representation of the options - as pyspark does not support calling properties of scala objects.
 
 crp = sc._jvm.com.microsoft.azure.kusto.data.ClientRequestProperties()
 crp.setOption("norequesttimeout",True)
@@ -73,10 +71,6 @@ kustoDf  = pyKusto.read. \
             option("kustoAADClientID", kustoOptions["kustoAADClientID"]). \
             option("kustoClientAADClientPassword", kustoOptions["kustoClientAADClientPassword"]). \
             option("kustoAADAuthorityID", kustoOptions["kustoAADAuthorityID"]). \
-            option("blobStorageAccountName",kustoOptions["blobStorageAccountName"]). \
-            option("blobStorageAccountKey",kustoOptions["blobStorageAccountKey"]). \
-            option("blobContainer",kustoOptions["blobContainer"]). \
-            option("blobStorageSasUrl",kustoOptions["blobStorageSasUrl"]). \ # Second option for scaling
             option("clientRequestPropertiesJson", crp.toString()). \
             load()
 
@@ -157,7 +151,7 @@ deviceAuth = sc._jvm.com.microsoft.kusto.spark.authentication.DeviceAuthenticati
                "https://{clusterAlias}.kusto.windows.net".format(clusterAlias=kustoOptions["kustoCluster"]),
                "common")
 try:
-  deviceCodeMessage = deviceAuth.getDeviceCodeMassage()
+  deviceCodeMessage = deviceAuth.getDeviceCodeMessage()
   print(deviceCodeMessage)
 except Exception as e:
   print(e)
