@@ -62,7 +62,7 @@ case class EscapedWriter(out: java.io.Writer) extends Writer {
 
   def write(str: String): Unit ={
     for (c <- str) {
-      val escaped = EscapedWriter.escapeTable(c)
+      val escaped =  if (c > 127) 0 else EscapedWriter.escapeTable(c)
       if (escaped != 0) {
         out.write('\\')
         out.write(escaped)
