@@ -141,7 +141,7 @@ df.write
 IngestionProperties and short scala usage:
 ```scala
 val sp = new SparkIngestionProperties
-var tags = new util.ArrayList[String]()
+var tags = new java.util.ArrayList[String]()
 tags.add("newTag")
 sp.ingestByTags = tags
 sp.creationTime = new DateTime().minusDays(1)
@@ -156,14 +156,14 @@ Asynchronous mode, table may not exist and will be created:
 ```scala
 df.write
   .format("com.microsoft.kusto.spark.datasource")
-  .option(KustoOptions.KUSTO_CLUSTER, "MyCluster.RegionName")
-  .option(KustoOptions.KUSTO_DATABASE, "MyDatabase")
-  .option(KustoOptions.KUSTO_TABLE, "MyTable")
-  .option(KustoOptions.KUSTO_AAD_CLIENT_ID, "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
-  .option(KustoOptions.KUSTO_AAD_CLIENT_PASSWORD, "MyPassword") 
-  .option(KustoOptions.KUSTO_AAD_AUTHORITY_ID, "AAD Authority Id") // "microsoft.com"
-  .option(KustoOptions.KUSTO_WRITE_ENABLE_ASYNC, true)
-  .option(KustoOptions.KUSTO_TABLE_CREATE_OPTIONS, "CreateIfNotExist")
+  .option(KustoSinkOptions.KUSTO_CLUSTER, "MyCluster.RegionName")
+  .option(KustoSinkOptions.KUSTO_DATABASE, "MyDatabase")
+  .option(KustoSinkOptions.KUSTO_TABLE, "MyTable")
+  .option(KustoSinkOptions.KUSTO_AAD_CLIENT_ID, "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
+  .option(KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD, "MyPassword") 
+  .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, "AAD Authority Id") // "microsoft.com"
+  .option(KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC, true)
+  .option(KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS, "CreateIfNotExist")
   .mode(SaveMode.Append)
   .save()
 ```
@@ -178,10 +178,10 @@ df.write
    .writeStream
    .format("com.microsoft.kusto.spark.datasink.KustoSinkProvider")
    .options(Map(
-      KustoOptions.<option-name-1>, <option-value-1>,
+      KustoSinkOptions.<option-name-1>, <option-value-1>,
       ...,
-      KustoOptions.<option-name-n>, <option-value-n>))
-   .trigger(Trigger.Once)
+      KustoSinkOptions.<option-name-n>, <option-value-n>))
+   .trigger(Trigger.Once) // Or use ProcessingTime
   ```
  ### Example
  ```scala
@@ -200,12 +200,12 @@ df.write
        .writeStream
        .format("com.microsoft.kusto.spark.datasink.KustoSinkProvider")
        .options(Map(
-         KustoOptions.KUSTO_CLUSTER -> cluster,
-         KustoOptions.KUSTO_TABLE -> table,
-         KustoOptions.KUSTO_DATABASE -> database,
-         KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
-         KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
-         KustoOptions.KUSTO_AAD_AUTHORITY_ID -> authorityId))
+         KustoSinkOptions.KUSTO_CLUSTER -> cluster,
+         KustoSinkOptions.KUSTO_TABLE -> table,
+         KustoSinkOptions.KUSTO_DATABASE -> database,
+         KustoSinkOptions.KUSTO_AAD_CLIENT_ID -> appId,
+         KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+         KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID -> authorityId))
        .trigger(Trigger.Once)
  
  kustoQ.start().awaitTermination(TimeUnit.MINUTES.toMillis(8))      
