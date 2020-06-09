@@ -12,7 +12,7 @@ import com.microsoft.azure.kusto.ingest.IngestionProperties.DATA_FORMAT
 import com.microsoft.azure.kusto.ingest.result.IngestionResult
 import com.microsoft.azure.kusto.ingest.source.BlobSourceInfo
 import com.microsoft.azure.kusto.ingest.{IngestClient, IngestionProperties}
-import com.microsoft.azure.storage.blob.CloudBlockBlob
+import com.microsoft.azure.storage.blob.{BlobRequestOptions, CloudBlockBlob}
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
@@ -187,7 +187,9 @@ object KustoWriter {
     val containerAndSas = client.getTempBlobForIngestion
     val currentBlob = new CloudBlockBlob(new URI(containerAndSas.containerUrl + '/' + blobName + containerAndSas.sas))
     val currentSas = containerAndSas.sas
-    val gzip: GZIPOutputStream = new GZIPOutputStream(currentBlob.openOutputStream())
+    val options = new BlobRequestOptions()
+    options.setConcurrentRequestCount(4) //should be configured from outside
+    val gzip: GZIPOutputStream = new GZIPOutputStream(currentBlob.openOutputStream(null, options, null))
 
     val writer = new OutputStreamWriter(gzip, StandardCharsets.UTF_8)
 

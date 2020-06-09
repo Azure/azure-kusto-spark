@@ -1,6 +1,5 @@
 package com.microsoft.kusto.spark.utils
 
-import java.io.InputStream
 import java.security.InvalidParameterException
 import java.util
 import java.util.concurrent.{CountDownLatch, TimeUnit, TimeoutException}
@@ -18,7 +17,6 @@ import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.types.StructType
 import java.util.Properties
 
 import scala.concurrent.ExecutionContext.Implicits.global
