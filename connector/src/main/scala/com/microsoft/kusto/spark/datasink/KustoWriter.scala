@@ -1,137 +1,125 @@
 package com.microsoft.kusto.spark.datasink
 
-
-import java.io.{BufferedWriter, IOException, OutputStreamWriter}
+import java.io._
 import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.security.InvalidParameterException
 import java.util
-import java.util.concurrent.TimeUnit
 import java.util.zip.GZIPOutputStream
 import java.util.{TimeZone, UUID}
 
-import com.microsoft.azure.kusto.data.Client
 import com.microsoft.azure.kusto.ingest.IngestionProperties.DATA_FORMAT
-import com.microsoft.azure.kusto.ingest.result.{IngestionResult, IngestionStatus, OperationStatus}
+import com.microsoft.azure.kusto.ingest.result.IngestionResult
 import com.microsoft.azure.kusto.ingest.source.BlobSourceInfo
-import com.microsoft.azure.kusto.ingest.IngestionProperties
-import com.microsoft.azure.storage.StorageCredentialsSharedAccessSignature
-import com.microsoft.azure.storage.blob.{CloudBlobContainer, CloudBlockBlob}
-import com.microsoft.kusto.spark.datasink
-import com.microsoft.kusto.spark.datasource.{KustoAuthentication, KustoCoordinates, WriteOptions}
+import com.microsoft.azure.kusto.ingest.{IngestClient, IngestionProperties}
+import com.microsoft.azure.storage.blob.{BlobRequestOptions, CloudBlockBlob}
+import com.microsoft.kusto.spark.authentication.KustoAuthentication
+import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
-import com.microsoft.kusto.spark.utils.{KustoClient, KustoQueryUtils, KustoConstants => KCONST, KustoDataSourceUtils => KDSU}
-import com.univocity.parsers.csv.{CsvWriter, CsvWriterSettings}
+import com.microsoft.kusto.spark.utils.{KustoClient, KustoClientCache, KustoQueryUtils, KustoConstants => KCONST, KustoDataSourceUtils => KDSU}
 import org.apache.commons.lang3.time.FastDateFormat
-import org.apache.spark
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.types.{DateType, StringType, StructField, StructType, TimestampType}
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.{FutureAction, TaskContext}
-import shaded.parquet.org.codehaus.jackson.map.ObjectMapper
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
+import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils, MapData}
+import org.apache.spark.sql.types.{DateType, StringType, StructType, TimestampType, _}
+import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.CollectionAccumulator
+import org.apache.spark.TaskContext
 
 import scala.collection.Iterator
 import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.duration.FiniteDuration
-import scala.concurrent.{Await, Future}
+import scala.concurrent.{Await, Future, TimeoutException}
 
 object KustoWriter {
   private val myName = this.getClass.getSimpleName
   val TempIngestionTablePrefix = "_tmpTable"
-  var OperationShowCommandResult = 16
-  val completedState = "Completed"
-  val inProgressState = "InProgress"
-  val stateCol = "State"
-  val statusCol = "Status"
   val delayPeriodBetweenCalls: Int = KCONST.defaultPeriodicSamplePeriod.toMillis.toInt
-  val GZIP_BUFFER_SIZE: Int = KCONST.defaultBufferSize
-  val maxBlobSize: Int = KCONST.oneGiga - KCONST.oneMega
+  val GZIP_BUFFER_SIZE: Int = 1000 * KCONST.defaultBufferSize
 
   private[kusto] def write(batchId: Option[Long],
                            data: DataFrame,
                            tableCoordinates: KustoCoordinates,
-                           authentication: KustoAuthentication, writeOptions: WriteOptions): Unit = {
-
+                           authentication: KustoAuthentication,
+                           writeOptions: WriteOptions): Unit = {
     val batchIdIfExists = batchId.filter(_ != 0).map(_.toString).getOrElse("")
-    val kustoAdminClient = KustoClient.getAdmin(authentication, tableCoordinates.cluster)
+    val kustoClient = KustoClientCache.getClient(tableCoordinates.cluster, authentication)
 
     if (tableCoordinates.table.isEmpty) {
-       KDSU.reportExceptionAndThrow(myName,  new InvalidParameterException("Table name not specified"), "writing data",
+      KDSU.reportExceptionAndThrow(myName, new InvalidParameterException("Table name not specified"), "writing data",
         tableCoordinates.cluster, tableCoordinates.database)
     }
 
     val table = tableCoordinates.table.get
-
     val tmpTableName: String = KustoQueryUtils.simplifyName(TempIngestionTablePrefix +
       data.sparkSession.sparkContext.appName +
       "_" + table + batchIdIfExists + "_" + UUID.randomUUID().toString)
     implicit val parameters: KustoWriteResource = KustoWriteResource(authentication, tableCoordinates, data.schema, writeOptions, tmpTableName)
 
-    cleanupTempTables(kustoAdminClient, tableCoordinates)
+    cleanupTempTables(kustoClient, tableCoordinates)
 
     // KustoWriter will create a temporary table ingesting the data to it.
     // Only if all executors succeeded the table will be appended to the original destination table.
-    KDSU.createTmpTableWithSameSchema(kustoAdminClient, tableCoordinates, tmpTableName, writeOptions.tableCreateOptions, data.schema)
+    kustoClient.createTmpTableWithSameSchema(tableCoordinates, tmpTableName, writeOptions.tableCreateOptions, data.schema)
     KDSU.logInfo(myName, s"Successfully created temporary table $tmpTableName, will be deleted after completing the operation")
 
-    val ingestKcsb = KustoClient.getKcsb(authentication, s"https://ingest-${tableCoordinates.cluster}.kusto.windows.net")
-    val storageUri = KustoTempIngestStorageCache.getNewTempBlobReference(tableCoordinates.cluster, ingestKcsb)
+    val stagingTableIngestionProperties = getIngestionProperties(writeOptions, parameters)
+    kustoClient.setMappingOnStagingTableIfNeeded(stagingTableIngestionProperties, table)
+    if (stagingTableIngestionProperties.getFlushImmediately){
+      KDSU.logWarn(myName, "Its not recommended to set flushImmediately to true")
+    }
     val rdd = data.queryExecution.toRdd
+    val partitionsResults = rdd.sparkContext.collectionAccumulator[PartitionResult]
+
     if (writeOptions.isAsync) {
-      val asyncWork: FutureAction[Unit] = rdd.foreachPartitionAsync { rows => ingestRowsIntoTempTbl(rows, batchIdIfExists, writeOptions.timeout, storageUri) }
+      val asyncWork = rdd.foreachPartitionAsync { rows => ingestRowsIntoTempTbl(rows, batchIdIfExists, partitionsResults) }
       KDSU.logInfo(myName, s"asynchronous write to Kusto table '$table' in progress")
       // This part runs back on the driver
       asyncWork.onSuccess {
-        case _ => finalizeIngestionWhenWorkersSucceeded(tableCoordinates, batchIdIfExists, kustoAdminClient, tmpTableName, isAsync = true)
+        case _ => kustoClient.finalizeIngestionWhenWorkersSucceeded(tableCoordinates, batchIdIfExists, kustoClient.engineClient, tmpTableName, partitionsResults, writeOptions.timeout, isAsync = true)
       }
       asyncWork.onFailure {
         case exception: Exception =>
-          tryCleanupIngestionByproducts(tableCoordinates.database, kustoAdminClient, tmpTableName)
-          KDSU.reportExceptionAndThrow(myName, exception, "writing data", tableCoordinates.cluster, tableCoordinates.database, table, isLogDontThrow = true)
+          kustoClient.cleanupIngestionByproducts(tableCoordinates.database, kustoClient.engineClient, tmpTableName)
+          KDSU.reportExceptionAndThrow(myName, exception, "writing data", tableCoordinates.cluster, tableCoordinates.database, table, shouldNotThrow = true)
           KDSU.logError(myName, "The exception is not visible in the driver since we're in async mode")
       }
-    }
-    else {
-      try {
-        rdd.foreachPartition { rows => ingestRowsIntoTempTbl(rows, batchIdIfExists, writeOptions.timeout, storageUri) }
-      } catch {
+    } else {
+      try
+        rdd.foreachPartition { rows => ingestRowsIntoTempTbl(rows, batchIdIfExists, partitionsResults) }
+      catch {
         case exception: Exception =>
-          tryCleanupIngestionByproducts(tableCoordinates.database, kustoAdminClient, tmpTableName)
-          throw exception.getCause
+          kustoClient.cleanupIngestionByproducts(tableCoordinates.database, kustoClient.engineClient, tmpTableName)
+          throw exception
       }
-      finalizeIngestionWhenWorkersSucceeded(tableCoordinates, batchIdIfExists, kustoAdminClient, tmpTableName)
-      KDSU.logInfo(myName, s"write operation to Kusto table '$table' finished successfully")
+      kustoClient.finalizeIngestionWhenWorkersSucceeded(tableCoordinates, batchIdIfExists, kustoClient.engineClient, tmpTableName, partitionsResults, writeOptions.timeout)
     }
   }
 
-
-  def ingestRowsIntoTempTbl(rows: Iterator[InternalRow], batchId: String, timeOut: FiniteDuration, storageUri: String)
+  def ingestRowsIntoTempTbl(rows: Iterator[InternalRow], batchId: String, partitionsResults: CollectionAccumulator[PartitionResult])
                            (implicit parameters: KustoWriteResource): Unit =
     if (rows.isEmpty) {
       KDSU.logWarn(myName, s"sink to Kusto table '${parameters.coordinates.table.get}' with no rows to write on partition ${TaskContext.getPartitionId}")
     } else {
-      ingestToTemporaryTableByWorkers(batchId, timeOut, storageUri, rows)
+      ingestToTemporaryTableByWorkers(batchId, rows, partitionsResults)
     }
 
-  def cleanupTempTables(kustoAdminClient: Client, coordinates: KustoCoordinates): Unit = {
-
-    val tempTablesOld: Seq[String] =
-      kustoAdminClient.execute(generateFindOldTempTablesCommand(coordinates.database))
-        .getValues.asScala
-        .headOption.map(_.asScala)
-        .getOrElse(Seq())
-
+  def cleanupTempTables(kustoClient: KustoClient, coordinates: KustoCoordinates): Unit = {
     Future {
+      val tempTablesOld: Seq[String] =
+        kustoClient.engineClient.execute(generateFindOldTempTablesCommand(coordinates.database))
+          .getValues.asScala
+          .headOption.map(_.asScala)
+          .getOrElse(Seq())
+
       // Try delete temporary tablesToCleanup created and not used
-      val tempTablesCurr: Seq[String] = kustoAdminClient.execute(coordinates.database, generateFindCurrentTempTablesCommand(TempIngestionTablePrefix))
-        .getValues.get(0).asScala
-
-      val tablesToCleanup: Seq[String] = tempTablesOld.intersect(tempTablesCurr)
-
-      if (tablesToCleanup.nonEmpty) {
-        kustoAdminClient.execute(coordinates.database, generateDropTablesCommand(tablesToCleanup.mkString(",")))
+      val tempTablesCurr = kustoClient.engineClient.execute(coordinates.database, generateFindCurrentTempTablesCommand(TempIngestionTablePrefix))
+      if (tempTablesCurr.getValues.size() > 0) {
+        val tablesToCleanup: Seq[String] = tempTablesOld.intersect(tempTablesCurr.getValues.get(0).asScala)
+        if (tablesToCleanup.nonEmpty) {
+          kustoClient.engineClient.execute(coordinates.database, generateDropTablesCommand(tablesToCleanup.mkString(",")))
+        }
       }
     } onFailure {
       case ex: Exception =>
@@ -139,218 +127,286 @@ object KustoWriter {
           myName,
           ex,
           "trying to drop temporary tables", coordinates.cluster, coordinates.database, coordinates.table.getOrElse("Unspecified table name"),
-          isLogDontThrow = true
+          shouldNotThrow = true
         )
     }
   }
 
   def ingestRowsIntoKusto(rows: Iterator[InternalRow],
-                          storageUri: String)
-                         (implicit parameters: KustoWriteResource): Seq[IngestionResult] = {
+                          ingestClient: IngestClient,
+                          partitionsResults: CollectionAccumulator[PartitionResult])
+                         (implicit parameters: KustoWriteResource): Unit = {
     import parameters._
 
-    val ingestClient = KustoClient.getIngest(authentication, coordinates.cluster)
-    val ingestionProperties = new IngestionProperties(coordinates.database, tmpTableName)
+    val ingestionProperties = getIngestionProperties(writeOptions, parameters)
     ingestionProperties.setDataFormat(DATA_FORMAT.csv.name)
     ingestionProperties.setReportMethod(IngestionProperties.IngestionReportMethod.Table)
     ingestionProperties.setReportLevel(IngestionProperties.IngestionReportLevel.FailuresAndSuccesses)
-    val targetTable = coordinates.table.get
 
-    val blobList: Seq[(CloudBlockBlob, Long)] = serializeRows(rows, storageUri, parameters)
+    val tasks = ingestRows(rows, parameters, ingestClient, ingestionProperties, partitionsResults)
 
-    if (blobList.isEmpty) {
-      KDSU.logWarn(myName, "No blobs created for ingestion to Kusto cluster " + {coordinates.cluster} +
-        ", database " + {coordinates.database} + ", table " + targetTable)
-    }
+    KDSU.logWarn(myName, s"Ingesting using ingest client - partition: ${TaskContext.getPartitionId()}")
 
-    blobList.map { blobSizePair =>
-      val (blob, blobSize) = (blobSizePair._1, blobSizePair._2)
-      val signature = blob.getServiceClient.getCredentials.asInstanceOf[StorageCredentialsSharedAccessSignature]
-      val blobUri = blob.getStorageUri.getPrimaryUri.toString
-      val blobPath = blobUri + "?" + signature.getToken
-      val blobSourceInfo = new BlobSourceInfo(blobPath, blobSize)
-
-      ingestClient.ingestFromBlob(blobSourceInfo, ingestionProperties)
-    }
+    tasks.asScala.foreach(t => try {
+      Await.result(t, KCONST.defaultIngestionTaskTime)
+    } catch {
+      case _: TimeoutException => KDSU.logWarn(myName, s"Timed out trying to ingest, no need to fail as the ingest might succeed")
+    })
   }
 
-  private def tryCleanupIngestionByproducts(database: String, kustoAdminClient: Client, tmpTableName: String) = {
-    try {
-      kustoAdminClient.execute(database, generateTableDropCommand(tmpTableName))
-    }
-    catch {
-      case exception: Exception =>
-        KDSU.reportExceptionAndThrow(myName, exception, s"deleting temporary table $tmpTableName", database = database, isLogDontThrow = true)
-    }
-  }
-
-  private def finalizeIngestionWhenWorkersSucceeded(coordinates: KustoCoordinates,
-                                                    batchIdIfExists: String,
-                                                    kustoAdminClient: Client,
-                                                    tmpTableName: String,
-                                                    isAsync: Boolean = false): Unit = {
-    import coordinates._
-    try {
-      // Move data to real table
-      // Protect tmp table from merge/rebuild and move data to the table requested by customer. This operation is atomic.
-      kustoAdminClient.execute(database, generateTableAlterMergePolicyCommand(tmpTableName, allowMerge = false, allowRebuild = false))
-      kustoAdminClient.execute(database, generateTableMoveExtentsCommand(tmpTableName, table.get))
-      KDSU.logInfo(myName, s"write to Kusto table '${table.get}' finished successfully $batchIdIfExists")
-    }
-    catch {
-      case exception: Exception =>
-        KDSU.reportExceptionAndThrow(myName, exception, "finalizing write operation", cluster, database, table.get, isLogDontThrow = isAsync)
-    }
-    finally {
-      tryCleanupIngestionByproducts(database, kustoAdminClient, tmpTableName)
+  private def getIngestionProperties(writeOptions: WriteOptions, parameters: KustoWriteResource): IngestionProperties = {
+    if (writeOptions.IngestionProperties.isDefined) {
+      SparkIngestionProperties.fromString(writeOptions.IngestionProperties.get).toIngestionProperties(parameters.coordinates.database, parameters.tmpTableName)
+    } else {
+      new IngestionProperties(parameters.coordinates.database, parameters.tmpTableName)
     }
   }
 
   private def ingestToTemporaryTableByWorkers(
                                                batchId: String,
-                                               timeout: FiniteDuration,
-                                               storageUri: String,
-                                               rows: Iterator[InternalRow])
-                                             (implicit parameters: KustoWriteResource)
-  : Unit = {
+                                               rows: Iterator[InternalRow],
+                                               partitionsResults: CollectionAccumulator[PartitionResult])
+                                             (implicit parameters: KustoWriteResource): Unit = {
 
     import parameters._
     val partitionId = TaskContext.getPartitionId
     KDSU.logInfo(myName, s"Ingesting partition '$partitionId'")
-    val targetTable = coordinates.table.get
+    val ingestClient = KustoClientCache.getClient(coordinates.cluster, authentication).ingestClient
 
     // We force blocking here, since the driver can only complete the ingestion process
     // once all partitions are ingested into the temporary table
-    Await.result(
-      Future(ingestRowsIntoKusto(rows, storageUri)).map { ingestionResults =>
-        // Proceed only on success. Will throw on failure for the driver to handle
-        ingestionResults.foreach {
-          ingestionResult => KDSU.runSequentially[IngestionStatus](
-            func = () => ingestionResult.getIngestionStatusCollection().get(0),
-            0, delayPeriodBetweenCalls, (timeout.toMillis / delayPeriodBetweenCalls + 5).toInt,
-            res => res.status == OperationStatus.Pending,
-            res => res.status match {
-              case OperationStatus.Pending =>
-                throw new RuntimeException(s"Ingestion to Kusto failed on timeout failure. Cluster: '${coordinates.cluster}', " +
-                  s"database: '${coordinates.database}', table: '$targetTable', batch: '$batchId', partition: '$partitionId'")
-              case OperationStatus.Succeeded =>
-                KDSU.logInfo(myName, s"Ingestion to Kusto succeeded. " +
-                  s"Cluster: '${coordinates.cluster}', " +
-                  s"database: '${coordinates.database}', " +
-                  s"table: '$targetTable', batch: '$batchId', partition: '$partitionId', from: '${res.ingestionSourcePath}', Operation ${res.operationId}")
-              case otherStatus =>
-                throw new RuntimeException(s"Ingestion to Kusto failed with status '$otherStatus'." +
-                  s" Cluster: '${coordinates.cluster}', database: '${coordinates.database}', " +
-                  s"table: '$targetTable', batch: '$batchId', partition: '$partitionId'. Ingestion info: '${readIngestionResult(res)}'")
-            }).await(timeout.toMillis, TimeUnit.MILLISECONDS)
-        }
-      },
-      timeout)
-  }
-
-  def all(list: util.ArrayList[Boolean]): Boolean = {
-    val it = list.iterator
-    var res = true
-    while (it.hasNext && res) {
-      res = it.next()
-    }
-    res
+    ingestRowsIntoKusto(rows, ingestClient, partitionsResults)
   }
 
   def createBlobWriter(schema: StructType,
-                       timeZone: String,
                        tableCoordinates: KustoCoordinates,
                        tmpTableName: String,
-                       storageUri: String,
-                       container: CloudBlobContainer): BlobWriteResource = {
-    val blobName = s"${tableCoordinates.database}_${tmpTableName}_${UUID.randomUUID.toString}_SparkStreamUpload.gz"
-    val blob: CloudBlockBlob = container.getBlockBlobReference(blobName)
-    val gzip: GZIPOutputStream = new GZIPOutputStream(blob.openOutputStream())
+                       client: KustoClient): BlobWriteResource = {
+    val blobName = s"${KustoQueryUtils.simplifyName(tableCoordinates.database)}_${tmpTableName}_${UUID.randomUUID.toString}_spark.csv.gz"
+
+    val containerAndSas = client.getTempBlobForIngestion
+    val currentBlob = new CloudBlockBlob(new URI(containerAndSas.containerUrl + '/' + blobName + containerAndSas.sas))
+    val currentSas = containerAndSas.sas
+    val options = new BlobRequestOptions()
+    options.setConcurrentRequestCount(4) //should be configured from outside
+    val gzip: GZIPOutputStream = new GZIPOutputStream(currentBlob.openOutputStream(null, options, null))
 
     val writer = new OutputStreamWriter(gzip, StandardCharsets.UTF_8)
+
     val buffer: BufferedWriter = new BufferedWriter(writer, GZIP_BUFFER_SIZE)
-    val csvWriter: CsvWriter = new CsvWriter(buffer, new CsvWriterSettings)
-    datasink.BlobWriteResource(buffer, gzip, csvWriter, blob)
+    val csvWriter = CountingWriter(buffer)
+    BlobWriteResource(buffer, gzip, csvWriter, currentBlob, currentSas)
   }
 
   @throws[IOException]
-  private[kusto] def serializeRows(rows: Iterator[InternalRow],
-                                   storageUri: String,
-                                   parameters: KustoWriteResource): Seq[(CloudBlockBlob, Long)] = {
+  private[kusto] def ingestRows(rows: Iterator[InternalRow],
+                                parameters: KustoWriteResource,
+                                ingestClient: IngestClient,
+                                ingestionProperties: IngestionProperties,
+                                partitionsResults: CollectionAccumulator[PartitionResult]): util.ArrayList[Future[Unit]]
+  = {
+    def ingest(blob: CloudBlockBlob, size: Long, sas: String, flushImmediately: Boolean = false): Future[Unit] = {
+      val partitionId = TaskContext.getPartitionId
+      Future {
+        var props = ingestionProperties
+        if(!ingestionProperties.getFlushImmediately && flushImmediately){
+          // Need to copy the ingestionProperties so that only this one will be flushed immediately
+          props = SparkIngestionProperties.cloneIngestionProperties(ingestionProperties)
+          props.setFlushImmediately(true)
+        }
+        val blobUri = blob.getStorageUri.getPrimaryUri.toString
+        val blobPath = blobUri + sas
+        val blobSourceInfo = new BlobSourceInfo(blobPath, size)
+        partitionsResults.add(PartitionResult(ingestClient.ingestFromBlob(blobSourceInfo, props), partitionId))
+      }
+    }
+
     import parameters._
-    val container: CloudBlobContainer = new CloudBlobContainer(new URI(storageUri))
+
+    val kustoClient = KustoClientCache.getClient(coordinates.cluster, authentication)
+    val maxBlobSize = writeOptions.batchLimit * KCONST.oneMega
     //This blobWriter will be used later to write the rows to blob storage from which it will be ingested to Kusto
-    val initialBlobWriter: BlobWriteResource = createBlobWriter(schema, writeOptions.timeZone, coordinates, tmpTableName, storageUri, container)
+    val initialBlobWriter: BlobWriteResource = createBlobWriter(schema, coordinates, tmpTableName, kustoClient)
+    val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone(writeOptions.timeZone))
+
+    val ingestionTasks: util.ArrayList[Future[Unit]] = new util.ArrayList()
 
     // Serialize rows to ingest and send to blob storage.
-    val (currentFileSize, currentBlobWriter, blobsToIngest) = rows.foldLeft[(Long, BlobWriteResource, Seq[(CloudBlockBlob, Long)])]((0, initialBlobWriter, Seq())) {
-      case ((size, blobWriter, blobsCreated), row) =>
+    val lastBlobWriter = rows.foldLeft[BlobWriteResource](initialBlobWriter) {
+      case (blobWriter, row) =>
+        writeRowAsCSV(row, schema, dateFormat, blobWriter.csvWriter)
 
-        val csvRowResult: CsvRowResult = convertRowToCSV(row, schema, writeOptions.timeZone)
-        blobWriter.csvWriter.writeRow(csvRowResult.formattedRow)
-        val newTotalSize = size + csvRowResult.rowByteSize
-
-        // Check if we crossed the threshold for a single blob to ingest.
-        // If so, add current blob to the list of blobs to ingest, and open a new blob writer
-        if (newTotalSize < maxBlobSize) {
-          (newTotalSize, blobWriter, blobsCreated)
+        val count = blobWriter.csvWriter.getCounter
+        val shouldNotCommitBlockBlob =  count < maxBlobSize
+        if (shouldNotCommitBlockBlob) {
+          blobWriter
         } else {
+          KDSU.logInfo(myName, s"Sealing blob in partition ${TaskContext.getPartitionId}, number ${ingestionTasks.size}, with size $count")
           finalizeBlobWrite(blobWriter)
-          (0, createBlobWriter(schema, writeOptions.timeZone, coordinates, tmpTableName, storageUri, container), blobsCreated :+ (blobWriter.blob, newTotalSize))
+          val task = ingest(blobWriter.blob, blobWriter.csvWriter.getCounter, blobWriter.sas, flushImmediately = true)
+          ingestionTasks.add(task)
+          createBlobWriter(schema, coordinates, tmpTableName, kustoClient)
         }
     }
 
-    if (currentFileSize > 0) {
-      finalizeBlobWrite(currentBlobWriter)
-      blobsToIngest :+ (currentBlobWriter.blob, currentFileSize)
+    KDSU.logInfo(myName, s"finished serializing partition ${TaskContext.getPartitionId}")
+    finalizeBlobWrite(lastBlobWriter)
+    if (lastBlobWriter.csvWriter.getCounter > 0) {
+      ingestionTasks.add(ingest(lastBlobWriter.blob, lastBlobWriter.csvWriter.getCounter, lastBlobWriter.sas))
     }
-    else {
-      blobsToIngest
-    }
+
+    ingestionTasks
   }
 
   def finalizeBlobWrite(blobWriteResource: BlobWriteResource): Unit = {
-    blobWriteResource.buffer.flush()
+    blobWriteResource.writer.flush()
     blobWriteResource.gzip.flush()
-    blobWriteResource.buffer.close()
+    blobWriteResource.writer.close()
     blobWriteResource.gzip.close()
   }
 
-  def convertRowToCSV(row: InternalRow, schema: StructType, timeZone: String): CsvRowResult = {
-    val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone(timeZone))
+  def writeRowAsCSV(row: InternalRow, schema: StructType, dateFormat: FastDateFormat, writer: CountingWriter): Unit = {
     val schemaFields: Array[StructField] = schema.fields
 
-    val (fields, size) = row.toSeq(schema).foldLeft[(Seq[String], Int)](Seq[String](), 0) { (res, curr) =>
-      val formattedField: String = if (curr == null) "" else {
-        val fieldIndexInRow = res._1.size
-        schemaFields(fieldIndexInRow).dataType match {
-          case DateType => DateTimeUtils.toJavaDate(row.getInt(fieldIndexInRow)).toString
-          case TimestampType => dateFormat.format(DateTimeUtils.toJavaTimestamp(row.getLong(fieldIndexInRow)))
-          case StringType => row.getString(fieldIndexInRow)
-          case _ => row.get(fieldIndexInRow, schemaFields(fieldIndexInRow).dataType).toString
-        }
-      }
-
-      (res._1 :+ formattedField, res._2 + formattedField.length)
+    if (!row.isNullAt(0)) {
+      writeField(row, fieldIndexInRow = 0, schemaFields(0).dataType, dateFormat, writer, nested = false)
     }
 
-    CsvRowResult(fields.toArray, size + fields.size)
+    for (i <- 1 until row.numFields) {
+      writer.write(',')
+      if (!row.isNullAt(i)) {
+        writeField(row, i, schemaFields(i).dataType, dateFormat, writer, nested = false)
+      }
+    }
+
+    writer.newLine()
   }
 
+  def writeJsonField(json: String, writer: Writer, nested: Boolean): Unit = {
+    if (nested) {
+      writer.writeUnescaped(json)
+    } else {
+      writer.writeStringField(json)
+    }
+  }
 
-  private def readIngestionResult(statusRecord: IngestionStatus): String = {
-    new ObjectMapper()
-      .writerWithDefaultPrettyPrinter
-      .writeValueAsString(statusRecord)
+  // This method does not check for null at the current row idx and should be checked before !
+  private def writeField(row: SpecializedGetters, fieldIndexInRow: Int, dataType: DataType, dateFormat: FastDateFormat, writer: Writer, nested: Boolean): Unit = {
+    dataType match {
+      case StringType => writeStringFromUTF8(row.getUTF8String(fieldIndexInRow), writer)
+      case DateType => writer.writeStringField(DateTimeUtils.toJavaDate(row.getInt(fieldIndexInRow)).toString)
+      case TimestampType => writer.writeStringField(dateFormat.format(DateTimeUtils.toJavaTimestamp(row.getLong(fieldIndexInRow))))
+      case BooleanType => writer.write(row.getBoolean(fieldIndexInRow).toString)
+      case structType: StructType => writeJsonField(convertStructToJson(row.getStruct(fieldIndexInRow, structType.length), structType, dateFormat), writer, nested)
+      case arrType: ArrayType => writeJsonField(convertArrayToJson(row.getArray(fieldIndexInRow), arrType.elementType, dateFormat), writer, nested)
+      case mapType: MapType => writeJsonField(convertMapToJson(row.getMap(fieldIndexInRow), mapType, dateFormat), writer, nested)
+      case ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType =>
+        writer.write(row.get(fieldIndexInRow, dataType).toString)
+      case _: DecimalType => writer.write(row.get(fieldIndexInRow, dataType).toString)
+      case _ => writer.writeStringField(row.get(fieldIndexInRow, dataType).toString)
+    }
+  }
+
+  private def convertStructToJson(row: InternalRow, schema: StructType, dateFormat: FastDateFormat): String = {
+    val fields = schema.fields
+    if (fields.length != 0) {
+      val writer = EscapedWriter(new CharArrayWriter())
+      writer.write('{')
+
+      var x = 0
+      var isNullOrEmpty = true
+      while (x < fields.length && isNullOrEmpty) {
+        isNullOrEmpty = row.isNullAt(x)
+        if (!isNullOrEmpty) {
+          writeStructField(x)
+        }
+        x += 1
+      }
+
+      while (x < fields.length) {
+        if (!row.isNullAt(x)){
+          writer.write(',')
+          writeStructField(x)
+        }
+        x += 1
+      }
+      writer.write('}')
+
+      def writeStructField(idx: Int): Unit = {
+        writer.writeStringField(fields(idx).name)
+        writer.write(':')
+        writeField(row, idx, fields(idx).dataType, dateFormat, writer, nested = true)
+      }
+
+      writer.out.toString
+    } else {
+      "{}"
+    }
+  }
+
+  private def convertArrayToJson(ar: ArrayData, fieldsType: DataType, dateFormat: FastDateFormat): String = {
+    if (ar.numElements() == 0) "[]" else {
+      val writer = EscapedWriter(new CharArrayWriter())
+
+      writer.write('[')
+      if (ar.isNullAt(0)) writer.write("null") else writeField(ar, fieldIndexInRow = 0, fieldsType, dateFormat, writer, nested = true)
+      for (x <- 1 until ar.numElements()) {
+        writer.write(',')
+        if (ar.isNullAt(x)) writer.write("null") else writeField(ar, x, fieldsType, dateFormat, writer, nested = true)
+      }
+      writer.write(']')
+
+      writer.out.toString
+    }
+  }
+
+  private def convertMapToJson(map: MapData, fieldsType: MapType, dateFormat: FastDateFormat): String = {
+    val keys = map.keyArray()
+    val values = map.valueArray()
+
+    val writer = EscapedWriter(new CharArrayWriter())
+
+    writer.write('{')
+
+    var x = 0
+    var isNull = true
+    while (x < map.keyArray().numElements() && isNull) {
+      isNull = values.isNullAt(x)
+      if (!isNull) {
+        writeMapField(x)
+      }
+      x += 1
+    }
+
+    while (x < map.keyArray().numElements()) {
+      if (!values.isNullAt(x)) {
+        writer.write(',')
+        writeMapField(x)
+      }
+      x += 1
+    }
+
+    writer.write('}')
+
+    def writeMapField(idx: Int): Unit = {
+      writeField(keys, fieldIndexInRow = idx, dataType = fieldsType.keyType, dateFormat = dateFormat, writer, nested = true)
+      writer.write(':')
+      writeField(values, fieldIndexInRow = idx, dataType = fieldsType.valueType, dateFormat = dateFormat, writer = writer, nested = true)
+    }
+    writer.out.toString
+  }
+
+  private def writeStringFromUTF8(str: UTF8String, writer: Writer): Unit = {
+    writer.writeStringField(str.toString)
   }
 }
 
-case class CsvRowResult(formattedRow: Array[String], rowByteSize: Long)
-
-case class BlobWriteResource(buffer: BufferedWriter, gzip: GZIPOutputStream, csvWriter: CsvWriter, blob: CloudBlockBlob)
+case class BlobWriteResource(writer: BufferedWriter, gzip: GZIPOutputStream, csvWriter: CountingWriter, blob: CloudBlockBlob, sas: String)
 
 case class KustoWriteResource(authentication: KustoAuthentication,
                               coordinates: KustoCoordinates,
                               schema: StructType,
                               writeOptions: WriteOptions,
                               tmpTableName: String)
+
+case class PartitionResult(ingestionResult: IngestionResult, partitionId: Int)

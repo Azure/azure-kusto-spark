@@ -19,12 +19,13 @@ This authentication method is fairly straightforward, and it is used in most of 
 ```
 df.write
   .format("com.microsoft.kusto.spark.datasource")
-  .option(KustoOptions.KUSTO_CLUSTER, "MyCluster")
-  .option(KustoOptions.KUSTO_DATABASE, "MyDatabase")
-  .option(KustoOptions.KUSTO_TABLE, "MyTable")
-  .option(KustoOptions.KUSTO_AAD_CLIENT_ID, "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
-  .option(KustoOptions.KUSTO_AAD_CLIENT_PASSWORD, "MyPassword") 
-  .option(KustoOptions.KUSTO_AAD_AUTHORITY_ID, "AAD Authority Id") // "microsoft.com"
+  .option(KustoSinkOptions.KUSTO_CLUSTER, "MyCluster.RegionName")
+  .option(KustoSinkOptions.KUSTO_DATABASE, "MyDatabase")
+  .option(KustoSinkOptions.KUSTO_TABLE, "MyTable")
+  .option(KustoSinkOptions.KUSTO_AAD_CLIENT_ID, "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
+  .option(KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD, "MyPassword") 
+  .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, "AAD Authority Id") // "microsoft.com"
+  .mode(SaveMode.Append)
   .save()
 ```
 ## Key Vault
@@ -77,21 +78,23 @@ val keyVaultUri: String = "keyVaultUri"
  
 df.write
   .format("com.microsoft.kusto.spark.datasource")
-  .option(KustoOptions.KUSTO_CLUSTER, MyCluster)
-  .option(KustoOptions.KUSTO_DATABASE, MyDatabase)
-  .option(KustoOptions.KUSTO_TABLE, MyTable)
-  .option(KustoOptions.KEY_VAULT_URI, keyVaultUri)
-  .option(KustoOptions.KEY_VAULT_APP_ID, keyVaultClientID)
-  .option(KustoOptions.KEY_VAULT_APP_KEY, keyVaultClientPassword)
+  .option(KustoSinkOptions.KUSTO_CLUSTER, MyCluster)
+  .option(KustoSinkOptions.KUSTO_DATABASE, MyDatabase)
+  .option(KustoSinkOptions.KUSTO_TABLE, MyTable)
+  .option(KustoSinkOptions.KEY_VAULT_URI, keyVaultUri)
+  .option(KustoSinkOptions.KEY_VAULT_APP_ID, keyVaultClientID)
+  .option(KustoSinkOptions.KEY_VAULT_APP_KEY, keyVaultClientPassword)
+  .mode(SaveMode.Append)
   .save()
 
 val conf: Map[String, String] = Map(
-  KustoOptions.KEY_VAULT_URI -> keyVaultUri,
-  KustoOptions.KEY_VAULT_APP_ID -> keyVaultClientID,
-  KustoOptions.KEY_VAULT_APP_KEY -> keyVaultClientPassword
+  KustoSourceOptions.KEY_VAULT_URI -> keyVaultUri,
+  KustoSourceOptions.KEY_VAULT_APP_ID -> keyVaultClientID,
+  KustoSourceOptions.KEY_VAULT_APP_KEY -> keyVaultClientPassword
 )
 
-val dfResult = spark.read.kusto(cluster, database, table, conf)
+val query = table
+val dfResult = spark.read.kusto(cluster, database, query, conf)
  ```
 ## Direct Authentication with Access Token
 User can also use ADAL directly to acquire an AAD access token to access Kusto. 
@@ -102,16 +105,22 @@ The token must be valid throughout the duration of the read/write operation
 ```
 df.write
   .format("com.microsoft.kusto.spark.datasource")
-  .option(KustoOptions.KUSTO_CLUSTER, "MyCluster")
-  .option(KustoOptions.KUSTO_DATABASE, "MyDatabase")
-  .option(KustoOptions.KUSTO_TABLE, "MyTable")
+  .option(KustoSinkOptions.KUSTO_CLUSTER, "MyCluster")
+  .option(KustoSinkOptions.KUSTO_DATABASE, "MyDatabase")
+  .option(KustoSinkOptions.KUSTO_TABLE, "MyTable")
+  .option(KustoSinkOptions.KUSTO_ACCESS_TOKEN, "MyAadToken")
   .option(KustoOptions., "MyTable")
+  .mode(SaveMode.Append)
   .save()
 ```
 ## Device Authentication
 If no authentication parameters were passed, the connector will request for user authentication by writing a token 
 to the console. This token can be used to authenticate at https://login.microsoftonline.com/common/oauth2/deviceauth 
-and will allow temporary access. 
+and will allow temporary access. When using **databricks** please use com.microsoft.kusto.spark.authentication.DeviceAuthentication 
+and use the returned token for [authentication with access token](#Authentication-with-Access-Token).
 The user needs appropriate privileges for the Kusto cluster as explained in [Kusto Sink authentication section](KustoSink.md#authentication). 
 
->**Note:** This method is not recommended for production!   
+### Device Authentication for PySpark
+Please refer to the [Python samples](../samples/src/main/python/pyKusto.py).
+
+>**Note:** Device authentication is not recommended for production   

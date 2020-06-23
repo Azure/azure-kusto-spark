@@ -18,6 +18,9 @@ When writing to or reading from a Kusto table, the connector converts types from
 |DecimalType |decimal
 |TimestampType |datetime
 |DateType |datetime
+|StructType |dynamic
+|MapType |dynamic
+|ArrayType |dynamic
 
 #####Kusto DataTypes mapping to Spark DataTypes
 

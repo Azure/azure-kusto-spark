@@ -9,7 +9,6 @@ Kusto connector uses **Azure Active Directory (AAD)** to authenticate the client
 that is using it. Please verify the following before using Kusto connector:
  * Client application is registered in AAD
  * Client application has 'user' privileges or above on the target database
- * In addition, client application has 'ingestor' privileges on the target database
  * When writing to an existing table, client application has 'admin' privileges on the target table
  
  For details on Kusto principal roles, please refer to [Role-based Authorization](https://docs.microsoft.com/en-us/azure/kusto/management/access-control/role-based-authorization) 
@@ -22,20 +21,23 @@ that is using it. Please verify the following before using Kusto connector:
  
  Kusto connector implements Spark 'Datasource V1' API. 
  Kusto data source identifier is "com.microsoft.kusto.spark.datasource". 
- Dataframe schema is translated into kusto schema as explained in [DataTypes](Spark-Kusto DataTypes mapping.md).
+ Dataframe schema is translated into kusto schema as explained in [DataTypes](Spark-Kusto%20DataTypes%20mapping.md).
  
  ### Command Syntax
- ```
+ ```scala
  <dataframe-object>
  .write
  .format("com.microsoft.kusto.spark.datasource")
- .option(KustoOptions.<option-name-1>, <option-value-1>
+ .option(KustoSinkOptions.<option-name-1>, <option-value-1>
  ...
- .option(KustoOptions.<option-name-n>, <option-value-n>
+ .option(KustoSinkOptions.<option-name-n>, <option-value-n>
+ .mode(SaveMode.Append)
  .save()
  ```
  
  ### Supported Options
+ 
+ All the options that can be use in the Kusto sink are under the object KustoSinkOptions.
  
 **Mandatory Parameters:** 
  
@@ -71,10 +73,11 @@ that is using it. Please verify the following before using Kusto connector:
  
    This is the recommended option for typical use cases. However, using it results in blocking
  Spark driver for as long as the operation is running, up to several minutes. 
- To avoid blocking Spark driver, it is possible to execute Kusto 'write' operation in an 
- opportunistic mode as an asynchronous operation. This results in the following behavior:
+ To **avoid blocking Spark driver**, it is possible to execute Kusto 'write' operation in an 
+ opportunistic mode as an asynchronous operation, this is recommended only for spark streaming.
+  The resulted behavior is the following:
    * Spark driver is not blocked
-   * In a success scenario, all data is written eventually
+   * In a success scenario, all data will eventually be written, only if the job is left running.  Job success status **DOES NOT** mean data is committed yet.
    * In a failure scenario, error messages are logged on Spark executor nodes, 
  but exceptions will not propagate to the client
  
@@ -83,6 +86,28 @@ that is using it. Please verify the following before using Kusto connector:
    This is an upper limit that may coexist with addition timeout limits as configured on Spark or Kusto clusters.  
    Default: '5400' (90 minutes)
 
+* **KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON**:
+    A json representation of a `SparkIngestionProperties` (use `toString` to make a json of an instance).
+    
+    Properties:
+        
+    - dropByTags, ingestByTags, additionalTags, ingestIfNotExists: util.ArrayList[String] - 
+    Tags list to add to the extents. Read [kusto docs - extents](https://docs.microsoft.com/en-us/azure/kusto/management/extents-overview#ingest-by-extent-tags)
+    
+    - creationTime: DateTime - sets the extents creationTime value to this date
+    
+    - csvMapping: String - a full json representation of a csvMapping (the connector always upload csv files to Kusto), 
+    see here [kusto docs - mappings](https://docs.microsoft.com/en-us/azure/kusto/management/mappings)
+    
+    - csvMappingNameReference: String - a reference to a name of a csvMapping pre-created for the table  
+    
+    - flushImmediately: Boolean - use with caution - flushes the data immidiatly upon ingestion without aggregation.
+
+* **KUSTO_CLIENT_BATCHING_LIMIT**:
+    A limit indicating the size in MB of the aggregated data before ingested to Kusto. Note that this is done for each
+    partition. The ingestion Kusto also aggregates data, default suggested by Kusto is 1GB but here we suggest to cut 
+    it at 100MB to adjust it to spark pulling of data.
+    
  >**Note:**
  For both synchronous and asynchronous operation, 'write' is an atomic transaction, i.e. 
  either all data is written to Kusto, or no data is written. 
@@ -100,30 +125,46 @@ For more details and command reference, please see [Ingestion Batching Policy co
 ### Examples
 
 Synchronous mode, table already exists:
-```
+```scala
 df.write
   .format("com.microsoft.kusto.spark.datasource")
-  .option(KustoOptions.KUSTO_CLUSTER, "MyCluster")
-  .option(KustoOptions.KUSTO_DATABASE, "MyDatabase")
-  .option(KustoOptions.KUSTO_TABLE, "MyTable")
-  .option(KustoOptions.KUSTO_AAD_CLIENT_ID, "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
-  .option(KustoOptions.KUSTO_AAD_CLIENT_PASSWORD, "MyPassword") 
-  .option(KustoOptions.KUSTO_AAD_AUTHORITY_ID, "AAD Authority Id") // "microsoft.com"
+  .option(KustoSinkOptions.KUSTO_CLUSTER, "MyCluster.RegionName")
+  .option(KustoSinkOptions.KUSTO_DATABASE, "MyDatabase")
+  .option(KustoSinkOptions.KUSTO_TABLE, "MyTable")
+  .option(KustoSinkOptions.KUSTO_AAD_CLIENT_ID, "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
+  .option(KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD, "MyPassword") 
+  .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, "AAD Authority Id") // "microsoft.com"
+  .mode(SaveMode.Append)
   .save()
 ``` 
 
-Asynchronous mode, table may not exist and will be created:
+IngestionProperties and short scala usage:
+```scala
+val sp = new SparkIngestionProperties
+var tags = new java.util.ArrayList[String]()
+tags.add("newTag")
+sp.ingestByTags = tags
+sp.creationTime = new DateTime().minusDays(1)
+df.write.kusto(cluster,
+             database,
+             table, 
+             conf, // optional
+             Some(sp)) // optional
 ```
+
+Asynchronous mode, table may not exist and will be created:
+```scala
 df.write
   .format("com.microsoft.kusto.spark.datasource")
-  .option(KustoOptions.KUSTO_CLUSTER, "MyCluster")
-  .option(KustoOptions.KUSTO_DATABASE, "MyDatabase")
-  .option(KustoOptions.KUSTO_TABLE, "MyTable")
-  .option(KustoOptions.KUSTO_AAD_CLIENT_ID, "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
-  .option(KustoOptions.KUSTO_AAD_CLIENT_PASSWORD, "MyPassword") 
-  .option(KustoOptions.KUSTO_AAD_AUTHORITY_ID, "AAD Authority Id") // "microsoft.com"
-  .option(KustoOptions.KUSTO_WRITE_ENABLE_ASYNC, true)
-  .option(KustoOptions.KUSTO_TABLE_CREATE_OPTIONS, "CreateIfNotExist")
+  .option(KustoSinkOptions.KUSTO_CLUSTER, "MyCluster.RegionName")
+  .option(KustoSinkOptions.KUSTO_DATABASE, "MyDatabase")
+  .option(KustoSinkOptions.KUSTO_TABLE, "MyTable")
+  .option(KustoSinkOptions.KUSTO_AAD_CLIENT_ID, "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
+  .option(KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD, "MyPassword") 
+  .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, "AAD Authority Id") // "microsoft.com"
+  .option(KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC, true)
+  .option(KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS, "CreateIfNotExist")
+  .mode(SaveMode.Append)
   .save()
 ```
 
@@ -132,18 +173,18 @@ df.write
  Kusto sink connector was adapted to support writing from a streaming source to a Kusto table.
  
  ### Command Syntax
-  ```
+  ```scala
   <queue-name> = <streaming-source-name>
    .writeStream
    .format("com.microsoft.kusto.spark.datasink.KustoSinkProvider")
    .options(Map(
-      KustoOptions.<option-name-1>, <option-value-1>,
+      KustoSinkOptions.<option-name-1>, <option-value-1>,
       ...,
-      KustoOptions.<option-name-n>, <option-value-n>))
-   .trigger(Trigger.Once)
+      KustoSinkOptions.<option-name-n>, <option-value-n>))
+   .trigger(Trigger.Once) // Or use ProcessingTime
   ```
  ### Example
- ```
+ ```scala
  var customSchema = new StructType().add("colA", StringType, nullable = true).add("colB", IntegerType, nullable = true)
  
  // Read data to stream 
@@ -159,17 +200,21 @@ df.write
        .writeStream
        .format("com.microsoft.kusto.spark.datasink.KustoSinkProvider")
        .options(Map(
-         KustoOptions.KUSTO_CLUSTER -> cluster,
-         KustoOptions.KUSTO_TABLE -> table,
-         KustoOptions.KUSTO_DATABASE -> database,
-         KustoOptions.KUSTO_AAD_CLIENT_ID -> appId,
-         KustoOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
-         KustoOptions.KUSTO_AAD_AUTHORITY_ID -> authorityId))
+         KustoSinkOptions.KUSTO_CLUSTER -> cluster,
+         KustoSinkOptions.KUSTO_TABLE -> table,
+         KustoSinkOptions.KUSTO_DATABASE -> database,
+         KustoSinkOptions.KUSTO_AAD_CLIENT_ID -> appId,
+         KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+         KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID -> authorityId))
        .trigger(Trigger.Once)
  
  kustoQ.start().awaitTermination(TimeUnit.MINUTES.toMillis(8))      
  ```
  
-  For more reference code examples please see 
-   [SimpleKustoDataSink](../samples/src/main/scala/SimpleKustoDataSink.scala) and 
-   [KustoConnectorDemo](../samples/src/main/scala/KustoConnectorDemo.scala).
+  For more reference code examples please see: 
+  
+   [SimpleKustoDataSink](../samples/src/main/scala/SimpleKustoDataSink.scala)
+   
+   [KustoConnectorDemo](../samples/src/main/scala/KustoConnectorDemo.scala)
+   
+   [Python samples](../samples/src/main/python/pyKusto.py)

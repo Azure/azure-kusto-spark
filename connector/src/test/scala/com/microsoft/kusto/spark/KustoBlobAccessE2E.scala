@@ -4,8 +4,10 @@ import java.security.InvalidParameterException
 import java.util.UUID
 
 import com.microsoft.azure.kusto.data.{ClientFactory, ConnectionStringBuilder}
-import com.microsoft.kusto.spark.datasource.{KustoOptions, KustoResponseDeserializer}
-import com.microsoft.kusto.spark.utils.{KustoBlobStorageUtils, CslCommandsGenerator, KustoQueryUtils, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.datasink.KustoSinkOptions
+import com.microsoft.kusto.spark.datasource.{KustoResponseDeserializer, KustoSourceOptions, KustoStorageParameters}
+import com.microsoft.kusto.spark.utils.{CslCommandsGenerator, KustoBlobStorageUtils, KustoQueryUtils, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.sql.extension.SparkExtension._
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{SQLContext, SparkSession}
 import org.junit.runner.RunWith
@@ -40,12 +42,12 @@ class KustoBlobAccessE2E extends FlatSpec with BeforeAndAfterAll {
     sc.stop()
   }
 
-  val appId: String = System.getProperty(KustoOptions.KUSTO_AAD_CLIENT_ID)
-  val appKey: String = System.getProperty(KustoOptions.KUSTO_AAD_CLIENT_PASSWORD)
-  val authority: String = System.getProperty(KustoOptions.KUSTO_AAD_AUTHORITY_ID)
-  val cluster: String = System.getProperty(KustoOptions.KUSTO_CLUSTER)
-  val database: String = System.getProperty(KustoOptions.KUSTO_DATABASE)
-  val table: String = System.getProperty(KustoOptions.KUSTO_TABLE, "")
+  val appId: String = System.getProperty(KustoSourceOptions.KUSTO_AAD_CLIENT_ID)
+  val appKey: String = System.getProperty(KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD)
+  val authority: String = System.getProperty(KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID)
+  val cluster: String = System.getProperty(KustoSourceOptions.KUSTO_CLUSTER)
+  val database: String = System.getProperty(KustoSourceOptions.KUSTO_DATABASE)
+  val table: String = System.getProperty(KustoSinkOptions.KUSTO_TABLE, "")
   val storageAccount: String = System.getProperty("storageAccount", "sparkblobforkustomichael")
   val container: String = System.getProperty("container", "CONTAINER")
   val blobKey: String = System.getProperty("blobKey", "KEY")
@@ -70,16 +72,14 @@ class KustoBlobAccessE2E extends FlatSpec with BeforeAndAfterAll {
       import spark.implicits._
       val df = rows.toDF("name", "value")
 
-      df.write
-        .format("com.microsoft.kusto.spark.datasource")
-        .option(KustoOptions.KUSTO_CLUSTER, cluster)
-        .option(KustoOptions.KUSTO_DATABASE, database)
-        .option(KustoOptions.KUSTO_TABLE, updatedTable)
-        .option(KustoOptions.KUSTO_AAD_CLIENT_ID, appId)
-        .option(KustoOptions.KUSTO_AAD_CLIENT_PASSWORD, appKey)
-        .option(KustoOptions.KUSTO_AAD_AUTHORITY_ID, authority)
-        .option(KustoOptions.KUSTO_TABLE_CREATE_OPTIONS, "CreateIfNotExist")
-        .save()
+      val conf = Map(
+        KustoSinkOptions.KUSTO_AAD_CLIENT_ID -> appId,
+        KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+        KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID -> authority,
+        KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS -> "CreateIfNotExist"
+      )
+
+      df.write.kusto(cluster, database, updatedTable, conf)
     }
 
     updatedTable
@@ -92,9 +92,9 @@ class KustoBlobAccessE2E extends FlatSpec with BeforeAndAfterAll {
     val schema = KustoResponseDeserializer(kustoAdminClient.execute(database, KustoQueryUtils.getQuerySchemaQuery(myTable))).getSchema
 
     val firstColumn =
-    if (schema.nonEmpty)
+    if (schema.sparkSchema.nonEmpty)
     {
-      schema.head.name
+      schema.sparkSchema.head.name
     }
     else
     {
@@ -116,16 +116,13 @@ class KustoBlobAccessE2E extends FlatSpec with BeforeAndAfterAll {
     val partitionPredicate = s" hash($firstColumn, $numberOfPartitions) == $partitionId"
     val useKeyNotSas = blobSas == null
 
-    val (blobContainerUri, directory: String, secretString: String) = getBlobCoordinates(storageAccount, container, secret, useKeyNotSas)
+    val (_, directory: String, _) = getBlobCoordinates(storageAccount, container, secret, useKeyNotSas)
 
-    val (exportCommand) = CslCommandsGenerator.generateExportDataCommand(
+    val exportCommand = CslCommandsGenerator.generateExportDataCommand(
       myTable,
-      storageAccount,
-      container,
       directory,
-      secret,
-      useKeyNotSas,
       partitionId,
+      Seq(KustoStorageParameters(storageAccount, secret, container, useKeyNotSas)),
       Some(partitionPredicate),
       None
     )

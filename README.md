@@ -30,23 +30,35 @@ For Scala/Java applications using Maven project definitions,
 link your application with the artifact below in order to use the Azure Data Explorer connector for Spark. 
 
 ```
-groupId = com.microsoft.azure
+groupId = com.microsoft.azure.kusto
 artifactId = spark-kusto-connector
-version = 1.0.0-Beta-03 
+version = 1.1.5
 ```
 
 **In Maven**:
 
-> Note that the jar is in beta and not available yet in public maven. 
-Clone this repository and build it locally to add it to your local maven repository, 
-or use the corresponding [released package](https://github.com/Azure/azure-kusto-spark/releases)
+Look for the following coordinates: 
+```
+com.microsoft.azure.kusto:spark-kusto-connector:1.1.5
+```
+
+Or clone this repository and build it locally to add it to your local maven repository, 
+the jar can also be found under the [released package](https://github.com/Azure/azure-kusto-spark/releases)
 
  ```
    <dependency>
-     <groupId>com.microsoft.azure</groupId>
+     <groupId>com.microsoft.azure.kusto</groupId>
      <artifactId>spark-kusto-connector</artifactId>
-     <version>1.0.0-Beta-03</version>
+     <version>1.1.5</version>
    </dependency>
+```
+
+**In Databricks**:
+
+Create Library -> Maven with the following coordinates:
+
+```
+com.microsoft.azure.kusto:spark-kusto-connector:1.1.5
 ```
 
 #### Building Samples Module
@@ -95,13 +107,12 @@ These libraries include:
 Spark Azure Data Explorer connector takes dependency on [Azure Data Explorer Data Client Library](https://mvnrepository.com/artifact/com.microsoft.azure.kusto/kusto-data) 
 and [Azure Data Explorer Ingest Client Library](https://mvnrepository.com/artifact/com.microsoft.azure.kusto/kusto-ingest), 
 available on maven repository.
-When [Key Vault based authentication](Authentication.md) is used, there is an additional dependency 
+When [Key Vault based authentication](./docs/Authentication.md) is used, there is an additional dependency 
 on [Microsoft Azure SDK For Key Vault](https://mvnrepository.com/artifact/com.microsoft.azure/azure-keyvault). 
 
 > **Note:** When working with Databricks, Azure Data Explorer connector requires Azure Data Explorer java client libraries (and azure key-vault library if used) to be installed.
 This can be done by accessing Databricks Create Library -> Maven and specifying the following coordinates:
-- com.microsoft.azure.kusto:kusto-data:1.0.0-BETA-04
-- com.microsoft.azure.kusto:kusto-ingest:1.0.0-BETA-04
+- com.microsoft.azure.kusto:spark-kusto-connector:1.1.4
 
 ## Documentation
 
@@ -118,6 +129,8 @@ Here is a list of currently available client libraries for Azure Data Explorer:
 - [Python](https://github.com/azure/azure-kusto-python)
 - [.NET](https://docs.microsoft.com/en-us/azure/kusto/api/netfx/about-the-sdk)
 - [Java](https://github.com/azure/azure-kusto-java)
+   
+For the comfort of the user, here is a [Pyspark sample](./samples/src/main/python/pyKusto.py) for the connector.
 
 # Need Support?
 

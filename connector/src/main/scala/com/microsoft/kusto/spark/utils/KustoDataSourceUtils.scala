@@ -5,28 +5,47 @@ import java.util
 import java.util.concurrent.{CountDownLatch, TimeUnit, TimeoutException}
 import java.util.{NoSuchElementException, StringJoiner, Timer, TimerTask}
 
-import com.microsoft.azure.kusto.data.{Client, Results}
-import com.microsoft.kusto.spark.datasource.{KeyVaultAuthentication, KustoAuthentication, KustoCoordinates, WriteOptions, _}
-import com.microsoft.kusto.spark.datasource.KustoOptions.SinkTableCreationMode
-import com.microsoft.kusto.spark.datasource.KustoOptions.SinkTableCreationMode.SinkTableCreationMode
+import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties, Results}
+import com.microsoft.kusto.spark.authentication._
+import com.microsoft.kusto.spark.common.{KustoCoordinates, KustoDebugOptions}
+import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
+import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode, WriteOptions}
+import com.microsoft.kusto.spark.datasource.{KustoResponseDeserializer, KustoSchema, KustoSourceOptions, KustoStorageParameters}
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
+import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
+import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.types.StructType
-import scala.collection.JavaConversions._
+import java.util.Properties
 
-import scala.util.matching.Regex
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.collection.JavaConversions._
+import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
-import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
+import scala.util.matching.Regex
+import org.apache.commons.lang3.StringUtils
 
 object KustoDataSourceUtils {
   private val klog = Logger.getLogger("KustoConnector")
+  val urlPattern: Regex = raw"https://(?:ingest-)?(.+).kusto.windows.net(?::443)?".r
+  val sasPattern: Regex = raw"(?:https://)?([^.]+).blob.core.windows.net/([^?]+)?(.+)".r
 
-  val ClientName = "Kusto.Spark.Connector"
-  val DefaultTimeoutLongRunning: FiniteDuration = 90 minutes
-  val DefaultPeriodicSamplePeriod: FiniteDuration = 2 seconds
+
+  var ClientName = "Kusto.Spark.Connector"
   val NewLine = sys.props("line.separator")
+  val MaxWaitTime: FiniteDuration = 1 minute
+
+  try {
+    val input = getClass.getClassLoader.getResourceAsStream("app.properties")
+    val prop = new Properties( )
+    prop.load(input)
+    val version = prop.getProperty("application.version")
+    ClientName = s"$ClientName:$version"
+  } catch {
+    case x: Throwable =>
+      klog.warn("Couldn't parse the connector's version:" + x)
+  }
 
   def setLoggingLevel(level: String): Unit = {
     setLoggingLevel(Level.toLevel(level))
@@ -52,61 +71,26 @@ object KustoDataSourceUtils {
     klog.fatal(s"$reporter: $message")
   }
 
-  def createTmpTableWithSameSchema(kustoAdminClient: Client,
-                                   tableCoordinates: KustoCoordinates,
-                                   tmpTableName: String,
-                                   tableCreation: SinkTableCreationMode = SinkTableCreationMode.FailIfNotExist,
-                                   schema: StructType): Unit = {
-    val schemaShowCommandResult = kustoAdminClient.execute(tableCoordinates.database, generateTableGetSchemaAsRowsCommand(tableCoordinates.table.get)).getValues
-    var tmpTableSchema: String = ""
-    val database = tableCoordinates.database
-    val table = tableCoordinates.table.get
-
-    if (schemaShowCommandResult.size() == 0) {
-      // Table Does not exist
-      if (tableCreation == SinkTableCreationMode.FailIfNotExist) {
-        throw new RuntimeException("Table '" + table + "' doesn't exist in database " + database + "', in cluster '" + tableCoordinates.cluster + "'")
-      } else {
-        // Parse dataframe schema and create a destination table with that schema
-        val tableSchemaBuilder = new StringJoiner(",")
-        schema.fields.foreach { field =>
-          val fieldType = DataTypeMapping.getSparkTypeToKustoTypeMap(field.dataType)
-          tableSchemaBuilder.add(s"${field.name}:$fieldType")
-        }
-        tmpTableSchema = tableSchemaBuilder.toString
-        kustoAdminClient.execute(database, generateTableCreateCommand(table, tmpTableSchema))
-      }
-    } else {
-      // Table exists. Parse kusto table schema and check if it matches the dataframes schema
-      tmpTableSchema = extractSchemaFromResultTable(schemaShowCommandResult)
-    }
-
-    //  Create a temporary table with the kusto or dataframe parsed schema
-    kustoAdminClient.execute(database, generateTableCreateCommand(tmpTableName, tmpTableSchema))
-  }
-
   private[kusto] def extractSchemaFromResultTable(resultRows: util.ArrayList[util.ArrayList[String]]): String = {
 
     val tableSchemaBuilder = new StringJoiner(",")
 
-    for(row <- resultRows){
+    for (row <- resultRows) {
       // Each row contains {Name, CslType, Type}, converted to (Name:CslType) pairs
-      tableSchemaBuilder.add(s"${row.get(0)}:${row.get(1)}")
+      tableSchemaBuilder.add(s"['${row.get(0)}']:${row.get(1)}")
     }
 
     tableSchemaBuilder.toString
   }
 
-  private[kusto] def getSchema(database: String, query: String, client: Client): StructType = {
-    val schemaQuery = KustoQueryUtils.getQuerySchemaQuery(query)
-
-    KustoResponseDeserializer(client.execute(database, schemaQuery)).getSchema
+  private[kusto] def getSchema(database: String, query: String, client: Client): KustoSchema = {
+    KustoResponseDeserializer(client.execute(database, query)).getSchema
   }
 
   def parseSourceParameters(parameters: Map[String, String]): SourceParameters = {
     // Parse KustoTableCoordinates - these are mandatory options
-    val database = parameters.get(KustoOptions.KUSTO_DATABASE)
-    val cluster = parameters.get(KustoOptions.KUSTO_CLUSTER)
+    val database = parameters.get(KustoSourceOptions.KUSTO_DATABASE)
+    val cluster = parameters.get(KustoSourceOptions.KUSTO_CLUSTER)
 
     if (database.isEmpty) {
       throw new InvalidParameterException("KUSTO_DATABASE parameter is missing. Must provide a destination database name")
@@ -116,40 +100,41 @@ object KustoDataSourceUtils {
       throw new InvalidParameterException("KUSTO_CLUSTER parameter is missing. Must provide a destination cluster name")
     }
 
-    val table = parameters.get(KustoOptions.KUSTO_TABLE)
+    val table = parameters.get(KustoSinkOptions.KUSTO_TABLE)
 
     // Parse KustoAuthentication
-    val applicationId = parameters.getOrElse(KustoOptions.KUSTO_AAD_CLIENT_ID, "")
-    val applicationKey = parameters.getOrElse(KustoOptions.KUSTO_AAD_CLIENT_PASSWORD, "")
+    val applicationId = parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_CLIENT_ID, "")
+    val applicationKey = parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD, "")
     var authentication: KustoAuthentication = null
-    val keyVaultUri: String = parameters.getOrElse(KustoOptions.KEY_VAULT_URI, "")
+    val keyVaultUri: String = parameters.getOrElse(KustoSourceOptions.KEY_VAULT_URI, "")
     var accessToken: String = ""
     var keyVaultAuthentication: Option[KeyVaultAuthentication] = None
     if (keyVaultUri != "") {
       // KeyVault Authentication
-      val keyVaultAppId: String = parameters.getOrElse(KustoOptions.KEY_VAULT_APP_ID, "")
+      val keyVaultAppId: String = parameters.getOrElse(KustoSourceOptions.KEY_VAULT_APP_ID, "")
 
       if (!keyVaultAppId.isEmpty) {
         keyVaultAuthentication = Some(KeyVaultAppAuthentication(keyVaultUri,
           keyVaultAppId,
-          parameters.getOrElse(KustoOptions.KEY_VAULT_APP_KEY, "")))
+          parameters.getOrElse(KustoSourceOptions.KEY_VAULT_APP_KEY, "")))
       } else {
         keyVaultAuthentication = Some(KeyVaultCertificateAuthentication(keyVaultUri,
-          parameters.getOrElse(KustoOptions.KEY_VAULT_PEM_FILE_PATH, ""),
-          parameters.getOrElse(KustoOptions.KEY_VAULT_CERTIFICATE_KEY, "")))
+          parameters.getOrElse(KustoDebugOptions.KEY_VAULT_PEM_FILE_PATH, ""),
+          parameters.getOrElse(KustoDebugOptions.KEY_VAULT_CERTIFICATE_KEY, "")))
       }
     }
 
     if (!applicationId.isEmpty || !applicationKey.isEmpty) {
-      authentication = AadApplicationAuthentication(applicationId, applicationKey, parameters.getOrElse(KustoOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com"))
+      authentication = AadApplicationAuthentication(applicationId, applicationKey, parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com"))
     }
     else if ( {
-      accessToken = parameters.getOrElse(KustoOptions.KUSTO_ACCESS_TOKEN, "")
+      accessToken = parameters.getOrElse(KustoSourceOptions.KUSTO_ACCESS_TOKEN, "")
       !accessToken.isEmpty
     }) {
       authentication = KustoAccessTokenAuthentication(accessToken)
     } else if (keyVaultUri.isEmpty) {
-      authentication = KustoAccessTokenAuthentication(DeviceAuthentication.acquireAccessTokenUsingDeviceCodeFlow(cluster.get))
+      val token = DeviceAuthentication.acquireAccessTokenUsingDeviceCodeFlow(getClusterUrlFromAlias(cluster.get))
+      authentication = KustoAccessTokenAuthentication(token)
     }
 
     SourceParameters(authentication, KustoCoordinates(getClusterNameFromUrlIfNeeded(cluster.get).toLowerCase(), database.get, table), keyVaultAuthentication)
@@ -161,11 +146,7 @@ object KustoDataSourceUtils {
 
   def parseSinkParameters(parameters: Map[String, String], mode: SaveMode = SaveMode.Append): SinkParameters = {
     if (mode != SaveMode.Append) {
-      if (mode == SaveMode.ErrorIfExists) {
-        logInfo(KCONST.clientName, "Kusto data source supports only append mode. Ignoring 'ErrorIfExists' directive")
-      } else {
-        throw new InvalidParameterException(s"Kusto data source supports only append mode. '$mode' directive is invalid")
-      }
+      throw new InvalidParameterException(s"Kusto data source supports only 'Append' mode, '$mode' directive is invalid. Please use df.write.mode(SaveMode.Append)..")
     }
 
     // Parse WriteOptions
@@ -173,32 +154,55 @@ object KustoDataSourceUtils {
     var tableCreationParam: Option[String] = None
     var isAsync: Boolean = false
     var isAsyncParam: String = ""
+    var batchLimit: Int = 0
 
     try {
-      isAsyncParam = parameters.getOrElse(KustoOptions.KUSTO_WRITE_ENABLE_ASYNC, "false")
-      isAsync = parameters.getOrElse(KustoOptions.KUSTO_WRITE_ENABLE_ASYNC, "false").trim.toBoolean
-      tableCreationParam = parameters.get(KustoOptions.KUSTO_TABLE_CREATE_OPTIONS)
+      isAsyncParam = parameters.getOrElse(KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC, "false")
+      isAsync = parameters.getOrElse(KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC, "false").trim.toBoolean
+      tableCreationParam = parameters.get(KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS)
       tableCreation = if (tableCreationParam.isEmpty) SinkTableCreationMode.FailIfNotExist else SinkTableCreationMode.withName(tableCreationParam.get)
+      batchLimit = parameters.getOrElse(KustoSinkOptions.KUSTO_CLIENT_BATCHING_LIMIT, "100").trim.toInt
     } catch {
       case _: NoSuchElementException => throw new InvalidParameterException(s"No such SinkTableCreationMode option: '${tableCreationParam.get}'")
       case _: java.lang.IllegalArgumentException => throw new InvalidParameterException(s"KUSTO_WRITE_ENABLE_ASYNC is expecting either 'true' or 'false', got: '$isAsyncParam'")
     }
 
-    val timeout = new FiniteDuration(parameters.getOrElse(KustoOptions.KUSTO_TIMEOUT_LIMIT, KCONST.defaultTimeoutAsString).toLong, TimeUnit.SECONDS)
+    val timeout = new FiniteDuration(parameters.getOrElse(KustoSinkOptions.KUSTO_TIMEOUT_LIMIT, KCONST.defaultWaitingIntervalLongRunning).toLong, TimeUnit.SECONDS)
+
+    val ingestionPropertiesAsJson = parameters.get(KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON)
 
     val writeOptions = WriteOptions(
       tableCreation,
       isAsync,
-      parameters.getOrElse(KustoOptions.KUSTO_WRITE_RESULT_LIMIT, "1"),
+      parameters.getOrElse(KustoSinkOptions.KUSTO_WRITE_RESULT_LIMIT, "1"),
       parameters.getOrElse(DateTimeUtils.TIMEZONE_OPTION, "UTC"),
-      timeout)
+      timeout,
+      ingestionPropertiesAsJson,
+      batchLimit
+    )
 
     val sourceParameters = parseSourceParameters(parameters)
 
     if (sourceParameters.kustoCoordinates.table.isEmpty) {
       throw new InvalidParameterException("KUSTO_TABLE parameter is missing. Must provide a destination table name")
     }
+
+    logInfo("parseSinkParameters", s"Parsed write options for sink: {'timeout': ${writeOptions.timeout}, 'async': ${writeOptions.isAsync}, " +
+      s"'tableCreationMode': ${writeOptions.tableCreateOptions}, 'writeLimit': ${writeOptions.writeResultLimit}, 'batchLimit': ${writeOptions.batchLimit}" +
+      s", 'timeout': ${writeOptions.timeout}, 'timezone': ${writeOptions.timeZone}, 'ingestionProperties': $ingestionPropertiesAsJson}")
+
     SinkParameters(writeOptions, sourceParameters)
+  }
+
+  def getClientRequestProperties(parameters: Map[String, String]): Option[ClientRequestProperties] = {
+    val crpOption = parameters.get(KustoSourceOptions.KUSTO_CLIENT_REQUEST_PROPERTIES_JSON)
+
+    if (crpOption.isDefined) {
+      val crp = ClientRequestProperties.fromString(crpOption.get)
+      Some(crp)
+    } else {
+      None
+    }
   }
 
   private[kusto] def reportExceptionAndThrow(
@@ -208,21 +212,31 @@ object KustoDataSourceUtils {
                                               cluster: String = "",
                                               database: String = "",
                                               table: String = "",
-                                              isLogDontThrow: Boolean = false): Unit = {
+                                              shouldNotThrow: Boolean = false): Unit = {
     val whatFailed = if (doingWhat.isEmpty) "" else s"when $doingWhat"
     val clusterDesc = if (cluster.isEmpty) "" else s", cluster: '$cluster' "
     val databaseDesc = if (database.isEmpty) "" else s", database: '$database'"
     val tableDesc = if (table.isEmpty) "" else s", table: '$table'"
-    logError(reporter,s"caught exception $whatFailed$clusterDesc$databaseDesc$tableDesc.${NewLine}EXCEPTION MESSAGE: ${exception.getMessage}")
 
-    if (!isLogDontThrow) throw exception
+    if (!shouldNotThrow) {
+      logError(reporter, s"caught exception $whatFailed$clusterDesc$databaseDesc$tableDesc.${NewLine}EXCEPTION: ${ExceptionUtils.getStackTrace(exception)}")
+      throw exception
+    }
+
+    logWarn(reporter, s"caught exception $whatFailed$clusterDesc$databaseDesc$tableDesc, exception ignored.${NewLine}EXCEPTION: ${ExceptionUtils.getStackTrace(exception)}")
   }
 
   private def getClusterNameFromUrlIfNeeded(url: String): String = {
-    val urlPattern: Regex = raw"https://(?:ingest-)?([^.]+).kusto.windows.net(?::443)?".r
     url match {
       case urlPattern(clusterAlias) => clusterAlias
       case _ => url
+    }
+  }
+
+  private def getClusterUrlFromAlias(alias: String): String = {
+    alias match {
+      case urlPattern(_) => alias
+      case _ => s"https://$alias.kusto.windows.net"
     }
   }
 
@@ -230,46 +244,52 @@ object KustoDataSourceUtils {
     * A function to run sequentially async work on TimerTask using a Timer.
     * The function passed is scheduled sequentially by the timer, until last calculated returned value by func does not
     * satisfy the condition of doWhile or a given number of times has passed.
-    * After one of these conditions was held true the finalWork function is called over the last returned value by func.
+    * After either this condition was satisfied or the 'numberOfTimesToRun' has passed (This can be avoided by setting
+    * numberOfTimesToRun to a value less than 0), the finalWork function is called over the last returned value by func.
     * Returns a CountDownLatch object used to count down iterations and await on it synchronously if needed
     *
     * @param func               - the function to run
-    * @param delay              - delay before first job
-    * @param runEvery           - delay between jobs
-    * @param numberOfTimesToRun - stop jobs after numberOfTimesToRun.
+    * @param delayBeforeStart              - delay before first job
+    * @param delayBeforeEach           - delay between jobs
+    * @param timesToRun - stop jobs after numberOfTimesToRun.
     *                           set negative value to run infinitely
-    * @param doWhile            - stop jobs if condition holds for the func.apply output
+    * @param stopCondition            - stop jobs if condition holds for the func.apply output
     * @param finalWork          - do final work with the last func.apply output
     */
-  def runSequentially[A](func: () => A, delay: Int, runEvery: Int, numberOfTimesToRun: Int, doWhile: A => Boolean, finalWork: A => Unit): CountDownLatch = {
-    val latch = new CountDownLatch(if (numberOfTimesToRun > 0) numberOfTimesToRun else 1)
+    def doWhile[A](func: () => A, delayBeforeStart: Long, delayBeforeEach: Int, timesToRun: Int, stopCondition: A => Boolean, finalWork: A => Unit): CountDownLatch = {
+    val latch = new CountDownLatch(if (timesToRun > 0) timesToRun else 1)
     val t = new Timer()
-    val task = new TimerTask() {
+    var currentWaitTime = delayBeforeEach
+
+    class ExponentialBackoffTask extends TimerTask {
       def run(): Unit = {
-        val res = func.apply()
-        if (numberOfTimesToRun > 0) {
-          latch.countDown()
-        }
+        try {
+          val res = func.apply()
+          if (timesToRun > 0) {
+            latch.countDown()
+          }
 
-        if (latch.getCount == 0) {
-          throw new TimeoutException(s"runSequentially: timed out based on maximal allowed repetitions ($numberOfTimesToRun), aborting")
-        }
+          if (latch.getCount == 0) {
+            throw new TimeoutException(s"runSequentially: timed out based on maximal allowed repetitions ($timesToRun), aborting")
+          }
 
-        if (!doWhile.apply(res)) {
-          t.cancel()
-          try {
+          if (!stopCondition.apply(res)) {
             finalWork.apply(res)
+            while (latch.getCount > 0) latch.countDown()
+          } else {
+            currentWaitTime = if (currentWaitTime > MaxWaitTime.toMillis) currentWaitTime else currentWaitTime + currentWaitTime
+            t.schedule(new ExponentialBackoffTask(), currentWaitTime)
           }
-          catch {
-            case exception: Exception =>
-              while (latch.getCount > 0) latch.countDown()
-              throw exception
-          }
-          while (latch.getCount > 0) latch.countDown()
+        } catch {
+          case exception: Exception =>
+            while (latch.getCount > 0) latch.countDown()
+            throw exception
         }
       }
     }
-    t.schedule(task, delay, runEvery)
+
+    val task: TimerTask = new ExponentialBackoffTask()
+    t.schedule(task, delayBeforeStart)
     latch
   }
 
@@ -283,7 +303,7 @@ object KustoDataSourceUtils {
     val sampleInMillis = samplePeriod.toMillis.toInt
     val timeoutInMillis = timeOut.toMillis
     val delayPeriodBetweenCalls = if (sampleInMillis < 1) 1 else sampleInMillis
-    val timesToRun = (timeoutInMillis / delayPeriodBetweenCalls + 5).toInt
+    val timesToRun = if (timeOut < FiniteDuration.apply(0, SECONDS)) -1 else (timeoutInMillis / delayPeriodBetweenCalls + 5).toInt
 
     val stateCol = "State"
     val statusCol = "Status"
@@ -291,19 +311,32 @@ object KustoDataSourceUtils {
     val stateIdx = showCommandResult.getColumnNameToIndex.get(stateCol)
     val statusIdx = showCommandResult.getColumnNameToIndex.get(statusCol)
 
-    val success = runSequentially[util.ArrayList[String]](
+    var lastResponse: Option[util.ArrayList[String]] = None
+    val task = doWhile[util.ArrayList[String]](
       func = () => client.execute(database, operationsShowCommand).getValues.get(0),
-      delay = 0, runEvery = delayPeriodBetweenCalls, numberOfTimesToRun = timesToRun,
-      doWhile = result => {
+      delayBeforeStart = 0, delayBeforeEach = delayPeriodBetweenCalls, timesToRun = timesToRun,
+      stopCondition = result => {
         result.get(stateIdx) == "InProgress"
       },
       finalWork = result => {
-        if (result.get(stateIdx) != "Completed") {
-          throw new RuntimeException(
-            s"Failed to execute Kusto operation with OperationId '$operationId', State: '${result.get(stateIdx)}', Status: '${result.get(statusIdx)}'"
-          )
-        }
-      }).await(timeoutInMillis, TimeUnit.MILLISECONDS)
+        lastResponse = Some(result)
+      })
+    var success = true
+    if (timeOut < FiniteDuration.apply(0, SECONDS)) {
+      task.await()
+    } else {
+      if (!task.await(timeoutInMillis, TimeUnit.SECONDS)) {
+        // Timed out
+        success = false
+      }
+    }
+
+    if (lastResponse.isDefined && lastResponse.get.get(stateIdx) != "Completed") {
+      throw new RuntimeException(
+        s"Failed to execute Kusto operation with OperationId '$operationId', State: '${lastResponse.get.get(stateIdx)}'," +
+          s" Status: '${lastResponse.get.get(statusIdx)}'"
+      )
+    }
 
     if (!success) {
       throw new RuntimeException(s"Timed out while waiting for operation with OperationId '$operationId'")
@@ -311,9 +344,8 @@ object KustoDataSourceUtils {
   }
 
   private[kusto] def parseSas(url: String): KustoStorageParameters = {
-    val urlPattern: Regex = raw"(?:https://)?([^.]+).blob.core.windows.net/([^?]+)?(.+)".r
     url match {
-      case urlPattern(storageAccountId, container, sasKey) => KustoStorageParameters(storageAccountId, sasKey, container, secretIsAccountKey = false)
+      case sasPattern(storageAccountId, container, sasKey) => KustoStorageParameters(storageAccountId, sasKey, container, secretIsAccountKey = false)
       case _ => throw new InvalidParameterException(
         "SAS url couldn't be parsed. Should be https://<storage-account>.blob.core.windows.net/<container>?<SAS-Token>"
       )
@@ -365,16 +397,16 @@ object KustoDataSourceUtils {
       if (storageAccount.isEmpty || storageContainer.isEmpty || storageSecret.isEmpty) {
         val keyVaultParameters = KeyVaultUtils.getStorageParamsFromKeyVault(keyVaultAuthentication)
         // If KeyVault contains sas take it
-        if(!keyVaultParameters.secretIsAccountKey) {
+        if (!keyVaultParameters.secretIsAccountKey) {
           Some(keyVaultParameters)
         } else {
           if ((storageAccount.isEmpty && keyVaultParameters.account.isEmpty) ||
-              (storageContainer.isEmpty && keyVaultParameters.container.isEmpty) ||
-              (storageSecret.isEmpty && keyVaultParameters.secret.isEmpty)) {
+            (storageContainer.isEmpty && keyVaultParameters.container.isEmpty) ||
+            (storageSecret.isEmpty && keyVaultParameters.secret.isEmpty)) {
 
-              // We don't have enough information to access blob storage
-              None
-            }
+            // We don't have enough information to access blob storage
+            None
+          }
           else {
             // Try combine
             val account = if (storageAccount.isEmpty) Some(keyVaultParameters.account) else storageAccount
@@ -396,6 +428,9 @@ object KustoDataSourceUtils {
                                                                      storageSecretIsAccountKey: Boolean): Option[KustoStorageParameters] = {
 
     val paramsFromSas = if (!storageSecretIsAccountKey && storageAccountSecret.isDefined) {
+      if (storageAccountSecret.get == null) {
+        throw new InvalidParameterException("storage secret from parameters is null")
+      }
       Some(parseSas(storageAccountSecret.get))
     } else None
 
@@ -411,6 +446,9 @@ object KustoDataSourceUtils {
       paramsFromSas
     }
     else if (storageAccount.isDefined && storageContainer.isDefined && storageAccountSecret.isDefined) {
+      if (storageAccount.get == null || storageAccountSecret.get == null || storageContainer.get == null) {
+        throw new InvalidParameterException("storageAccount key from parameters is null")
+      }
       Some(KustoStorageParameters(storageAccount.get, storageAccountSecret.get, storageContainer.get, storageSecretIsAccountKey))
     }
     else None
@@ -420,13 +458,20 @@ object KustoDataSourceUtils {
     client.execute(database, generateCountQuery(query)).getValues.get(0).get(0).toInt
   }
 
-  private[kusto] def isLeanReadMode(numberOfRows: Int, storageAccessProvided: Boolean, forcedMode: String): Boolean = {
-    if (!forcedMode.isEmpty) {
-      forcedMode.equalsIgnoreCase("lean")
+  private[kusto] def estimateRowsCount(client: Client, query: String, database: String): Int = {
+    var count = 0
+    val estimationResult: util.ArrayList[String] = Await.result(Future(
+      client.execute(database, generateEstimateRowsCountQuery(query)).getValues.get(0)), KustoConstants.timeoutForCountCheck)
+    if(StringUtils.isBlank(estimationResult.get(1))){
+      // Estimation can be empty for certain cases
+      val justCountResult = Await.result(Future(
+        client.execute(database, generateCountQuery(query)).getValues.get(0)), KustoConstants.timeoutForCountCheck)
+      count = justCountResult.get(0).toInt
     } else {
-      // see https://docs.microsoft.com/en-us/azure/kusto/concepts/querylimits#limit-on-result-set-size-result-truncation
-      // for hard limit on query size
-      !(storageAccessProvided && numberOfRows > KCONST.directQueryUpperBoundRows)
+      // Zero estimation count does not indicate zero results, therefore we add 1 here so that we won't return an empty RDD
+      count = estimationResult.get(1).toInt + 1
     }
+
+    count
   }
 }

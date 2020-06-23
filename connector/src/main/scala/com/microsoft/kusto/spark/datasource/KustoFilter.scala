@@ -7,8 +7,8 @@ import org.apache.spark.sql.types._
 
 private[kusto] object KustoFilter {
   // Augment the original query to include column pruning and filtering
-  def pruneAndFilter(originalSchema: StructType, originalQuery: String, filtering: KustoFiltering): String = {
-    originalQuery + KustoFilter.buildFiltersClause(originalSchema, filtering.filters) + KustoFilter.buildColumnsClause(filtering.columns)
+  def pruneAndFilter(kustoSchema: KustoSchema, originalQuery: String, filtering: KustoFiltering): String = {
+    originalQuery + KustoFilter.buildFiltersClause(kustoSchema.sparkSchema, filtering.filters) + KustoFilter.buildColumnsClause(filtering.columns, kustoSchema.toStringCastedColumns)
   }
 
   def pruneSchema(schema: StructType, columns: Array[String]): StructType = {
@@ -16,9 +16,9 @@ private[kusto] object KustoFilter {
     new StructType(columns.map(name => fieldMap(name)))
   }
 
-  def buildColumnsClause(columns: Array[String]): String = {
-    if(columns.isEmpty) "" else {
-      " | project " + columns.mkString(", ")
+  def buildColumnsClause(columns: Array[String], timespanColumns: Set[String]): String = {
+    if (columns.isEmpty) "" else {
+      " | project " + columns.map(col => if (timespanColumns.contains(col)) s"tostring(['$col'])" else s"['$col']").mkString(", ")
     }
   }
 
@@ -52,12 +52,12 @@ private[kusto] object KustoFilter {
 
   private def binaryScalarOperatorFilter(schema: StructType, attr: String, value: Any, operator: String): Option[String] = {
     getType(schema, attr).map {
-      dataType => s"$attr $operator ${format(value, dataType)}"
+      dataType => s"['$attr'] $operator ${format(value, dataType)}"
     }
   }
 
   private def unaryScalarOperatorFilter(attr: String, function: String): Option[String] = {
-    Some(s"$function($attr)")
+    Some(s"$function(['$attr'])")
   }
 
   private def binaryLogicalOperatorFilter(schema: StructType, leftFilter: Filter, rightFilter: Filter, operator: String): Option[String] = {
@@ -75,7 +75,7 @@ private[kusto] object KustoFilter {
   private  def stringOperatorFilter(schema: StructType, attr: String, value: String, operator: String): Option[String] = {
     // Will return 'None' if 'attr' is not part of the 'schema'
     getType(schema, attr).map {
-      _ => s"""$attr $operator '$value'"""
+      _ => s"""['$attr'] $operator '$value'"""
     }
   }
 
@@ -85,7 +85,7 @@ private[kusto] object KustoFilter {
 
   private def unaryOperatorOnValueSetFilter(schema: StructType, attr: String, value: Array[Any], operator: String): Option[String] = {
     getType(schema, attr).map {
-      dataType => s"$attr $operator (${toStringList(value, dataType)})"
+      dataType => s"['$attr'] $operator (${toStringList(value, dataType)})"
     }
   }
 
