@@ -17,7 +17,7 @@
         <dependency>
             <groupId>com.fasterxml.jackson.module</groupId>
             <artifactId>jackson-module-scala_${scala.version}</artifactId>
-            <version>[2.9.6,2.12.0)</version>
+            <version>[2.11.0,2.12.0)</version>
         </dependency>
         <dependency>
             <groupId>com.microsoft.azure</groupId>
@@ -53,6 +53,12 @@
             <groupId>com.microsoft.azure.kusto</groupId>
             <artifactId>kusto-ingest</artifactId>
             <version>${kusto-sdk.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.fasterxml.jackson.core</groupId>
+                    <artifactId>jackson-databind</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>com.microsoft.azure</groupId>
@@ -74,11 +80,12 @@
             <artifactId>azure-keyvault-webkey</artifactId>
             <version>1.1</version>
         </dependency>
-        <!--might need 2.7 here for local run query-->
+        <!--might need 2.7.0 here for local run query-->
         <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-azure</artifactId>
-            <version>[3.2.0,3.3.0)</version>
+            <version>2.7.0</version>
+            <!--<version>[3.2.0,3.3.0)</version>-->
         </dependency>
         <dependency>
             <groupId>org.json</groupId>
@@ -288,6 +295,19 @@
                         </configuration>
                     </execution>
                 </executions>
+            </plugin>
+            <plugin>
+                <artifactId>maven-assembly-plugin</artifactId>
+                <configuration>
+                    <archive>
+                        <manifest>
+                            <mainClass>fully.qualified.MainClass</mainClass>
+                        </manifest>
+                    </archive>
+                    <descriptorRefs>
+                        <descriptorRef>jar-with-dependencies</descriptorRef>
+                    </descriptorRefs>
+                </configuration>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

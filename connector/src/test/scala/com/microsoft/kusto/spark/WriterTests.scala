@@ -123,7 +123,6 @@ class WriterTests extends FlatSpec with Matchers {
     resultTable.add(element2)
     resultTable.add(element3)
 
-    //("SubscriptionGuid", "string", "System.String")
     val parsedSchema = KDSU.extractSchemaFromResultTable(resultTable)
     // We could add new elements for IsCurrent:bool,LastModifiedOn:datetime,IntegerValue:int
     parsedSchema shouldEqual "['SubscriptionGuid']:string,['Identifier']:string,['SomeNumber']:long"

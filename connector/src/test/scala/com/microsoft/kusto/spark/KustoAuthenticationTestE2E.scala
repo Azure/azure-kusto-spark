@@ -45,8 +45,8 @@ class KustoAuthenticationTestE2E extends FlatSpec {
     val df = rows.toDF("name", "value")
     val conf: Map[String, String] = Map(
       KustoSinkOptions.KEY_VAULT_URI -> keyVaultUri,
-      KustoSinkOptions.KEY_VAULT_APP_ID -> keyVaultClientID,
-      KustoSinkOptions.KEY_VAULT_APP_KEY -> keyVaultClientPassword,
+      KustoSinkOptions.KEY_VAULT_APP_ID -> (if(keyVaultClientID == null) appId else keyVaultClientID),
+      KustoSinkOptions.KEY_VAULT_APP_KEY -> (if(keyVaultClientPassword == null) appKey else keyVaultClientPassword),
       KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS -> SinkTableCreationMode.CreateIfNotExist.toString
     )
 
