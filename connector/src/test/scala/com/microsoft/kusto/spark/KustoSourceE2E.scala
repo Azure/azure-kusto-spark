@@ -42,8 +42,8 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
     sc.stop()
   }
 
-  val appId: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_CLIENT_ID)
-  val appKey: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD)
+  val appId: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_APP_ID)
+  val appKey: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_APP_SECRET)
   val authority: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com")
   val cluster: String = System.getProperty(KustoSinkOptions.KUSTO_CLUSTER)
   val database: String = System.getProperty(KustoSinkOptions.KUSTO_DATABASE)
@@ -113,8 +113,8 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
       .save()
 
     val conf: Map[String, String] = Map(
-      KustoSinkOptions.KUSTO_AAD_CLIENT_ID -> appId,
-      KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey
+      KustoSinkOptions.KUSTO_AAD_APP_ID -> appId,
+      KustoSinkOptions.KUSTO_AAD_APP_SECRET -> appKey
     )
 
     val dfResult = spark.read.kusto(cluster, database, table, conf)

@@ -42,8 +42,8 @@ class KustoPruneAndFilterE2E extends FlatSpec with BeforeAndAfterAll {
     sc.stop()
   }
 
-  val appId: String = System.getProperty(KustoSourceOptions.KUSTO_AAD_CLIENT_ID)
-  val appKey: String = System.getProperty(KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD)
+  val appId: String = System.getProperty(KustoSourceOptions.KUSTO_AAD_APP_ID)
+  val appKey: String = System.getProperty(KustoSourceOptions.KUSTO_AAD_APP_SECRET)
   val authority: String = System.getProperty(KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com")
   val cluster: String = System.getProperty(KustoSourceOptions.KUSTO_CLUSTER)
   val database: String = System.getProperty(KustoSourceOptions.KUSTO_DATABASE)
@@ -56,8 +56,8 @@ class KustoPruneAndFilterE2E extends FlatSpec with BeforeAndAfterAll {
     val query: String = System.getProperty(KustoSourceOptions.KUSTO_QUERY, s"$table | where (toint(ColB) % 1000 == 0) ")
 
     val conf = Map(
-      KustoSourceOptions.KUSTO_AAD_CLIENT_ID -> appId,
-      KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+      KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
+      KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey,
       KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceSingleMode.toString
     )
 
@@ -75,15 +75,15 @@ class KustoPruneAndFilterE2E extends FlatSpec with BeforeAndAfterAll {
     val blobSas: String = System.getProperty("blobSas")
 
     val conf = if (blobSas == null) {
-      Map(KustoSourceOptions.KUSTO_AAD_CLIENT_ID -> appId,
-        KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+      Map(KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
+        KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey,
         KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME -> storageAccount,
         KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_KEY -> blobKey,
         KustoSourceOptions.KUSTO_BLOB_CONTAINER -> container)
     }
     else {
-      Map(KustoSourceOptions.KUSTO_AAD_CLIENT_ID -> appId,
-        KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+      Map(KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
+        KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey,
         KustoSourceOptions.KUSTO_BLOB_STORAGE_SAS_URL -> blobSas
         //          , KustoDebugOptions.KUSTO_DBG_BLOB_FORCE_KEEP -> "true"
       )
@@ -120,23 +120,23 @@ class KustoPruneAndFilterE2E extends FlatSpec with BeforeAndAfterAll {
       .option(KustoSinkOptions.KUSTO_CLUSTER, cluster)
       .option(KustoSinkOptions.KUSTO_DATABASE, database)
       .option(KustoSinkOptions.KUSTO_TABLE, query)
-      .option(KustoSinkOptions.KUSTO_AAD_CLIENT_ID, appId)
-      .option(KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD, appKey)
+      .option(KustoSinkOptions.KUSTO_AAD_APP_ID, appId)
+      .option(KustoSinkOptions.KUSTO_AAD_APP_SECRET, appKey)
       .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, authority)
       .mode(SaveMode.Append)
       .save()
 
     val conf = if (blobSas.isEmpty) {
-      Map(KustoSourceOptions.KUSTO_AAD_CLIENT_ID -> appId,
-        KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+      Map(KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
+        KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey,
         KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME -> storageAccount,
         KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_KEY -> blobKey,
         KustoSourceOptions.KUSTO_BLOB_CONTAINER -> container,
         KustoDebugOptions.KUSTO_DBG_BLOB_COMPRESS_ON_EXPORT -> "false") // Just to test this option
     }
     else {
-      Map(KustoSourceOptions.KUSTO_AAD_CLIENT_ID -> appId,
-        KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+      Map(KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
+        KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey,
         KustoSourceOptions.KUSTO_BLOB_STORAGE_SAS_URL -> blobSas,
         KustoDebugOptions.KUSTO_DBG_BLOB_COMPRESS_ON_EXPORT -> "false") // Just to test this option
     }
@@ -191,22 +191,22 @@ class KustoPruneAndFilterE2E extends FlatSpec with BeforeAndAfterAll {
       .option(KustoSinkOptions.KUSTO_CLUSTER, cluster)
       .option(KustoSinkOptions.KUSTO_DATABASE, database)
       .option(KustoSinkOptions.KUSTO_TABLE, query)
-      .option(KustoSinkOptions.KUSTO_AAD_CLIENT_ID, appId)
-      .option(KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD, appKey)
+      .option(KustoSinkOptions.KUSTO_AAD_APP_ID, appId)
+      .option(KustoSinkOptions.KUSTO_AAD_APP_SECRET, appKey)
       .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, authority)
       .mode(SaveMode.Append)
       .save()
 
     val conf = if (blobSas.isEmpty) {
-      Map(KustoSourceOptions.KUSTO_AAD_CLIENT_ID -> appId,
-        KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+      Map(KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
+        KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey,
         KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME -> storageAccount,
         KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_KEY -> blobKey,
         KustoSourceOptions.KUSTO_BLOB_CONTAINER -> container)
     }
     else {
-      Map(KustoSourceOptions.KUSTO_AAD_CLIENT_ID -> appId,
-        KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+      Map(KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
+        KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey,
         KustoSourceOptions.KUSTO_BLOB_STORAGE_SAS_URL -> blobSas)
     }
 

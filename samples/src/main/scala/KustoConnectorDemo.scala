@@ -58,8 +58,8 @@ object KustoConnectorDemo {
       .option(KustoSinkOptions.KUSTO_CLUSTER, cluster)
       .option(KustoSinkOptions.KUSTO_DATABASE, database)
       .option(KustoSinkOptions.KUSTO_TABLE, table)
-      .option(KustoSinkOptions.KUSTO_AAD_CLIENT_ID, appId)
-      .option(KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD, appKey)
+      .option(KustoSinkOptions.KUSTO_AAD_APP_ID, appId)
+      .option(KustoSinkOptions.KUSTO_AAD_APP_SECRET, appKey)
       .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, authorityId)
       .mode(SaveMode.Append)
       .save()
@@ -97,8 +97,8 @@ object KustoConnectorDemo {
             KustoSinkOptions.KUSTO_CLUSTER -> cluster,
             KustoSinkOptions.KUSTO_TABLE -> table,
             KustoSinkOptions.KUSTO_DATABASE -> database,
-            KustoSinkOptions.KUSTO_AAD_CLIENT_ID -> appId,
-            KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+            KustoSinkOptions.KUSTO_AAD_APP_ID -> appId,
+            KustoSinkOptions.KUSTO_AAD_APP_SECRET -> appKey,
             KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID -> authorityId,
             KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS -> "CreateIfNotExist"))
           .trigger(Trigger.Once)
@@ -107,8 +107,8 @@ object KustoConnectorDemo {
     kustoQ.start().awaitTermination(TimeUnit.MINUTES.toMillis(8))
 
     val conf: Map[String, String] = Map(
-      KustoSourceOptions.KUSTO_AAD_CLIENT_ID -> appId,
-      KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+      KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
+      KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey,
       KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID -> authorityId,
       KustoSourceOptions.KUSTO_QUERY -> s"$table | where colB % 50 == 0 | distinct colA"
     )
@@ -120,8 +120,8 @@ object KustoConnectorDemo {
     // ELABORATE READ SYNTAX
     // Here we read the whole table.
     val conf2: Map[String, String] = Map(
-      KustoSourceOptions.KUSTO_AAD_CLIENT_ID -> appId,
-      KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+      KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
+      KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey,
       KustoSourceOptions.KUSTO_QUERY -> "StringAndIntTable"
     )
 
@@ -149,8 +149,8 @@ object KustoConnectorDemo {
 
     // SET UP CONFIGURATION FOR PROVIDING STORAGE YOURSELF
     val conf3: Map[String, String] = Map(
-      KustoSourceOptions.KUSTO_AAD_CLIENT_ID -> appId,
-      KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+      KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
+      KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey,
       KustoSourceOptions.KUSTO_BLOB_CONTAINER -> container,
       //KustoOptions.KUSTO_BLOB_STORAGE_SAS_URL -> storageSas,
       KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME -> storageAccountName,

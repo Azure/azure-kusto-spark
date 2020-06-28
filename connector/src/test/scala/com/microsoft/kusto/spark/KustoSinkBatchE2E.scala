@@ -56,8 +56,8 @@ class KustoSinkBatchE2E extends FlatSpec with BeforeAndAfterAll{
     sc.stop()
   }
 
-  val appId: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_CLIENT_ID)
-  val appKey: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD)
+  val appId: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_APP_ID)
+  val appKey: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_APP_SECRET)
   val authority: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com")
   val cluster: String = System.getProperty(KustoSinkOptions.KUSTO_CLUSTER)
   val database: String = System.getProperty(KustoSinkOptions.KUSTO_DATABASE)
@@ -88,8 +88,8 @@ class KustoSinkBatchE2E extends FlatSpec with BeforeAndAfterAll{
       .option(KustoSinkOptions.KUSTO_CLUSTER, cluster)
       .option(KustoSinkOptions.KUSTO_DATABASE, database)
       .option(KustoSinkOptions.KUSTO_TABLE, table)
-      .option(KustoSinkOptions.KUSTO_AAD_CLIENT_ID, appId)
-      .option(KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD, appKey)
+      .option(KustoSinkOptions.KUSTO_AAD_APP_ID, appId)
+      .option(KustoSinkOptions.KUSTO_AAD_APP_SECRET, appKey)
       .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, authority)
       .option(DateTimeUtils.TIMEZONE_OPTION, "GMT+4")
       .option(KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS, SinkTableCreationMode.CreateIfNotExist.toString)
@@ -97,8 +97,8 @@ class KustoSinkBatchE2E extends FlatSpec with BeforeAndAfterAll{
       .save()
 
     val conf: Map[String, String] = Map(
-      KustoSinkOptions.KUSTO_AAD_CLIENT_ID -> appId,
-      KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey
+      KustoSinkOptions.KUSTO_AAD_APP_ID -> appId,
+      KustoSinkOptions.KUSTO_AAD_APP_SECRET -> appKey
     )
 
     val dfResult: DataFrame = spark.read.kusto(cluster, database, table, conf)
@@ -165,8 +165,8 @@ class KustoSinkBatchE2E extends FlatSpec with BeforeAndAfterAll{
       .option(KustoSinkOptions.KUSTO_CLUSTER, cluster)
       .option(KustoSinkOptions.KUSTO_DATABASE, database)
       .option(KustoSinkOptions.KUSTO_TABLE, table)
-      .option(KustoSinkOptions.KUSTO_AAD_CLIENT_ID, appId)
-      .option(KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD, appKey)
+      .option(KustoSinkOptions.KUSTO_AAD_APP_ID, appId)
+      .option(KustoSinkOptions.KUSTO_AAD_APP_SECRET, appKey)
       .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, authority)
       .option(KustoSinkOptions.KUSTO_TIMEOUT_LIMIT, (8 * 60).toString)
       .mode(SaveMode.Append)
@@ -191,8 +191,8 @@ class KustoSinkBatchE2E extends FlatSpec with BeforeAndAfterAll{
       .option(KustoSinkOptions.KUSTO_CLUSTER, cluster)
       .option(KustoSinkOptions.KUSTO_DATABASE, database)
       .option(KustoSinkOptions.KUSTO_TABLE, table)
-      .option(KustoSinkOptions.KUSTO_AAD_CLIENT_ID, appId)
-      .option(KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD, appKey)
+      .option(KustoSinkOptions.KUSTO_AAD_APP_ID, appId)
+      .option(KustoSinkOptions.KUSTO_AAD_APP_SECRET, appKey)
       .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, authority)
       .option(KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC, "true")
       .mode(SaveMode.Append)

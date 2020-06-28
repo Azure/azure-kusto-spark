@@ -6,14 +6,14 @@ Kusto Spark connector allows the user to authenticate with AAD using an AAD appl
 ## AAD Application Authentication
 This authentication method is fairly straightforward, and it is used in most of the examples in this documentation.
 
- * **KUSTO_AAD_CLIENT_ID**: 
-  'kustoAADClientID' - AAD application (client) identifier.
+ * **KUSTO_AAD_APP_ID**: 
+  'kustoAadAppId' - AAD application (client) identifier.
   
  * **KUSTO_AAD_AUTHORITY_ID**: 
-  'kustoAADAuthorityID' - AAD authentication authority. This is the AAD Directory (tenant) ID.
+  'kustoAadAuthorityID' - AAD authentication authority. This is the AAD Directory (tenant) ID.
  
- * **KUSTO_AAD_CLIENT_PASSWORD**: 
-  'kustoClientAADClientPassword' - AAD application key for the client.
+ * **KUSTO_AAD_APP_SECRET**: 
+  'kustoAadAppSecret' - AAD application key for the client.
  
 #### Example
 ```
@@ -22,8 +22,8 @@ df.write
   .option(KustoSinkOptions.KUSTO_CLUSTER, "MyCluster.RegionName")
   .option(KustoSinkOptions.KUSTO_DATABASE, "MyDatabase")
   .option(KustoSinkOptions.KUSTO_TABLE, "MyTable")
-  .option(KustoSinkOptions.KUSTO_AAD_CLIENT_ID, "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
-  .option(KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD, "MyPassword") 
+  .option(KustoSinkOptions.KUSTO_AAD_APP_ID, "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
+  .option(KustoSinkOptions.KUSTO_AAD_APP_SECRET, "MyPassword") 
   .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, "AAD Authority Id") // "microsoft.com"
   .mode(SaveMode.Append)
   .save()

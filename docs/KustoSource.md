@@ -127,8 +127,8 @@ Scala and java users may take these options from com.microsoft.kusto.spark.datas
  Create a DataFrame based on a query accessing 'MyKustoTable' table
  ```
  val conf: Map[String, String] = Map(
-       KustoSourceOptions.KUSTO_AAD_CLIENT_ID -> appId,
-       KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey
+       KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
+       KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey
      )
      
  val df = spark.read.kusto(cluster, database, "MyKustoTable | where (ColB % 1000 == 0) | distinct ColA ", conf)
@@ -140,8 +140,8 @@ Scala and java users may take these options from com.microsoft.kusto.spark.datas
   Create a DataFrame by reading all of 'MyKustoTable' table
   ```
  val conf: Map[String, String] = Map(
-       KustoSourceOptions.KUSTO_AAD_CLIENT_ID -> appId,
-       KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+       KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
+       KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey,
        KustoSourceOptions.KUSTO_QUERY -> "MyKustoTable"
      )
  

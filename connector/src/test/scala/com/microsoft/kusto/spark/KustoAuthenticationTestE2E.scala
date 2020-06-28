@@ -23,8 +23,8 @@ class KustoAuthenticationTestE2E extends FlatSpec {
   val cluster: String = System.getProperty(KustoSinkOptions.KUSTO_CLUSTER)
   val database: String = System.getProperty(KustoSinkOptions.KUSTO_DATABASE)
 
-  val appId: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_CLIENT_ID)
-  val appKey: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD)
+  val appId: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_APP_ID)
+  val appKey: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_APP_SECRET)
   val authority: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com")
 
   val keyVaultClientID: String = System.getProperty(KustoSinkOptions.KEY_VAULT_APP_ID)

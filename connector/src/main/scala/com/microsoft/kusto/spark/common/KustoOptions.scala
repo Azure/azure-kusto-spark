@@ -17,11 +17,11 @@ trait KustoOptions {
 
 
   // AAD application identifier of the client
-  val KUSTO_AAD_CLIENT_ID: String = newOption("kustoAADClientID")
+  val KUSTO_AAD_APP_ID: String = newOption("kustoAadAppId")
   // AAD authentication authority
-  val KUSTO_AAD_AUTHORITY_ID: String = newOption("kustoAADAuthorityID")
+  val KUSTO_AAD_AUTHORITY_ID: String = newOption("kustoAadAuthorityID")
   // AAD application key for the client
-  val KUSTO_AAD_CLIENT_PASSWORD: String = newOption("kustoClientAADClientPassword")
+  val KUSTO_AAD_APP_SECRET: String = newOption("kustoAadAppSecret")
 
   val KUSTO_ACCESS_TOKEN: String = newOption("accessToken")
 

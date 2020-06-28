@@ -131,8 +131,8 @@ df.write
   .option(KustoSinkOptions.KUSTO_CLUSTER, "MyCluster.RegionName")
   .option(KustoSinkOptions.KUSTO_DATABASE, "MyDatabase")
   .option(KustoSinkOptions.KUSTO_TABLE, "MyTable")
-  .option(KustoSinkOptions.KUSTO_AAD_CLIENT_ID, "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
-  .option(KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD, "MyPassword") 
+  .option(KustoSinkOptions.KUSTO_AAD_APP_ID, "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
+  .option(KustoSinkOptions.KUSTO_AAD_APP_SECRET, "MyPassword") 
   .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, "AAD Authority Id") // "microsoft.com"
   .mode(SaveMode.Append)
   .save()
@@ -159,8 +159,8 @@ df.write
   .option(KustoSinkOptions.KUSTO_CLUSTER, "MyCluster.RegionName")
   .option(KustoSinkOptions.KUSTO_DATABASE, "MyDatabase")
   .option(KustoSinkOptions.KUSTO_TABLE, "MyTable")
-  .option(KustoSinkOptions.KUSTO_AAD_CLIENT_ID, "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
-  .option(KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD, "MyPassword") 
+  .option(KustoSinkOptions.KUSTO_AAD_APP_ID, "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
+  .option(KustoSinkOptions.KUSTO_AAD_APP_SECRET, "MyPassword") 
   .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, "AAD Authority Id") // "microsoft.com"
   .option(KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC, true)
   .option(KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS, "CreateIfNotExist")
@@ -203,8 +203,8 @@ df.write
          KustoSinkOptions.KUSTO_CLUSTER -> cluster,
          KustoSinkOptions.KUSTO_TABLE -> table,
          KustoSinkOptions.KUSTO_DATABASE -> database,
-         KustoSinkOptions.KUSTO_AAD_CLIENT_ID -> appId,
-         KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+         KustoSinkOptions.KUSTO_AAD_APP_ID -> appId,
+         KustoSinkOptions.KUSTO_AAD_APP_SECRET -> appKey,
          KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID -> authorityId))
        .trigger(Trigger.Once)
  
