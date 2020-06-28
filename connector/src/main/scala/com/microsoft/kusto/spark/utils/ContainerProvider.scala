@@ -14,7 +14,7 @@ class ContainerProvider[A](val dmClient: Client, val clusterAlias: String, val c
   private var lastRefresh: DateTime = new DateTime(DateTimeZone.UTC)
   private val myName = this.getClass.getSimpleName
 
-  def getContainer = {
+  def getContainer: A = {
     // Refresh if storageExpiryMinutes have passed since last refresh for this cluster as SAS should be valid for at least 120 minutes
     if (storageUris.isEmpty ||
       new Period(new DateTime(DateTimeZone.UTC), lastRefresh).getMinutes > KustoConstants.storageExpiryMinutes) {
@@ -25,7 +25,7 @@ class ContainerProvider[A](val dmClient: Client, val clusterAlias: String, val c
     }
   }
 
-  def getAllContainers = {
+  def getAllContainers: Seq[A] = {
     if (storageUris.isEmpty ||
       new Period(new DateTime(DateTimeZone.UTC), lastRefresh).getMinutes > KustoConstants.storageExpiryMinutes){
       refresh
@@ -35,8 +35,8 @@ class ContainerProvider[A](val dmClient: Client, val clusterAlias: String, val c
 
   private def refresh = {
       val res = dmClient.execute(command)
-      val storage = res.getValues.asScala.map(row => {
-        val parts = row.get(0).split('?')
+      val storage = res.getPrimaryResults.getData.asScala.map(row => {
+        val parts = row.get(0).toString.split('?')
         cacheEntryCreator(ContainerAndSas(parts(0), '?' + parts(1)))
       })
 

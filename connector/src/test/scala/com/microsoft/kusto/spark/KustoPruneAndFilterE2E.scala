@@ -126,7 +126,7 @@ class KustoPruneAndFilterE2E extends FlatSpec with BeforeAndAfterAll {
       .mode(SaveMode.Append)
       .save()
 
-    val conf = if (blobSas.isEmpty) {
+    val conf = if (blobSas != null) {
       Map(KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
         KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey,
         KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME -> storageAccount,
@@ -197,7 +197,7 @@ class KustoPruneAndFilterE2E extends FlatSpec with BeforeAndAfterAll {
       .mode(SaveMode.Append)
       .save()
 
-    val conf = if (blobSas.isEmpty) {
+    val conf = if (blobSas == null) {
       Map(KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
         KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey,
         KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME -> storageAccount,

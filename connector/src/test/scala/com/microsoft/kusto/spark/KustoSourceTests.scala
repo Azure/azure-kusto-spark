@@ -3,6 +3,7 @@ package com.microsoft.kusto.spark
 import com.microsoft.kusto.spark.datasource.KustoSourceOptions
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import org.apache.spark.SparkContext
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.sql.{SQLContext, SparkSession}
 import org.junit.runner.RunWith
 import org.scalamock.scalatest.MockFactory
@@ -62,6 +63,7 @@ class KustoSourceTests extends FlatSpec with MockFactory with Matchers with Befo
       .option(KustoSourceOptions.KUSTO_CUSTOM_DATAFRAME_COLUMN_TYPES, customSchema)
       .load("src/test/resources/")
 
-    df.printSchema()
+    val expected = StructType(Array(StructField("colA", StringType, nullable = true),StructField("colB", IntegerType, nullable = true)))
+    assert(df.schema.equals(expected))
   }
 }

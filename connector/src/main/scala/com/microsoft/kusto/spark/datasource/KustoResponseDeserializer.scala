@@ -3,7 +3,7 @@ package com.microsoft.kusto.spark.datasource
 import java.sql.Timestamp
 import java.util
 
-import com.microsoft.azure.kusto.data.Results
+import com.microsoft.azure.kusto.data.{KustoResultColumn, KustoResultSetTable, Results}
 import com.microsoft.kusto.spark.utils.DataTypeMapping
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
@@ -15,7 +15,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 object KustoResponseDeserializer {
-  def apply(kustoResult: Results): KustoResponseDeserializer = new KustoResponseDeserializer(kustoResult)
+  def apply(kustoResult: KustoResultSetTable): KustoResponseDeserializer = new KustoResponseDeserializer(kustoResult)
 }
 
 // Timespan columns are casted to strings in kusto side. A simple test to compare the translation to a Duration string
@@ -23,61 +23,65 @@ object KustoResponseDeserializer {
 // second was by a udf function, both were less performant.
 case class KustoSchema(sparkSchema: StructType, toStringCastedColumns: Set[String])
 
-class KustoResponseDeserializer(val kustoResult: Results) {
+class KustoResponseDeserializer(val kustoResult: KustoResultSetTable) {
   val schema: KustoSchema = getSchemaFromKustoResult
 
-  private def getValueTransformer(valueType: String): String => Any = {
+  private def getValueTransformer(valueType: String): Any => Any = {
 
     valueType.toLowerCase() match {
-      case "string" => value: String => value
-      case "int64" => value: String => value.toLong
-      case "datetime" =>value: String => new Timestamp(new DateTime(value).getMillis)
-      case "timespan" => value: String => value
-      case "sbyte" => value: String => value.toBoolean
-      case "long" => value: String => value.toLong
-      case "double" => value: String => value.toDouble
-      case "sqldecimal" => value: String => BigDecimal(value)
-      case "int" => value: String => value.toInt
-      case "int32" => value: String => value.toInt
-      case _ => value: String => value.toString
+      case "string" => value: Any => value
+      case "int64" => value: Any => value
+      case "datetime" => value: Any => new Timestamp(new DateTime(value).getMillis)
+      case "timespan" => value: Any => value
+      case "sbyte" => value: Any => value
+      case "long" => value: Any => value match {
+        case i: Int => i.toLong
+        case _ => value.asInstanceOf[Long]
+      }
+      case "double" => value: Any => value
+      case "decimal" => value: Any => BigDecimal(value.asInstanceOf[String])
+      case "int" => value: Any => value
+      case "int32" => value: Any => value
+      case "bool" => value: Any => value
+      case "real" => value: Any => value
+      case _ => value: Any => value.toString
       }
   }
 
    private def getSchemaFromKustoResult: KustoSchema = {
-    if (kustoResult.getColumnNameToType.isEmpty) {
+    if (kustoResult.getColumns.isEmpty) {
       KustoSchema(StructType(List()), Set())
     } else {
-      val columnInOrder = this.getOrderedColumnName
+      val columns = kustoResult.getColumns
 
-      val columnNameToType = kustoResult.getColumnNameToType
-
-      KustoSchema(StructType(columnInOrder.map(key => StructField(key,
-            DataTypeMapping.kustoJavaTypeToSparkTypeMap.getOrElse(columnNameToType.get(key).toLowerCase, StringType)))),
-        columnNameToType.asScala.filter(c => c._2 == "TimeSpan").keys.toSet)
+      KustoSchema(StructType(columns.map(col => StructField(col.getColumnName,
+            DataTypeMapping.kustoTypeToSparkTypeMap.getOrElse(col.getColumnType.toLowerCase, StringType)))),
+        columns.filter(c => c.getColumnType.equalsIgnoreCase("TimeSpan")).map(c => c.getColumnName).toSet)
     }
   }
 
   def getSchema: KustoSchema = { schema }
 
   def toRows: java.util.List[Row] = {
-    val columnInOrder = this.getOrderedColumnName
-    val value: util.ArrayList[Row] = new util.ArrayList[Row](kustoResult.getValues.size)
+    val columnInOrder = kustoResult.getColumns
+    val value: util.ArrayList[Row] = new util.ArrayList[Row](kustoResult.count())
 
-    // Calculate the transformer function for each column to use later by order
-    val valueTransformers: mutable.Seq[String => Any] = columnInOrder.map(col => getValueTransformer(kustoResult.getTypeByColumnName(col)))
-    kustoResult.getValues.toArray().foreach(row => {
-      val genericRow = row.asInstanceOf[util.ArrayList[String]].toArray().zipWithIndex.map(
-        column => if (column._1== null) null else valueTransformers(column._2)(column._1.asInstanceOf[String])
-      )
+//     Calculate the transformer function for each column to use later by order
+    val valueTransformers: mutable.Seq[Any => Any] = columnInOrder.map(col => getValueTransformer(col.getColumnType))
+    kustoResult.getData.asScala.foreach(row => {
+      val genericRow = row.toArray().zipWithIndex.map(
+        column => {
+          if (column._1 == null) null else valueTransformers(column._2)(column._1)
+        })
       value.add(new GenericRowWithSchema(genericRow, schema.sparkSchema))
     })
 
     value
   }
 
-  private def getOrderedColumnName = {
-    val columnInOrder = ArrayBuffer.fill(kustoResult.getColumnNameToIndex.size()){ "" }
-    kustoResult.getColumnNameToIndex.asScala.foreach(columnIndexPair => columnInOrder(columnIndexPair._2) = columnIndexPair._1)
-    columnInOrder
-  }
+//  private def getOrderedColumnName = {
+//    val columnInOrder = ArrayBuffer.fill(kustoResult.getColumnNameToIndex.size()){ "" }
+//    kustoResult.getColumns.foreach((columnIndexPair: KustoResultColumn) => columnInOrder(columnIndexPair.) = columnIndexPair._1)
+//    columnInOrder
+//  }
 }

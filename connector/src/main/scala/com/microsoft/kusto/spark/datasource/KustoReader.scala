@@ -4,7 +4,7 @@ import java.net.URI
 import java.security.InvalidParameterException
 import java.util.UUID
 
-import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties}
+import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties, KustoResultSetTable}
 import com.microsoft.azure.storage.StorageCredentialsAccountAndKey
 import com.microsoft.azure.storage.blob.CloudBlobContainer
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
@@ -51,9 +51,9 @@ private[kusto] object KustoReader {
                                      filtering: KustoFiltering): RDD[Row] = {
 
     val filteredQuery = KustoFilter.pruneAndFilter(KustoSchema(request.schema.sparkSchema, Set()), request.query, filtering)
-    val kustoResult = kustoClient.execute(request.kustoCoordinates.database,
+    val kustoResult: KustoResultSetTable = kustoClient.execute(request.kustoCoordinates.database,
       filteredQuery,
-      request.clientRequestProperties.orNull)
+      request.clientRequestProperties.orNull).getPrimaryResults
 
     val serializer = KustoResponseDeserializer(kustoResult)
     request.sparkSession.createDataFrame(serializer.toRows, serializer.getSchema.sparkSchema).rdd
@@ -190,9 +190,9 @@ private[kusto] class KustoReader(client: Client, request: KustoReadRequest, stor
       isCompressed = options.shouldCompressOnExport
     )
 
-    val commandResult = client.execute(request.kustoCoordinates.database,
+    val commandResult: KustoResultSetTable = client.execute(request.kustoCoordinates.database,
       exportCommand,
-      clientRequestProperties.orNull)
+      clientRequestProperties.orNull).getPrimaryResults
     KDSU.verifyAsyncCommandCompletion(client, request.kustoCoordinates.database, commandResult, timeOut = request.timeout)
   }
 }

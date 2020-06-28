@@ -1,9 +1,10 @@
 package com.microsoft.kusto.spark.utils
 
+import java.util
 import java.util.StringJoiner
 import java.util.concurrent.TimeUnit
 
-import com.microsoft.azure.kusto.data.{Client, ClientFactory, ConnectionStringBuilder}
+import com.microsoft.azure.kusto.data.{Client, ClientFactory, ConnectionStringBuilder, KustoResultSetTable}
 import com.microsoft.azure.kusto.ingest.result.{IngestionStatus, OperationStatus}
 import com.microsoft.azure.kusto.ingest.{IngestClient, IngestClientFactory, IngestionProperties}
 import com.microsoft.kusto.spark.common.KustoCoordinates
@@ -43,12 +44,12 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
                                    tableCreation: SinkTableCreationMode = SinkTableCreationMode.FailIfNotExist,
                                    schema: StructType): Unit = {
 
-    val schemaShowCommandResult = engineClient.execute(tableCoordinates.database, generateTableGetSchemaAsRowsCommand(tableCoordinates.table.get)).getValues
+    val schemaShowCommandResult = engineClient.execute(tableCoordinates.database, generateTableGetSchemaAsRowsCommand(tableCoordinates.table.get)).getPrimaryResults
     var tmpTableSchema: String = ""
     val database = tableCoordinates.database
     val table = tableCoordinates.table.get
 
-    if (schemaShowCommandResult.size() == 0) {
+    if (schemaShowCommandResult.count() == 0) {
       // Table Does not exist
       if (tableCreation == SinkTableCreationMode.FailIfNotExist) {
         throw new RuntimeException("Table '" + table + "' doesn't exist in database '" + database + "', in cluster '" + tableCoordinates.cluster + "'")
@@ -64,10 +65,10 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
       }
     } else {
       // Table exists. Parse kusto table schema and check if it matches the dataframes schema
-      tmpTableSchema = extractSchemaFromResultTable(schemaShowCommandResult)
+      tmpTableSchema = extractSchemaFromResultTable(schemaShowCommandResult.getData.asInstanceOf[util.ArrayList[util.ArrayList[String]]])
     }
 
-    //  Create a temporary table with the kusto or dataframe parsed schema with 1 day retention
+    // Create a temporary table with the kusto or dataframe parsed schema with 1 day retention
     engineClient.execute(database, generateTempTableCreateCommand(tmpTableName, tmpTableSchema))
     engineClient.execute(database, generateTableAlterRetentionPolicy(tmpTableName, "001:00:00:00", recoverable = false))
   }
@@ -165,13 +166,12 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
     if (StringUtils.isNotBlank(mappingReferenceName)) {
       val mappingKind = mapping.getIngestionMappingKind.toString
       val cmd = generateShowTableMappingsCommand(originalTable, mappingKind)
-      val mappings = engineClient.execute(stagingTableIngestionProperties.getDatabaseName, cmd).getValues
-      val it = mappings.iterator()
+      val mappings = engineClient.execute(stagingTableIngestionProperties.getDatabaseName, cmd).getPrimaryResults
+
       var found = false
-      while (it.hasNext && !found){
-        val mapping = it.next()
-        if(mapping.get(0).equals(mappingReferenceName)){
-          val policyJson = mapping.get(2).replace("\"","'")
+      while (mappings.next && !found){
+        if(mappings.getString(0).equals(mappingReferenceName)){
+          val policyJson = mappings.getString(2).replace("\"","'")
           val c = generateCreateTableMappingCommand(stagingTableIngestionProperties.getTableName, mappingKind, mappingReferenceName, policyJson)
           engineClient.execute(stagingTableIngestionProperties.getDatabaseName, c)
           found = true
