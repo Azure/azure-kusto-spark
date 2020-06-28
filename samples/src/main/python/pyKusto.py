@@ -82,10 +82,20 @@ kustoDf.show()
 # Writing with advanced options
 # Please refer to https://github.com/Azure/azure-kusto-spark/blob/master/connector/src/main/scala/com/microsoft/kusto/spark/datasink/KustoSinkOptions.scala
 # to get the string representation of the options you need
-time = sc._jvm.org.joda.time.DateTime.now().minusDays(1)
+extentsCreationTime = sc._jvm.org.joda.time.DateTime.now().minusDays(1)
 csvMap = "[{\"Name\":\"ColA\",\"Ordinal\":0},{\"Name\":\"ColB\",\"Ordinal\":1}]"
+# Alternatively use an existing csv mapping configured on the table and pass it as the last parameter of SparkIngestionProperties or use none
 
-sp = sc._jvm.com.microsoft.kusto.spark.datasink.SparkIngestionProperties(False, ["1"], ["2"], ["3"], ["4"], time, csvMap, None)
+sp = sc._jvm.com.microsoft.kusto.spark.datasink.SparkIngestionProperties(
+        False, ["dropByTags"], ["ingestByTags"], ["tags"], ["ingestIfNotExistsTags"], extentsCreationTime, csvMap, None)
+# Class fields: SparkIngestionProperties(flushImmediately: Boolean,
+#                                        dropByTags: util.ArrayList[String],
+#                                        ingestByTags: util.ArrayList[String],
+#                                        additionalTags: util.ArrayList[String],
+#                                        ingestIfNotExists: util.ArrayList[String],
+#                                        creationTime: DateTime,
+#                                        csvMapping: String,
+#                                        csvMappingNameReference: String)
 
 df.write. \
   format("com.microsoft.kusto.spark.datasource"). \
