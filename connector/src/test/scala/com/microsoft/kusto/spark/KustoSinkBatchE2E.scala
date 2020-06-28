@@ -8,6 +8,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import com.microsoft.azure.kusto.data.{ClientFactory, ConnectionStringBuilder}
 import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode}
+import com.microsoft.kusto.spark.datasource.{KustoSourceOptions, ReadMode}
 import com.microsoft.kusto.spark.sql.extension.SparkExtension._
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils => KDSU}
@@ -98,10 +99,19 @@ class KustoSinkBatchE2E extends FlatSpec with BeforeAndAfterAll{
 
     val conf: Map[String, String] = Map(
       KustoSinkOptions.KUSTO_AAD_CLIENT_ID -> appId,
-      KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey
+      KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+      KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceDistributedMode.toString
     )
 
-    val dfResult: DataFrame = spark.read.kusto(cluster, database, table, conf)
+    val conf2: Map[String, String] = Map(
+      KustoSinkOptions.KUSTO_AAD_CLIENT_ID -> appId,
+      KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+      KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceSingleMode.toString
+    )
+
+    val dfResultDist: DataFrame = spark.read.kusto(cluster, database, table, conf)
+    val dfResultSingle: DataFrame = spark.read.kusto(cluster, database, table, conf2)
+
     def getRowOriginal(x:Row): (String, Int, Date, Boolean, Short, Byte, Float, Timestamp, Double, BigDecimal, Long) ={
       (x.getString(0), x.getInt(1),x.getDate(2),x.getBoolean(3),x.getShort(4),x.getByte(5),x.getFloat(6),x.getTimestamp(7),x.getDouble(8),x.getDecimal(9),x.getLong(10))
     }
@@ -130,14 +140,13 @@ class KustoSinkBatchE2E extends FlatSpec with BeforeAndAfterAll{
       res
     }
 
-    val check= dfResult.filter(x=>x.get(1) == 1)
-
     val orig = dfOrig.select("String", "Int", "Date", "Boolean", "short", "Byte", "floatie", "Timestamp", "Double", "BigDecimal", "Long").rdd.map(x => getRowOriginal(x)).collect().sortBy(_._2)
-    val result = dfResult.select("String", "Int", "Date", "Boolean", "short", "Byte", "floatie", "Timestamp", "Double", "BigDecimal", "Long").rdd.map(x => getRowFromKusto(x)).collect().sortBy(_._2)
+    val result = dfResultDist.select("String", "Int", "Date", "Boolean", "short", "Byte", "floatie", "Timestamp", "Double", "BigDecimal", "Long").rdd.map(x => getRowFromKusto(x)).collect().sortBy(_._2)
+    val resultSingle = dfResultSingle.select("String", "Int", "Date", "Boolean", "short", "Byte", "floatie", "Timestamp", "Double", "BigDecimal", "Long").rdd.map(x => getRowFromKusto(x)).collect().sortBy(_._2)
 
     var isEqual = true
     for(idx <- orig.indices) {
-      if(!compareRowsWithTimestamp(orig(idx),result(idx))){
+      if(!compareRowsWithTimestamp(orig(idx),result(idx)) || !compareRowsWithTimestamp(orig(idx),resultSingle(idx))){
         isEqual = false
       }
     }

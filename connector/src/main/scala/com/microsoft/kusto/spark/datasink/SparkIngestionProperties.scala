@@ -60,7 +60,7 @@ class SparkIngestionProperties(var flushImmediately: Boolean = false,
     }
 
     if (this.csvMappingNameReference != null) {
-      ingestionProperties.setIngestionMapping(new IngestionMapping(this.csvMappingNameReference, IngestionMapping.IngestionMappingKind.csv))
+      ingestionProperties.setIngestionMapping(new IngestionMapping(this.csvMappingNameReference, IngestionMapping.IngestionMappingKind.Csv))
     }
 
     ingestionProperties.setAdditionalProperties(additionalProperties)

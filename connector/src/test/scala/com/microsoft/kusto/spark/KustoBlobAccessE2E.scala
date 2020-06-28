@@ -89,7 +89,7 @@ class KustoBlobAccessE2E extends FlatSpec with BeforeAndAfterAll {
     val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://$cluster.kusto.windows.net", appId, appKey, authority)
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
     val myTable = updateKustoTable(table)
-    val schema = KustoResponseDeserializer(kustoAdminClient.execute(database, KustoQueryUtils.getQuerySchemaQuery(myTable))).getSchema
+    val schema = KustoResponseDeserializer(kustoAdminClient.execute(database, KustoQueryUtils.getQuerySchemaQuery(myTable)).getPrimaryResults).getSchema
 
     val firstColumn =
     if (schema.sparkSchema.nonEmpty)
@@ -128,7 +128,7 @@ class KustoBlobAccessE2E extends FlatSpec with BeforeAndAfterAll {
     )
 
     val blobs = kustoAdminClient.execute(database, exportCommand)
-      .getValues.asScala
+      .getPrimaryResults.getData.asScala
       .map(row => row.get(0))
 
     blobs.foreach(blob => KDSU.logInfo(myName, s"Exported to blob: $blob"))
