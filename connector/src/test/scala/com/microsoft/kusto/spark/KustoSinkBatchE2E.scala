@@ -99,13 +99,13 @@ class KustoSinkBatchE2E extends FlatSpec with BeforeAndAfterAll{
 
     val conf: Map[String, String] = Map(
       KustoSinkOptions.KUSTO_AAD_APP_ID -> appId,
-      KustoSinkOptions.KUSTO_AAD_APP_SECRET -> appKey
+      KustoSinkOptions.KUSTO_AAD_APP_SECRET -> appKey,
       KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceDistributedMode.toString
     )
 
     val conf2: Map[String, String] = Map(
-      KustoSinkOptions.KUSTO_AAD_CLIENT_ID -> appId,
-      KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+      KustoSinkOptions.KUSTO_AAD_APP_ID -> appId,
+      KustoSinkOptions.KUSTO_AAD_APP_SECRET -> appKey,
       KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceSingleMode.toString
     )
 
