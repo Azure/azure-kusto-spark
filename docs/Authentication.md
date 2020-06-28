@@ -7,13 +7,13 @@ Kusto Spark connector allows the user to authenticate with AAD using an AAD appl
 This authentication method is fairly straightforward, and it is used in most of the examples in this documentation.
 
  * **KUSTO_AAD_CLIENT_ID**: 
-  AAD application (client) identifier.
+  'kustoAADClientID' - AAD application (client) identifier.
   
  * **KUSTO_AAD_AUTHORITY_ID**: 
-  AAD authentication authority. This is the AAD Directory (tenant) ID.
+  'kustoAADAuthorityID' - AAD authentication authority. This is the AAD Directory (tenant) ID.
  
  * **KUSTO_AAD_CLIENT_PASSWORD**: 
- AAD application key for the client.
+  'kustoClientAADClientPassword' - AAD application key for the client.
  
 #### Example
 ```
@@ -37,6 +37,15 @@ either key vault or direct options for passing authentication parameters but not
 
 >**Note:** when working with a Databricks notebook, azure-keyvault package must be installed.
 For details, refer to [Databricks documentation](https://docs.databricks.com/user-guide/libraries.html#maven-or-spark-package). 
+                                                           
+* **KEY_VAULT_URI**
+ 'keyVaultUri' - URI to the Key vault
+ 
+ * **KEY_VAULT_APP_ID**
+ 'keyVaultAppId' - AAD application identifier that has access to 'get' and 'list' secrets from the vault.
+
+ * **KEY_VAULT_APP_KEY**
+ 'keyVaultAppKey' - AAD application key for the application.
                                                                                              
 **The connector will look for the following secret names:**
 
@@ -101,7 +110,7 @@ User can also use ADAL directly to acquire an AAD access token to access Kusto.
 The token must be valid throughout the duration of the read/write operation
 
  * **KUSTO_ACCESS_TOKEN**: 
-    The AAD access token
+    'accessToken' - The AAD access token
 ```
 df.write
   .format("com.microsoft.kusto.spark.datasource")

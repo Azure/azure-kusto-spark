@@ -42,17 +42,17 @@ that is using it. Please verify the following before using Kusto connector:
 **Mandatory Parameters:** 
  
 * **KUSTO_CLUSTER**:
- Target Kusto cluster to which the data will be written.
+ 'kustoCluster' - Target Kusto cluster to which the data will be written.
  Use either cluster profile name for global clusters, or <profile-name.region> for regional clusters.
  For example: if the cluster URL is 'https://testcluster.eastus.kusto.windows.net', set this property 
  as 'testcluster.eastus' 
   
  * **KUSTO_DATABASE**: 
- Target Kusto database to which the data will be written. The client must have 'user' and 'ingestor' 
+ 'kustoDatabase' - Target Kusto database to which the data will be written. The client must have 'user' and 'ingestor' 
  privileges on this database.
  
  * **KUSTO_TABLE**: 
- Target Kusto table to which the data will be written. If _KUSTO_CREATE_TABLE_OPTIONS_ is 
+ 'kustoTable' - Target Kusto table to which the data will be written. If _KUSTO_CREATE_TABLE_OPTIONS_ is 
  set to "FailIfNotExist" (default), the table must already exist, and the client must have 
  'admin' privileges on the table.
  
@@ -60,13 +60,13 @@ that is using it. Please verify the following before using Kusto connector:
  
  **Optional Parameters:** 
  * **KUSTO_TABLE_CREATE_OPTIONS**: 
- If set to 'FailIfNotExist' (default), the operation will fail if the table is not found 
+ 'tableCreateOptions' - If set to 'FailIfNotExist' (default), the operation will fail if the table is not found 
  in the requested cluster and database.  
  If set to 'CreateIfNotExist' and the table is not found in the requested cluster and database,
  it will be created, with a schema matching the DataFrame that is being written.
  
  * **KUSTO_WRITE_ENABLE_ASYNC**:
-  If set to 'false' (default), writing to Kusto is done synchronously. This means:
+  'writeEnableAsync' - If set to 'false' (default), writing to Kusto is done synchronously. This means:
    * Once the operation completes successfully, it is guaranteed that that data was written to
  the requested table in Kusto
    * Exceptions will propagate to the client
@@ -79,15 +79,15 @@ that is using it. Please verify the following before using Kusto connector:
    * Spark driver is not blocked
    * In a success scenario, all data will eventually be written, only if the job is left running.  Job success status **DOES NOT** mean data is committed yet.
    * In a failure scenario, error messages are logged on Spark executor nodes, 
- but exceptions will not propagate to the client
+ but exceptions will not propagate to the client. 
  
  * **KUSTO_TIMEOUT_LIMIT**:
-   An integer number corresponding to the period in seconds after which the operation will timeout.
+   'timeoutLimit' - An integer number corresponding to the period in seconds after which the write operation will timeout.
    This is an upper limit that may coexist with addition timeout limits as configured on Spark or Kusto clusters.  
    Default: '5400' (90 minutes)
 
 * **KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON**:
-    A json representation of a `SparkIngestionProperties` (use `toString` to make a json of an instance).
+    'sparkIngestionPropertiesJson' - A json representation of a `SparkIngestionProperties` (use `toString` to make a json of an instance).
     
     Properties:
         
@@ -104,9 +104,9 @@ that is using it. Please verify the following before using Kusto connector:
     - flushImmediately: Boolean - use with caution - flushes the data immidiatly upon ingestion without aggregation.
 
 * **KUSTO_CLIENT_BATCHING_LIMIT**:
-    A limit indicating the size in MB of the aggregated data before ingested to Kusto. Note that this is done for each
-    partition. The ingestion Kusto also aggregates data, default suggested by Kusto is 1GB but here we suggest to cut 
-    it at 100MB to adjust it to spark pulling of data.
+    'clientBatchingLimit' - A limit indicating the size in MB of the aggregated data before ingested to Kusto. Note that 
+    this is done for each partition. The ingestion Kusto also aggregates data, default suggested by Kusto is 1GB but here
+    we suggest to cut it at 100MB to adjust it to spark pulling of data.
     
  >**Note:**
  For both synchronous and asynchronous operation, 'write' is an atomic transaction, i.e. 
