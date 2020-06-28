@@ -172,11 +172,11 @@ object KustoConnectorDemo {
 
     // READING USING KEY VAULT ACCESS
     // There are two different approaches to use parameters stored in Azure Key Vault for Kusto connector:
-    // 1. One can use DataBricks KV-assisted store under a DataBricks secret scope (see https://docs.azuredatabricks.net/user-guide/secrets/secret-scopes.html#akv-ss). This is how keyVaultClientPassword is stored.
+    // 1. One can use DataBricks KV-assisted store under a DataBricks secret scope (see https://docs.azuredatabricks.net/user-guide/secrets/secret-scopes.html#akv-ss). This is how keyVaultAppKey is stored.
     // 2. Some parameters, including all secrets required for Kusto connector operations, can be accessed as described in https://github.com/Azure/azure-kusto-spark/blob/dev/docs/Authentication.md
     // This requires accessing the KV with the three parameters below
-    val keyVaultClientPassword = "Password of the AAD client used to identify to your key vault"//Databricks example: dbutils.secrets.get(scope = "KustoDemos", key = "keyVaultClientPassword")
-    val keyVaultClientID = "The client id of the AAD client used to identify to your key vault"
+    val keyVaultAppKey = "Password of the AAD client used to identify to your key vault"//Databricks example: dbutils.secrets.get(scope = "KustoDemos", key = "keyVaultAppKey")
+    val keyVaultAppId = "The client id of the AAD client used to identify to your key vault"
     val keyVaultUri = "https://<Your key vault name>.vault.azure.net"
 
     /************************************************************************************************************/
@@ -185,8 +185,8 @@ object KustoConnectorDemo {
     /************************************************************************************************************/
     val conf4: Map[String, String] = Map(
       KustoSourceOptions.KEY_VAULT_URI -> keyVaultUri,
-      KustoSourceOptions.KEY_VAULT_APP_ID -> keyVaultClientID,
-      KustoSourceOptions.KEY_VAULT_APP_KEY -> keyVaultClientPassword,
+      KustoSourceOptions.KEY_VAULT_APP_ID -> keyVaultAppId,
+      KustoSourceOptions.KEY_VAULT_APP_KEY -> keyVaultAppKey,
       KustoSourceOptions.KUSTO_QUERY -> "StringAndIntExpTable"
     )
 

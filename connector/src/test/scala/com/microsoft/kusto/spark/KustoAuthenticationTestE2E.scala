@@ -27,8 +27,8 @@ class KustoAuthenticationTestE2E extends FlatSpec {
   val appKey: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_APP_SECRET)
   val authority: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com")
 
-  val keyVaultClientID: String = System.getProperty(KustoSinkOptions.KEY_VAULT_APP_ID)
-  val keyVaultClientPassword: String = System.getProperty(KustoSinkOptions.KEY_VAULT_APP_KEY)
+  val keyVaultAppId: String = System.getProperty(KustoSinkOptions.KEY_VAULT_APP_ID)
+  val keyVaultAppKey: String = System.getProperty(KustoSinkOptions.KEY_VAULT_APP_KEY)
   val keyVaultUri: String = System.getProperty(KustoSinkOptions.KEY_VAULT_URI)
 
   "keyVaultAuthentication" should "use key vault for authentication and retracting kusto app auth params" taggedAs KustoE2E in {
@@ -45,8 +45,8 @@ class KustoAuthenticationTestE2E extends FlatSpec {
     val df = rows.toDF("name", "value")
     val conf: Map[String, String] = Map(
       KustoSinkOptions.KEY_VAULT_URI -> keyVaultUri,
-      KustoSinkOptions.KEY_VAULT_APP_ID -> keyVaultClientID,
-      KustoSinkOptions.KEY_VAULT_APP_KEY -> keyVaultClientPassword,
+      KustoSinkOptions.KEY_VAULT_APP_ID -> keyVaultAppId,
+      KustoSinkOptions.KEY_VAULT_APP_KEY -> keyVaultAppKey,
       KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS -> SinkTableCreationMode.CreateIfNotExist.toString
     )
 

@@ -81,8 +81,8 @@ This is a temporary requirement - future versions will be able to provision blob
 ### Key Vault Authentication Example
 
 ```
-val keyVaultClientID: String = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-val keyVaultClientPassword: String = "MyPassword"
+val keyVaultAppId: String = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+val keyVaultAppKey: String = "MyPassword"
 val keyVaultUri: String = "keyVaultUri" 
  
 df.write
@@ -91,15 +91,15 @@ df.write
   .option(KustoSinkOptions.KUSTO_DATABASE, MyDatabase)
   .option(KustoSinkOptions.KUSTO_TABLE, MyTable)
   .option(KustoSinkOptions.KEY_VAULT_URI, keyVaultUri)
-  .option(KustoSinkOptions.KEY_VAULT_APP_ID, keyVaultClientID)
-  .option(KustoSinkOptions.KEY_VAULT_APP_KEY, keyVaultClientPassword)
+  .option(KustoSinkOptions.KEY_VAULT_APP_ID, keyVaultAppId)
+  .option(KustoSinkOptions.KEY_VAULT_APP_KEY, keyVaultAppKey)
   .mode(SaveMode.Append)
   .save()
 
 val conf: Map[String, String] = Map(
   KustoSourceOptions.KEY_VAULT_URI -> keyVaultUri,
-  KustoSourceOptions.KEY_VAULT_APP_ID -> keyVaultClientID,
-  KustoSourceOptions.KEY_VAULT_APP_KEY -> keyVaultClientPassword
+  KustoSourceOptions.KEY_VAULT_APP_ID -> keyVaultAppId,
+  KustoSourceOptions.KEY_VAULT_APP_KEY -> keyVaultAppKey
 )
 
 val query = table

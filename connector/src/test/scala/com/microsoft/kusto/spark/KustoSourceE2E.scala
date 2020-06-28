@@ -57,8 +57,8 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
 
     val conf: Map[String, String] = Map(
       KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceSingleMode.toString,
-      KustoSourceOptions.KUSTO_AAD_CLIENT_ID -> appId,
-      KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey
+      KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
+      KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey
     )
 
     val df = spark.read.kusto(cluster, database, query, conf)
@@ -76,8 +76,8 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
     val blobSasConnectionString: String = System.getProperty("blobSasQuery")
 
     val conf: Map[String, String] = Map(
-      KustoSourceOptions.KUSTO_AAD_CLIENT_ID -> appId,
-      KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+      KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
+      KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey,
       KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME -> storageAccount,
       KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_KEY -> blobKey,
       KustoSourceOptions.KUSTO_BLOB_CONTAINER -> container
@@ -106,8 +106,8 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
       .option(KustoSinkOptions.KUSTO_CLUSTER, cluster)
       .option(KustoSinkOptions.KUSTO_DATABASE, database)
       .option(KustoSinkOptions.KUSTO_TABLE, table)
-      .option(KustoSinkOptions.KUSTO_AAD_CLIENT_ID, appId)
-      .option(KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD, appKey)
+      .option(KustoSinkOptions.KUSTO_AAD_APP_ID, appId)
+      .option(KustoSinkOptions.KUSTO_AAD_APP_SECRET, appKey)
       .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, authority)
       .mode(SaveMode.Append)
       .save()
