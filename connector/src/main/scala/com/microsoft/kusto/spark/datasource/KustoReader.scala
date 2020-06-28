@@ -125,7 +125,7 @@ private[kusto] object KustoReader {
   }
 
   private[kusto] def setupBlobAccess(request: KustoReadRequest, storageParameters: Seq[KustoStorageParameters]): Unit = {
-    val config = request.sparkSession.conf
+    val config = request.sparkSession.sparkContext.hadoopConfiguration
     val now = new DateTime(DateTimeZone.UTC)
     for(storage <- storageParameters) {
       if (storage.secretIsAccountKey) {
