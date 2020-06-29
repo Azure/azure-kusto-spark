@@ -23,12 +23,12 @@ class KustoAuthenticationTestE2E extends FlatSpec {
   val cluster: String = System.getProperty(KustoSinkOptions.KUSTO_CLUSTER)
   val database: String = System.getProperty(KustoSinkOptions.KUSTO_DATABASE)
 
-  val appId: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_CLIENT_ID)
-  val appKey: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD)
+  val appId: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_APP_ID)
+  val appKey: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_APP_SECRET)
   val authority: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com")
 
-  val keyVaultClientID: String = System.getProperty(KustoSinkOptions.KEY_VAULT_APP_ID)
-  val keyVaultClientPassword: String = System.getProperty(KustoSinkOptions.KEY_VAULT_APP_KEY)
+  val keyVaultAppId: String = System.getProperty(KustoSinkOptions.KEY_VAULT_APP_ID)
+  val keyVaultAppKey: String = System.getProperty(KustoSinkOptions.KEY_VAULT_APP_KEY)
   val keyVaultUri: String = System.getProperty(KustoSinkOptions.KEY_VAULT_URI)
 
   "keyVaultAuthentication" should "use key vault for authentication and retracting kusto app auth params" taggedAs KustoE2E in {
@@ -45,8 +45,8 @@ class KustoAuthenticationTestE2E extends FlatSpec {
     val df = rows.toDF("name", "value")
     val conf: Map[String, String] = Map(
       KustoSinkOptions.KEY_VAULT_URI -> keyVaultUri,
-      KustoSinkOptions.KEY_VAULT_APP_ID -> (if(keyVaultClientID == null) appId else keyVaultClientID),
-      KustoSinkOptions.KEY_VAULT_APP_KEY -> (if(keyVaultClientPassword == null) appKey else keyVaultClientPassword),
+      KustoSinkOptions.KEY_VAULT_APP_ID -> (if(keyVaultAppId == null) appId else keyVaultAppId),
+      KustoSinkOptions.KEY_VAULT_APP_KEY -> (if(keyVaultAppKey == null) appKey else keyVaultAppKey),
       KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS -> SinkTableCreationMode.CreateIfNotExist.toString
     )
 

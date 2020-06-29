@@ -39,8 +39,8 @@ class KustoSinkStreamingE2E extends FlatSpec with BeforeAndAfterAll {
     sc.stop()
   }
 
-  val appId: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_CLIENT_ID)
-  val appKey: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD)
+  val appId: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_APP_ID)
+  val appKey: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_APP_SECRET)
   val authority: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com")
   val cluster: String = System.getProperty(KustoSinkOptions.KUSTO_CLUSTER)
   val database: String = System.getProperty(KustoSinkOptions.KUSTO_DATABASE)
@@ -80,8 +80,8 @@ class KustoSinkStreamingE2E extends FlatSpec with BeforeAndAfterAll {
         KustoSinkOptions.KUSTO_CLUSTER -> cluster,
         KustoSinkOptions.KUSTO_TABLE -> table,
         KustoSinkOptions.KUSTO_DATABASE -> database,
-        KustoSinkOptions.KUSTO_AAD_CLIENT_ID -> appId,
-        KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+        KustoSinkOptions.KUSTO_AAD_APP_ID -> appId,
+        KustoSinkOptions.KUSTO_AAD_APP_SECRET -> appKey,
         KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID -> authority,
         KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS -> SinkTableCreationMode.CreateIfNotExist.toString))
       .trigger(Trigger.Once)
@@ -127,8 +127,8 @@ class KustoSinkStreamingE2E extends FlatSpec with BeforeAndAfterAll {
         KustoSinkOptions.KUSTO_CLUSTER -> cluster,
         KustoSinkOptions.KUSTO_TABLE -> table,
         KustoSinkOptions.KUSTO_DATABASE -> database,
-        KustoSinkOptions.KUSTO_AAD_CLIENT_ID -> appId,
-        KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+        KustoSinkOptions.KUSTO_AAD_APP_ID -> appId,
+        KustoSinkOptions.KUSTO_AAD_APP_SECRET -> appKey,
         KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID -> authority,
         KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC -> "true"))
       .trigger(Trigger.Once)

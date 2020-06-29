@@ -64,31 +64,31 @@ All the options that can be use in the Kusto source are under the object KustoSo
  **Mandatory Parameters:** 
   
  * **KUSTO_CLUSTER**:
-  Kusto cluster from which the data will be read.
+  'kustoCluster' - Kusto cluster from which the data will be read.
   Use either cluster profile name for global clusters, or <profile-name.region> for regional clusters.
   For example: if the cluster URL is 'https://testcluster.eastus.kusto.windows.net', set this property 
   as either 'testcluster.eastus', or  'https://testcluster.eastus.kusto.windows.net'.
    
   * **KUSTO_DATABASE**: 
-  Kusto database from which the data will be read. The client must have 'viewer' 
+  'kustoDatabase' - Kusto database from which the data will be read. The client must have 'viewer' 
   privileges on this database, unless it has 'admin' privileges on the table.
   
   **Authentication Parameters** can be found [AAD Application Authentication](Authentication.md). 
 
   * **KUSTO_QUERY**: 
-  A flexible Kusto query (can simply be a table name). The schema of the resulting dataframe will match the schema of the query result. 
+  'kustoQuery' - A flexible Kusto query (can simply be a table name). The schema of the resulting dataframe will match the schema of the query result. 
  
  
  **Optional Parameters:** 
  
  * **KUSTO_TIMEOUT_LIMIT**:
- An integer number corresponding to the period in seconds after which the operation will timeout.
+ 'timeoutLimit' - An integer number corresponding to the period in seconds after which the operation will timeout.
  This is an upper limit that may coexist with addition timeout limits as configured on Spark or Kusto clusters.
  
     **Default:** '5400' (90 minutes)    
     
 * **KUSTO_CLIENT_REQUEST_PROPERTIES_JSON**:
-  A json representation for [ClientRequestProperties](https://github.com/Azure/azure-kusto-java/blob/master/data/src/main/java/com/microsoft/azure/kusto/data/ClientRequestProperties.java)
+  'clientRequestPropertiesJson' - A json representation for [ClientRequestProperties](https://github.com/Azure/azure-kusto-java/blob/master/data/src/main/java/com/microsoft/azure/kusto/data/ClientRequestProperties.java)
    used in the call for reading from Kusto (used in the single query for 'single' mode or for the export command for 'distributed' mode). Use toString to create the json.
     
     
@@ -102,21 +102,21 @@ coordinates and account credentials, or a full SAS URL with write, read and list
 artifacts in a separate directory. This directory is captured as part of read-transaction information logs reported on the Spark Driver node 
 
 * **KUSTO_BLOB_STORAGE_ACCOUNT_NAME**
-Transient storage account name. Either this, or a SAS url, must be provided in order to access the storage account
+'blobStorageAccountName' - Transient storage account name. Either this, or a SAS url, must be provided in order to access the storage account
 
 * **KUSTO_BLOB_STORAGE_ACCOUNT_KEY**
-Storage account key. Either this, or a SAS url, must be provided in order to access the storage account
+'blobStorageAccountKey' - Storage account key. Either this, or a SAS url, must be provided in order to access the storage account
 
 * **KUSTO_BLOB_CONTAINER**
-Blob container name. This container will be used to store all transient artifacts created every time the corresponding RDD is materialized. 
+'KUSTO_BLOB_CONTAINER' - Blob container name. This container will be used to store all transient artifacts created every time the corresponding RDD is materialized. 
 Once the RDD is no longer required by the caller application, the container and/or all its contents can be deleted by the caller.
 
 * **KUSTO_BLOB_STORAGE_SAS_URL**
-SAS access url: a complete url of the SAS to the container. Either this, or a storage account name and key, must be provided
+'KUSTO_BLOB_STORAGE_SAS_URL' - SAS access url: a complete url of the SAS to the container. Either this, or a storage account name and key, must be provided
   in order to access the storage account
   
 * **KUSTO_READ_MODE**
-Override the connector heuristic to choose between 'Single' and 'Distributed' mode.
+'readMode' - Override the connector heuristic to choose between 'Single' and 'Distributed' mode.
 Options are - 'ForceSingleMode', 'ForceDistributedMode'.
 Scala and java users may take these options from com.microsoft.kusto.spark.datasource.ReadMode.
   
@@ -127,8 +127,8 @@ Scala and java users may take these options from com.microsoft.kusto.spark.datas
  Create a DataFrame based on a query accessing 'MyKustoTable' table
  ```
  val conf: Map[String, String] = Map(
-       KustoSourceOptions.KUSTO_AAD_CLIENT_ID -> appId,
-       KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey
+       KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
+       KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey
      )
      
  val df = spark.read.kusto(cluster, database, "MyKustoTable | where (ColB % 1000 == 0) | distinct ColA ", conf)
@@ -140,8 +140,8 @@ Scala and java users may take these options from com.microsoft.kusto.spark.datas
   Create a DataFrame by reading all of 'MyKustoTable' table
   ```
  val conf: Map[String, String] = Map(
-       KustoSourceOptions.KUSTO_AAD_CLIENT_ID -> appId,
-       KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+       KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
+       KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey,
        KustoSourceOptions.KUSTO_QUERY -> "MyKustoTable"
      )
  
