@@ -14,7 +14,7 @@ object SimpleKustoDataSource {
     val conf: Map[String, String] = Map(
       KustoSourceOptions.KUSTO_AAD_APP_ID -> "Your Client ID",
       KustoSourceOptions.KUSTO_AAD_APP_SECRET -> "Your secret",
-      KustoSourceOptions.KUSTO_QUERY -> "Your Kusto query",
+      KustoSourceOptions.KUSTO_QUERY -> "Your Kusto query"
     )
     val df = sparkSession.read.kusto("Your Kusto Cluster", "Your Kusto Database", "Your Kusto Query in KustoOptions.Kusto_Query", conf)
     df.show
