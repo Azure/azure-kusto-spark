@@ -15,12 +15,10 @@ Azure Data Explorer (A.K.A. [Kusto](https://azure.microsoft.com/en-us/services/d
 
 Making Azure Data Explorer and Spark work together enables building fast and scalable applications, targeting a variety of Machine Learning, Extract-Transform-Load, Log Analytics and other data driven scenarios. 
  
-## About This Release
+## Changelog
 
-This is a beta release of Azure Data Explorer connector for Spark. It exposes Azure Data Explorer as a valid Data Store 
-for standard Spark source and sink operations such as write, read and writeStream.
-
-For main changes from previous releases and known issues please refer to [CHANGELIST](docs/CHANGELIST.md) 
+For main changes from previous releases please refer to [Releases](https://github.com/Azure/azure-kusto-spark/releases).
+For known or new issues please refer to the [issues](https://github.com/Azure/azure-kusto-spark/issues) section.
 
 ## Usage
 
@@ -32,7 +30,7 @@ link your application with the artifact below in order to use the Azure Data Exp
 ```
 groupId = com.microsoft.azure.kusto
 artifactId = spark-kusto-connector
-version = 1.1.5
+version = 2.0.0
 ```
 
 **In Maven**:
@@ -49,7 +47,7 @@ the jar can also be found under the [released package](https://github.com/Azure/
    <dependency>
      <groupId>com.microsoft.azure.kusto</groupId>
      <artifactId>spark-kusto-connector</artifactId>
-     <version>1.1.5</version>
+     <version>2.0.0</version>
    </dependency>
 ```
 
