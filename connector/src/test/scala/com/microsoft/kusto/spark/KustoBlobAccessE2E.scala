@@ -42,8 +42,8 @@ class KustoBlobAccessE2E extends FlatSpec with BeforeAndAfterAll {
     sc.stop()
   }
 
-  val appId: String = System.getProperty(KustoSourceOptions.KUSTO_AAD_CLIENT_ID)
-  val appKey: String = System.getProperty(KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD)
+  val appId: String = System.getProperty(KustoSourceOptions.KUSTO_AAD_APP_ID)
+  val appKey: String = System.getProperty(KustoSourceOptions.KUSTO_AAD_APP_SECRET)
   val authority: String = System.getProperty(KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID)
   val cluster: String = System.getProperty(KustoSourceOptions.KUSTO_CLUSTER)
   val database: String = System.getProperty(KustoSourceOptions.KUSTO_DATABASE)
@@ -73,8 +73,8 @@ class KustoBlobAccessE2E extends FlatSpec with BeforeAndAfterAll {
       val df = rows.toDF("name", "value")
 
       val conf = Map(
-        KustoSinkOptions.KUSTO_AAD_CLIENT_ID -> appId,
-        KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+        KustoSinkOptions.KUSTO_AAD_APP_ID -> appId,
+        KustoSinkOptions.KUSTO_AAD_APP_SECRET -> appKey,
         KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID -> authority,
         KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS -> "CreateIfNotExist"
       )
@@ -89,7 +89,7 @@ class KustoBlobAccessE2E extends FlatSpec with BeforeAndAfterAll {
     val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://$cluster.kusto.windows.net", appId, appKey, authority)
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
     val myTable = updateKustoTable(table)
-    val schema = KustoResponseDeserializer(kustoAdminClient.execute(database, KustoQueryUtils.getQuerySchemaQuery(myTable))).getSchema
+    val schema = KustoResponseDeserializer(kustoAdminClient.execute(database, KustoQueryUtils.getQuerySchemaQuery(myTable)).getPrimaryResults).getSchema
 
     val firstColumn =
     if (schema.sparkSchema.nonEmpty)
@@ -128,7 +128,7 @@ class KustoBlobAccessE2E extends FlatSpec with BeforeAndAfterAll {
     )
 
     val blobs = kustoAdminClient.execute(database, exportCommand)
-      .getValues.asScala
+      .getPrimaryResults.getData.asScala
       .map(row => row.get(0))
 
     blobs.foreach(blob => KDSU.logInfo(myName, s"Exported to blob: $blob"))

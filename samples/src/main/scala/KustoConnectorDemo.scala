@@ -58,8 +58,8 @@ object KustoConnectorDemo {
       .option(KustoSinkOptions.KUSTO_CLUSTER, cluster)
       .option(KustoSinkOptions.KUSTO_DATABASE, database)
       .option(KustoSinkOptions.KUSTO_TABLE, table)
-      .option(KustoSinkOptions.KUSTO_AAD_CLIENT_ID, appId)
-      .option(KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD, appKey)
+      .option(KustoSinkOptions.KUSTO_AAD_APP_ID, appId)
+      .option(KustoSinkOptions.KUSTO_AAD_APP_SECRET, appKey)
       .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, authorityId)
       .mode(SaveMode.Append)
       .save()
@@ -97,8 +97,8 @@ object KustoConnectorDemo {
             KustoSinkOptions.KUSTO_CLUSTER -> cluster,
             KustoSinkOptions.KUSTO_TABLE -> table,
             KustoSinkOptions.KUSTO_DATABASE -> database,
-            KustoSinkOptions.KUSTO_AAD_CLIENT_ID -> appId,
-            KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+            KustoSinkOptions.KUSTO_AAD_APP_ID -> appId,
+            KustoSinkOptions.KUSTO_AAD_APP_SECRET -> appKey,
             KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID -> authorityId,
             KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS -> "CreateIfNotExist"))
           .trigger(Trigger.Once)
@@ -107,8 +107,8 @@ object KustoConnectorDemo {
     kustoQ.start().awaitTermination(TimeUnit.MINUTES.toMillis(8))
 
     val conf: Map[String, String] = Map(
-      KustoSourceOptions.KUSTO_AAD_CLIENT_ID -> appId,
-      KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+      KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
+      KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey,
       KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID -> authorityId,
       KustoSourceOptions.KUSTO_QUERY -> s"$table | where colB % 50 == 0 | distinct colA"
     )
@@ -120,8 +120,8 @@ object KustoConnectorDemo {
     // ELABORATE READ SYNTAX
     // Here we read the whole table.
     val conf2: Map[String, String] = Map(
-      KustoSourceOptions.KUSTO_AAD_CLIENT_ID -> appId,
-      KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+      KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
+      KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey,
       KustoSourceOptions.KUSTO_QUERY -> "StringAndIntTable"
     )
 
@@ -149,8 +149,8 @@ object KustoConnectorDemo {
 
     // SET UP CONFIGURATION FOR PROVIDING STORAGE YOURSELF
     val conf3: Map[String, String] = Map(
-      KustoSourceOptions.KUSTO_AAD_CLIENT_ID -> appId,
-      KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD -> appKey,
+      KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
+      KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey,
       KustoSourceOptions.KUSTO_BLOB_CONTAINER -> container,
       //KustoOptions.KUSTO_BLOB_STORAGE_SAS_URL -> storageSas,
       KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME -> storageAccountName,
@@ -172,11 +172,11 @@ object KustoConnectorDemo {
 
     // READING USING KEY VAULT ACCESS
     // There are two different approaches to use parameters stored in Azure Key Vault for Kusto connector:
-    // 1. One can use DataBricks KV-assisted store under a DataBricks secret scope (see https://docs.azuredatabricks.net/user-guide/secrets/secret-scopes.html#akv-ss). This is how keyVaultClientPassword is stored.
+    // 1. One can use DataBricks KV-assisted store under a DataBricks secret scope (see https://docs.azuredatabricks.net/user-guide/secrets/secret-scopes.html#akv-ss). This is how keyVaultAppKey is stored.
     // 2. Some parameters, including all secrets required for Kusto connector operations, can be accessed as described in https://github.com/Azure/azure-kusto-spark/blob/dev/docs/Authentication.md
     // This requires accessing the KV with the three parameters below
-    val keyVaultClientPassword = "Password of the AAD client used to identify to your key vault"//Databricks example: dbutils.secrets.get(scope = "KustoDemos", key = "keyVaultClientPassword")
-    val keyVaultClientID = "The client id of the AAD client used to identify to your key vault"
+    val keyVaultAppKey = "Password of the AAD client used to identify to your key vault"//Databricks example: dbutils.secrets.get(scope = "KustoDemos", key = "keyVaultAppKey")
+    val keyVaultAppId = "The client id of the AAD client used to identify to your key vault"
     val keyVaultUri = "https://<Your key vault name>.vault.azure.net"
 
     /************************************************************************************************************/
@@ -185,8 +185,8 @@ object KustoConnectorDemo {
     /************************************************************************************************************/
     val conf4: Map[String, String] = Map(
       KustoSourceOptions.KEY_VAULT_URI -> keyVaultUri,
-      KustoSourceOptions.KEY_VAULT_APP_ID -> keyVaultClientID,
-      KustoSourceOptions.KEY_VAULT_APP_KEY -> keyVaultClientPassword,
+      KustoSourceOptions.KEY_VAULT_APP_ID -> keyVaultAppId,
+      KustoSourceOptions.KEY_VAULT_APP_KEY -> keyVaultAppKey,
       KustoSourceOptions.KUSTO_QUERY -> "StringAndIntExpTable"
     )
 

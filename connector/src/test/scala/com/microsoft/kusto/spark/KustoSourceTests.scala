@@ -3,6 +3,7 @@ package com.microsoft.kusto.spark
 import com.microsoft.kusto.spark.datasource.KustoSourceOptions
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import org.apache.spark.SparkContext
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.sql.{SQLContext, SparkSession}
 import org.junit.runner.RunWith
 import org.scalamock.scalatest.MockFactory
@@ -56,12 +57,13 @@ class KustoSourceTests extends FlatSpec with MockFactory with Matchers with Befo
       .option(KustoSourceOptions.KUSTO_CLUSTER, cluster)
       .option(KustoSourceOptions.KUSTO_DATABASE, database)
       .option(KustoSourceOptions.KUSTO_QUERY, query)
-      .option(KustoSourceOptions.KUSTO_AAD_CLIENT_ID, appId)
-      .option(KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD, appKey)
+      .option(KustoSourceOptions.KUSTO_AAD_APP_ID, appId)
+      .option(KustoSourceOptions.KUSTO_AAD_APP_SECRET, appKey)
       .option(KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID, appAuthorityId)
       .option(KustoSourceOptions.KUSTO_CUSTOM_DATAFRAME_COLUMN_TYPES, customSchema)
       .load("src/test/resources/")
 
-    df.printSchema()
+    val expected = StructType(Array(StructField("colA", StringType, nullable = true),StructField("colB", IntegerType, nullable = true)))
+    assert(df.schema.equals(expected))
   }
 }

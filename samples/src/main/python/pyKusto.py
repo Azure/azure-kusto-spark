@@ -7,8 +7,8 @@ sc._jvm.com.microsoft.kusto.spark.utils.KustoDataSourceUtils.setLoggingLevel("al
 # COMMAND ----------
 
 pyKusto = SparkSession.builder.appName("kustoPySpark").getOrCreate()
-kustoOptions = {"kustoCluster":"<cluster-name>", "kustoDatabase" : "<database-name>", "kustoTable" : "<table-name>", "kustoAADClientID":"<AAD-app id>" ,
- "kustoClientAADClientPassword":"<AAD-app key>", "kustoAADAuthorityID":"<AAD authentication authority>"} # This can replace the above distributed mode options
+kustoOptions = {"kustoCluster":"<cluster-name>", "kustoDatabase" : "<database-name>", "kustoTable" : "<table-name>", "kustoAadAppId":"<AAD-app id>" ,
+ "kustoAadAppSecret":"<AAD-app key>", "kustoAadAuthorityID":"<AAD authentication authority>"} # This can replace the above distributed mode options
 # Create a DataFrame for ingestion
 df = spark.createDataFrame([("row-"+str(i),i)for i in range(1000)],["name", "value"])
 
@@ -24,9 +24,9 @@ df.write. \
   option("kustoCluster",kustoOptions["kustoCluster"]). \
   option("kustoDatabase",kustoOptions["kustoDatabase"]). \
   option("kustoTable", kustoOptions["kustoTable"]). \
-  option("kustoAADClientID",kustoOptions["kustoAADClientID"]). \
-  option("kustoClientAADClientPassword",kustoOptions["kustoClientAADClientPassword"]). \
-  option("kustoAADAuthorityID",kustoOptions["kustoAADAuthorityID"]). \
+  option("kustoAadAppId",kustoOptions["kustoAadAppId"]). \
+  option("kustoAadAppSecret",kustoOptions["kustoAadAppSecret"]). \
+  option("kustoAadAuthorityID",kustoOptions["kustoAadAuthorityID"]). \
   mode("Append"). \
   save()
 
@@ -38,9 +38,9 @@ kustoDf  = pyKusto.read. \
             option("kustoCluster", kustoOptions["kustoCluster"]). \
             option("kustoDatabase", kustoOptions["kustoDatabase"]). \
             option("kustoQuery", kustoOptions["kustoTable"]). \
-            option("kustoAADClientID", kustoOptions["kustoAADClientID"]). \
-            option("kustoClientAADClientPassword", kustoOptions["kustoClientAADClientPassword"]). \
-            option("kustoAADAuthorityID", kustoOptions["kustoAADAuthorityID"]). \
+            option("kustoAadAppId", kustoOptions["kustoAadAppId"]). \
+            option("kustoAadAppSecret", kustoOptions["kustoAadAppSecret"]). \
+            option("kustoAadAuthorityID", kustoOptions["kustoAadAuthorityID"]). \
             load()
 
 # Read the data from the kusto table in forced 'distributed' mode and with advanced options
@@ -56,9 +56,9 @@ kustoDf  = pyKusto.read. \
             option("kustoCluster", kustoOptions["kustoCluster"]). \
             option("kustoDatabase", kustoOptions["kustoDatabase"]). \
             option("kustoQuery", kustoOptions["kustoTable"]). \
-            option("kustoAADClientID", kustoOptions["kustoAADClientID"]). \
-            option("kustoClientAADClientPassword", kustoOptions["kustoClientAADClientPassword"]). \
-            option("kustoAADAuthorityID", kustoOptions["kustoAADAuthorityID"]). \
+            option("kustoAadAppId", kustoOptions["kustoAadAppId"]). \
+            option("kustoAadAppSecret", kustoOptions["kustoAadAppSecret"]). \
+            option("kustoAadAuthorityID", kustoOptions["kustoAadAuthorityID"]). \
             option("clientRequestPropertiesJson", crp.toString()). \
             option("readMode", 'ForceDistributedMode'). \
             load()
@@ -68,9 +68,9 @@ kustoDf  = pyKusto.read. \
             option("kustoCluster", kustoOptions["kustoCluster"]). \
             option("kustoDatabase", kustoOptions["kustoDatabase"]). \
             option("kustoQuery", kustoOptions["kustoTable"]). \
-            option("kustoAADClientID", kustoOptions["kustoAADClientID"]). \
-            option("kustoClientAADClientPassword", kustoOptions["kustoClientAADClientPassword"]). \
-            option("kustoAADAuthorityID", kustoOptions["kustoAADAuthorityID"]). \
+            option("kustoAadAppId", kustoOptions["kustoAadAppId"]). \
+            option("kustoAadAppSecret", kustoOptions["kustoAadAppSecret"]). \
+            option("kustoAadAuthorityID", kustoOptions["kustoAadAuthorityID"]). \
             option("clientRequestPropertiesJson", crp.toString()). \
             load()
 
@@ -82,20 +82,30 @@ kustoDf.show()
 # Writing with advanced options
 # Please refer to https://github.com/Azure/azure-kusto-spark/blob/master/connector/src/main/scala/com/microsoft/kusto/spark/datasink/KustoSinkOptions.scala
 # to get the string representation of the options you need
-time = sc._jvm.org.joda.time.DateTime.now().minusDays(1)
+extentsCreationTime = sc._jvm.org.joda.time.DateTime.now().plusDays(1)
 csvMap = "[{\"Name\":\"ColA\",\"Ordinal\":0},{\"Name\":\"ColB\",\"Ordinal\":1}]"
+# Alternatively use an existing csv mapping configured on the table and pass it as the last parameter of SparkIngestionProperties or use none
 
-sp = sc._jvm.com.microsoft.kusto.spark.datasink.SparkIngestionProperties(False, ["1"], ["2"], ["3"], ["4"], time, csvMap, None)
+sp = sc._jvm.com.microsoft.kusto.spark.datasink.SparkIngestionProperties(
+        False, ["dropByTags"], ["ingestByTags"], ["tags"], ["ingestIfNotExistsTags"], extentsCreationTime, csvMap, None)
+# Class fields: SparkIngestionProperties(flushImmediately: Boolean,
+#                                        dropByTags: util.ArrayList[String],
+#                                        ingestByTags: util.ArrayList[String],
+#                                        additionalTags: util.ArrayList[String],
+#                                        ingestIfNotExists: util.ArrayList[String],
+#                                        creationTime: DateTime,
+#                                        csvMapping: String,
+#                                        csvMappingNameReference: String)
 
 df.write. \
   format("com.microsoft.kusto.spark.datasource"). \
   option("kustoCluster",kustoOptions["kustoCluster"]). \
   option("kustoDatabase",kustoOptions["kustoDatabase"]). \
   option("kustoTable", kustoOptions["kustoTable"]). \
-  option("kustoAADClientID",kustoOptions["kustoAADClientID"]). \
-  option("kustoClientAADClientPassword",kustoOptions["kustoClientAADClientPassword"]). \
-  option("kustoAADAuthorityID",kustoOptions["kustoAADAuthorityID"]). \
-  option("kustoAADAuthorityID",kustoOptions["kustoAADAuthorityID"]). \
+  option("kustoAadAppId",kustoOptions["kustoAadAppId"]). \
+  option("kustoAadAppSecret",kustoOptions["kustoAadAppSecret"]). \
+  option("kustoAadAuthorityID",kustoOptions["kustoAadAuthorityID"]). \
+  option("sparkIngestionPropertiesJson", sp.toString()). \
   option("tableCreateOptions","CreateIfNotExist"). \
   mode("Append"). \
   save()
@@ -132,9 +142,9 @@ kustoQ = csvDf.writeStream. \
   option("kustoCluster",kustoOptions["kustoCluster"]). \
   option("kustoDatabase",kustoOptions["kustoDatabase"]). \
   option("kustoTable", kustoOptions["kustoTable"]). \
-  option("kustoAADClientID",kustoOptions["kustoAADClientID"]). \
-  option("kustoClientAADClientPassword",kustoOptions["kustoClientAADClientPassword"]). \
-  option("kustoAADAuthorityID",kustoOptions["kustoAADAuthorityID"]). \
+  option("kustoAadAppId",kustoOptions["kustoAadAppId"]). \
+  option("kustoAadAppSecret",kustoOptions["kustoAadAppSecret"]). \
+  option("kustoAadAuthorityID",kustoOptions["kustoAadAuthorityID"]). \
   trigger(once = True)
 
 kustoQ.start().awaitTermination(60*8)

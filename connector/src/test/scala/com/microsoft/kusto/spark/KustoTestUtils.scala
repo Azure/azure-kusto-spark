@@ -30,8 +30,9 @@ private [kusto] object KustoTestUtils {
     val query = s"$table | count"
 
     while (rowCount < expectedNumberOfRows && timeElapsedMs < timeoutMs) {
-      val result = kustoAdminClient.execute(database, query)
-      rowCount = result.getValues.get(0).get(0).toInt
+      val result = kustoAdminClient.execute(database, query).getPrimaryResults
+      result.next()
+      rowCount = result.getInt(0)
       Thread.sleep(sleepPeriodMs)
       timeElapsedMs += sleepPeriodMs
     }
@@ -58,7 +59,7 @@ private [kusto] object KustoTestUtils {
   {
     try{
       val res = kustoAdminClient.execute(database, generateFindCurrentTempTablesCommand(tablePrefix))
-      val tablesToCleanup = res.getValues.asScala.map(row => row.get(0))
+      val tablesToCleanup = res.getPrimaryResults.getData.asScala.map(row => row.get(0))
 
       if (tablesToCleanup.nonEmpty) {
         kustoAdminClient.execute(database, generateDropTablesCommand(tablesToCleanup.mkString(",")))

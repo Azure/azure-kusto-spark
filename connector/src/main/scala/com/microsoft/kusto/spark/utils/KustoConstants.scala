@@ -17,5 +17,5 @@ object KustoConstants {
   // The restriction from kusto is 50000 rows but 5000 can still be really big
   val directQueryUpperBoundRows = 5000
   // less?
-  val timeoutForCountCheck : FiniteDuration = 2 seconds
+  val timeoutForCountCheck : FiniteDuration = 3 seconds
 }

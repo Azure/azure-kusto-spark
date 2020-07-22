@@ -5,7 +5,7 @@ import java.util
 import java.util.concurrent.{CountDownLatch, TimeUnit, TimeoutException}
 import java.util.{NoSuchElementException, StringJoiner, Timer, TimerTask}
 
-import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties, Results}
+import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties, KustoResultSetTable, Results}
 import com.microsoft.kusto.spark.authentication._
 import com.microsoft.kusto.spark.common.{KustoCoordinates, KustoDebugOptions}
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
@@ -84,7 +84,7 @@ object KustoDataSourceUtils {
   }
 
   private[kusto] def getSchema(database: String, query: String, client: Client): KustoSchema = {
-    KustoResponseDeserializer(client.execute(database, query)).getSchema
+    KustoResponseDeserializer(client.execute(database, query).getPrimaryResults).getSchema
   }
 
   def parseSourceParameters(parameters: Map[String, String]): SourceParameters = {
@@ -103,8 +103,8 @@ object KustoDataSourceUtils {
     val table = parameters.get(KustoSinkOptions.KUSTO_TABLE)
 
     // Parse KustoAuthentication
-    val applicationId = parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_CLIENT_ID, "")
-    val applicationKey = parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_CLIENT_PASSWORD, "")
+    val applicationId = parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_APP_ID, "")
+    val applicationKey = parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_APP_SECRET, "")
     var authentication: KustoAuthentication = null
     val keyVaultUri: String = parameters.getOrElse(KustoSourceOptions.KEY_VAULT_URI, "")
     var accessToken: String = ""
@@ -295,10 +295,11 @@ object KustoDataSourceUtils {
 
   def verifyAsyncCommandCompletion(client: Client,
                                    database: String,
-                                   commandResult: Results,
+                                   commandResult: KustoResultSetTable,
                                    samplePeriod: FiniteDuration = KCONST.defaultPeriodicSamplePeriod,
                                    timeOut: FiniteDuration): Unit = {
-    val operationId = commandResult.getValues.get(0).get(0)
+    commandResult.next()
+    val operationId = commandResult.getString(0)
     val operationsShowCommand = CslCommandsGenerator.generateOperationsShowCommand(operationId)
     val sampleInMillis = samplePeriod.toMillis.toInt
     val timeoutInMillis = timeOut.toMillis
@@ -307,16 +308,14 @@ object KustoDataSourceUtils {
 
     val stateCol = "State"
     val statusCol = "Status"
-    val showCommandResult = client.execute(database, operationsShowCommand)
-    val stateIdx = showCommandResult.getColumnNameToIndex.get(stateCol)
-    val statusIdx = showCommandResult.getColumnNameToIndex.get(statusCol)
 
-    var lastResponse: Option[util.ArrayList[String]] = None
-    val task = doWhile[util.ArrayList[String]](
-      func = () => client.execute(database, operationsShowCommand).getValues.get(0),
+    var lastResponse: Option[KustoResultSetTable] = None
+    val task = doWhile[KustoResultSetTable](
+      func = () => client.execute(database, operationsShowCommand).getPrimaryResults,
       delayBeforeStart = 0, delayBeforeEach = delayPeriodBetweenCalls, timesToRun = timesToRun,
-      stopCondition = result => {
-        result.get(stateIdx) == "InProgress"
+      stopCondition = (result: KustoResultSetTable) => {
+        result.next()
+        result.getString(stateCol) == "InProgress"
       },
       finalWork = result => {
         lastResponse = Some(result)
@@ -331,10 +330,10 @@ object KustoDataSourceUtils {
       }
     }
 
-    if (lastResponse.isDefined && lastResponse.get.get(stateIdx) != "Completed") {
+    if (lastResponse.isDefined && lastResponse.get.getString(stateCol) != "Completed") {
       throw new RuntimeException(
-        s"Failed to execute Kusto operation with OperationId '$operationId', State: '${lastResponse.get.get(stateIdx)}'," +
-          s" Status: '${lastResponse.get.get(statusIdx)}'"
+        s"Failed to execute Kusto operation with OperationId '$operationId', State: '${lastResponse.get.getString(stateCol)}'," +
+          s" Status: '${lastResponse.get.getString(statusCol)}'"
       )
     }
 
@@ -455,21 +454,28 @@ object KustoDataSourceUtils {
   }
 
   private[kusto] def countRows(client: Client, query: String, database: String): Int = {
-    client.execute(database, generateCountQuery(query)).getValues.get(0).get(0).toInt
+    val res =client.execute(database, generateCountQuery(query)).getPrimaryResults
+    res.next()
+    res.getInt(0)
   }
 
   private[kusto] def estimateRowsCount(client: Client, query: String, database: String): Int = {
     var count = 0
-    val estimationResult: util.ArrayList[String] = Await.result(Future(
-      client.execute(database, generateEstimateRowsCountQuery(query)).getValues.get(0)), KustoConstants.timeoutForCountCheck)
-    if(StringUtils.isBlank(estimationResult.get(1))){
+    val estimationResult: util.ArrayList[AnyRef] = Await.result(Future {
+      val res = client.execute(database, generateEstimateRowsCountQuery(query)).getPrimaryResults
+      res.next()
+      res.getCurrentRow
+    }, KustoConstants.timeoutForCountCheck)
+    if(StringUtils.isBlank(estimationResult.get(1).toString)){
       // Estimation can be empty for certain cases
-      val justCountResult = Await.result(Future(
-        client.execute(database, generateCountQuery(query)).getValues.get(0)), KustoConstants.timeoutForCountCheck)
-      count = justCountResult.get(0).toInt
+      Await.result(Future{
+        val res = client.execute(database, generateCountQuery(query)).getPrimaryResults
+          res.next()
+          res.getInt(0)
+      }, KustoConstants.timeoutForCountCheck)
     } else {
       // Zero estimation count does not indicate zero results, therefore we add 1 here so that we won't return an empty RDD
-      count = estimationResult.get(1).toInt + 1
+      count = estimationResult.get(1).asInstanceOf[Int] + 1
     }
 
     count

@@ -111,10 +111,10 @@ private[kusto] object CslCommandsGenerator {
   }
 
   def generateShowTableMappingsCommand(tableName: String, kind: String): String = {
-    s""".show table ${KustoQueryUtils.normalizeTableName(tableName)} ingestion $kind mappings"""
+    s""".show table ${KustoQueryUtils.normalizeTableName(tableName)} ingestion ${kind.toLowerCase()} mappings"""
   }
 
   def generateCreateTableMappingCommand(tableName: String, kind: String, name:String, mappingAsJson: String): String = {
-    s""".create table ${KustoQueryUtils.normalizeTableName(tableName)} ingestion $kind mapping "$name" @"$mappingAsJson""""
+    s""".create table ${KustoQueryUtils.normalizeTableName(tableName)} ingestion ${kind.toLowerCase} mapping "$name" @"$mappingAsJson""""
   }
 }

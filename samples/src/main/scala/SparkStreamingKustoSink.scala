@@ -50,8 +50,8 @@ object SparkStreamingKustoSink {
       .option(KustoSinkOptions.KUSTO_CLUSTER, "Your Kusto Cluster")
       .option(KustoSinkOptions.KUSTO_DATABASE, "Your Kusto Database")
       .option(KustoSinkOptions.KUSTO_TABLE, "Your Kusto Destination Table")
-      .option(KustoSinkOptions.KUSTO_AAD_CLIENT_ID, "Your Client ID")
-      .option(KustoSinkOptions.KUSTO_AAD_CLIENT_PASSWORD, "Your secret")
+      .option(KustoSinkOptions.KUSTO_AAD_APP_ID, "Your Client ID")
+      .option(KustoSinkOptions.KUSTO_AAD_APP_SECRET, "Your secret")
       .trigger(Trigger.ProcessingTime(0))
       .start()
 
