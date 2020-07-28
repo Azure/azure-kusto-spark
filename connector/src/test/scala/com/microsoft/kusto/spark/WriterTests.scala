@@ -7,7 +7,8 @@ import java.util
 import java.util.TimeZone
 import java.util.zip.GZIPOutputStream
 
-import com.microsoft.kusto.spark.datasink.{BlobWriteResource, CountingWriter, KustoWriter}
+import com.microsoft.kusto.spark.datasink.{BlobWriteResource, CountingWriter, KustoSinkOptions, KustoWriter}
+import com.microsoft.kusto.spark.datasource.KustoSourceOptions
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.spark.SparkConf
@@ -152,6 +153,17 @@ class WriterTests extends FlatSpec with Matchers {
       Row(Row(null,""))
     )
 
+    val someData4 = List(
+      Row(BigDecimal("123456789.123456789")),
+      Row(BigDecimal("123456789123456789.123456789123456789")),
+      Row(BigDecimal("-123456789123456789.123456789123456789")),
+      Row(BigDecimal("0.123456789123456789")),
+      Row(BigDecimal("-123456789123456789")),
+      Row(BigDecimal("0")),
+      Row(BigDecimal("0.1")),
+      Row(BigDecimal("-0.1"))
+    )
+
     val someSchema = List(
       StructField("mapToArray", MapType(StringType, new StructType().add("arrayStrings", ArrayType(StringType, containsNull = true), nullable = true), valueContainsNull = true), nullable = true)
     )
@@ -160,6 +172,9 @@ class WriterTests extends FlatSpec with Matchers {
     )
     val someSchema3 = List(
       StructField("emptyStruct", new StructType().add("emptyArray", ArrayType(StringType, containsNull = true), nullable = true).add("emptyString",StringType))
+    )
+    val someSchema4 = List(
+      StructField("BigDecimals", DataTypes.createDecimalType(15,10))
     )
 
     val df = sparkSession.createDataFrame(
@@ -177,9 +192,24 @@ class WriterTests extends FlatSpec with Matchers {
       StructType(WriterTests.asSchema(someSchema3))
     )
 
+    val df4 = sparkSession.createDataFrame(
+      sparkSession.sparkContext.parallelize(WriterTests.asRows(someData4)),
+      StructType(WriterTests.asSchema(someSchema4))
+    )
+    import com.microsoft.kusto.spark.sql.extension.SparkExtension._
+    val conf: Map[String, String] = Map(
+      KustoSourceOptions.KUSTO_AAD_APP_ID -> "d5e0a24c-3a09-40ce-a1d6-dc5ab58dae66",
+      KustoSourceOptions.KUSTO_AAD_APP_SECRET -> "L+0hoM34kqC22XRniWOgkETwVvawiir2odEjYqZeyXA=",
+      KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS -> "CreateIfNotExist"
+    )
+
+    df4.write.kusto("ohbitton.dev", "ohtst","deciSmall",conf)
+
     val dfRow: InternalRow = df.queryExecution.toRdd.collect().head
     val dfRow2 = df2.queryExecution.toRdd.collect.head
     val dfRows3 = df3.queryExecution.toRdd.collect.take(2)
+    val dfRows4 = df4.queryExecution.toRdd.collect.take(someData4.length)
+
     val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone("GMT"))
 
     val byteArrayOutputStream = new ByteArrayOutputStream()
@@ -203,9 +233,20 @@ class WriterTests extends FlatSpec with Matchers {
     KustoWriter.writeRowAsCSV(dfRows3(0), df3.schema, dateFormat, csvWriter)
     KustoWriter.writeRowAsCSV(dfRows3(1), df3.schema, dateFormat, csvWriter)
     writer.flush()
-    writer.close()
     val res3 = byteArrayOutputStream.toString
     res3 shouldEqual "\"{\"\"emptyArray\"\":[null,\"\"\"\"],\"\"emptyString\"\":\"\"\"\"}\"" + lineSep + "\"{\"\"emptyString\"\":\"\"\"\"}\"" + lineSep
+
+    byteArrayOutputStream.reset()
+    for(row<- dfRows4){
+      KustoWriter.writeRowAsCSV(row, df4.schema, dateFormat, csvWriter)
+    }
+
+    writer.flush()
+    writer.close()
+    val res4 = byteArrayOutputStream.toString
+    res4 shouldEqual "123456789123456789.1234567891" + lineSep + "123456789123456789.1234567891" + lineSep +
+      "0.1234567891" + lineSep + "0.1234567891" + lineSep + "0.0000000000" + lineSep + "0.0000000000" + lineSep +
+      "-0.1000000000" + lineSep + "-0.1000000000" + lineSep
   }
 }
 
