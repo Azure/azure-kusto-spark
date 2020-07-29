@@ -402,7 +402,7 @@ object KustoWriter {
     writer.write('"')
     val (numStr: String, negative: Boolean) = if (precision <= Decimal.MAX_LONG_DIGITS) {
       val num: Long = row.getLong(fieldIndexInRow)
-      (num.abs.toString, num > 0)
+      (num.abs.toString, num < 0)
     } else {
       val bytes = row.getBinary(fieldIndexInRow)
       val num = new BigInteger(bytes)

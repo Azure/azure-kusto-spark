@@ -174,7 +174,7 @@ class WriterTests extends FlatSpec with Matchers {
       StructField("emptyStruct", new StructType().add("emptyArray", ArrayType(StringType, containsNull = true), nullable = true).add("emptyString",StringType))
     )
     val someSchema4 = List(
-      StructField("BigDecimals", DataTypes.createDecimalType(15,10))
+      StructField("BigDecimals", DataTypes.createDecimalType(38,10))
     )
 
     val df = sparkSession.createDataFrame(
@@ -196,14 +196,6 @@ class WriterTests extends FlatSpec with Matchers {
       sparkSession.sparkContext.parallelize(WriterTests.asRows(someData4)),
       StructType(WriterTests.asSchema(someSchema4))
     )
-    import com.microsoft.kusto.spark.sql.extension.SparkExtension._
-    val conf: Map[String, String] = Map(
-      KustoSourceOptions.KUSTO_AAD_APP_ID -> "d5e0a24c-3a09-40ce-a1d6-dc5ab58dae66",
-      KustoSourceOptions.KUSTO_AAD_APP_SECRET -> "L+0hoM34kqC22XRniWOgkETwVvawiir2odEjYqZeyXA=",
-      KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS -> "CreateIfNotExist"
-    )
-
-    df4.write.kusto("ohbitton.dev", "ohtst","deciSmall",conf)
 
     val dfRow: InternalRow = df.queryExecution.toRdd.collect().head
     val dfRow2 = df2.queryExecution.toRdd.collect.head
@@ -227,7 +219,7 @@ class WriterTests extends FlatSpec with Matchers {
     KustoWriter.writeRowAsCSV(dfRow2, df2.schema, dateFormat, csvWriter)
     writer.flush()
     val res2 = byteArrayOutputStream.toString
-    res2 shouldEqual "\"{\"\"asd\"\":{\"\"date\"\":\"\"1991-09-07\"\",\"\"time\"\":\"\"2018-06-18T16:04:00.000Z\"\",\"\"booly\"\":false,\"\"deci\"\":0.00001000000000}}\"" + lineSep
+    res2 shouldEqual "\"{\"\"asd\"\":{\"\"date\"\":\"\"1991-09-07\"\",\"\"time\"\":\"\"2018-06-18T16:04:00.000Z\"\",\"\"booly\"\":false,\"\"deci\"\":\"\"0.00001000000000\"\"}}\"" + lineSep
 
     byteArrayOutputStream.reset()
     KustoWriter.writeRowAsCSV(dfRows3(0), df3.schema, dateFormat, csvWriter)
@@ -244,9 +236,9 @@ class WriterTests extends FlatSpec with Matchers {
     writer.flush()
     writer.close()
     val res4 = byteArrayOutputStream.toString
-    res4 shouldEqual "123456789123456789.1234567891" + lineSep + "123456789123456789.1234567891" + lineSep +
-      "0.1234567891" + lineSep + "0.1234567891" + lineSep + "0.0000000000" + lineSep + "0.0000000000" + lineSep +
-      "-0.1000000000" + lineSep + "-0.1000000000" + lineSep
+    res4 shouldEqual "\"123456789123456789.1234567891\"" + lineSep + "\"123456789123456789.1234567891\"" + lineSep +
+      "\"0.1234567891\"" + lineSep + "\"0.1234567891\"" + lineSep + "\"0.0000000000\"" + lineSep + "\"0.0000000000\"" + lineSep +
+      "\"-0.1000000000\"" + lineSep + "\"-0.1000000000\"" + lineSep
   }
 }
 
