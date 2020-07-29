@@ -37,7 +37,7 @@ version = 2.0.0
 
 Look for the following coordinates: 
 ```
-com.microsoft.azure.kusto:spark-kusto-connector:1.1.5
+com.microsoft.azure.kusto:spark-kusto-connector:2.0.0
 ```
 
 Or clone this repository and build it locally to add it to your local maven repository, 
@@ -56,7 +56,7 @@ the jar can also be found under the [released package](https://github.com/Azure/
 Create Library -> Maven with the following coordinates:
 
 ```
-com.microsoft.azure.kusto:spark-kusto-connector:1.1.5
+com.microsoft.azure.kusto:spark-kusto-connector:2.0.0
 ```
 
 #### Building Samples Module
@@ -79,10 +79,11 @@ In order to use the connector, you need to have:
 
 - Java 1.8 SDK installed
 - [Maven 3.x](https://maven.apache.org/download.cgi) installed
-- Spark version 2.4.0 or higher
+- Spark version 2.4.x 
 
 > Note: when working with 2.3 Spark version or lower, please refer to [Building for legacy Spark versions](docs/CHANGELIST.md#building-for-legacy-spark-versions)
- section of the [CHANGELIST](docs/CHANGELIST.md) document 
+ section of the [CHANGELIST](docs/CHANGELIST.md) document
+
 
 ## Build Commands
    
