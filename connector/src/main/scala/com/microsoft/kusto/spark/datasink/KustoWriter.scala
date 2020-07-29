@@ -1,6 +1,7 @@
 package com.microsoft.kusto.spark.datasink
 
 import java.io._
+import java.math.BigInteger
 import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.security.InvalidParameterException
@@ -303,7 +304,7 @@ object KustoWriter {
       case mapType: MapType => writeJsonField(convertMapToJson(row.getMap(fieldIndexInRow), mapType, dateFormat), writer, nested)
       case ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType =>
         writer.write(row.get(fieldIndexInRow, dataType).toString)
-      case _: DecimalType => writer.write(row.get(fieldIndexInRow, dataType).toString)
+      case decimalType: DecimalType => writeDecimalField(row, fieldIndexInRow, decimalType.precision, decimalType.scale, writer)
       case _ => writer.writeStringField(row.get(fieldIndexInRow, dataType).toString)
     }
   }
@@ -395,6 +396,42 @@ object KustoWriter {
       writeField(values, fieldIndexInRow = idx, dataType = fieldsType.valueType, dateFormat = dateFormat, writer = writer, nested = true)
     }
     writer.out.toString
+  }
+
+  private def writeDecimalField(row: SpecializedGetters, fieldIndexInRow: Int, precision: Int,scale: Int, writer: Writer) = {
+    writer.write('"')
+    val (numStr: String, negative: Boolean) = if (precision <= Decimal.MAX_LONG_DIGITS) {
+      val num: Long = row.getLong(fieldIndexInRow)
+      (num.abs.toString, num < 0)
+    } else {
+      val bytes = row.getBinary(fieldIndexInRow)
+      val num = new BigInteger(bytes)
+      (num.abs.toString, num.signum() < 0)
+    }
+
+    // Get string representation without scientific notation
+    var point = numStr.length - scale
+    if (negative){
+      writer.write("-")
+    }
+    if (point <= 0){
+      writer.write('0')
+      writer.write('.')
+      while(point < 0){
+        writer.write('0')
+        point += 1
+      }
+      writer.write(numStr)
+    } else {
+      for (i <- 0 until numStr.length){
+        if (point == i) {
+          writer.write('.')
+        }
+        writer.write(numStr(i))
+      }
+    }
+
+    writer.write('"')
   }
 
   private def writeStringFromUTF8(str: UTF8String, writer: Writer): Unit = {
