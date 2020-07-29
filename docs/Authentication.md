@@ -7,13 +7,15 @@ Kusto Spark connector allows the user to authenticate with AAD using an AAD appl
 This authentication method is fairly straightforward, and it is used in most of the examples in this documentation.
 
  * **KUSTO_AAD_APP_ID**: 
-  'kustoAadAppId' - AAD application (client) identifier.
+  'kustoAadAppId' - AAD application (client) identifier. 
   
  * **KUSTO_AAD_AUTHORITY_ID**: 
   'kustoAadAuthorityID' - AAD authentication authority. This is the AAD Directory (tenant) ID.
  
  * **KUSTO_AAD_APP_SECRET**: 
   'kustoAadAppSecret' - AAD application key for the client.
+ 
+ >**Note:** Older versions (less then 2.0.0) have the following naming: "kustoAADClientID", "kustoClientAADClientPassword", "kustoAADAuthorityID"
  
 #### Example
 ```
