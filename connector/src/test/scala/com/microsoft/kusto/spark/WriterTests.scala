@@ -8,7 +8,6 @@ import java.util.TimeZone
 import java.util.zip.GZIPOutputStream
 
 import com.microsoft.kusto.spark.datasink._
-import com.microsoft.kusto.spark.datasource.KustoSourceOptions
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.spark.SparkConf
@@ -153,11 +152,14 @@ class WriterTests extends FlatSpec with Matchers {
       Row(Row(null,""))
     )
 
+
     val someDecimalData = List(
       Row(BigDecimal("123456789.123456789")),
       Row(BigDecimal("123456789123456789.123456789123456789")),
       Row(BigDecimal("-123456789123456789.123456789123456789")),
-      Row(BigDecimal("0.123456789123456789")),
+      Row(BigDecimal("0.123456789123456789"))
+    )
+    val otherDecimalData = List(
       Row(BigDecimal("-123456789123456789")),
       Row(BigDecimal("0")),
       Row(BigDecimal("0.1")),
@@ -197,10 +199,16 @@ class WriterTests extends FlatSpec with Matchers {
       StructType(WriterTests.asSchema(someDecimalSchema))
     )
 
+    val otherDecimalDf = sparkSession.createDataFrame(
+      sparkSession.sparkContext.parallelize(WriterTests.asRows(otherDecimalData)),
+      StructType(WriterTests.asSchema(someDecimalSchema))
+    )
+
     val dfRow: InternalRow = df.queryExecution.toRdd.collect().head
     val dfRow2 = dateDf.queryExecution.toRdd.collect.head
-    val dfRows3 = emptyArraysDf.queryExecution.toRdd.collect.take(2)
-    val dfRows4 = someDecimalDf.queryExecution.toRdd.collect.take(someDecimalData.length)
+    val dfRows3 = emptyArraysDf.queryExecution.toRdd.collect
+    val dfRows4 = someDecimalDf.queryExecution.toRdd.collect
+    val dfRows5 = otherDecimalDf.queryExecution.toRdd.collect
 
     val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone("GMT"))
 
@@ -234,11 +242,20 @@ class WriterTests extends FlatSpec with Matchers {
     }
 
     writer.flush()
-    writer.close()
     val res4 = byteArrayOutputStream.toString
     res4 shouldEqual "\"123456789.1234567890\"" + lineSep + "\"123456789123456789.1234567891\"" + lineSep + "\"-123456789123456789.1234567891\"" + lineSep +
-      "\"0.1234567891\"" + lineSep + "\"-123456789123456789.0000000000\"" + lineSep + "\"0.0000000000\"" + lineSep +
-      "\"0.1000000000\"" + lineSep + "\"-0.1000000000\"" + lineSep
+      "\"0.1234567891\"" + lineSep
+
+    byteArrayOutputStream.reset()
+    for(row<- dfRows5){
+      RowCSVWriterUtils.writeRowAsCSV(row, someDecimalDf.schema, dateFormat, csvWriter)
+    }
+
+    writer.flush()
+    writer.close()
+    val res5 = byteArrayOutputStream.toString
+    res5 shouldEqual "\"-123456789123456789.0000000000\"" + lineSep + "\"0.0000000000\"" + lineSep + "\"0.1000000000\"" +
+      lineSep + "\"-0.1000000000\"" + lineSep
   }
 }
 
