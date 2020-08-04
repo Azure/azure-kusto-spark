@@ -44,6 +44,7 @@ class ContainerProvider[A](val dmClient: Client, val clusterAlias: String, val c
         KDSU.reportExceptionAndThrow(myName, new RuntimeException("Failed to allocate temporary storage"), "writing to Kusto", clusterAlias)
       }
 
+      KDSU.logInfo(myName, s"Got ${storage.length} storage SAS with command :'$command'. from service 'ingest-$clusterAlias'")
       lastRefresh = new DateTime(DateTimeZone.UTC)
       storageUris = scala.util.Random.shuffle(storage)
       roundRobinIdx = 0
