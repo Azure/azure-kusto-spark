@@ -7,7 +7,7 @@ import java.util
 import java.util.TimeZone
 import java.util.zip.GZIPOutputStream
 
-import com.microsoft.kusto.spark.datasink.{BlobWriteResource, CountingWriter, KustoWriter}
+import com.microsoft.kusto.spark.datasink._
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.spark.SparkConf
@@ -46,7 +46,7 @@ class WriterTests extends FlatSpec with Matchers {
     val streamWriter = new OutputStreamWriter(byteArrayOutputStream)
     val writer = new BufferedWriter(streamWriter)
     val csvWriter = CountingWriter(writer)
-    KustoWriter.writeRowAsCSV(dfRow, df.schema, dateFormat, csvWriter)
+    RowCSVWriterUtils.writeRowAsCSV(dfRow, df.schema, dateFormat, csvWriter)
     writer.flush()
     writer.close()
     byteArrayOutputStream.toString() shouldEqual "\"John,\"\" Doe\",1" + lineSep
@@ -62,7 +62,7 @@ class WriterTests extends FlatSpec with Matchers {
     val streamWriter = new OutputStreamWriter(byteArrayOutputStream)
     val writer = new BufferedWriter(streamWriter)
     var csvWriter = CountingWriter(writer)
-    KustoWriter.writeRowAsCSV(dfRow, df.schema, dateFormat, csvWriter)
+    RowCSVWriterUtils.writeRowAsCSV(dfRow, df.schema, dateFormat, csvWriter)
     writer.flush()
     val got = byteArrayOutputStream.toString()
 
@@ -79,7 +79,7 @@ class WriterTests extends FlatSpec with Matchers {
     val writer = new BufferedWriter(streamWriter)
     val csvWriter = CountingWriter(writer)
 
-    KustoWriter.writeRowAsCSV(dfRow, df.schema, dateFormat, csvWriter)
+    RowCSVWriterUtils.writeRowAsCSV(dfRow, df.schema, dateFormat, csvWriter)
     writer.flush()
     writer.close()
     csvWriter.getCounter shouldEqual expectedSize
@@ -143,23 +143,40 @@ class WriterTests extends FlatSpec with Matchers {
     // 2018-06-18 16:04:00.0 in GMT
     val ts = new java.sql.Timestamp(1529337840000l)
 
-    val someData2 = List(
+    val someDateData = List(
       Map("asd" -> Row(Date.valueOf("1991-09-07"), ts, false, java.math.BigDecimal.valueOf(1/100000.toDouble)))
     )
 
-    val someData3 = List(
+    val someEmptyArrays = List(
       Row(Row(Array(null,""),"")),
       Row(Row(null,""))
+    )
+
+
+    val someDecimalData = List(
+      Row(BigDecimal("123456789.123456789")),
+      Row(BigDecimal("123456789123456789.123456789123456789")),
+      Row(BigDecimal("-123456789123456789.123456789123456789")),
+      Row(BigDecimal("0.123456789123456789"))
+    )
+    val otherDecimalData = List(
+      Row(BigDecimal("-123456789123456789")),
+      Row(BigDecimal("0")),
+      Row(BigDecimal("0.1")),
+      Row(BigDecimal("-0.1"))
     )
 
     val someSchema = List(
       StructField("mapToArray", MapType(StringType, new StructType().add("arrayStrings", ArrayType(StringType, containsNull = true), nullable = true), valueContainsNull = true), nullable = true)
     )
-    val someSchema2 = List(
+    val someDateSchema = List(
       StructField("mapToStruct", MapType(StringType, new StructType().add("date", DateType, nullable = true).add("time", TimestampType).add("booly", BooleanType).add("deci", DataTypes.createDecimalType(20,14)), valueContainsNull = true), nullable = true)
     )
-    val someSchema3 = List(
+    val someEmptyArraysSchema = List(
       StructField("emptyStruct", new StructType().add("emptyArray", ArrayType(StringType, containsNull = true), nullable = true).add("emptyString",StringType))
+    )
+    val someDecimalSchema = List(
+      StructField("BigDecimals", DataTypes.createDecimalType(38,10))
     )
 
     val df = sparkSession.createDataFrame(
@@ -167,19 +184,32 @@ class WriterTests extends FlatSpec with Matchers {
       StructType(WriterTests.asSchema(someSchema))
     )
 
-    val df2 = sparkSession.createDataFrame(
-      sparkSession.sparkContext.parallelize(WriterTests.asRows(someData2)),
-      StructType(WriterTests.asSchema(someSchema2))
+    val dateDf = sparkSession.createDataFrame(
+      sparkSession.sparkContext.parallelize(WriterTests.asRows(someDateData)),
+      StructType(WriterTests.asSchema(someDateSchema))
     )
 
-    val df3 = sparkSession.createDataFrame(
-      sparkSession.sparkContext.parallelize(WriterTests.asRows(someData3)),
-      StructType(WriterTests.asSchema(someSchema3))
+    val emptyArraysDf = sparkSession.createDataFrame(
+      sparkSession.sparkContext.parallelize(WriterTests.asRows(someEmptyArrays)),
+      StructType(WriterTests.asSchema(someEmptyArraysSchema))
+    )
+
+    val someDecimalDf = sparkSession.createDataFrame(
+      sparkSession.sparkContext.parallelize(WriterTests.asRows(someDecimalData)),
+      StructType(WriterTests.asSchema(someDecimalSchema))
+    )
+
+    val otherDecimalDf = sparkSession.createDataFrame(
+      sparkSession.sparkContext.parallelize(WriterTests.asRows(otherDecimalData)),
+      StructType(WriterTests.asSchema(someDecimalSchema))
     )
 
     val dfRow: InternalRow = df.queryExecution.toRdd.collect().head
-    val dfRow2 = df2.queryExecution.toRdd.collect.head
-    val dfRows3 = df3.queryExecution.toRdd.collect.take(2)
+    val dfRow2 = dateDf.queryExecution.toRdd.collect.head
+    val dfRows3 = emptyArraysDf.queryExecution.toRdd.collect
+    val dfRows4 = someDecimalDf.queryExecution.toRdd.collect
+    val dfRows5 = otherDecimalDf.queryExecution.toRdd.collect
+
     val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone("GMT"))
 
     val byteArrayOutputStream = new ByteArrayOutputStream()
@@ -187,25 +217,45 @@ class WriterTests extends FlatSpec with Matchers {
     val writer = new BufferedWriter(streamWriter)
     val csvWriter = CountingWriter(writer)
 
-    KustoWriter.writeRowAsCSV(dfRow, df.schema, dateFormat, csvWriter)
+    RowCSVWriterUtils.writeRowAsCSV(dfRow, df.schema, dateFormat, csvWriter)
 
     writer.flush()
     val res1 = byteArrayOutputStream.toString
     res1 shouldEqual "\"{\"\"asd\"\":{\"\"arrayStrings\"\":[\"\"stringVal\\n\\r\\\\\\\"\"\"\"]},\"\"asd2\"\":{\"\"arrayStrings\"\":[\"\"stringVal2\\b\\f\"\"]}}\"" + lineSep
 
     byteArrayOutputStream.reset()
-    KustoWriter.writeRowAsCSV(dfRow2, df2.schema, dateFormat, csvWriter)
+    RowCSVWriterUtils.writeRowAsCSV(dfRow2, dateDf.schema, dateFormat, csvWriter)
     writer.flush()
     val res2 = byteArrayOutputStream.toString
-    res2 shouldEqual "\"{\"\"asd\"\":{\"\"date\"\":\"\"1991-09-07\"\",\"\"time\"\":\"\"2018-06-18T16:04:00.000Z\"\",\"\"booly\"\":false,\"\"deci\"\":0.00001000000000}}\"" + lineSep
+    res2 shouldEqual "\"{\"\"asd\"\":{\"\"date\"\":\"\"1991-09-07\"\",\"\"time\"\":\"\"2018-06-18T16:04:00.000Z\"\",\"\"booly\"\":false,\"\"deci\"\":\"\"0.00001000000000\"\"}}\"" + lineSep
 
     byteArrayOutputStream.reset()
-    KustoWriter.writeRowAsCSV(dfRows3(0), df3.schema, dateFormat, csvWriter)
-    KustoWriter.writeRowAsCSV(dfRows3(1), df3.schema, dateFormat, csvWriter)
+    RowCSVWriterUtils.writeRowAsCSV(dfRows3(0), emptyArraysDf.schema, dateFormat, csvWriter)
+    RowCSVWriterUtils.writeRowAsCSV(dfRows3(1), emptyArraysDf.schema, dateFormat, csvWriter)
     writer.flush()
-    writer.close()
     val res3 = byteArrayOutputStream.toString
     res3 shouldEqual "\"{\"\"emptyArray\"\":[null,\"\"\"\"],\"\"emptyString\"\":\"\"\"\"}\"" + lineSep + "\"{\"\"emptyString\"\":\"\"\"\"}\"" + lineSep
+
+    byteArrayOutputStream.reset()
+    for(row<- dfRows4){
+      RowCSVWriterUtils.writeRowAsCSV(row, someDecimalDf.schema, dateFormat, csvWriter)
+    }
+
+    writer.flush()
+    val res4 = byteArrayOutputStream.toString
+    res4 shouldEqual "\"123456789.1234567890\"" + lineSep + "\"123456789123456789.1234567891\"" + lineSep + "\"-123456789123456789.1234567891\"" + lineSep +
+      "\"0.1234567891\"" + lineSep
+
+    byteArrayOutputStream.reset()
+    for(row<- dfRows5){
+      RowCSVWriterUtils.writeRowAsCSV(row, someDecimalDf.schema, dateFormat, csvWriter)
+    }
+
+    writer.flush()
+    writer.close()
+    val res5 = byteArrayOutputStream.toString
+    res5 shouldEqual "\"-123456789123456789.0000000000\"" + lineSep + "\"0.0000000000\"" + lineSep + "\"0.1000000000\"" +
+      lineSep + "\"-0.1000000000\"" + lineSep
   }
 }
 
