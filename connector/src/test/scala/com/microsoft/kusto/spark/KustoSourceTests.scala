@@ -1,6 +1,7 @@
 package com.microsoft.kusto.spark
 
 import com.microsoft.kusto.spark.datasource.KustoSourceOptions
+import com.microsoft.kusto.spark.utils.KustoClientCache.AliasAndAuth
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
@@ -65,5 +66,34 @@ class KustoSourceTests extends FlatSpec with MockFactory with Matchers with Befo
 
     val expected = StructType(Array(StructField("colA", StringType, nullable = true),StructField("colB", IntegerType, nullable = true)))
     assert(df.schema.equals(expected))
+  }
+
+  "KustoDataSource" should "match cluster default url pattern" in {
+    val ingestUrl = "https://ingest-ohbitton.dev.kusto.windows.net"
+    val engineUrl = "https://ohbitton.dev.kusto.windows.net"
+    val expectedAlias = "ohbitton.dev"
+    val alias = KDSU.getClusterNameFromUrlIfNeeded(ingestUrl)
+    assert(alias.equals(expectedAlias))
+    val engine = KDSU.getEngineUrlFromAliasIfNeeded(expectedAlias)
+    assert(engine.equals(engineUrl))
+    assert(KDSU.getEngineUrlFromAliasIfNeeded(engineUrl ).equals(engineUrl))
+
+    assert(ingestUrl.equals(AliasAndAuth(alias,engineUrl,null).ingestUri))
+
+  }
+
+  "KustoDataSource" should "match cluster custom domain url or aria old cluster" in {
+    val url = "https://ingest-ohbitton.dev.kusto.customDom"
+    val engineUrl = "https://ohbitton.dev.kusto.customDom"
+    val expectedAlias = "ohbitton.dev"
+    val alias = KDSU.getClusterNameFromUrlIfNeeded(url)
+    assert(alias.equals(expectedAlias))
+    assert(url.equals(AliasAndAuth(alias,engineUrl,null).ingestUri))
+
+    val ariaEngineUrl = "https://kusto.aria.microsoft.com"
+    val expectedAriaAlias = "aria"
+    val ariaAlias = KDSU.getClusterNameFromUrlIfNeeded(ariaEngineUrl)
+    assert(ariaAlias.equals(expectedAriaAlias))
+
   }
 }

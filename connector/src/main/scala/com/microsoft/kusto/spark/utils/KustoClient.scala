@@ -52,7 +52,7 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
     if (schemaShowCommandResult.count() == 0) {
       // Table Does not exist
       if (tableCreation == SinkTableCreationMode.FailIfNotExist) {
-        throw new RuntimeException("Table '" + table + "' doesn't exist in database '" + database + "', in cluster '" + tableCoordinates.cluster + "'")
+        throw new RuntimeException("Table '" + table + "' doesn't exist in database '" + database + "', in cluster '" + tableCoordinates.clusterAlias + "'")
       } else {
         // Parse dataframe schema and create a destination table with that schema
         val tableSchemaBuilder = new StringJoiner(",")
@@ -109,16 +109,16 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
 
             finalRes.status match {
               case OperationStatus.Pending =>
-                throw new RuntimeException(s"Ingestion to Kusto failed on timeout failure. Cluster: '${coordinates.cluster}', " +
+                throw new RuntimeException(s"Ingestion to Kusto failed on timeout failure. Cluster: '${coordinates.clusterAlias}', " +
                   s"database: '${coordinates.database}', table: '$tmpTableName', batch: '$batchIdIfExists', partition: '${partitionResult.partitionId}'")
               case OperationStatus.Succeeded =>
                 KDSU.logInfo(myName, s"Ingestion to Kusto succeeded. " +
-                  s"Cluster: '${coordinates.cluster}', " +
+                  s"Cluster: '${coordinates.clusterAlias}', " +
                   s"database: '${coordinates.database}', " +
                   s"table: '$tmpTableName', batch: '$batchIdIfExists', partition: '${partitionResult.partitionId}'', from: '${finalRes.ingestionSourcePath}', Operation ${finalRes.operationId}")
               case otherStatus =>
                 throw new RuntimeException(s"Ingestion to Kusto failed with status '$otherStatus'." +
-                  s" Cluster: '${coordinates.cluster}', database: '${coordinates.database}', " +
+                  s" Cluster: '${coordinates.clusterAlias}', database: '${coordinates.database}', " +
                   s"table: '$tmpTableName', batch: '$batchIdIfExists', partition: '${partitionResult.partitionId}''. Ingestion info: '${readIngestionResult(finalRes)}'")
             }
           }
@@ -138,7 +138,7 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
           KDSU.reportExceptionAndThrow(
             myName,
             ex,
-            "Trying to poll on pending ingestions", coordinates.cluster, coordinates.database, coordinates.table.getOrElse("Unspecified table name")
+            "Trying to poll on pending ingestions", coordinates.clusterAlias, coordinates.database, coordinates.table.getOrElse("Unspecified table name")
           )
       } finally {
         cleanupIngestionByproducts(database, kustoAdminClient, tmpTableName)

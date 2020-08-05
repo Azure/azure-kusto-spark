@@ -22,6 +22,8 @@ object KustoSourceOptions extends KustoOptions {
   // SAS access key: a complete query string of the SAS as a container
   // Use either this or storage account key to access the storage account
   val KUSTO_BLOB_STORAGE_SAS_URL: String = newOption("blobStorageSasUrl")
+  // Blob domain postfix - default: windows.net
+  val KUSTO_BLOB_STORAGE_DOMAIN_POSTFIX: String = newOption("blobStorageDomainPostfix")
   // Blob container name
   val KUSTO_BLOB_CONTAINER: String = newOption("blobContainer")
 

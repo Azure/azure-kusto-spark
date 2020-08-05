@@ -35,7 +35,7 @@ trait KustoOptions {
   val KUSTO_TIMEOUT_LIMIT: String = newOption("timeoutLimit")
 }
 
-case class KustoCoordinates(cluster: String, database: String, table: Option[String] = None)
+case class KustoCoordinates(clusterUrl: String, clusterAlias:String, database: String, table: Option[String] = None)
 
 /** **********************************************************************************/
 /*                                    NOTE!!!                                       */

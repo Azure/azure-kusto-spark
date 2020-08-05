@@ -28,7 +28,8 @@ private[kusto] case class KustoPartitionParameters(num: Int, column: String, mod
 private[kusto] case class KustoStorageParameters(account: String,
                                                  secret: String,
                                                  container: String,
-                                                 secretIsAccountKey: Boolean)
+                                                 secretIsAccountKey: Boolean,
+                                                 domainPostfix: String = KDSU.defaultDomainPostfix)
 
 private[kusto] case class KustoFiltering(columns: Array[String] = Array.empty, filters: Array[Filter] = Array.empty)
 
@@ -85,13 +86,13 @@ private[kusto] object KustoReader {
 
     val directoryExists = (params: KustoStorageParameters) => {
       val container = if (params.secretIsAccountKey) {
-        new CloudBlobContainer(new URI(s"https://${params.account}.blob.core.windows.net/${params.container}"), new StorageCredentialsAccountAndKey(params.account,params.secret))
+        new CloudBlobContainer(new URI(s"https://${params.account}.blob.core.${params.domainPostfix}/${params.container}"), new StorageCredentialsAccountAndKey(params.account,params.secret))
       } else {
-        new CloudBlobContainer(new URI(s"https://${params.account}.blob.core.windows.net/${params.container}?${params.secret}"))
+        new CloudBlobContainer(new URI(s"https://${params.account}.blob.core.${params.domainPostfix}/${params.container}${params.secret}"))
       }
       container.getDirectoryReference(directory).listBlobsSegmented().getLength > 0
     }
-    val paths = storage.filter(directoryExists).map(params => s"wasbs://${params.container}@${params.account}.blob.core.windows.net/$directory")
+    val paths = storage.filter(directoryExists).map(params => s"wasbs://${params.container}@${params.account}.blob.core.${params.domainPostfix}/$directory")
     KDSU.logInfo(myName, s"Finished exporting from Kusto to '$paths'" +
       s", will start parquet reading now")
     val rdd = try {
@@ -130,12 +131,12 @@ private[kusto] object KustoReader {
     for(storage <- storageParameters) {
       if (storage.secretIsAccountKey) {
         if (!KustoAzureFsSetupCache.updateAndGetPrevStorageAccountAccess(storage.account, storage.secret, now)) {
-          config.set(s"fs.azure.account.key.${storage.account}.blob.core.windows.net", s"${storage.secret}")
+          config.set(s"fs.azure.account.key.${storage.account}.blob.core.${storage.domainPostfix}", s"${storage.secret}")
         }
       }
       else {
         if (!KustoAzureFsSetupCache.updateAndGetPrevSas(storage.container, storage.account, storage.secret, now)) {
-          config.set(s"fs.azure.sas.${storage.container}.${storage.account}.blob.core.windows.net", s"${storage.secret}")
+          config.set(s"fs.azure.sas.${storage.container}.${storage.account}.blob.core.${storage.domainPostfix}", s"${storage.secret}")
         }
       }
 
