@@ -138,7 +138,7 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
           KDSU.reportExceptionAndThrow(
             myName,
             ex,
-            "Trying to poll on pending ingestions", coordinates.clusterAlias, coordinates.database, coordinates.table.getOrElse("Unspecified table name")
+            "Trying to poll on pending ingestions", coordinates.clusterUrl, coordinates.database, coordinates.table.getOrElse("Unspecified table name")
           )
       } finally {
         cleanupIngestionByproducts(database, kustoAdminClient, tmpTableName)

@@ -79,7 +79,7 @@ object KustoWriter {
       asyncWork.onFailure {
         case exception: Exception =>
           kustoClient.cleanupIngestionByproducts(tableCoordinates.database, kustoClient.engineClient, tmpTableName)
-          KDSU.reportExceptionAndThrow(myName, exception, "writing data", tableCoordinates.clusterAlias, tableCoordinates.database, table, shouldNotThrow = true)
+          KDSU.reportExceptionAndThrow(myName, exception, "writing data", tableCoordinates.clusterUrl, tableCoordinates.database, table, shouldNotThrow = true)
           KDSU.logError(myName, "The exception is not visible in the driver since we're in async mode")
       }
     } else {
@@ -124,7 +124,7 @@ object KustoWriter {
         KDSU.reportExceptionAndThrow(
           myName,
           ex,
-          "trying to drop temporary tables", coordinates.clusterAlias, coordinates.database, coordinates.table.getOrElse("Unspecified table name"),
+          "trying to drop temporary tables", coordinates.clusterUrl, coordinates.database, coordinates.table.getOrElse("Unspecified table name"),
           shouldNotThrow = true
         )
     }
