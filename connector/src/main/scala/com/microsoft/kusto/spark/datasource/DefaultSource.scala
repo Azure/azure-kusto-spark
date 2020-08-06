@@ -108,7 +108,7 @@ class DefaultSource extends CreatableRelationProvider
           parameters.get(KustoSourceOptions.KUSTO_BLOB_CONTAINER),
           storageSecret,
           storageSecretIsAccountKey,
-          parameters.get(KustoSourceOptions.KUSTO_BLOB_STORAGE_DOMAIN_POSTFIX)))
+          parameters.get(KustoSourceOptions.KUSTO_BLOB_STORAGE_ENDPOINT_SUFFIX)))
       }
 
     val timeout = new FiniteDuration(parameters.getOrElse(KustoSourceOptions.KUSTO_TIMEOUT_LIMIT, KCONST.defaultWaitingIntervalLongRunning).toLong, TimeUnit.SECONDS)

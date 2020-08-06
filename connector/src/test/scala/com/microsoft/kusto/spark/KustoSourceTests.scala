@@ -68,6 +68,16 @@ class KustoSourceTests extends FlatSpec with MockFactory with Matchers with Befo
     assert(df.schema.equals(expected))
   }
 
+  "KustoDataSource" should "parse sas" in {
+    val sas = "https://storage.blob.core.customDom/upload/?<secret>"
+    val params = KDSU.parseSas(sas)
+    assert(params.endpointSuffix.equals("core.customDom"))
+    assert(params.account.equals("storage"))
+    assert(params.secret.equals("?<secret>"))
+    assert(params.container.equals("upload/"))
+    assert(params.secretIsAccountKey.equals(false))
+  }
+
   "KustoDataSource" should "match cluster default url pattern" in {
     val ingestUrl = "https://ingest-ohbitton.dev.kusto.windows.net"
     val engineUrl = "https://ohbitton.dev.kusto.windows.net"
@@ -94,6 +104,5 @@ class KustoSourceTests extends FlatSpec with MockFactory with Matchers with Befo
     val expectedAriaAlias = "aria"
     val ariaAlias = KDSU.getClusterNameFromUrlIfNeeded(ariaEngineUrl)
     assert(ariaAlias.equals(expectedAriaAlias))
-
   }
 }

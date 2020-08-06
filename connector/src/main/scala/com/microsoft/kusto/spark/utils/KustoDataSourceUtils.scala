@@ -29,10 +29,10 @@ import org.apache.commons.lang3.StringUtils
 object KustoDataSourceUtils {
   private val klog = Logger.getLogger("KustoConnector")
 
-  val sasPattern: Regex = raw"(?:https://)?([^.]+).blob.core.(.+)/([^?]+)?(.+)".r
+  val sasPattern: Regex = raw"(?:https://)?([^.]+).blob.([^/]+)/([^?]+)?(.+)".r
   val ingestPrefix = "https://ingest-"
   val enginePrefix = "https://"
-  val defaultDomainPostfix = "windows.net"
+  val defaultDomainPostfix = "core.windows.net"
   val oldClustersPrefix = "https://kusto."
   val oldClusterSuffix = "microsoft.com"
 
@@ -362,7 +362,7 @@ object KustoDataSourceUtils {
     url match {
       case sasPattern(storageAccountId, cloud, container, sasKey) => KustoStorageParameters(storageAccountId, sasKey, container, secretIsAccountKey = false, cloud)
       case _ => throw new InvalidParameterException(
-        "SAS url couldn't be parsed. Should be https://<storage-account>.blob.core.windows.net/<container>?<SAS-Token>"
+        "SAS url couldn't be parsed. Should be https://<storage-account>.blob.<domainEndpointSuffix>/<container>?<SAS-Token>"
       )
     }
   }
