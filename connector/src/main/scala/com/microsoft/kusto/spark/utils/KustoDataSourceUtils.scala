@@ -1,5 +1,6 @@
 package com.microsoft.kusto.spark.utils
 
+import java.io.InputStream
 import java.security.InvalidParameterException
 import java.util
 import java.util.concurrent.{CountDownLatch, TimeUnit, TimeoutException}
@@ -30,26 +31,21 @@ object KustoDataSourceUtils {
   private val klog = Logger.getLogger("KustoConnector")
 
   val sasPattern: Regex = raw"(?:https://)?([^.]+).blob.([^/]+)/([^?]+)?(.+)".r
-  val ingestPrefix = "https://ingest-"
-  val enginePrefix = "https://"
-  val defaultDomainPostfix = "core.windows.net"
-  val oldClustersPrefix = "https://kusto."
-  val oldClusterSuffix = "microsoft.com"
 
-  var ClientName = "Kusto.Spark.Connector"
   val NewLine = sys.props("line.separator")
   val MaxWaitTime: FiniteDuration = 1 minute
 
-  try {
-    val input = getClass.getClassLoader.getResourceAsStream("app.properties")
-    val prop = new Properties( )
-    prop.load(input)
-    val version = prop.getProperty("application.version")
-    ClientName = s"$ClientName:$version"
-  } catch {
-    case x: Throwable =>
-      klog.warn("Couldn't parse the connector's version:" + x)
-  }
+  val input: InputStream = getClass.getClassLoader.getResourceAsStream("app.properties")
+  val prop = new Properties( )
+  prop.load(input)
+  val version: String = prop.getProperty("application.version")
+  val clientName = s"Kusto.Spark.Connector:$version"
+  val ingestPrefix: String = prop.getProperty("ingestPrefix")
+  val enginePrefix: String = prop.getProperty("enginePrefix")
+  val defaultDomainPostfix: String = prop.getProperty("defaultDomainPostfix")
+  val defaultClusterSuffix: String = prop.getProperty("defaultClusterSuffix")
+  val ariaClustersPrefix: String = prop.getProperty("ariaClustersPrefix")
+  val ariaClustersSuffix: String = prop.getProperty("ariaClustersSuffix")
 
   def setLoggingLevel(level: String): Unit = {
     setLoggingLevel(Level.toLevel(level))
@@ -232,9 +228,9 @@ object KustoDataSourceUtils {
   }
 
   private[kusto] def getClusterNameFromUrlIfNeeded(cluster: String): String = {
-    if(cluster.startsWith(oldClustersPrefix) && cluster.endsWith(oldClusterSuffix)){
+    if(cluster.startsWith(ariaClustersPrefix) && cluster.endsWith(ariaClustersSuffix)){
       val secondDotIndex = cluster.indexOf(".",cluster.indexOf(".") + 1)
-      cluster.substring(oldClustersPrefix.length,secondDotIndex)
+      cluster.substring(ariaClustersPrefix.length,secondDotIndex)
     }
     else if (cluster.startsWith(enginePrefix) ){
       val startIdx = if (cluster.startsWith(ingestPrefix)) ingestPrefix.length else enginePrefix.length

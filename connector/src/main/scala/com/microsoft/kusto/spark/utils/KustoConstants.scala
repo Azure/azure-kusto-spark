@@ -7,7 +7,7 @@ object KustoConstants {
   val defaultWaitingIntervalLongRunning: String = (2 days).toSeconds.toString
   val defaultPeriodicSamplePeriod: FiniteDuration = 1 seconds
   val defaultIngestionTaskTime: FiniteDuration = 20 seconds
-  val clientName: String = KustoDataSourceUtils.ClientName
+  val clientName: String = KustoDataSourceUtils.clientName
   val defaultBufferSize: Int = 16 * 1024
   val storageExpiryMinutes: Int = 120
   val sparkSettingsRefreshMinutes: Int = 120
