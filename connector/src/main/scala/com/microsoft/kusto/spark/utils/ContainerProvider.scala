@@ -1,9 +1,7 @@
 package com.microsoft.kusto.spark.utils
 
 import com.microsoft.azure.kusto.data.Client
-import com.microsoft.kusto.spark.utils.CslCommandsGenerator.generateCreateTmpStorageCommand
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
-
 import org.joda.time.{DateTime, DateTimeZone, Period}
 
 import scala.collection.JavaConverters._
@@ -17,7 +15,7 @@ class ContainerProvider[A](val dmClient: Client, val clusterAlias: String, val c
   def getContainer: A = {
     // Refresh if storageExpiryMinutes have passed since last refresh for this cluster as SAS should be valid for at least 120 minutes
     if (storageUris.isEmpty ||
-      new Period(new DateTime(DateTimeZone.UTC), lastRefresh).getMinutes > KustoConstants.storageExpiryMinutes) {
+      new Period(lastRefresh, new DateTime(DateTimeZone.UTC)).getMinutes > KustoConstants.storageExpiryMinutes) {
       refresh
     } else {
       roundRobinIdx = (roundRobinIdx + 1) % storageUris.size
@@ -27,7 +25,7 @@ class ContainerProvider[A](val dmClient: Client, val clusterAlias: String, val c
 
   def getAllContainers: Seq[A] = {
     if (storageUris.isEmpty ||
-      new Period(new DateTime(DateTimeZone.UTC), lastRefresh).getMinutes > KustoConstants.storageExpiryMinutes){
+      new Period(lastRefresh, new DateTime(DateTimeZone.UTC)).getMinutes > KustoConstants.storageExpiryMinutes){
       refresh
     }
     storageUris
