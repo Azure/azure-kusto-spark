@@ -15,6 +15,8 @@ object KustoSourceOptions extends KustoOptions {
   // Blob Storage access parameters for source connector when working in 'distributed' mode (read)
   // These parameters will not be needed once we move to automatic blob provisioning
 
+  // Blob container name
+  val KUSTO_BLOB_CONTAINER: String = newOption("blobContainer")
   // Transient storage account when reading from Kusto
   val KUSTO_BLOB_STORAGE_ACCOUNT_NAME: String = newOption("blobStorageAccountName")
   // Storage account key. Use either this or SAS key to access the storage account
@@ -22,9 +24,9 @@ object KustoSourceOptions extends KustoOptions {
   // SAS access key: a complete query string of the SAS as a container
   // Use either this or storage account key to access the storage account
   val KUSTO_BLOB_STORAGE_SAS_URL: String = newOption("blobStorageSasUrl")
-  // Blob container name
-  val KUSTO_BLOB_CONTAINER: String = newOption("blobContainer")
 
+  // Blob domain endpoint suffix - default: core.windows.net
+  val KUSTO_BLOB_STORAGE_ENDPOINT_SUFFIX: String = newOption("blobStorageEndpointSuffix")
   // By default an estimation of the rows count is first being made, if the count is lower than 5000 records a simple
   // query is made, else - if storage params were provided they are used for 'distributed' reading and if not - the connector
   // tries to use storage from the kusto ingest service.

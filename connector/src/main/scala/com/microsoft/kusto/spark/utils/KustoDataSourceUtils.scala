@@ -1,11 +1,12 @@
 package com.microsoft.kusto.spark.utils
 
+import java.io.InputStream
 import java.security.InvalidParameterException
 import java.util
 import java.util.concurrent.{CountDownLatch, TimeUnit, TimeoutException}
 import java.util.{NoSuchElementException, StringJoiner, Timer, TimerTask}
 
-import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties, KustoResultSetTable, Results}
+import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties, KustoResultSetTable}
 import com.microsoft.kusto.spark.authentication._
 import com.microsoft.kusto.spark.common.{KustoCoordinates, KustoDebugOptions}
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
@@ -28,24 +29,23 @@ import org.apache.commons.lang3.StringUtils
 
 object KustoDataSourceUtils {
   private val klog = Logger.getLogger("KustoConnector")
-  val urlPattern: Regex = raw"https://(?:ingest-)?(.+).kusto.windows.net(?::443)?".r
-  val sasPattern: Regex = raw"(?:https://)?([^.]+).blob.core.windows.net/([^?]+)?(.+)".r
 
+  val sasPattern: Regex = raw"(?:https://)?([^.]+).blob.([^/]+)/([^?]+)?(.+)".r
 
-  var ClientName = "Kusto.Spark.Connector"
   val NewLine = sys.props("line.separator")
   val MaxWaitTime: FiniteDuration = 1 minute
 
-  try {
-    val input = getClass.getClassLoader.getResourceAsStream("app.properties")
-    val prop = new Properties( )
-    prop.load(input)
-    val version = prop.getProperty("application.version")
-    ClientName = s"$ClientName:$version"
-  } catch {
-    case x: Throwable =>
-      klog.warn("Couldn't parse the connector's version:" + x)
-  }
+  val input: InputStream = getClass.getClassLoader.getResourceAsStream("app.properties")
+  val prop = new Properties( )
+  prop.load(input)
+  val version: String = prop.getProperty("application.version")
+  val clientName = s"Kusto.Spark.Connector:$version"
+  val ingestPrefix: String = prop.getProperty("ingestPrefix")
+  val enginePrefix: String = prop.getProperty("enginePrefix")
+  val defaultDomainPostfix: String = prop.getProperty("defaultDomainPostfix")
+  val defaultClusterSuffix: String = prop.getProperty("defaultClusterSuffix")
+  val ariaClustersPrefix: String = prop.getProperty("ariaClustersPrefix")
+  val ariaClustersSuffix: String = prop.getProperty("ariaClustersSuffix")
 
   def setLoggingLevel(level: String): Unit = {
     setLoggingLevel(Level.toLevel(level))
@@ -99,7 +99,8 @@ object KustoDataSourceUtils {
     if (cluster.isEmpty) {
       throw new InvalidParameterException("KUSTO_CLUSTER parameter is missing. Must provide a destination cluster name")
     }
-
+    val alias = getClusterNameFromUrlIfNeeded(cluster.get.toLowerCase())
+    val clusterUrl = getEngineUrlFromAliasIfNeeded(cluster.get.toLowerCase())
     val table = parameters.get(KustoSinkOptions.KUSTO_TABLE)
 
     // Parse KustoAuthentication
@@ -133,11 +134,11 @@ object KustoDataSourceUtils {
     }) {
       authentication = KustoAccessTokenAuthentication(accessToken)
     } else if (keyVaultUri.isEmpty) {
-      val token = DeviceAuthentication.acquireAccessTokenUsingDeviceCodeFlow(getClusterUrlFromAlias(cluster.get))
+      val token = DeviceAuthentication.acquireAccessTokenUsingDeviceCodeFlow(clusterUrl)
       authentication = KustoAccessTokenAuthentication(token)
     }
 
-    SourceParameters(authentication, KustoCoordinates(getClusterNameFromUrlIfNeeded(cluster.get).toLowerCase(), database.get, table), keyVaultAuthentication)
+    SourceParameters(authentication, KustoCoordinates(clusterUrl, alias, database.get, table), keyVaultAuthentication)
   }
 
   case class SinkParameters(writeOptions: WriteOptions, sourceParametersResults: SourceParameters)
@@ -226,17 +227,28 @@ object KustoDataSourceUtils {
     logWarn(reporter, s"caught exception $whatFailed$clusterDesc$databaseDesc$tableDesc, exception ignored.${NewLine}EXCEPTION: ${ExceptionUtils.getStackTrace(exception)}")
   }
 
-  private def getClusterNameFromUrlIfNeeded(url: String): String = {
-    url match {
-      case urlPattern(clusterAlias) => clusterAlias
-      case _ => url
+  private[kusto] def getClusterNameFromUrlIfNeeded(cluster: String): String = {
+    if(cluster.startsWith(ariaClustersPrefix) && cluster.endsWith(ariaClustersSuffix)){
+      val secondDotIndex = cluster.indexOf(".",cluster.indexOf(".") + 1)
+      cluster.substring(ariaClustersPrefix.length,secondDotIndex)
+    }
+    else if (cluster.startsWith(enginePrefix) ){
+      val startIdx = if (cluster.startsWith(ingestPrefix)) ingestPrefix.length else enginePrefix.length
+      cluster.substring(startIdx,cluster.indexOf(".kusto."))
+    } else {
+      cluster
     }
   }
 
-  private def getClusterUrlFromAlias(alias: String): String = {
-    alias match {
-      case urlPattern(_) => alias
-      case _ => s"https://$alias.kusto.windows.net"
+  private[kusto] def getEngineUrlFromAliasIfNeeded(cluster: String): String = {
+    if(cluster.startsWith(enginePrefix)){
+      if(cluster.startsWith(ingestPrefix)){
+        cluster.replace(ingestPrefix, "https://")
+      } else{
+        cluster
+      }
+    } else {
+      s"https://$cluster.kusto.windows.net"
     }
   }
 
@@ -344,9 +356,9 @@ object KustoDataSourceUtils {
 
   private[kusto] def parseSas(url: String): KustoStorageParameters = {
     url match {
-      case sasPattern(storageAccountId, container, sasKey) => KustoStorageParameters(storageAccountId, sasKey, container, secretIsAccountKey = false)
+      case sasPattern(storageAccountId, cloud, container, sasKey) => KustoStorageParameters(storageAccountId, sasKey, container, secretIsAccountKey = false, cloud)
       case _ => throw new InvalidParameterException(
-        "SAS url couldn't be parsed. Should be https://<storage-account>.blob.core.windows.net/<container>?<SAS-Token>"
+        "SAS url couldn't be parsed. Should be https://<storage-account>.blob.<domainEndpointSuffix>/<container>?<SAS-Token>"
       )
     }
   }
@@ -412,7 +424,7 @@ object KustoDataSourceUtils {
             val secret = if (storageSecret.isEmpty) Some(keyVaultParameters.secret) else storageSecret
             val container = if (storageContainer.isEmpty) Some(keyVaultParameters.container) else storageContainer
 
-            getAndValidateTransientStorageParametersIfExist(account, container, secret, storageSecretIsAccountKey = true)
+            getAndValidateTransientStorageParametersIfExist(account, container, secret, storageSecretIsAccountKey = true, None)
           }
         }
       } else {
@@ -424,7 +436,9 @@ object KustoDataSourceUtils {
   private[kusto] def getAndValidateTransientStorageParametersIfExist(storageAccount: Option[String],
                                                                      storageContainer: Option[String],
                                                                      storageAccountSecret: Option[String],
-                                                                     storageSecretIsAccountKey: Boolean): Option[KustoStorageParameters] = {
+                                                                     storageSecretIsAccountKey: Boolean,
+                                                                     domainPostfix: Option[String])
+                                                              : Option[KustoStorageParameters] = {
 
     val paramsFromSas = if (!storageSecretIsAccountKey && storageAccountSecret.isDefined) {
       if (storageAccountSecret.get == null) {
@@ -448,7 +462,8 @@ object KustoDataSourceUtils {
       if (storageAccount.get == null || storageAccountSecret.get == null || storageContainer.get == null) {
         throw new InvalidParameterException("storageAccount key from parameters is null")
       }
-      Some(KustoStorageParameters(storageAccount.get, storageAccountSecret.get, storageContainer.get, storageSecretIsAccountKey))
+      val postfix = domainPostfix.getOrElse(defaultDomainPostfix)
+      Some(KustoStorageParameters(storageAccount.get, storageAccountSecret.get, storageContainer.get, storageSecretIsAccountKey, postfix))
     }
     else None
   }
@@ -480,4 +495,5 @@ object KustoDataSourceUtils {
 
     count
   }
+
 }

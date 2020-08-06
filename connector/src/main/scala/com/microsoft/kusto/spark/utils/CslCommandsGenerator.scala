@@ -76,7 +76,7 @@ private[kusto] object CslCommandsGenerator {
     val getFullUrlFromParams = (storage: KustoStorageParameters) => {
       val secret = storage.secret
       val secretString = if (storage.secretIsAccountKey) s""";" h@"$secret"""" else if (secret(0) == '?') s"""" h@"$secret"""" else s"""?" h@"$secret""""
-      val blobUri = s"https://${storage.account}.blob.core.windows.net"
+      val blobUri = s"https://${storage.account}.blob.${storage.endpointSuffix}"
       s"$blobUri/${storage.container}$secretString"
     }
 

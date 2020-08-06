@@ -10,9 +10,9 @@ import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
 object KustoClientCache {
   var clientCache = new ConcurrentHashMap[AliasAndAuth, KustoClient]
 
-  def getClient(clusterAlias: String, authentication: KustoAuthentication): KustoClient = {
-    val aliasAndAuth = AliasAndAuth(clusterAlias, authentication)
-    clientCache.computeIfAbsent(aliasAndAuth, adderSupplier)
+  def getClient(clusterAlias: String, clusterUrl: String, authentication: KustoAuthentication): KustoClient = {
+    val clusterAndAuth = AliasAndAuth(clusterAlias, clusterUrl, authentication)
+    clientCache.computeIfAbsent(clusterAndAuth, adderSupplier)
   }
 
   val adderSupplier: function.Function[AliasAndAuth, KustoClient] = new java.util.function.Function[AliasAndAuth, KustoClient]() {
@@ -44,11 +44,9 @@ object KustoClientCache {
     new KustoClient(aliasAndAuth.clusterAlias, engineKcsb, ingestKcsb)
   }
 
-  private[KustoClientCache] case class AliasAndAuth(clusterAlias: String, authentication: KustoAuthentication) {
-    private[AliasAndAuth] val clusterUri = "https://%s.kusto.windows.net"
-    val ingestClusterAlias = s"ingest-$clusterAlias"
-    val engineUri: String = clusterUri.format(clusterAlias)
-    val ingestUri: String = clusterUri.format(ingestClusterAlias)
+  private[kusto] case class AliasAndAuth(clusterAlias: String, engineUrl: String, authentication: KustoAuthentication) {
+    val engineUri: String = engineUrl
+    val ingestUri: String = engineUrl.replace("https://", KustoDataSourceUtils.ingestPrefix)
 
     override def equals(that: Any): Boolean = that match {
       case aa: AliasAndAuth => clusterAlias == aa.clusterAlias && authentication == aa.authentication
@@ -57,7 +55,6 @@ object KustoClientCache {
 
     override def hashCode(): Int = clusterAlias.hashCode + authentication.hashCode
   }
-
 }
 
 

@@ -52,7 +52,7 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
   }
 
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
-    val kustoClient = KustoClientCache.getClient(kustoCoordinates.cluster, authentication).engineClient
+    val kustoClient = KustoClientCache.getClient(kustoCoordinates.clusterAlias, kustoCoordinates.clusterUrl, authentication).engineClient
     var timedOutCounting = false
     val forceSingleMode = readOptions.readMode.isDefined && readOptions.readMode.get == ReadMode.ForceSingleMode
     var useSingleMode = forceSingleMode
@@ -100,7 +100,7 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
           kustoClient,
           KustoReadRequest(sparkSession, cachedSchema, kustoCoordinates, query, authentication, timeout, clientRequestProperties),
           if (storageParameters.isDefined) Seq(storageParameters.get) else
-            KustoClientCache.getClient(kustoCoordinates.cluster, authentication).getTempBlobsForExport,
+            KustoClientCache.getClient(kustoCoordinates.clusterAlias, kustoCoordinates.clusterUrl, authentication).getTempBlobsForExport,
           KustoPartitionParameters(numPartitions, getPartitioningColumn, getPartitioningMode),
           readOptions,
           KustoFiltering(requiredColumns, filters))
@@ -127,7 +127,7 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
       throw new RuntimeException("Spark connector cannot run Kusto commands. Please provide a valid query")
     }
 
-    KDSU.getSchema(kustoCoordinates.database, getSchemaQuery, KustoClientCache.getClient(kustoCoordinates.cluster, authentication).engineClient)
+    KDSU.getSchema(kustoCoordinates.database, getSchemaQuery, KustoClientCache.getClient(kustoCoordinates.clusterAlias, kustoCoordinates.clusterUrl, authentication).engineClient)
   }
 
   private def getPartitioningColumn: String = {
