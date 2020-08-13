@@ -14,6 +14,14 @@ This authentication method is fairly straightforward, and it is used in most of 
  
  * **KUSTO_AAD_APP_SECRET**: 
   'kustoAadAppSecret' - AAD application key for the client.
+  
+  * **KUSTO_AAD_APP_CERTIFICATE_PATH**: 
+  'kutoAadAppCertPath' - AAD application pfx certificate path.
+  
+  * **KUSTO_AAD_APP_CERTIFICATE_PASSWORD**: 
+  'kutoAadAppCertPassword' - AAD application certificate password.
+  
+  
  
  >**Note:** Older versions (less then 2.0.0) have the following naming: "kustoAADClientID", "kustoClientAADClientPassword", "kustoAADAuthorityID"
  
@@ -124,6 +132,32 @@ df.write
   .mode(SaveMode.Append)
   .save()
 ```
+
+## Pfx certificate based AAD App Authentication with Access Token
+User can also use AAD App authenticate with pfx certificate 
+
+ * **KUSTO_AAD_APP_ID**: 
+   'kustoAadAppId' - AAD application (client) identifier. 
+   
+   * **KUSTO_AAD_APP_CERTIFICATE_PATH**: 
+   'kutoAadAppCertPath' - AAD application pfx certificate path.
+   
+   * **KUSTO_AAD_APP_CERTIFICATE_PASSWORD**: 
+   'kutoAadAppCertPassword' - AAD application certificate password.
+   
+```
+df.write
+  .format("com.microsoft.kusto.spark.datasource")
+  .option(KustoSinkOptions.KUSTO_CLUSTER, "MyCluster")
+  .option(KustoSinkOptions.KUSTO_DATABASE, "MyDatabase")
+  .option(KustoSinkOptions.KUSTO_AAD_APP_ID, "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
+  .option(KustoSinkOptions.KUSTO_AAD_APP_CERTIFICATE_PATH, "absolute path to pfx cert") 
+  .option(KustoSinkOptions.KUSTO_AAD_APP_CERTIFICATE_PASSWORD, "cert password if it is protected")
+  .option(KustoOptions., "MyTable")
+  .mode(SaveMode.Append)
+  .save()
+```
+
 ## Device Authentication
 If no authentication parameters were passed, the connector will request for user authentication by writing a token 
 to the console. This token can be used to authenticate at https://login.microsoftonline.com/common/oauth2/deviceauth 

@@ -218,6 +218,7 @@
                     <excludes>
                         <exclude>**/*E2E.scala</exclude>
                     </excludes>
+                    <argLine>-Xms512m -Xmx512m</argLine>
                 </configuration>
             </plugin>
             <plugin>
@@ -229,6 +230,7 @@
                     <junitxml>.</junitxml>
                     <filereports>TestSuiteReport.txt</filereports>
                     <tagsToExclude>KustoE2E</tagsToExclude>
+                    <argLine>-Xms512m -Xmx512m</argLine>
                     <!-- Comma separated list of JUnit test class names to execute -->
                     <!--jUnitClasses>samples.AppTest</jUnitClasses-->
                 </configuration>

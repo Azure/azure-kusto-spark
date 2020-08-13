@@ -20,6 +20,17 @@ case class AadApplicationAuthentication(ID: String, password: String, authority:
   override def hashCode(): Int = ID.hashCode + authority.hashCode
 }
 
+case class AadApplicationCertificateAuthentication(ID: String, certFilePath: String, certPassword: String) extends KustoAuthentication {
+  def canEqual(that: Any) : Boolean = that.isInstanceOf[KustoAccessTokenAuthentication]
+  override def equals(that: Any) : Boolean = that match {
+    case auth : AadApplicationCertificateAuthentication =>
+      ID == auth.ID && certFilePath == auth.certFilePath && certPassword == auth.certPassword
+    case _ => false
+  }
+
+  override def hashCode(): Int = ID.hashCode + certFilePath.hashCode + certPassword.hashCode()
+}
+
 case class KeyVaultAppAuthentication(uri: String, keyVaultAppID: String, keyVaultAppKey: String) extends KeyVaultAuthentication(uri) {
   def canEqual(that: Any) : Boolean = that.isInstanceOf[KeyVaultAppAuthentication]
   override def equals(that: Any) : Boolean = that match {

@@ -4,7 +4,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.function
 
 import com.microsoft.azure.kusto.data.ConnectionStringBuilder
-import com.microsoft.kusto.spark.authentication.{AadApplicationAuthentication, KeyVaultAuthentication, KustoAccessTokenAuthentication, KustoAuthentication}
+import com.microsoft.kusto.spark.authentication._
 import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
 
 object KustoClientCache {
@@ -26,6 +26,12 @@ object KustoClientCache {
         ConnectionStringBuilder.createWithAadApplicationCredentials(aliasAndAuth.engineUri, app.ID, app.password, app.authority),
         ConnectionStringBuilder.createWithAadApplicationCredentials(aliasAndAuth.ingestUri, app.ID, app.password, app.authority)
       )
+      case app: AadApplicationCertificateAuthentication =>
+        val keyCert = CertUtils.readPfx(app.certFilePath, app.certPassword)
+        (
+          ConnectionStringBuilder.createWithAadApplicationCertificate(aliasAndAuth.engineUri, app.ID, keyCert.cert, keyCert.key),
+          ConnectionStringBuilder.createWithAadApplicationCertificate(aliasAndAuth.engineUri, app.ID, keyCert.cert, keyCert.key)
+        )
       case keyVaultParams: KeyVaultAuthentication =>
         val app = KeyVaultUtils.getAadAppParametersFromKeyVault(keyVaultParams)
         (

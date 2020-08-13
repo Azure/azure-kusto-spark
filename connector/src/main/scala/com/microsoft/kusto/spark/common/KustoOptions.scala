@@ -24,6 +24,10 @@ trait KustoOptions {
   val KUSTO_AAD_APP_SECRET: String = newOption("kustoAadAppSecret")
 
   val KUSTO_ACCESS_TOKEN: String = newOption("accessToken")
+  // AAD application pfx certificate path
+  val KUSTO_AAD_APP_CERTIFICATE_PATH: String = newOption("kutoAadAppCertPath")
+  // AAD application certificate password
+  val KUSTO_AAD_APP_CERTIFICATE_PASSWORD: String = newOption("kutoAadAppCertPassword")
 
   // Target/source Kusto cluster for writing/reading the data.
   val KUSTO_CLUSTER: String = newOption("kustoCluster")
