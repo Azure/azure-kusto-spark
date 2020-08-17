@@ -25,24 +25,26 @@ object CertUtils {
   def readPfx(path: String, password: String): CertUtils.KeyCert = {
     val stream = new FileInputStream(path)
     try {
-      var isAliasWithPrivateKey = false
       // Access Java keystore
       val store = KeyStore.getInstance("pkcs12", "SunJSSE")
       // Load Java Keystore with password for access
       store.load(stream, password.toCharArray)
       // Iterate over all aliases to find the private key
       val aliases = store.aliases
-      var alias = ""
+      var alias: Option[String] = Option.empty
       // Break if alias refers to a private key because we want to use that
       // certificate
-      while ( aliases.hasMoreElements && !isAliasWithPrivateKey) {
-        alias = aliases.nextElement
-        isAliasWithPrivateKey = store.isKeyEntry(alias)
+      while ( aliases.hasMoreElements && alias.isEmpty) {
+        val currentAlias = aliases.nextElement
+        if(store.isKeyEntry(currentAlias)){
+          alias = Option.apply(currentAlias)
+        }
       }
-      if (isAliasWithPrivateKey) { // Retrieves the certificate from the Java keystore
-        val certificate = store.getCertificate(alias).asInstanceOf[X509Certificate]
+      // Retrieves the certificate from the Java keystore
+      if (alias.isDefined) {
+        val certificate = store.getCertificate(alias.get).asInstanceOf[X509Certificate]
         // Retrieves the private key from the Java keystore
-        val key = store.getKey(alias, password.toCharArray).asInstanceOf[PrivateKey]
+        val key = store.getKey(alias.get, password.toCharArray).asInstanceOf[PrivateKey]
         KeyCert(certificate, key)
       }else{
         throw new UnrecoverableKeyException(s"cert could not be read from pfx path ${path}")

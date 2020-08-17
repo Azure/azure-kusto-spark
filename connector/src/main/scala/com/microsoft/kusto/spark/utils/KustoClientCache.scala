@@ -29,8 +29,8 @@ object KustoClientCache {
       case app: AadApplicationCertificateAuthentication =>
         val keyCert = CertUtils.readPfx(app.certFilePath, app.certPassword)
         (
-          ConnectionStringBuilder.createWithAadApplicationCertificate(aliasAndAuth.engineUri, app.ID, keyCert.cert, keyCert.key),
-          ConnectionStringBuilder.createWithAadApplicationCertificate(aliasAndAuth.engineUri, app.ID, keyCert.cert, keyCert.key)
+          ConnectionStringBuilder.createWithAadApplicationCertificate(aliasAndAuth.engineUri, app.appId, keyCert.cert, keyCert.key),
+          ConnectionStringBuilder.createWithAadApplicationCertificate(aliasAndAuth.ingestUri, app.appId, keyCert.cert, keyCert.key)
         )
       case keyVaultParams: KeyVaultAuthentication =>
         val app = KeyVaultUtils.getAadAppParametersFromKeyVault(keyVaultParams)
