@@ -38,14 +38,17 @@ object KustoDataSourceUtils {
   val input: InputStream = getClass.getClassLoader.getResourceAsStream("app.properties")
   val prop = new Properties( )
   prop.load(input)
-  val version: String = prop.getProperty("application.version")
+  var version: String = prop.getProperty("application.version")
+  if(version == null){
+    version = prop.getProperty("version")
+  }
   val clientName = s"Kusto.Spark.Connector:$version"
-  val ingestPrefix: String = prop.getProperty("ingestPrefix")
-  val enginePrefix: String = prop.getProperty("enginePrefix")
-  val defaultDomainPostfix: String = prop.getProperty("defaultDomainPostfix")
-  val defaultClusterSuffix: String = prop.getProperty("defaultClusterSuffix")
-  val ariaClustersPrefix: String = prop.getProperty("ariaClustersPrefix")
-  val ariaClustersSuffix: String = prop.getProperty("ariaClustersSuffix")
+  val ingestPrefix: String = prop.getProperty("ingestPrefix","http://ingest-")
+  val enginePrefix: String = prop.getProperty("enginePrefix","http://")
+  val defaultDomainPostfix: String = prop.getProperty("defaultDomainPostfix","core.windows.net")
+  val defaultClusterSuffix: String = prop.getProperty("defaultClusterSuffix","kusto.windows.net")
+  val ariaClustersPrefix: String = prop.getProperty("ariaClustersPrefix", "https://kusto")
+  val ariaClustersSuffix: String = prop.getProperty("ariaClustersSuffix", "microsoft.com")
 
   def setLoggingLevel(level: String): Unit = {
     setLoggingLevel(Level.toLevel(level))
