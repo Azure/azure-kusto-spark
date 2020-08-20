@@ -43,12 +43,12 @@ object KustoDataSourceUtils {
     version = prop.getProperty("version")
   }
   val clientName = s"Kusto.Spark.Connector:$version"
-  val ingestPrefix: String = prop.getProperty("ingestPrefix","http://ingest-")
-  val enginePrefix: String = prop.getProperty("enginePrefix","http://")
+  val ingestPrefix: String = prop.getProperty("ingestPrefix","https://ingest-")
+  val enginePrefix: String = prop.getProperty("enginePrefix","https://")
   val defaultDomainPostfix: String = prop.getProperty("defaultDomainPostfix","core.windows.net")
   val defaultClusterSuffix: String = prop.getProperty("defaultClusterSuffix","kusto.windows.net")
   val ariaClustersPrefix: String = prop.getProperty("ariaClustersPrefix", "https://kusto")
-  val ariaClustersSuffix: String = prop.getProperty("ariaClustersSuffix", "microsoft.com")
+  val ariaClustersProxy: String = prop.getProperty("ariaClustersProxy", "https://kusto.aria.microsoft.com")
 
   def setLoggingLevel(level: String): Unit = {
     setLoggingLevel(Level.toLevel(level))
@@ -231,7 +231,7 @@ object KustoDataSourceUtils {
   }
 
   private[kusto] def getClusterNameFromUrlIfNeeded(cluster: String): String = {
-    if(cluster.startsWith(ariaClustersPrefix) && cluster.endsWith(ariaClustersSuffix)){
+    if (cluster.equals(ariaClustersProxy)){
       val secondDotIndex = cluster.indexOf(".",cluster.indexOf(".") + 1)
       cluster.substring(ariaClustersPrefix.length,secondDotIndex)
     }
