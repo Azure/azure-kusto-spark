@@ -50,7 +50,7 @@ object KustoDataSourceUtils {
   val defaultDomainPostfix: String = prop.getProperty("defaultDomainPostfix","core.windows.net")
   val defaultClusterSuffix: String = prop.getProperty("defaultClusterSuffix","kusto.windows.net")
   val ariaClustersProxy: String = prop.getProperty("ariaClustersProxy", "https://kusto.aria.microsoft.com")
-  val ariaClustersAlias: String = "aria"
+  val ariaClustersAlias: String = "Aria proxy"
 
   def setLoggingLevel(level: String): Unit = {
     setLoggingLevel(Level.toLevel(level))
