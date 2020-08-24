@@ -1,6 +1,7 @@
 package com.microsoft.kusto.spark.utils
 
 import java.io.InputStream
+import java.net.URI
 import java.security.InvalidParameterException
 import java.util
 import java.util.concurrent.{CountDownLatch, TimeUnit, TimeoutException}
@@ -26,6 +27,7 @@ import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
 import scala.util.matching.Regex
 import org.apache.commons.lang3.StringUtils
+import org.apache.http.client.utils.URIBuilder
 
 object KustoDataSourceUtils {
   private val klog = Logger.getLogger("KustoConnector")
@@ -38,14 +40,17 @@ object KustoDataSourceUtils {
   val input: InputStream = getClass.getClassLoader.getResourceAsStream("app.properties")
   val prop = new Properties( )
   prop.load(input)
-  val version: String = prop.getProperty("application.version")
+  var version: String = prop.getProperty("application.version")
+  if(version == null){
+    version = prop.getProperty("version")
+  }
   val clientName = s"Kusto.Spark.Connector:$version"
-  val ingestPrefix: String = prop.getProperty("ingestPrefix")
-  val enginePrefix: String = prop.getProperty("enginePrefix")
-  val defaultDomainPostfix: String = prop.getProperty("defaultDomainPostfix")
-  val defaultClusterSuffix: String = prop.getProperty("defaultClusterSuffix")
-  val ariaClustersPrefix: String = prop.getProperty("ariaClustersPrefix")
-  val ariaClustersSuffix: String = prop.getProperty("ariaClustersSuffix")
+  val ingestPrefix: String = prop.getProperty("ingestPrefix","ingest-")
+  val enginePrefix: String = prop.getProperty("enginePrefix","https://")
+  val defaultDomainPostfix: String = prop.getProperty("defaultDomainPostfix","core.windows.net")
+  val defaultClusterSuffix: String = prop.getProperty("defaultClusterSuffix","kusto.windows.net")
+  val ariaClustersProxy: String = prop.getProperty("ariaClustersProxy", "https://kusto.aria.microsoft.com")
+  val ariaClustersAlias: String = "Aria proxy"
 
   def setLoggingLevel(level: String): Unit = {
     setLoggingLevel(Level.toLevel(level))
@@ -234,13 +239,13 @@ object KustoDataSourceUtils {
   }
 
   private[kusto] def getClusterNameFromUrlIfNeeded(cluster: String): String = {
-    if(cluster.startsWith(ariaClustersPrefix) && cluster.endsWith(ariaClustersSuffix)){
-      val secondDotIndex = cluster.indexOf(".",cluster.indexOf(".") + 1)
-      cluster.substring(ariaClustersPrefix.length,secondDotIndex)
+    if (cluster.equals(ariaClustersProxy)){
+      ariaClustersAlias
     }
     else if (cluster.startsWith(enginePrefix) ){
-      val startIdx = if (cluster.startsWith(ingestPrefix)) ingestPrefix.length else enginePrefix.length
-      cluster.substring(startIdx,cluster.indexOf(".kusto."))
+      val host = new URI(cluster).getHost
+      val startIdx = if (host.startsWith(ingestPrefix)) ingestPrefix.length else 0
+      host.substring(startIdx,host.indexOf(".kusto."))
     } else {
       cluster
     }
@@ -248,13 +253,16 @@ object KustoDataSourceUtils {
 
   private[kusto] def getEngineUrlFromAliasIfNeeded(cluster: String): String = {
     if(cluster.startsWith(enginePrefix)){
-      if(cluster.startsWith(ingestPrefix)){
-        cluster.replace(ingestPrefix, "https://")
+      val host = new URI(cluster).getHost
+      if(host.startsWith(ingestPrefix)){
+        val uriBuilder = new URIBuilder()
+        uriBuilder.setHost(ingestPrefix + host).toString
       } else{
         cluster
       }
     } else {
-      s"https://$cluster.kusto.windows.net"
+      val uriBuilder = new URIBuilder()
+      uriBuilder.setScheme("https").setHost(s"$cluster.kusto.windows.net").toString
     }
   }
 

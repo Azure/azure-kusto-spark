@@ -101,7 +101,7 @@ class KustoSourceTests extends FlatSpec with MockFactory with Matchers with Befo
     assert(url.equals(AliasAndAuth(alias,engineUrl,null).ingestUri))
 
     val ariaEngineUrl = "https://kusto.aria.microsoft.com"
-    val expectedAriaAlias = "aria"
+    val expectedAriaAlias = "Aria proxy"
     val ariaAlias = KDSU.getClusterNameFromUrlIfNeeded(ariaEngineUrl)
     assert(ariaAlias.equals(expectedAriaAlias))
   }
