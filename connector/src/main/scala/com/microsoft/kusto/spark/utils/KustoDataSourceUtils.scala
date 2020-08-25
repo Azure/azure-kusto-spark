@@ -111,6 +111,8 @@ object KustoDataSourceUtils {
     // Parse KustoAuthentication
     val applicationId = parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_APP_ID, "")
     val applicationKey = parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_APP_SECRET, "")
+    val applicationCertPath = parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_APP_CERTIFICATE_PATH, "")
+    val applicationCertPassword = parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_APP_CERTIFICATE_PASSWORD, "")
     var authentication: KustoAuthentication = null
     val keyVaultUri: String = parameters.getOrElse(KustoSourceOptions.KEY_VAULT_URI, "")
     var accessToken: String = ""
@@ -130,8 +132,12 @@ object KustoDataSourceUtils {
       }
     }
 
-    if (!applicationId.isEmpty || !applicationKey.isEmpty) {
-      authentication = AadApplicationAuthentication(applicationId, applicationKey, parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com"))
+    if (!applicationId.isEmpty) {
+      if(!applicationKey.isEmpty){
+        authentication = AadApplicationAuthentication(applicationId, applicationKey, parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com"))
+      }else if(!applicationCertPath.isEmpty){
+        authentication = AadApplicationCertificateAuthentication(applicationId, applicationCertPath, applicationCertPassword);
+      }
     }
     else if ( {
       accessToken = parameters.getOrElse(KustoSourceOptions.KUSTO_ACCESS_TOKEN, "")
