@@ -45,8 +45,8 @@ object KustoClientCache {
         ConnectionStringBuilder.createWithAadAccessTokenAuthentication(aliasAndAuth.ingestUri, userToken.token)
       )
       case tokenProvider: KustoTokenProviderAuthentication => (
-        ConnectionStringBuilder.createWithAadTokenProviderAuthentication(aliasAndAuth.engineUri, tokenProvider.tokenProvider),
-        ConnectionStringBuilder.createWithAadTokenProviderAuthentication(aliasAndAuth.ingestUri, tokenProvider.tokenProvider)
+        ConnectionStringBuilder.createWithAadTokenProviderAuthentication(aliasAndAuth.engineUri, tokenProvider.tokenProviderCallback),
+        ConnectionStringBuilder.createWithAadTokenProviderAuthentication(aliasAndAuth.ingestUri, tokenProvider.tokenProviderCallback)
       )
     }
 

@@ -63,12 +63,12 @@ case class KustoAccessTokenAuthentication(token: String) extends KustoAuthentica
   override def hashCode(): Int = token.hashCode
 }
 
-case class KustoTokenProviderAuthentication(tokenProvider: Callable[String]) extends KustoAuthentication {
-  def canEqual(that: Any) : Boolean = that.isInstanceOf[KustoAccessTokenAuthentication]
+case class KustoTokenProviderAuthentication(tokenProviderCallback: Callable[String]) extends KustoAuthentication {
+  def canEqual(that: Any) : Boolean = that.isInstanceOf[KustoTokenProviderAuthentication]
   override def equals(that: Any) : Boolean = that match {
-    case auth : KustoTokenProviderAuthentication => tokenProvider == auth.tokenProvider
+    case auth : KustoTokenProviderAuthentication => tokenProviderCallback == auth.tokenProviderCallback
     case _ => false
   }
 
-  override def hashCode(): Int = tokenProvider.hashCode
+  override def hashCode(): Int = tokenProviderCallback.hashCode
 }
