@@ -29,6 +29,10 @@ trait KustoOptions {
   // AAD application certificate password
   val KUSTO_AAD_APP_CERTIFICATE_PASSWORD: String = newOption("kutoAadAppCertPassword")
 
+  // Coordinates of a class that extends callable<String> with Serializeable and returns a token.
+  // The provider will be called for every request to the kusto service
+  val KUSTO_TOKEN_PROVIDER: String = newOption("tokenProvider")
+
   // Target/source Kusto cluster for writing/reading the data.
   val KUSTO_CLUSTER: String = newOption("kustoCluster")
   // Target/source Kusto database for writing/reading the data. See KustoSink.md/KustoSource.md for

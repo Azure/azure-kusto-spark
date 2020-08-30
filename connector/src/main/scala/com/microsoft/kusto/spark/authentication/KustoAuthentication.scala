@@ -1,5 +1,7 @@
 package com.microsoft.kusto.spark.authentication
 
+import java.util.concurrent.Callable
+
 trait KustoAuthentication {
   def canEqual(that: Any) : Boolean
   override def equals(that: Any) : Boolean = that match {
@@ -61,3 +63,12 @@ case class KustoAccessTokenAuthentication(token: String) extends KustoAuthentica
   override def hashCode(): Int = token.hashCode
 }
 
+case class KustoTokenProviderAuthentication(tokenProvider: Callable[String]) extends KustoAuthentication {
+  def canEqual(that: Any) : Boolean = that.isInstanceOf[KustoAccessTokenAuthentication]
+  override def equals(that: Any) : Boolean = that match {
+    case auth : KustoTokenProviderAuthentication => tokenProvider == auth.tokenProvider
+    case _ => false
+  }
+
+  override def hashCode(): Int = tokenProvider.hashCode
+}

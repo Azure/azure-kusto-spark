@@ -4,7 +4,7 @@ import java.io.InputStream
 import java.net.URI
 import java.security.InvalidParameterException
 import java.util
-import java.util.concurrent.{CountDownLatch, TimeUnit, TimeoutException}
+import java.util.concurrent.{Callable, CountDownLatch, TimeUnit, TimeoutException}
 import java.util.{NoSuchElementException, StringJoiner, Timer, TimerTask}
 
 import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties, KustoResultSetTable}
@@ -113,6 +113,8 @@ object KustoDataSourceUtils {
     val applicationKey = parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_APP_SECRET, "")
     val applicationCertPath = parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_APP_CERTIFICATE_PATH, "")
     val applicationCertPassword = parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_APP_CERTIFICATE_PASSWORD, "")
+    val tokenProviderCoordinates = parameters.getOrElse(KustoSourceOptions.KUSTO_TOKEN_PROVIDER, "")
+
     var authentication: KustoAuthentication = null
     val keyVaultUri: String = parameters.getOrElse(KustoSourceOptions.KEY_VAULT_URI, "")
     var accessToken: String = ""
@@ -138,12 +140,20 @@ object KustoDataSourceUtils {
       }else if(!applicationCertPath.isEmpty){
         authentication = AadApplicationCertificateAuthentication(applicationId, applicationCertPath, applicationCertPassword);
       }
-    }
-    else if ( {
+    } else if ( {
       accessToken = parameters.getOrElse(KustoSourceOptions.KUSTO_ACCESS_TOKEN, "")
       !accessToken.isEmpty
     }) {
       authentication = KustoAccessTokenAuthentication(accessToken)
+    }  else if ( {
+      !tokenProviderCoordinates.isEmpty
+    }) {
+      val provider1 = Thread.currentThread().getContextClassLoader
+      val c1 = provider1.loadClass(tokenProviderCoordinates).newInstance()
+      val tokenProvider = c1.asInstanceOf[Callable[String]]
+
+      authentication = KustoTokenProviderAuthentication(tokenProvider)
+
     } else if (keyVaultUri.isEmpty) {
       val token = DeviceAuthentication.acquireAccessTokenUsingDeviceCodeFlow(clusterUrl)
       authentication = KustoAccessTokenAuthentication(token)
