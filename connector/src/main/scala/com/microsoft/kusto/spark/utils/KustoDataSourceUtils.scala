@@ -148,8 +148,8 @@ object KustoDataSourceUtils {
     }  else if ( {
       !tokenProviderCoordinates.isEmpty
     }) {
-      val provider1 = Thread.currentThread().getContextClassLoader
-      val c1 = provider1.loadClass(tokenProviderCoordinates).newInstance()
+      val provider = Thread.currentThread().getContextClassLoader
+      val c1 = provider.loadClass(tokenProviderCoordinates).newInstance()
       val tokenProvider = c1.asInstanceOf[Callable[String]]
 
       authentication = KustoTokenProviderAuthentication(tokenProvider)
