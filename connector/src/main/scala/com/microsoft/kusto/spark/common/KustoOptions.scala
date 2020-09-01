@@ -29,6 +29,12 @@ trait KustoOptions {
   // AAD application certificate password
   val KUSTO_AAD_APP_CERTIFICATE_PASSWORD: String = newOption("kutoAadAppCertPassword")
 
+  // Classpath to a class that its constructor accepts one argument of type CaseInsensitiveMap[String] which will contain
+  // the options provided to the connector. The class should extend Callable[String] with Serializeable and is expected
+  // to return an AAD token upon invoking the call method.
+  // The provider will be called for every request to the kusto service
+  val KUSTO_TOKEN_PROVIDER_CALLBACK_CLASSPATH: String = newOption("tokenProviderCallbackClasspath")
+
   // Target/source Kusto cluster for writing/reading the data.
   val KUSTO_CLUSTER: String = newOption("kustoCluster")
   // Target/source Kusto database for writing/reading the data. See KustoSink.md/KustoSource.md for

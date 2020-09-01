@@ -138,12 +138,12 @@ User can also use AAD App authenticate with pfx certificate
 
  * **KUSTO_AAD_APP_ID**: 
    'kustoAadAppId' - AAD application (client) identifier. 
-   
-   * **KUSTO_AAD_APP_CERTIFICATE_PATH**: 
-   'kutoAadAppCertPath' - AAD application pfx certificate path.
-   
-   * **KUSTO_AAD_APP_CERTIFICATE_PASSWORD**: 
-   'kutoAadAppCertPassword' - AAD application certificate password.
+    
+ * **KUSTO_AAD_APP_CERTIFICATE_PATH**: 
+    'kutoAadAppCertPath' - AAD application pfx certificate path.
+    
+ * **KUSTO_AAD_APP_CERTIFICATE_PASSWORD**: 
+    'kutoAadAppCertPassword' - AAD application certificate password.
    
 ```
 df.write
@@ -169,3 +169,14 @@ The user needs appropriate privileges for the Kusto cluster as explained in [Kus
 Please refer to the [Python samples](../samples/src/main/python/pyKusto.py).
 
 >**Note:** Device authentication is not recommended for production   
+
+## Authentication via token provider callback
+
+User can provide a class to be used as a callback for providing an AAD token for authentication. 
+The class should have a constructor that accepts one argument of type CaseInsensitiveMap[String] (which will contain
+the options provided to the connector). The class should extend Callable<String> with Serializeable and is expected
+to return an AAD token upon invoking the call method.
+The provider will be called for every request to the kusto service
+
+* **KUSTO_TOKEN_PROVIDER_CALLBACK_CLASSPATH**: 
+    'tokenProviderCallbackClasspath' - The classpath to the class

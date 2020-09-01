@@ -1,8 +1,19 @@
 package com.microsoft.kusto.spark.authentication
 
+import java.util.concurrent.Callable
+
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.junit.runner.RunWith
 import org.scalatest.FlatSpec
 import org.scalatest.junit.JUnitRunner
+
+class TokenProvider1(map: CaseInsensitiveMap[String]) extends Callable[String] with Serializable {
+  override def call(): String = map("token")
+}
+
+class TokenProvider2(map: CaseInsensitiveMap[String]) extends Callable[String] with Serializable {
+  override def call(): String = map("token")
+}
 
 @RunWith(classOf[JUnitRunner])
 class kustoAuthenticationTests extends FlatSpec {
@@ -12,7 +23,6 @@ class kustoAuthenticationTests extends FlatSpec {
     val kvaa12 = KeyVaultAppAuthentication("uri1", "appId2", "pass123")
     val kvaa21 = KeyVaultAppAuthentication("uri2", "appId1", "pass12")
     val kvaa22 = KeyVaultAppAuthentication("uri2", "appId2", "pass12")
-
     assert(kvaa11 == kvaa11Duplicate)
     assert(kvaa11 != kvaa12)
     assert(kvaa11 != kvaa21)
@@ -55,5 +65,21 @@ class kustoAuthenticationTests extends FlatSpec {
     assert(kvaa11 != kvca11)
     assert(kvaa11 != kata1)
     assert(kvca11 != kata1)
+  }
+
+  "KustoTokenProviderAuthentication Equals" should "Verify that different types of authentication won't equal" in {
+    val params = CaseInsensitiveMap(Map[String,String]("token" -> "token"))
+
+    val tokenProvider1 = java.lang.ClassLoader.getSystemClassLoader
+      .loadClass("com.microsoft.kusto.spark.authentication.TokenProvider1")
+      .getConstructor(params.getClass).newInstance(params)
+
+    val tokenProvider2 = java.lang.ClassLoader.getSystemClassLoader
+      .loadClass("com.microsoft.kusto.spark.authentication.TokenProvider1")
+      .getConstructor(params.getClass).newInstance(params)
+
+    val ktp1 = KustoTokenProviderAuthentication(tokenProvider1.asInstanceOf[Callable[String]])
+    val ktp2 = KustoTokenProviderAuthentication(tokenProvider2.asInstanceOf[Callable[String]])
+    assert(ktp1 != ktp2)
   }
 }

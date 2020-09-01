@@ -44,6 +44,10 @@ object KustoClientCache {
         ConnectionStringBuilder.createWithAadAccessTokenAuthentication(aliasAndAuth.engineUri, userToken.token),
         ConnectionStringBuilder.createWithAadAccessTokenAuthentication(aliasAndAuth.ingestUri, userToken.token)
       )
+      case tokenProvider: KustoTokenProviderAuthentication => (
+        ConnectionStringBuilder.createWithAadTokenProviderAuthentication(aliasAndAuth.engineUri, tokenProvider.tokenProviderCallback),
+        ConnectionStringBuilder.createWithAadTokenProviderAuthentication(aliasAndAuth.ingestUri, tokenProvider.tokenProviderCallback)
+      )
     }
 
     engineKcsb.setClientVersionForTracing(KCONST.clientName)

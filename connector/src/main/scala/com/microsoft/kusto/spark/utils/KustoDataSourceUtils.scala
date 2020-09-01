@@ -4,7 +4,7 @@ import java.io.InputStream
 import java.net.URI
 import java.security.InvalidParameterException
 import java.util
-import java.util.concurrent.{CountDownLatch, TimeUnit, TimeoutException}
+import java.util.concurrent.{Callable, CountDownLatch, TimeUnit, TimeoutException}
 import java.util.{NoSuchElementException, StringJoiner, Timer, TimerTask}
 
 import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties, KustoResultSetTable}
@@ -113,38 +113,59 @@ object KustoDataSourceUtils {
     val applicationKey = parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_APP_SECRET, "")
     val applicationCertPath = parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_APP_CERTIFICATE_PATH, "")
     val applicationCertPassword = parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_APP_CERTIFICATE_PASSWORD, "")
-    var authentication: KustoAuthentication = null
+    val tokenProviderCoordinates = parameters.getOrElse(KustoSourceOptions.KUSTO_TOKEN_PROVIDER_CALLBACK_CLASSPATH, "")
+    val keyVaultAppId: String = parameters.getOrElse(KustoSourceOptions.KEY_VAULT_APP_ID, "")
+    val keyVaultAppKey = parameters.getOrElse(KustoSourceOptions.KEY_VAULT_APP_KEY, "")
     val keyVaultUri: String = parameters.getOrElse(KustoSourceOptions.KEY_VAULT_URI, "")
-    var accessToken: String = ""
+    val keyVaultPemFile = parameters.getOrElse(KustoDebugOptions.KEY_VAULT_PEM_FILE_PATH, "")
+    val keyVaultCertKey = parameters.getOrElse(KustoDebugOptions.KEY_VAULT_CERTIFICATE_KEY, "")
+    val accessToken: String = parameters.getOrElse(KustoSourceOptions.KUSTO_ACCESS_TOKEN, "")
+    var authentication: KustoAuthentication = null
     var keyVaultAuthentication: Option[KeyVaultAuthentication] = None
-    if (keyVaultUri != "") {
-      // KeyVault Authentication
-      val keyVaultAppId: String = parameters.getOrElse(KustoSourceOptions.KEY_VAULT_APP_ID, "")
 
+    // Check KeyVault Authentication
+    if (keyVaultUri != "") {
       if (!keyVaultAppId.isEmpty) {
         keyVaultAuthentication = Some(KeyVaultAppAuthentication(keyVaultUri,
           keyVaultAppId,
-          parameters.getOrElse(KustoSourceOptions.KEY_VAULT_APP_KEY, "")))
+          keyVaultAppKey))
       } else {
         keyVaultAuthentication = Some(KeyVaultCertificateAuthentication(keyVaultUri,
-          parameters.getOrElse(KustoDebugOptions.KEY_VAULT_PEM_FILE_PATH, ""),
-          parameters.getOrElse(KustoDebugOptions.KEY_VAULT_CERTIFICATE_KEY, "")))
+          keyVaultPemFile,
+          keyVaultCertKey))
       }
     }
 
+    // Look for conflicts
+    var numberOfAuthenticationMethods = 0
+    if (!applicationId.isEmpty) numberOfAuthenticationMethods += 1
+    if (!accessToken.isEmpty) numberOfAuthenticationMethods += 1
+    if (!tokenProviderCoordinates.isEmpty) numberOfAuthenticationMethods += 1
+    if (!keyVaultUri.isEmpty) numberOfAuthenticationMethods += 1
+    if(numberOfAuthenticationMethods > 1){
+      throw new IllegalArgumentException("More than one authentication methods were provided. Failing.")
+    }
+
+    // Resolve authentication
     if (!applicationId.isEmpty) {
+      // Application authentication
       if(!applicationKey.isEmpty){
         authentication = AadApplicationAuthentication(applicationId, applicationKey, parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com"))
-      }else if(!applicationCertPath.isEmpty){
+      } else if(!applicationCertPath.isEmpty){
         authentication = AadApplicationCertificateAuthentication(applicationId, applicationCertPath, applicationCertPassword);
       }
-    }
-    else if ( {
-      accessToken = parameters.getOrElse(KustoSourceOptions.KUSTO_ACCESS_TOKEN, "")
-      !accessToken.isEmpty
-    }) {
+    } else if (!accessToken.isEmpty) {
+      // Authentication by token
       authentication = KustoAccessTokenAuthentication(accessToken)
+    }  else if (!tokenProviderCoordinates.isEmpty) {
+      // Authentication by token provider
+      val classLoader = Thread.currentThread().getContextClassLoader
+      val c1 = classLoader.loadClass(tokenProviderCoordinates).getConstructor(parameters.getClass).newInstance(parameters)
+      val tokenProviderCallback = c1.asInstanceOf[Callable[String]]
+
+      authentication = KustoTokenProviderAuthentication(tokenProviderCallback)
     } else if (keyVaultUri.isEmpty) {
+      logWarn("parseSourceParameters", "No authentication method was not supplied - using device authentication")
       val token = DeviceAuthentication.acquireAccessTokenUsingDeviceCodeFlow(clusterUrl)
       authentication = KustoAccessTokenAuthentication(token)
     }
