@@ -37,7 +37,7 @@ version = 2.1.1
 
 Look for the following coordinates: 
 ```
-com.microsoft.azure.kusto:spark-kusto-connector:2.1.1
+com.microsoft.azure.kusto:spark-kusto-connector:2.2.0
 ```
 
 Or clone this repository and build it locally to add it to your local maven repository, 
@@ -47,7 +47,7 @@ the jar can also be found under the [released package](https://github.com/Azure/
    <dependency>
      <groupId>com.microsoft.azure.kusto</groupId>
      <artifactId>spark-kusto-connector</artifactId>
-     <version>2.1.1</version>
+     <version>2.2.0</version>
    </dependency>
 ```
 
@@ -56,7 +56,7 @@ the jar can also be found under the [released package](https://github.com/Azure/
 Create Library -> Maven with the following coordinates:
 
 ```
-com.microsoft.azure.kusto:spark-kusto-connector:2.1.1
+com.microsoft.azure.kusto:spark-kusto-connector:2.2.0
 ```
 
 #### Building Samples Module
