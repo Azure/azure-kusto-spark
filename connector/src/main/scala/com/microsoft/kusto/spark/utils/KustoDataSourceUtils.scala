@@ -5,9 +5,10 @@ import java.net.URI
 import java.security.InvalidParameterException
 import java.util
 import java.util.concurrent.{Callable, CountDownLatch, TimeUnit, TimeoutException}
-import java.util.{NoSuchElementException, StringJoiner, Timer, TimerTask}
+import java.util.{NoSuchElementException, StringJoiner, Timer, TimerTask, UUID}
 
 import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties, KustoResultSetTable}
+import com.microsoft.azure.kusto.data.exceptions.{DataClientException, DataServiceException}
 import com.microsoft.kusto.spark.authentication._
 import com.microsoft.kusto.spark.common.{KustoCoordinates, KustoDebugOptions}
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
@@ -28,6 +29,7 @@ import scala.concurrent.duration._
 import scala.util.matching.Regex
 import org.apache.commons.lang3.StringUtils
 import org.apache.http.client.utils.URIBuilder
+import org.json.JSONObject
 
 object KustoDataSourceUtils {
   private val klog = Logger.getLogger("KustoConnector")
@@ -152,7 +154,7 @@ object KustoDataSourceUtils {
       if(!applicationKey.isEmpty){
         authentication = AadApplicationAuthentication(applicationId, applicationKey, parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com"))
       } else if(!applicationCertPath.isEmpty){
-        authentication = AadApplicationCertificateAuthentication(applicationId, applicationCertPath, applicationCertPassword);
+        authentication = AadApplicationCertificateAuthentication(applicationId, applicationCertPath, applicationCertPassword)
       }
     } else if (!accessToken.isEmpty) {
       // Authentication by token
@@ -343,6 +345,7 @@ object KustoDataSourceUtils {
   def verifyAsyncCommandCompletion(client: Client,
                                    database: String,
                                    commandResult: KustoResultSetTable,
+                                   directory: String,
                                    samplePeriod: FiniteDuration = KCONST.defaultPeriodicSamplePeriod,
                                    timeOut: FiniteDuration): Unit = {
     commandResult.next()
@@ -355,29 +358,45 @@ object KustoDataSourceUtils {
 
     val stateCol = "State"
     val statusCol = "Status"
-
+    val statusCheck: () => Option[KustoResultSetTable] = () => {
+      try {
+        Some(client.execute(database, operationsShowCommand).getPrimaryResults)
+      }
+      catch{
+        case e: DataServiceException => {
+          val error = new JSONObject(e.getCause.getMessage).getJSONObject("error")
+          val isPermanent = error.getBoolean("@permanent")
+          if (isPermanent) {
+            val message = s"Couldn't monitor the progress of the export command from the service, operationId:$operationId" +
+              s"and read from the blob directory: ('$directory'), once it completes."
+            logError("verifyAsyncCommandCompletion", message)
+            throw new Exception(message, e)
+          }
+          logWarn("verifyAsyncCommandCompletion", "Failed transiently to retrieve export status, trying again in a few seconds")
+          None
+        }
+        case _: DataClientException => None
+      }}
     var lastResponse: Option[KustoResultSetTable] = None
-    val task = doWhile[KustoResultSetTable](
-      func = () => client.execute(database, operationsShowCommand).getPrimaryResults,
+    val task = doWhile[Option[KustoResultSetTable]](
+      func = statusCheck,
       delayBeforeStart = 0, delayBeforeEach = delayPeriodBetweenCalls, timesToRun = timesToRun,
-      stopCondition = (result: KustoResultSetTable) => {
-        result.next()
-        result.getString(stateCol) == "InProgress"
-      },
-      finalWork = result => {
-        lastResponse = Some(result)
+      stopCondition = (result: Option[KustoResultSetTable]) =>
+        result.isEmpty || (result.get.next() && result.get.getString(stateCol) == "InProgress"),
+      finalWork = (result: Option[KustoResultSetTable]) => {
+        lastResponse = result
       })
     var success = true
     if (timeOut < FiniteDuration.apply(0, SECONDS)) {
       task.await()
     } else {
-      if (!task.await(timeoutInMillis, TimeUnit.SECONDS)) {
+      if (!task.await(timeoutInMillis, TimeUnit.MILLISECONDS)) {
         // Timed out
         success = false
       }
     }
 
-    if (lastResponse.isDefined && lastResponse.get.getString(stateCol) != "Completed") {
+    if (lastResponse.isEmpty || lastResponse.get.getString(stateCol) != "Completed") {
       throw new RuntimeException(
         s"Failed to execute Kusto operation with OperationId '$operationId', State: '${lastResponse.get.getString(stateCol)}'," +
           s" Status: '${lastResponse.get.getString(statusCol)}'"
