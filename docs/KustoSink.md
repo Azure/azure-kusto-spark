@@ -108,6 +108,9 @@ that is using it. Please verify the following before using Kusto connector:
     this is done for each partition. The ingestion Kusto also aggregates data, default suggested by Kusto is 1GB but here
     we suggest to cut it at 100MB to adjust it to spark pulling of data.
     
+* **KUSTO_SOURCE_ID**:
+    A unique identifier UUID for this ingestion command
+    
  >**Note:**
  For both synchronous and asynchronous operation, 'write' is an atomic transaction, i.e. 
  either all data is written to Kusto, or no data is written. 

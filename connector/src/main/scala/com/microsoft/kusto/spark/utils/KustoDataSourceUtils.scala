@@ -188,13 +188,14 @@ object KustoDataSourceUtils {
     var isAsync: Boolean = false
     var isAsyncParam: String = ""
     var batchLimit: Int = 0
-
+    var sourceId: Option[String] = None
     try {
       isAsyncParam = parameters.getOrElse(KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC, "false")
       isAsync = parameters.getOrElse(KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC, "false").trim.toBoolean
       tableCreationParam = parameters.get(KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS)
       tableCreation = if (tableCreationParam.isEmpty) SinkTableCreationMode.FailIfNotExist else SinkTableCreationMode.withName(tableCreationParam.get)
       batchLimit = parameters.getOrElse(KustoSinkOptions.KUSTO_CLIENT_BATCHING_LIMIT, "100").trim.toInt
+      sourceId = parameters.get(KustoSinkOptions.KUSTO_SOURCE_ID)
     } catch {
       case _: NoSuchElementException => throw new InvalidParameterException(s"No such SinkTableCreationMode option: '${tableCreationParam.get}'")
       case _: java.lang.IllegalArgumentException => throw new InvalidParameterException(s"KUSTO_WRITE_ENABLE_ASYNC is expecting either 'true' or 'false', got: '$isAsyncParam'")
@@ -211,7 +212,8 @@ object KustoDataSourceUtils {
       parameters.getOrElse(DateTimeUtils.TIMEZONE_OPTION, "UTC"),
       timeout,
       ingestionPropertiesAsJson,
-      batchLimit
+      batchLimit,
+      if (sourceId.isDefined) UUID.fromString(sourceId.get) else UUID.randomUUID()
     )
 
     val sourceParameters = parseSourceParameters(parameters)
