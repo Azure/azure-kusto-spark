@@ -43,6 +43,9 @@ trait KustoOptions {
 
   // An integer number corresponding to the period in seconds after which the operation will timeout. Default: '5400' (90 minutes)
   val KUSTO_TIMEOUT_LIMIT: String = newOption("timeoutLimit")
+
+  // An id of the source used for tracing of the write operation
+  val KUSTO_OPERATION_ID: String = newOption("operationId")
 }
 
 case class KustoCoordinates(clusterUrl: String, clusterAlias:String, database: String, table: Option[String] = None)

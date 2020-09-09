@@ -1,6 +1,7 @@
 package com.microsoft.kusto.spark.datasource
 
 import java.security.InvalidParameterException
+import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 import com.microsoft.azure.kusto.data.ClientRequestProperties
@@ -81,13 +82,15 @@ class DefaultSource extends CreatableRelationProvider
       if (storageSecret.isDefined) storageSecretIsAccountKey = false
     }
 
+    val operationId = parameters.get(KustoSinkOptions.KUSTO_OPERATION_ID)
     if (authenticationParameters.isEmpty) {
       // Parse parameters if haven't got parsed before
       val sourceParameters = KDSU.parseSourceParameters(parameters)
       authenticationParameters = Some(sourceParameters.authenticationParameters)
       kustoCoordinates = sourceParameters.kustoCoordinates
       keyVaultAuthentication = sourceParameters.keyVaultAuth
-      clientRequestProperties = KDSU.getClientRequestProperties(parameters)
+      clientRequestProperties = Some(KDSU.getClientRequestProperties(parameters))
+      if (operationId.isDefined) clientRequestProperties.get.setClientRequestId(operationId.get)
     }
 
     val (kustoAuthentication, storageParameters): (Option[KustoAuthentication], Option[KustoStorageParameters]) =
@@ -132,7 +135,8 @@ class DefaultSource extends CreatableRelationProvider
       partitioningMode,
       parameters.get(KustoSourceOptions.KUSTO_CUSTOM_DATAFRAME_COLUMN_TYPES),
       storageParameters,
-      clientRequestProperties
+      clientRequestProperties,
+      operationId.getOrElse(UUID.randomUUID().toString)
     )(sqlContext.sparkSession)
   }
 
