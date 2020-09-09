@@ -109,7 +109,7 @@ that is using it. Please verify the following before using Kusto connector:
     we suggest to cut it at 100MB to adjust it to spark pulling of data.
     
 * **KUSTO_OPERATION_ID**:
-    A unique identifier UUID for this ingestion command
+    'operationId' - A unique identifier UUID for this ingestion command
     
  >**Note:**
  For both synchronous and asynchronous operation, 'write' is an atomic transaction, i.e. 

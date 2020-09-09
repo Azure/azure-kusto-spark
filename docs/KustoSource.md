@@ -92,7 +92,7 @@ All the options that can be use in the Kusto source are under the object KustoSo
    used in the call for reading from Kusto (used in the single query for 'single' mode or for the export command for 'distributed' mode). Use toString to create the json.
 
 * **KUSTO_OPERATION_ID**:
-    A unique identifier UUID for this reading operation. Setting this will override the ClientRequestId on the
+    'operationId' - A unique identifier UUID for this reading operation. Setting this will override the ClientRequestId on the
     ClientRequestProperties object if set.
     
 #### Transient Storage Parameters
