@@ -7,6 +7,7 @@ import java.util.concurrent.TimeUnit
 import com.microsoft.azure.kusto.data.{Client, ClientFactory, ConnectionStringBuilder}
 import com.microsoft.azure.kusto.ingest.result.{IngestionStatus, OperationStatus}
 import com.microsoft.azure.kusto.ingest.{IngestClient, IngestClientFactory, IngestionProperties}
+import com.microsoft.azure.storage.StorageException
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.KustoWriter.delayPeriodBetweenCalls
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
@@ -96,18 +97,27 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
       try {
         partitionsResults.value.asScala.foreach {
           partitionResult => {
-            var finalRes: IngestionStatus = null
-            KDSU.doWhile[IngestionStatus](
+            var finalRes: Option[IngestionStatus] = None
+            KDSU.doWhile[Option[IngestionStatus]](
               () => {
-                finalRes = partitionResult.ingestionResult.getIngestionStatusCollection.get(0); finalRes
+                try {
+                  finalRes = Some(partitionResult.ingestionResult.getIngestionStatusCollection.get(0)); finalRes
+                } catch {
+                  case e: StorageException =>
+                    KDSU.logWarn(myName, "Failed to fetch operation status transiently - will keep polling")
+                    None
+                  case e: Exception => KDSU.reportExceptionAndThrow(myName, e, "Failed to fetch operation status"); None
+                }
               },
               0,
               delayPeriodBetweenCalls,
               (timeout.toMillis / delayPeriodBetweenCalls + 5).toInt,
-              res => res.status == OperationStatus.Pending,
-              res => finalRes = res).await(timeout.toMillis, TimeUnit.MILLISECONDS)
+              res => res.isDefined && res.get.status == OperationStatus.Pending,
+              res => finalRes = res,
+              maxWaitTimeBetweenCalls = KDSU.WriteMaxWaitTime.toMillis.toInt).await(timeout.toMillis, TimeUnit.MILLISECONDS)
 
-            finalRes.status match {
+            if (finalRes.isDefined) {
+              finalRes.get.status match {
               case OperationStatus.Pending =>
                 throw new RuntimeException(s"Ingestion to Kusto failed on timeout failure. Cluster: '${coordinates.clusterAlias}', " +
                   s"database: '${coordinates.database}', table: '$tmpTableName', batch: '$batchIdIfExists', partition: '${partitionResult.partitionId}'")
@@ -115,11 +125,14 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
                 KDSU.logInfo(myName, s"Ingestion to Kusto succeeded. " +
                   s"Cluster: '${coordinates.clusterAlias}', " +
                   s"database: '${coordinates.database}', " +
-                  s"table: '$tmpTableName', batch: '$batchIdIfExists', partition: '${partitionResult.partitionId}'', from: '${finalRes.ingestionSourcePath}', Operation ${finalRes.operationId}")
+                  s"table: '$tmpTableName', batch: '$batchIdIfExists', partition: '${partitionResult.partitionId}'', from: '${finalRes.get.ingestionSourcePath}', Operation ${finalRes.get.operationId}")
               case otherStatus =>
                 throw new RuntimeException(s"Ingestion to Kusto failed with status '$otherStatus'." +
                   s" Cluster: '${coordinates.clusterAlias}', database: '${coordinates.database}', " +
-                  s"table: '$tmpTableName', batch: '$batchIdIfExists', partition: '${partitionResult.partitionId}''. Ingestion info: '${readIngestionResult(finalRes)}'")
+                  s"table: '$tmpTableName', batch: '$batchIdIfExists', partition: '${partitionResult.partitionId}''. Ingestion info: '${readIngestionResult(finalRes.get)}'")
+              }
+            } else {
+              throw new RuntimeException("Failed to poll on ingestion status.")
             }
           }
         }
