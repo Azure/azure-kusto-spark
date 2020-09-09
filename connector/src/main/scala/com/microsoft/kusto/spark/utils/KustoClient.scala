@@ -113,7 +113,8 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
               delayPeriodBetweenCalls,
               (timeout.toMillis / delayPeriodBetweenCalls + 5).toInt,
               res => res.isDefined && res.get.status == OperationStatus.Pending,
-              res => finalRes = res).await(timeout.toMillis, TimeUnit.MILLISECONDS)
+              res => finalRes = res,
+              maxWaitTimeBetweenCalls = KDSU.WriteMaxWaitTime.toMillis.toInt).await(timeout.toMillis, TimeUnit.MILLISECONDS)
 
             if (finalRes.isDefined) {
               finalRes.get.status match {

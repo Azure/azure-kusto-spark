@@ -37,7 +37,8 @@ object KustoDataSourceUtils {
   val sasPattern: Regex = raw"(?:https://)?([^.]+).blob.([^/]+)/([^?]+)?(.+)".r
 
   val NewLine = sys.props("line.separator")
-  val MaxWaitTime: FiniteDuration = 1 minute
+  val ReadMaxWaitTime: FiniteDuration = 30 seconds
+  val WriteMaxWaitTime: FiniteDuration = 5 seconds
 
   val input: InputStream = getClass.getClassLoader.getResourceAsStream("spark.kusto.properties")
   val props = new Properties( )
@@ -303,7 +304,7 @@ object KustoDataSourceUtils {
     * @param stopCondition            - stop jobs if condition holds for the func.apply output
     * @param finalWork          - do final work with the last func.apply output
     */
-    def doWhile[A](func: () => A, delayBeforeStart: Long, delayBeforeEach: Int, timesToRun: Int, stopCondition: A => Boolean, finalWork: A => Unit): CountDownLatch = {
+    def doWhile[A](func: () => A, delayBeforeStart: Long, delayBeforeEach: Int, timesToRun: Int, stopCondition: A => Boolean, finalWork: A => Unit, maxWaitTimeBetweenCalls: Int): CountDownLatch = {
     val latch = new CountDownLatch(if (timesToRun > 0) timesToRun else 1)
     val t = new Timer()
     var currentWaitTime = delayBeforeEach
@@ -324,7 +325,7 @@ object KustoDataSourceUtils {
             finalWork.apply(res)
             while (latch.getCount > 0) latch.countDown()
           } else {
-            currentWaitTime = if (currentWaitTime > MaxWaitTime.toMillis) currentWaitTime else currentWaitTime + currentWaitTime
+            currentWaitTime = if (currentWaitTime + currentWaitTime > maxWaitTimeBetweenCalls) maxWaitTimeBetweenCalls else currentWaitTime + currentWaitTime
             t.schedule(new ExponentialBackoffTask(), currentWaitTime)
           }
         } catch {
@@ -383,7 +384,7 @@ object KustoDataSourceUtils {
         result.isEmpty || (result.get.next() && result.get.getString(stateCol) == "InProgress"),
       finalWork = (result: Option[KustoResultSetTable]) => {
         lastResponse = result
-      })
+      }, maxWaitTimeBetweenCalls = ReadMaxWaitTime.toMillis.toInt)
     var success = true
     if (timeOut < FiniteDuration.apply(0, SECONDS)) {
       task.await()
