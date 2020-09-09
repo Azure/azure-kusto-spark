@@ -51,7 +51,7 @@ object KustoWriter {
     val table = tableCoordinates.table.get
     val tmpTableName: String = KustoQueryUtils.simplifyName(TempIngestionTablePrefix +
       data.sparkSession.sparkContext.appName +
-      "_" + table + "_" + batchIdIfExists + "_" + writeOptions.sourceId)
+      "_" + table + "_" + batchIdIfExists + "_" + writeOptions.operationId)
     implicit val parameters: KustoWriteResource = KustoWriteResource(authentication, tableCoordinates, data.schema, writeOptions, tmpTableName)
 
     cleanupTempTables(kustoClient, tableCoordinates)
@@ -143,12 +143,12 @@ object KustoWriter {
 
     val tasks = ingestRows(rows, parameters, ingestClient, ingestionProperties, partitionsResults)
 
-    KDSU.logWarn(myName, s"Ingesting using ingest client - partition: ${TaskContext.getPartitionId()}, sourceId: '${writeOptions.sourceId}'")
+    KDSU.logWarn(myName, s"Ingesting using ingest client - partition: ${TaskContext.getPartitionId()}, operationId: '${writeOptions.operationId}'")
 
     tasks.asScala.foreach(t => try {
       Await.result(t, KCONST.defaultIngestionTaskTime)
     } catch {
-      case _: TimeoutException => KDSU.logWarn(myName, s"Timed out trying to ingest sourceId: '${writeOptions.sourceId}', no need to fail as the ingest might succeed")
+      case _: TimeoutException => KDSU.logWarn(myName, s"Timed out trying to ingest operationId: '${writeOptions.operationId}', no need to fail as the ingest might succeed")
     })
   }
 
@@ -168,7 +168,7 @@ object KustoWriter {
 
     import parameters._
     val partitionId = TaskContext.getPartitionId
-    KDSU.logInfo(myName, s"Ingesting partition: '$partitionId', sourceId: '${writeOptions.sourceId}'")
+    KDSU.logInfo(myName, s"Ingesting partition: '$partitionId', operationId: '${writeOptions.operationId}'")
     val ingestClient = KustoClientCache.getClient(coordinates.clusterAlias, coordinates.clusterUrl, authentication).ingestClient
 
     // We force blocking here, since the driver can only complete the ingestion process
@@ -239,7 +239,7 @@ object KustoWriter {
         if (shouldNotCommitBlockBlob) {
           blobWriter
         } else {
-          KDSU.logInfo(myName, s"Sealing blob for sourceId: '${writeOptions.sourceId}', in partition ${TaskContext.getPartitionId}, " +
+          KDSU.logInfo(myName, s"Sealing blob for operationId: '${writeOptions.operationId}', in partition ${TaskContext.getPartitionId}, " +
             s"blob number ${ingestionTasks.size}, with size $count")
           finalizeBlobWrite(blobWriter)
           val task = ingest(blobWriter.blob, blobWriter.csvWriter.getCounter, blobWriter.sas, flushImmediately = true)
@@ -248,7 +248,7 @@ object KustoWriter {
         }
     }
 
-    KDSU.logInfo(myName, s"finished serializing rows for sourceId: '${writeOptions.sourceId}' in partition ${TaskContext.getPartitionId}")
+    KDSU.logInfo(myName, s"finished serializing rows for operationId: '${writeOptions.operationId}' in partition ${TaskContext.getPartitionId}")
     finalizeBlobWrite(lastBlobWriter)
     if (lastBlobWriter.csvWriter.getCounter > 0) {
       ingestionTasks.add(ingest(lastBlobWriter.blob, lastBlobWriter.csvWriter.getCounter, lastBlobWriter.sas))

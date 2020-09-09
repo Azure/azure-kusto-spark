@@ -5,7 +5,7 @@ import java.net.URI
 import java.security.InvalidParameterException
 import java.util
 import java.util.concurrent.{Callable, CountDownLatch, TimeUnit, TimeoutException}
-import java.util.{NoSuchElementException, StringJoiner, Timer, TimerTask}
+import java.util.{NoSuchElementException, StringJoiner, Timer, TimerTask, UUID}
 
 import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties, KustoResultSetTable}
 import com.microsoft.kusto.spark.authentication._
@@ -37,19 +37,16 @@ object KustoDataSourceUtils {
   val NewLine = sys.props("line.separator")
   val MaxWaitTime: FiniteDuration = 1 minute
 
-  val input: InputStream = getClass.getClassLoader.getResourceAsStream("app.properties")
-  val prop = new Properties( )
-  prop.load(input)
-  var version: String = prop.getProperty("application.version")
-  if(version == null){
-    version = prop.getProperty("version")
-  }
-  val clientName = s"Kusto.Spark.Connector:$version"
-  val ingestPrefix: String = prop.getProperty("ingestPrefix","ingest-")
-  val enginePrefix: String = prop.getProperty("enginePrefix","https://")
-  val defaultDomainPostfix: String = prop.getProperty("defaultDomainPostfix","core.windows.net")
-  val defaultClusterSuffix: String = prop.getProperty("defaultClusterSuffix","kusto.windows.net")
-  val ariaClustersProxy: String = prop.getProperty("ariaClustersProxy", "https://kusto.aria.microsoft.com")
+  val input: InputStream = getClass.getClassLoader.getResourceAsStream("spark.kusto.properties")
+  val props = new Properties( )
+  props.load(input)
+  var version: String = props.getProperty("application.version")
+  var clientName = s"Kusto.Spark.Connector:$version"
+  val ingestPrefix: String = props.getProperty("ingestPrefix","ingest-")
+  val enginePrefix: String = props.getProperty("enginePrefix","https://")
+  val defaultDomainPostfix: String = props.getProperty("defaultDomainPostfix","core.windows.net")
+  val defaultClusterSuffix: String = props.getProperty("defaultClusterSuffix","kusto.windows.net")
+  val ariaClustersProxy: String = props.getProperty("ariaClustersProxy", "https://kusto.aria.microsoft.com")
   val ariaClustersAlias: String = "Aria proxy"
 
   def setLoggingLevel(level: String): Unit = {
@@ -152,7 +149,7 @@ object KustoDataSourceUtils {
       if(!applicationKey.isEmpty){
         authentication = AadApplicationAuthentication(applicationId, applicationKey, parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com"))
       } else if(!applicationCertPath.isEmpty){
-        authentication = AadApplicationCertificateAuthentication(applicationId, applicationCertPath, applicationCertPassword);
+        authentication = AadApplicationCertificateAuthentication(applicationId, applicationCertPath, applicationCertPassword)
       }
     } else if (!accessToken.isEmpty) {
       // Authentication by token
@@ -188,20 +185,19 @@ object KustoDataSourceUtils {
     var isAsync: Boolean = false
     var isAsyncParam: String = ""
     var batchLimit: Int = 0
-    var sourceId: Option[String] = None
     try {
       isAsyncParam = parameters.getOrElse(KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC, "false")
       isAsync = parameters.getOrElse(KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC, "false").trim.toBoolean
       tableCreationParam = parameters.get(KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS)
       tableCreation = if (tableCreationParam.isEmpty) SinkTableCreationMode.FailIfNotExist else SinkTableCreationMode.withName(tableCreationParam.get)
       batchLimit = parameters.getOrElse(KustoSinkOptions.KUSTO_CLIENT_BATCHING_LIMIT, "100").trim.toInt
-      sourceId = parameters.get(KustoSinkOptions.KUSTO_SOURCE_ID)
     } catch {
       case _: NoSuchElementException => throw new InvalidParameterException(s"No such SinkTableCreationMode option: '${tableCreationParam.get}'")
       case _: java.lang.IllegalArgumentException => throw new InvalidParameterException(s"KUSTO_WRITE_ENABLE_ASYNC is expecting either 'true' or 'false', got: '$isAsyncParam'")
     }
 
     val timeout = new FiniteDuration(parameters.getOrElse(KustoSinkOptions.KUSTO_TIMEOUT_LIMIT, KCONST.defaultWaitingIntervalLongRunning).toLong, TimeUnit.SECONDS)
+    val operationId = parameters.getOrElse(KustoSinkOptions.KUSTO_OPERATION_ID, UUID.randomUUID().toString)
 
     val ingestionPropertiesAsJson = parameters.get(KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON)
 
@@ -213,7 +209,7 @@ object KustoDataSourceUtils {
       timeout,
       ingestionPropertiesAsJson,
       batchLimit,
-      if (sourceId.isDefined) UUID.fromString(sourceId.get) else UUID.randomUUID()
+      operationId
     )
 
     val sourceParameters = parseSourceParameters(parameters)
@@ -224,19 +220,19 @@ object KustoDataSourceUtils {
 
     logInfo("parseSinkParameters", s"Parsed write options for sink: {'timeout': ${writeOptions.timeout}, 'async': ${writeOptions.isAsync}, " +
       s"'tableCreationMode': ${writeOptions.tableCreateOptions}, 'writeLimit': ${writeOptions.writeResultLimit}, 'batchLimit': ${writeOptions.batchLimit}" +
-      s", 'timeout': ${writeOptions.timeout}, 'timezone': ${writeOptions.timeZone}, 'ingestionProperties': $ingestionPropertiesAsJson}")
+      s", 'timeout': ${writeOptions.timeout}, 'timezone': ${writeOptions.timeZone}, 'ingestionProperties': $ingestionPropertiesAsJson, operationId: $operationId}")
 
     SinkParameters(writeOptions, sourceParameters)
   }
 
-  def getClientRequestProperties(parameters: Map[String, String]): Option[ClientRequestProperties] = {
+  def getClientRequestProperties(parameters: Map[String, String]): ClientRequestProperties = {
     val crpOption = parameters.get(KustoSourceOptions.KUSTO_CLIENT_REQUEST_PROPERTIES_JSON)
 
     if (crpOption.isDefined) {
       val crp = ClientRequestProperties.fromString(crpOption.get)
-      Some(crp)
+      crp
     } else {
-      None
+      new ClientRequestProperties
     }
   }
 

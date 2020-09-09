@@ -90,7 +90,10 @@ All the options that can be use in the Kusto source are under the object KustoSo
 * **KUSTO_CLIENT_REQUEST_PROPERTIES_JSON**:
   'clientRequestPropertiesJson' - A json representation for [ClientRequestProperties](https://github.com/Azure/azure-kusto-java/blob/master/data/src/main/java/com/microsoft/azure/kusto/data/ClientRequestProperties.java)
    used in the call for reading from Kusto (used in the single query for 'single' mode or for the export command for 'distributed' mode). Use toString to create the json.
-    
+
+* **KUSTO_OPERATION_ID**:
+    A unique identifier UUID for this reading operation. Setting this will override the ClientRequestId on the
+    ClientRequestProperties object if set.
     
 #### Transient Storage Parameters
 When reading data from Kusto in 'distributed' mode, the data is exported from Kusto into a blob storage every time the corresponding RDD is materialized. 
