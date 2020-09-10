@@ -51,40 +51,40 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
   private val loggingLevel: Option[String] = Option(System.getProperty("logLevel"))
   if (loggingLevel.isDefined) KDSU.setLoggingLevel(loggingLevel.get)
 
-  "KustoSource" should "execute a read query on Kusto cluster in single mode" taggedAs KustoE2E in {
-    val table: String = System.getProperty(KustoSinkOptions.KUSTO_TABLE)
-    val query: String = System.getProperty(KustoSourceOptions.KUSTO_QUERY, s"$table | where (toint(ColB) % 1000 == 0) | distinct ColA ")
-
-    val conf: Map[String, String] = Map(
-      KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceSingleMode.toString,
-      KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
-      KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey
-    )
-
-    val df = spark.read.kusto(cluster, database, query, conf)
-    df.show()
-  }
-
-  "KustoSource" should "execute a read query on Kusto cluster in distributed mode" taggedAs KustoE2E in {
-    val table: String = System.getProperty(KustoSinkOptions.KUSTO_TABLE)
-    val query: String = System.getProperty(KustoSourceOptions.KUSTO_QUERY, s"$table | where (toint(ColB) % 1 == 0)")
-
-    val storageAccount: String = System.getProperty("storageAccount")
-    val container: String = System.getProperty("container")
-    val blobKey: String = System.getProperty("blobKey")
-    val blobSas: String = System.getProperty("blobSas")
-    val blobSasConnectionString: String = System.getProperty("blobSasQuery")
-
-    val conf: Map[String, String] = Map(
-      KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
-      KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey,
-      KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME -> storageAccount,
-      KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_KEY -> blobKey,
-      KustoSourceOptions.KUSTO_BLOB_CONTAINER -> container
-    )
-
-    spark.read.kusto(cluster, database, query, conf).show(20)
-  }
+//  "KustoSource" should "execute a read query on Kusto cluster in single mode" taggedAs KustoE2E in {
+//    val table: String = System.getProperty(KustoSinkOptions.KUSTO_TABLE)
+//    val query: String = System.getProperty(KustoSourceOptions.KUSTO_QUERY, s"$table | where (toint(ColB) % 1000 == 0) | distinct ColA ")
+//
+//    val conf: Map[String, String] = Map(
+//      KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceSingleMode.toString,
+//      KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
+//      KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey
+//    )
+//
+//    val df = spark.read.kusto(cluster, database, query, conf)
+//    df.show()
+//  }
+//
+//  "KustoSource" should "execute a read query on Kusto cluster in distributed mode" taggedAs KustoE2E in {
+//    val table: String = System.getProperty(KustoSinkOptions.KUSTO_TABLE)
+//    val query: String = System.getProperty(KustoSourceOptions.KUSTO_QUERY, s"$table | where (toint(ColB) % 1 == 0)")
+//
+//    val storageAccount: String = System.getProperty("storageAccount")
+//    val container: String = System.getProperty("container")
+//    val blobKey: String = System.getProperty("blobKey")
+//    val blobSas: String = System.getProperty("blobSas")
+//    val blobSasConnectionString: String = System.getProperty("blobSasQuery")
+//
+//    val conf: Map[String, String] = Map(
+//      KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
+//      KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey,
+//      KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME -> storageAccount,
+//      KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_KEY -> blobKey,
+//      KustoSourceOptions.KUSTO_BLOB_CONTAINER -> container
+//    )
+//
+//    spark.read.kusto(cluster, database, query, conf).show(20)
+//  }
 
   "KustoConnector" should "write to a kusto table and read it back in default mode" taggedAs KustoE2E in {
     import spark.implicits._
@@ -109,6 +109,7 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
       .option(KustoSinkOptions.KUSTO_AAD_APP_ID, appId)
       .option(KustoSinkOptions.KUSTO_AAD_APP_SECRET, appKey)
       .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, authority)
+      .option(KustoSinkOptions.KUSTO_REQUEST_ID, "04ec0408-3cc3_.asd")
       .mode(SaveMode.Append)
       .save()
 
@@ -121,6 +122,7 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
 
     val orig = dfOrig.select("name", "value").rdd.map(x => (x.getString(0), x.getInt(1))).collect().sortBy(_._2)
     val result = dfResult.select("ColA", "ColB").rdd.map(x => (x.getString(0), x.getInt(1))).collect().sortBy(_._2)
+
 
     assert(orig.deep == result.deep)
 

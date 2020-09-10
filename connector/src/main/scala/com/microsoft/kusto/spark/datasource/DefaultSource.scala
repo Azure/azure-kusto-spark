@@ -82,7 +82,7 @@ class DefaultSource extends CreatableRelationProvider
       if (storageSecret.isDefined) storageSecretIsAccountKey = false
     }
 
-    val operationId = parameters.get(KustoSinkOptions.KUSTO_OPERATION_ID)
+    val requestIdOption = parameters.get(KustoSinkOptions.KUSTO_REQUEST_ID)
     if (authenticationParameters.isEmpty) {
       // Parse parameters if haven't got parsed before
       val sourceParameters = KDSU.parseSourceParameters(parameters)
@@ -90,9 +90,8 @@ class DefaultSource extends CreatableRelationProvider
       kustoCoordinates = sourceParameters.kustoCoordinates
       keyVaultAuthentication = sourceParameters.keyVaultAuth
       clientRequestProperties = Some(KDSU.getClientRequestProperties(parameters))
-      if (operationId.isDefined) clientRequestProperties.get.setClientRequestId(operationId.get)
+      if (requestIdOption.isDefined) clientRequestProperties.get.setClientRequestId(requestIdOption.get)
     }
-
     val (kustoAuthentication, storageParameters): (Option[KustoAuthentication], Option[KustoStorageParameters]) =
       if (keyVaultAuthentication.isDefined) {
         // Get params from keyVault
@@ -121,9 +120,9 @@ class DefaultSource extends CreatableRelationProvider
     } else {
       None
     }
+    val requestId = requestIdOption.getOrElse(UUID.randomUUID().toString)
 
-    KDSU.logInfo(myName, "Finished serializing parameters for reading")
-
+    KDSU.logInfo(myName, s"Finished serializing parameters for reading: {requestId: $requestId, timeout: $timeout, readMode: ${readMode.getOrElse("Default")}, clientRequestProperties: $clientRequestProperties")
     KustoRelation(
       kustoCoordinates,
       kustoAuthentication.get,
@@ -136,7 +135,7 @@ class DefaultSource extends CreatableRelationProvider
       parameters.get(KustoSourceOptions.KUSTO_CUSTOM_DATAFRAME_COLUMN_TYPES),
       storageParameters,
       clientRequestProperties,
-      operationId.getOrElse(UUID.randomUUID().toString)
+      requestId
     )(sqlContext.sparkSession)
   }
 

@@ -200,7 +200,7 @@ object KustoDataSourceUtils {
     }
 
     val timeout = new FiniteDuration(parameters.getOrElse(KustoSinkOptions.KUSTO_TIMEOUT_LIMIT, KCONST.defaultWaitingIntervalLongRunning).toLong, TimeUnit.SECONDS)
-    val operationId = parameters.getOrElse(KustoSinkOptions.KUSTO_OPERATION_ID, UUID.randomUUID().toString)
+    val requestId = parameters.getOrElse(KustoSinkOptions.KUSTO_REQUEST_ID, UUID.randomUUID().toString)
 
     val ingestionPropertiesAsJson = parameters.get(KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON)
 
@@ -212,7 +212,7 @@ object KustoDataSourceUtils {
       timeout,
       ingestionPropertiesAsJson,
       batchLimit,
-      operationId
+      requestId
     )
 
     val sourceParameters = parseSourceParameters(parameters)
@@ -223,7 +223,7 @@ object KustoDataSourceUtils {
 
     logInfo("parseSinkParameters", s"Parsed write options for sink: {'timeout': ${writeOptions.timeout}, 'async': ${writeOptions.isAsync}, " +
       s"'tableCreationMode': ${writeOptions.tableCreateOptions}, 'writeLimit': ${writeOptions.writeResultLimit}, 'batchLimit': ${writeOptions.batchLimit}" +
-      s", 'timeout': ${writeOptions.timeout}, 'timezone': ${writeOptions.timeZone}, 'ingestionProperties': $ingestionPropertiesAsJson, operationId: $operationId}")
+      s", 'timeout': ${writeOptions.timeout}, 'timezone': ${writeOptions.timeZone}, 'ingestionProperties': $ingestionPropertiesAsJson, requestId: $requestId}")
 
     SinkParameters(writeOptions, sourceParameters)
   }
@@ -366,8 +366,8 @@ object KustoDataSourceUtils {
           val error = new JSONObject(e.getCause.getMessage).getJSONObject("error")
           val isPermanent = error.getBoolean("@permanent")
           if (isPermanent) {
-            val message = s"Couldn't monitor the progress of the export command from the service, operationId:$operationId" +
-              s"and read from the blob directory: ('$directory'), once it completes."
+            val message = s"Couldn't monitor the progress of the export command from the service, you may track it using " +
+              s"the command '$operationsShowCommand' and read from the blob directory: ('$directory'), once it completes."
             logError("verifyAsyncCommandCompletion", message)
             throw new Exception(message, e)
           }

@@ -46,4 +46,4 @@ case class WriteOptions(tableCreateOptions: SinkTableCreationMode.SinkTableCreat
                         timeZone: String = "UTC", timeout: FiniteDuration,
                         IngestionProperties: Option[String] = None,
                         batchLimit: Int = 100,
-                        operationId: String = UUID.randomUUID().toString)
+                        requestId: String = UUID.randomUUID().toString)

@@ -88,11 +88,12 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
                                                            tmpTableName: String,
                                                            partitionsResults: CollectionAccumulator[PartitionResult],
                                                            timeout: FiniteDuration,
+                                                           requestId: String,
                                                            isAsync: Boolean = false): Unit = {
     import coordinates._
 
     val mergeTask = Future {
-      KDSU.logInfo(myName, s"Polling on ingestion results, will move data to destination table when finished")
+      KDSU.logInfo(myName, s"Polling on ingestion results for requestId: $requestId, will move data to destination table when finished")
 
       try {
         partitionsResults.value.asScala.foreach {
@@ -103,10 +104,10 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
                 try {
                   finalRes = Some(partitionResult.ingestionResult.getIngestionStatusCollection.get(0)); finalRes
                 } catch {
-                  case e: StorageException =>
-                    KDSU.logWarn(myName, "Failed to fetch operation status transiently - will keep polling")
+                  case _: StorageException =>
+                    KDSU.logWarn(myName, s"Failed to fetch operation status transiently - will keep polling. RequestId: $requestId")
                     None
-                  case e: Exception => KDSU.reportExceptionAndThrow(myName, e, "Failed to fetch operation status"); None
+                  case e: Exception => KDSU.reportExceptionAndThrow(myName, e, s"Failed to fetch operation status. RequestId: $requestId"); None
                 }
               },
               0,
@@ -120,16 +121,16 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
               finalRes.get.status match {
               case OperationStatus.Pending =>
                 throw new RuntimeException(s"Ingestion to Kusto failed on timeout failure. Cluster: '${coordinates.clusterAlias}', " +
-                  s"database: '${coordinates.database}', table: '$tmpTableName', batch: '$batchIdIfExists', partition: '${partitionResult.partitionId}'")
+                  s"database: '${coordinates.database}', table: '$tmpTableName'$batchIdIfExists, partition: '${partitionResult.partitionId}'")
               case OperationStatus.Succeeded =>
                 KDSU.logInfo(myName, s"Ingestion to Kusto succeeded. " +
                   s"Cluster: '${coordinates.clusterAlias}', " +
                   s"database: '${coordinates.database}', " +
-                  s"table: '$tmpTableName', batch: '$batchIdIfExists', partition: '${partitionResult.partitionId}'', from: '${finalRes.get.ingestionSourcePath}', Operation ${finalRes.get.operationId}")
+                  s"table: '$tmpTableName'$batchIdIfExists, partition: '${partitionResult.partitionId}'', from: '${finalRes.get.ingestionSourcePath}', Operation ${finalRes.get.operationId}")
               case otherStatus =>
                 throw new RuntimeException(s"Ingestion to Kusto failed with status '$otherStatus'." +
                   s" Cluster: '${coordinates.clusterAlias}', database: '${coordinates.database}', " +
-                  s"table: '$tmpTableName', batch: '$batchIdIfExists', partition: '${partitionResult.partitionId}''. Ingestion info: '${readIngestionResult(finalRes.get)}'")
+                  s"table: '$tmpTableName'$batchIdIfExists, partition: '${partitionResult.partitionId}''. Ingestion info: '${readIngestionResult(finalRes.get)}'")
               }
             } else {
               throw new RuntimeException("Failed to poll on ingestion status.")
@@ -142,9 +143,9 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
           // Protect tmp table from merge/rebuild and move data to the table requested by customer. This operation is atomic.
           kustoAdminClient.execute(database, generateTableAlterMergePolicyCommand(tmpTableName, allowMerge = false, allowRebuild = false))
           kustoAdminClient.execute(database, generateTableMoveExtentsCommand(tmpTableName, table.get))
-          KDSU.logInfo(myName, s"write to Kusto table '${table.get}' finished successfully $batchIdIfExists")
+          KDSU.logInfo(myName, s"write to Kusto table '${table.get}' finished successfully requestId: $requestId $batchIdIfExists")
         } else {
-          KDSU.logWarn(myName, s"write to Kusto table '${table.get}' finished with no data written")
+          KDSU.logWarn(myName, s"write to Kusto table '${table.get}' finished with no data written requestId: $requestId $batchIdIfExists")
         }
       } catch {
         case ex: Exception =>

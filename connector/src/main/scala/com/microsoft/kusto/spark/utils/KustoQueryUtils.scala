@@ -21,7 +21,7 @@ object KustoQueryUtils {
   def isQuery(query: String): Boolean = !isCommand(query)
 
   def simplifyName(name: String): String = {
-    name.replaceAll("-", "_").replaceAll("\\s", "")
+    name.replaceAll("-", "_").replaceAll("\\.", "_").replaceAll("\\s", "_")
   }
 
   def normalizeTableName(table: String): String = {

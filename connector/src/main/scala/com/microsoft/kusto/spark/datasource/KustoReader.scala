@@ -40,7 +40,7 @@ private[kusto] case class KustoReadRequest(sparkSession: SparkSession,
                                            authentication: KustoAuthentication,
                                            timeout: FiniteDuration,
                                            clientRequestProperties: Option[ClientRequestProperties],
-                                           operationId: String)
+                                           requestId: String)
 
 private[kusto] case class KustoReadOptions(readMode: Option[ReadMode] = None,
                                            shouldCompressOnExport: Boolean = true,
@@ -52,7 +52,7 @@ private[kusto] object KustoReader {
                                      request: KustoReadRequest,
                                      filtering: KustoFiltering): RDD[Row] = {
 
-    KDSU.logInfo(myName, s"Executing query. operationId: ${request.operationId}")
+    KDSU.logInfo(myName, s"Executing query. requestId: ${request.requestId}")
     val filteredQuery = KustoFilter.pruneAndFilter(KustoSchema(request.schema.sparkSchema, Set()), request.query, filtering)
     val kustoResult: KustoResultSetTable = kustoClient.execute(request.kustoCoordinates.database,
       filteredQuery,
@@ -68,7 +68,7 @@ private[kusto] object KustoReader {
                                           partitionInfo: KustoPartitionParameters,
                                           options: KustoReadOptions,
                                           filtering: KustoFiltering): RDD[Row] = {
-    KDSU.logInfo(myName, s"Starting exporting data from Kusto to blob storage. OperationId: ${request.operationId}")
+    KDSU.logInfo(myName, s"Starting exporting data from Kusto to blob storage. requestId: ${request.requestId}")
 
     setupBlobAccess(request, storage)
     val partitions = calculatePartitions(partitionInfo)
@@ -95,7 +95,7 @@ private[kusto] object KustoReader {
     }
     val paths = storage.filter(directoryExists).map(params => s"wasbs://${params.container}@${params.account}.blob.${params.endpointSuffix}/$directory")
     KDSU.logInfo(myName, s"Finished exporting from Kusto to '${paths.toString()}'" +
-      s", on operationId: ${request.operationId}, will start parquet reading now")
+      s", on requestId: ${request.requestId}, will start parquet reading now")
     val rdd = try {
       request.sparkSession.read.parquet(paths:_*).rdd
     } catch {
