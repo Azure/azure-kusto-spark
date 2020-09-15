@@ -198,7 +198,6 @@ df.write
        .csv("/FileStore/tables")
  
  spark.conf.set("spark.sql.streaming.checkpointLocation", "/FileStore/temp/checkpoint")
- spark.conf.set("spark.sql.codegen.wholeStage", "false")
  
  val kustoQ = csvDf
        .writeStream

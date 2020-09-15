@@ -87,7 +87,6 @@ object KustoConnectorDemo {
 
     // Set up a checkpoint and disable codeGen
     spark.conf.set("spark.sql.streaming.checkpointLocation", "/FileStore/temp/checkpoint")
-    spark.conf.set("spark.sql.codegen.wholeStage","false")
 
     // Write to a Kusto table from streaming source
     val kustoQ = csvDf
