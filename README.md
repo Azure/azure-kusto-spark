@@ -79,7 +79,7 @@ In order to use the connector, you need to have:
 
 - Java 1.8 SDK installed
 - [Maven 3.x](https://maven.apache.org/download.cgi) installed
-- Spark version 2.4.x 
+- Spark version 2.4.x. For spark 3.x use connector versions x.x.x-spark_3.0_2.12.
 
 > Note: when working with 2.3 Spark version or lower, please refer to [Building for legacy Spark versions](docs/CHANGELIST.md#building-for-legacy-spark-versions)
  section of the [CHANGELIST](docs/CHANGELIST.md) document
