@@ -3,7 +3,7 @@ package com.microsoft.kusto.spark
 import java.sql.{Date, Timestamp}
 
 import com.microsoft.kusto.spark.datasource.{KustoFilter, KustoFiltering, KustoSchema}
-import org.apache.spark.sql.sources._
+import org.apache.spark.sql.sources.{Filter, _}
 import org.apache.spark.sql.types._
 import org.junit.runner.RunWith
 import org.scalamock.scalatest.MockFactory
@@ -25,16 +25,9 @@ class KustoFilterTests extends FlatSpec with MockFactory with Matchers{
     StructField("date", DateType),
     StructField("timestamp", TimestampType)))
 
-  val unknownFilter: Filter = new Filter {
-    override def references: Array[String] = Array("UnknownFilter")
-  }
 
   "Filter clause" should "be empty if filters list is empty" in {
     assert(KustoFilter.buildFiltersClause(StructType(Nil), Seq.empty) === "")
-  }
-
-  "Filter clause" should "be empty if filter is unknown" in {
-    assert(KustoFilter.buildFiltersClause(StructType(Nil), Seq(unknownFilter)) === "")
   }
 
   "EqualTo expression" should "construct equality filter correctly for string type" in {
@@ -49,13 +42,13 @@ class KustoFilterTests extends FlatSpec with MockFactory with Matchers{
 
   "EqualTo expression" should "construct equality filter correctly for date type" in {
       // Java.sql.date  year is 1900-based, month is 0-based
-      val filter = KustoFilter.buildFilterExpression(schema, EqualTo("date", new Date(119, 1, 21)))
+      val filter = KustoFilter.buildFilterExpression(schema, EqualTo("date", Date.valueOf("2019-02-21")))
       filter shouldBe Some("""['date'] == datetime('2019-02-21')""")
   }
 
   "EqualTo expression" should "construct equality filter correctly for timestamp type" in {
     // Java.sql.date  year is 1900-based, month is 0-based
-    val filter = KustoFilter.buildFilterExpression(schema, EqualTo("timestamp", new Timestamp(119, 1, 21, 12, 30, 2, 123)))
+    val filter = KustoFilter.buildFilterExpression(schema, EqualTo("timestamp", Timestamp.valueOf("2019-02-21 12:30:02.000000123")))
     filter shouldBe Some("""['timestamp'] == datetime('2019-02-21 12:30:02.000000123')""")
   }
 
@@ -131,13 +124,6 @@ class KustoFilterTests extends FlatSpec with MockFactory with Matchers{
 
     val filter = KustoFilter.buildFilterExpression(schema, Not(childFilter))
     filter shouldBe Some("""not(isnotnull(['byte']))""")
-  }
-
-  "Not expression with empty child" should "return None" in {
-    val childFilter = unknownFilter
-
-    val filter = KustoFilter.buildFilterExpression(schema, Not(childFilter))
-    filter shouldBe None
   }
 
   "StringStartsWith expression" should "construct the correct expression" in {
