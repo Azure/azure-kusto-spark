@@ -2,7 +2,7 @@
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
     <modelVersion>4.0.0</modelVersion>
-    <artifactId>spark-kusto-connector</artifactId>
+    <artifactId>kusto-spark_${spark.version.major}_${scala.version.major}</artifactId>
     <name>Spark Kusto connector</name>
     <description>Kusto connector for Spark to query and ingest data</description>
     <parent>
@@ -16,7 +16,7 @@
         <!-- Compile Scope -->
         <dependency>
             <groupId>com.fasterxml.jackson.module</groupId>
-            <artifactId>jackson-module-scala_${scala.version}</artifactId>
+            <artifactId>jackson-module-scala_${scala.version.major}</artifactId>
             <version>[2.11.0,2.12.0)</version>
         </dependency>
         <dependency>
@@ -37,12 +37,12 @@
         <dependency>
             <groupId>org.scala-lang</groupId>
             <artifactId>scala-library</artifactId>
-            <version>${scala.version}.12</version>
+            <version>${scala.version.major}.${scala.version.minor}</version>
         </dependency>
         <dependency>
             <groupId>org.scala-lang</groupId>
             <artifactId>scala-reflect</artifactId>
-            <version>${scala.version}.12</version>
+            <version>${scala.version.major}.${scala.version.minor}</version>
         </dependency>
         <dependency>
             <groupId>com.microsoft.azure.kusto</groupId>
@@ -57,6 +57,10 @@
                 <exclusion>
                     <groupId>com.fasterxml.jackson.core</groupId>
                     <artifactId>jackson-databind</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.univocity</groupId>
+                    <artifactId>univocity-parsers</artifactId>
                 </exclusion>
             </exclusions>
         </dependency>
@@ -92,16 +96,6 @@
             <version>20180813</version>
         </dependency>
         <dependency>
-            <groupId>org.json4s</groupId>
-            <artifactId>json4s-core_${scala.version}</artifactId>
-            <version>3.5.3</version>
-        </dependency>
-        <dependency>
-            <groupId>org.json4s</groupId>
-            <artifactId>json4s-ast_${scala.version}</artifactId>
-            <version>3.5.3</version>
-        </dependency>
-        <dependency>
             <groupId>joda-time</groupId>
             <artifactId>joda-time</artifactId>
             <version>2.10.2</version>
@@ -112,11 +106,6 @@
             <version>2.2.1</version>
         </dependency>
         <dependency>
-            <groupId>com.univocity</groupId>
-            <artifactId>univocity-parsers</artifactId>
-            <version>2.7.6</version>
-        </dependency>
-        <dependency>
             <groupId>commons-beanutils</groupId>
             <artifactId>commons-beanutils</artifactId>
             <version>1.9.4</version>
@@ -124,20 +113,14 @@
         <!-- Provided Scope -->
         <dependency>
             <groupId>org.apache.spark</groupId>
-            <artifactId>spark-core_${scala.version}</artifactId>
-            <version>${spark.version}</version>
+            <artifactId>spark-sql_${scala.version.major}</artifactId>
+            <version>${spark.version.major}.${spark.version.minor}</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.apache.spark</groupId>
-            <artifactId>spark-sql_${scala.version}</artifactId>
-            <version>${spark.version}</version>
-            <scope>provided</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.spark</groupId>
-            <artifactId>spark-catalyst_${scala.version}</artifactId>
-            <version>${spark.version}</version>
+            <artifactId>spark-catalyst_${scala.version.major}</artifactId>
+            <version>${spark.version.major}.${spark.version.minor}</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
@@ -155,20 +138,14 @@
         </dependency>
         <dependency>
             <groupId>org.scalatest</groupId>
-            <artifactId>scalatest_${scala.version}</artifactId>
+            <artifactId>scalatest_${scala.version.major}</artifactId>
             <version>3.0.0</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.scalamock</groupId>
-            <artifactId>scalamock_${scala.version}</artifactId>
+            <artifactId>scalamock_${scala.version.major}</artifactId>
             <version>4.1.0</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.scalactic</groupId>
-            <artifactId>scalactic_${scala.version}</artifactId>
-            <version>3.0.5</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -286,6 +263,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-jar-plugin</artifactId>
+                <version>3.2.0</version>
                 <executions>
                     <execution>
                         <id>empty-javadoc-jar</id>
@@ -316,6 +294,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.8.0</version>
                 <configuration>
                     <source>8</source>
                     <target>8</target>
