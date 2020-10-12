@@ -7,7 +7,7 @@ sc._jvm.com.microsoft.kusto.spark.utils.KustoDataSourceUtils.setLoggingLevel("al
 #######################
 
 # Read data from Azure Data Explorer table(s)
-# In this example the Kusto Spark connector will determing the optimal path to get data: API for small data sets, Export/Distributed mode for large datasets.
+# In this example the Kusto Spark connector will determine the optimal path to get data: API for small data sets, Export/Distributed mode for large datasets.
 
 kustoDf  = spark.read \
             .format("com.microsoft.kusto.spark.synapse.datasource") \
