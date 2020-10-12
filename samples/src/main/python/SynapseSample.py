@@ -1,6 +1,9 @@
 # Optional:
-sc._jvm.com.microsoft.kusto.spark.utils.KustoDataSourceUtils.setLoggingLevel("all")
+sc._jvm.com.microsoft.kusto.spark.utils.KustoDataSourceUtils.setLoggingLevel("all") 
 
+# Azure Synapse is a limitless analytics service that brings together enterprise data warehousing. 
+# The synapse-kusto connector encapsulates the kusto-spark connector. The code resides in a private repository and is integrated in azure synapse.
+# Read more about this integration https://docs.microsoft.com/azure/synapse-analytics/quickstart-connect-azure-data-explorer
 
 #######################
 # BATCH READ EXAMPLE  #
@@ -47,7 +50,7 @@ display(kustoDf)
 # BATCH WRITE EXAMPLE #
 #######################
 
-# Write data to a Azure Data Explorer table
+# Write data to an Azure Data Explorer table
 
 df.write \
     .format("com.microsoft.kusto.spark.synapse.datasource") \
