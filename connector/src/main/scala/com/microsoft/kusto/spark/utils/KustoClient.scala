@@ -9,7 +9,7 @@ import com.microsoft.azure.kusto.ingest.result.{IngestionStatus, OperationStatus
 import com.microsoft.azure.kusto.ingest.{IngestClient, IngestClientFactory, IngestionProperties}
 import com.microsoft.azure.storage.StorageException
 import com.microsoft.kusto.spark.common.KustoCoordinates
-import com.microsoft.kusto.spark.datasink.KustoWriter.delayPeriodBetweenCalls
+import com.microsoft.kusto.spark.datasink.KustoWriter.{TempIngestionTablePrefix, delayPeriodBetweenCalls}
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
 import com.microsoft.kusto.spark.datasink.{PartitionResult, SinkTableCreationMode}
 import com.microsoft.kusto.spark.datasource.KustoStorageParameters
@@ -170,7 +170,35 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
     }
     catch {
       case exception: Exception =>
-        KDSU.reportExceptionAndThrow(myName, exception, s"deleting temporary table $tmpTableName", database = database, shouldNotThrow = true)
+        KDSU.reportExceptionAndThrow(myName, exception, s"deleting temporary table $tmpTableName", database = database, shouldNotThrow = false)
+    }
+  }
+
+  def cleanupTempTables(coordinates: KustoCoordinates): Unit = {
+    Future {
+      val tempTablesOld: Seq[String] =
+        engineClient.execute(generateFindOldTempTablesCommand(coordinates.database))
+          .getPrimaryResults.getData.asInstanceOf[util.ArrayList[util.ArrayList[String]]].asScala
+          .headOption.map(_.asScala)
+          .getOrElse(Seq())
+
+      // Try delete temporary tablesToCleanup created and not used
+      val tempTablesCurr = engineClient.execute(coordinates.database, generateFindCurrentTempTablesCommand(TempIngestionTablePrefix)).getPrimaryResults
+      if (tempTablesCurr.count() > 0) {
+        tempTablesCurr.next()
+        val tablesToCleanup: Seq[String] = tempTablesOld.intersect(tempTablesCurr.getCurrentRow.asScala)
+        if (tablesToCleanup.nonEmpty) {
+          engineClient.execute(coordinates.database, generateDropTablesCommand(tablesToCleanup.mkString(",")))
+        }
+      }
+    } onFailure {
+      case ex: Exception =>
+        KDSU.reportExceptionAndThrow(
+          myName,
+          ex,
+          "trying to drop temporary tables", coordinates.clusterUrl, coordinates.database, coordinates.table.getOrElse("Unspecified table name"),
+          shouldNotThrow = true
+        )
     }
   }
 

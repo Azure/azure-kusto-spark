@@ -15,7 +15,6 @@ import com.microsoft.azure.kusto.ingest.{IngestClient, IngestionProperties}
 import com.microsoft.azure.storage.blob.{BlobRequestOptions, CloudBlockBlob}
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
-import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.{KustoClient, KustoClientCache, KustoQueryUtils, KustoConstants => KCONST, KustoDataSourceUtils => KDSU}
 import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.spark.TaskContext
@@ -54,7 +53,7 @@ object KustoWriter {
       "_" + table + batchId.map(b=>s"_${b.toString}").getOrElse("") + "_" + writeOptions.requestId)
     implicit val parameters: KustoWriteResource = KustoWriteResource(authentication, tableCoordinates, data.schema, writeOptions, tmpTableName)
 
-    cleanupTempTables(kustoClient, tableCoordinates)
+    kustoClient.cleanupTempTables(tableCoordinates)
 
     // KustoWriter will create a temporary table ingesting the data to it.
     // Only if all executors succeeded the table will be appended to the original destination table.
@@ -101,34 +100,6 @@ object KustoWriter {
     } else {
       ingestToTemporaryTableByWorkers(batchIdForTracing, rows, partitionsResults)
     }
-
-  def cleanupTempTables(kustoClient: KustoClient, coordinates: KustoCoordinates): Unit = {
-    Future {
-      val tempTablesOld: Seq[String] =
-        kustoClient.engineClient.execute(generateFindOldTempTablesCommand(coordinates.database))
-          .getPrimaryResults.getData.asInstanceOf[util.ArrayList[util.ArrayList[String]]].asScala
-          .headOption.map(_.asScala)
-          .getOrElse(Seq())
-
-      // Try delete temporary tablesToCleanup created and not used
-      val tempTablesCurr = kustoClient.engineClient.execute(coordinates.database, generateFindCurrentTempTablesCommand(TempIngestionTablePrefix)).getPrimaryResults
-      if (tempTablesCurr.count() > 0) {
-        tempTablesCurr.next()
-        val tablesToCleanup: Seq[String] = tempTablesOld.intersect(tempTablesCurr.getCurrentRow.asScala)
-        if (tablesToCleanup.nonEmpty) {
-          kustoClient.engineClient.execute(coordinates.database, generateDropTablesCommand(tablesToCleanup.mkString(",")))
-        }
-      }
-    } onFailure {
-      case ex: Exception =>
-        KDSU.reportExceptionAndThrow(
-          myName,
-          ex,
-          "trying to drop temporary tables", coordinates.clusterUrl, coordinates.database, coordinates.table.getOrElse("Unspecified table name"),
-          shouldNotThrow = true
-        )
-    }
-  }
 
   def ingestRowsIntoKusto(rows: Iterator[InternalRow],
                           ingestClient: IngestClient,
