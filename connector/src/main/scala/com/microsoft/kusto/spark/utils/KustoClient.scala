@@ -167,6 +167,7 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
   private[kusto] def cleanupIngestionByproducts(database: String, kustoAdminClient: Client, tmpTableName: String): Unit = {
     try {
       kustoAdminClient.execute(database, generateTableDropCommand(tmpTableName))
+      KDSU.logInfo(myName, s"Temporary table '$tmpTableName' deleted successfully")
     }
     catch {
       case exception: Exception =>
