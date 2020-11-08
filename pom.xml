@@ -8,9 +8,15 @@
     <packaging>pom</packaging>
     <version>${revision}</version>
     <properties>
+<<<<<<< HEAD
         <revision>2.4.1</revision>
         <scala.version.major>2.11</scala.version.major>
         <scala.version.minor>12</scala.version.minor>
+=======
+        <revision>2.3.1</revision>
+        <scala.version.major>2.11</scala.version.major>
+        <scala.version.minor>11</scala.version.minor>
+>>>>>>> 497d3bc (spark 2.4 and 2.11 - 2.3.1)
         <specs2.version>3.6.5</specs2.version>
         <spark.version.major>2.4</spark.version.major>
         <spark.version.minor>0</spark.version.minor>
