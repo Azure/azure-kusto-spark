@@ -11,11 +11,11 @@ private[kusto] object CslCommandsGenerator {
   }
 
   def generateFindOldTempTablesCommand(database: String): String = {
-    s""".show journal | where Event == 'CREATE-TABLE' | where Database == '$database' | where EntityName startswith '$TempIngestionTablePrefix' | where EventTimestamp < ago(1h) and EventTimestamp > ago(3d) | project EntityName """
+    s""".show journal | where Event == 'CREATE-TABLE' | where Database == '$database' | where EntityName startswith '$TempIngestionTablePrefix' | where EventTimestamp < ago(3d) | project EntityName """
   }
 
   def generateFindCurrentTempTablesCommand(prefix: String): String = {
-    s""".show tables | where TableName startswith '$prefix' | project TableName """
+    s""".show tables with (IncludeHiddenTables=true) | where TableName startswith '$prefix' | project TableName """
   }
 
   def generateDropTablesCommand(tables: String): String = {
