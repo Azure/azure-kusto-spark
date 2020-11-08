@@ -9,7 +9,7 @@
     <version>${revision}</version>
     <properties>
         <revision>2.3.1</revision>
-        <scala.version.major>2.12</scala.version.major>
+        <scala.version.major>2.11</scala.version.major>
         <scala.version.minor>11</scala.version.minor>
         <specs2.version>3.6.5</specs2.version>
         <spark.version.major>2.4</spark.version.major>
