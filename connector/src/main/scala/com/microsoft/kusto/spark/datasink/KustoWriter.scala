@@ -51,45 +51,57 @@ object KustoWriter {
     val tmpTableName: String = KustoQueryUtils.simplifyName(TempIngestionTablePrefix +
       data.sparkSession.sparkContext.appName +
       "_" + table + batchId.map(b=>s"_${b.toString}").getOrElse("") + "_" + writeOptions.requestId)
+
     implicit val parameters: KustoWriteResource = KustoWriteResource(authentication, tableCoordinates, data.schema, writeOptions, tmpTableName)
-
-    kustoClient.cleanupTempTables(tableCoordinates)
-
-    // KustoWriter will create a temporary table ingesting the data to it.
-    // Only if all executors succeeded the table will be appended to the original destination table.
-    kustoClient.createTmpTableWithSameSchema(tableCoordinates, tmpTableName, writeOptions.tableCreateOptions, data.schema)
-    KDSU.logInfo(myName, s"Successfully created temporary table $tmpTableName, will be deleted after completing the operation")
-
     val stagingTableIngestionProperties = getIngestionProperties(writeOptions, parameters)
-    kustoClient.setMappingOnStagingTableIfNeeded(stagingTableIngestionProperties, table)
-    if (stagingTableIngestionProperties.getFlushImmediately){
-      KDSU.logWarn(myName, "Its not recommended to set flushImmediately to true")
-    }
-    val rdd = data.queryExecution.toRdd
-    val partitionsResults = rdd.sparkContext.collectionAccumulator[PartitionResult]
+    val ingestIfNotExistsTags = stagingTableIngestionProperties.getIngestIfNotExists
 
-    if (writeOptions.isAsync) {
-      val asyncWork = rdd.foreachPartitionAsync { rows => ingestRowsIntoTempTbl(rows, batchIdIfExists, partitionsResults) }
-      KDSU.logInfo(myName, s"asynchronous write to Kusto table '$table' in progress")
-      // This part runs back on the driver
-      asyncWork.onSuccess {
-        case _ => kustoClient.finalizeIngestionWhenWorkersSucceeded(tableCoordinates, batchIdIfExists, kustoClient.engineClient, tmpTableName, partitionsResults, writeOptions.timeout, writeOptions.requestId, isAsync = true)
-      }
-      asyncWork.onFailure {
-        case exception: Exception =>
-          kustoClient.cleanupIngestionByproducts(tableCoordinates.database, kustoClient.engineClient, tmpTableName)
-          KDSU.reportExceptionAndThrow(myName, exception, "writing data", tableCoordinates.clusterUrl, tableCoordinates.database, table, shouldNotThrow = true)
-          KDSU.logError(myName, "The exception is not visible in the driver since we're in async mode")
-      }
+    // Remove the ingestIfNotExists tags because several partitions can ingest into the staging table and should not interfere one another
+    stagingTableIngestionProperties.setIngestIfNotExists(new util.ArrayList())
+    val shouldIngest = kustoClient.shouldIngestData(tableCoordinates.database, table, writeOptions.IngestionProperties)
+
+    if (!shouldIngest) {
+      KDSU.logInfo(myName, s"Ingestion skipped: IngestByTags were given and destination table ingest-by tags intersect with them.")
     } else {
-      try
-        rdd.foreachPartition { rows => ingestRowsIntoTempTbl(rows, batchIdIfExists, partitionsResults) }
-      catch {
-        case exception: Exception =>
-          kustoClient.cleanupIngestionByproducts(tableCoordinates.database, kustoClient.engineClient, tmpTableName)
-          throw exception
+      kustoClient.cleanupTempTables(tableCoordinates)
+
+      // KustoWriter will create a temporary table ingesting the data to it.
+      // Only if all executors succeeded the table will be appended to the original destination table.
+      kustoClient.createTmpTableWithSameSchema(tableCoordinates, tmpTableName, writeOptions.tableCreateOptions, data.schema)
+      KDSU.logInfo(myName, s"Successfully created temporary table $tmpTableName, will be deleted after completing the operation")
+
+      kustoClient.setMappingOnStagingTableIfNeeded(stagingTableIngestionProperties, table)
+      if (stagingTableIngestionProperties.getFlushImmediately){
+        KDSU.logWarn(myName, "Its not recommended to set flushImmediately to true")
       }
-      kustoClient.finalizeIngestionWhenWorkersSucceeded(tableCoordinates, batchIdIfExists, kustoClient.engineClient, tmpTableName, partitionsResults, writeOptions.timeout, writeOptions.requestId)
+      val rdd = data.queryExecution.toRdd
+      val partitionsResults = rdd.sparkContext.collectionAccumulator[PartitionResult]
+
+      if (writeOptions.isAsync) {
+        val asyncWork = rdd.foreachPartitionAsync { rows => ingestRowsIntoTempTbl(rows, batchIdIfExists, partitionsResults) }
+        KDSU.logInfo(myName, s"asynchronous write to Kusto table '$table' in progress")
+        // This part runs back on the driver
+        asyncWork.onSuccess {
+          case _ => kustoClient.finalizeIngestionWhenWorkersSucceeded(
+            tableCoordinates, batchIdIfExists, kustoClient.engineClient, tmpTableName, partitionsResults, writeOptions.timeout, writeOptions.requestId, ingestIfNotExistsTags, isAsync = true)
+        }
+        asyncWork.onFailure {
+          case exception: Exception =>
+            kustoClient.cleanupIngestionByproducts(tableCoordinates.database, kustoClient.engineClient, tmpTableName)
+            KDSU.reportExceptionAndThrow(myName, exception, "writing data", tableCoordinates.clusterUrl, tableCoordinates.database, table, shouldNotThrow = true)
+            KDSU.logError(myName, "The exception is not visible in the driver since we're in async mode")
+        }
+      } else {
+        try
+          rdd.foreachPartition { rows => ingestRowsIntoTempTbl(rows, batchIdIfExists, partitionsResults) }
+        catch {
+          case exception: Exception =>
+            kustoClient.cleanupIngestionByproducts(tableCoordinates.database, kustoClient.engineClient, tmpTableName)
+            throw exception
+        }
+        kustoClient.finalizeIngestionWhenWorkersSucceeded(
+          tableCoordinates, batchIdIfExists, kustoClient.engineClient, tmpTableName, partitionsResults, writeOptions.timeout, writeOptions.requestId, ingestIfNotExistsTags)
+      }
     }
   }
 
