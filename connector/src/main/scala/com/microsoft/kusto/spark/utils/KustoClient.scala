@@ -144,7 +144,11 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
           // We are using the ingestIfNotExists Tags here too (on top of the check at the start of the flow) so that if
           // several flows started together only one of them would ingest
           kustoAdminClient.execute(database, generateTableAlterMergePolicyCommand(tmpTableName, allowMerge = false, allowRebuild = false))
-          kustoAdminClient.execute(database, generateTableMoveExtentsCommand(tmpTableName, table.get ,ingestIfNotExistsTags))
+          val res = kustoAdminClient.execute(database, generateTableMoveExtentsCommand(tmpTableName, table.get ,ingestIfNotExistsTags)).getPrimaryResults
+          if (!res.next()) {
+            // Extents that were moved are returned by move extents command
+            KDSU.logInfo(myName, s"Ingestion skipped: Provided ingest-by tags are present in the destination table '$table'")
+          }
           KDSU.logInfo(myName, s"write to Kusto table '${table.get}' finished successfully requestId: $requestId $batchIdIfExists")
         } else {
           KDSU.logWarn(myName, s"write to Kusto table '${table.get}' finished with no data written requestId: $requestId $batchIdIfExists")

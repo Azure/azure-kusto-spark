@@ -61,7 +61,7 @@ object KustoWriter {
     val shouldIngest = kustoClient.shouldIngestData(tableCoordinates.database, table, writeOptions.IngestionProperties)
 
     if (!shouldIngest) {
-      KDSU.logInfo(myName, s"Ingestion skipped: IngestByTags were given and destination table ingest-by tags intersect with them.")
+      KDSU.logInfo(myName, s"Ingestion skipped: Provided ingest-by tags are present in the destination table '$table'")
     } else {
       kustoClient.cleanupTempTables(tableCoordinates)
 
