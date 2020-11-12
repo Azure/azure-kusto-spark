@@ -4,14 +4,14 @@ import java.util
 import java.util.StringJoiner
 import java.util.concurrent.TimeUnit
 
-import com.microsoft.azure.kusto.data.{Client, ClientFactory, ConnectionStringBuilder}
+import com.microsoft.azure.kusto.data.{Client, ClientFactory, ConnectionStringBuilder, KustoResultSetTable}
 import com.microsoft.azure.kusto.ingest.result.{IngestionStatus, OperationStatus}
 import com.microsoft.azure.kusto.ingest.{IngestClient, IngestClientFactory, IngestionProperties}
 import com.microsoft.azure.storage.StorageException
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.KustoWriter.{TempIngestionTablePrefix, delayPeriodBetweenCalls}
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
-import com.microsoft.kusto.spark.datasink.{PartitionResult, SinkTableCreationMode}
+import com.microsoft.kusto.spark.datasink.{PartitionResult, SinkTableCreationMode, SparkIngestionProperties}
 import com.microsoft.kusto.spark.datasource.KustoStorageParameters
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.KustoDataSourceUtils.extractSchemaFromResultTable
@@ -19,6 +19,7 @@ import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import org.apache.commons.lang3.StringUtils
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.CollectionAccumulator
+import org.json.JSONArray
 import shaded.parquet.org.codehaus.jackson.map.ObjectMapper
 
 import scala.collection.JavaConverters._
@@ -27,19 +28,17 @@ import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{Await, Future}
 
 class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuilder, val ingestKcsb: ConnectionStringBuilder) {
-  val engineClient: Client = ClientFactory.createClient(engineKcsb)
+  lazy val engineClient: Client = ClientFactory.createClient(engineKcsb)
 
   // Reading process does not require ingest client to start working
   lazy val dmClient: Client = ClientFactory.createClient(ingestKcsb)
   lazy val ingestClient: IngestClient = IngestClientFactory.createClient(ingestKcsb)
-
   private val exportProviderEntryCreator = (c: ContainerAndSas) => KDSU.parseSas(c.containerUrl + c.sas)
   private val ingestProviderEntryCreator = (c: ContainerAndSas) => c
   private lazy val  ingestContainersContainerProvider = new ContainerProvider(dmClient, clusterAlias, generateCreateTmpStorageCommand(), ingestProviderEntryCreator)
   private lazy val  exportContainersContainerProvider = new ContainerProvider(dmClient, clusterAlias, generateGetExportContainersCommand(), exportProviderEntryCreator)
 
   private val myName = this.getClass.getSimpleName
-
   def createTmpTableWithSameSchema(tableCoordinates: KustoCoordinates,
                                    tmpTableName: String,
                                    tableCreation: SinkTableCreationMode = SinkTableCreationMode.FailIfNotExist,
@@ -89,6 +88,7 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
                                                            partitionsResults: CollectionAccumulator[PartitionResult],
                                                            timeout: FiniteDuration,
                                                            requestId: String,
+                                                           ingestIfNotExistsTags: util.ArrayList[String],
                                                            isAsync: Boolean = false): Unit = {
     import coordinates._
 
@@ -141,8 +141,14 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
         if (partitionsResults.value.size > 0) {
           // Move data to real table
           // Protect tmp table from merge/rebuild and move data to the table requested by customer. This operation is atomic.
+          // We are using the ingestIfNotExists Tags here too (on top of the check at the start of the flow) so that if
+          // several flows started together only one of them would ingest
           kustoAdminClient.execute(database, generateTableAlterMergePolicyCommand(tmpTableName, allowMerge = false, allowRebuild = false))
-          kustoAdminClient.execute(database, generateTableMoveExtentsCommand(tmpTableName, table.get))
+          val res = kustoAdminClient.execute(database, generateTableMoveExtentsCommand(tmpTableName, table.get ,ingestIfNotExistsTags)).getPrimaryResults
+          if (!res.next()) {
+            // Extents that were moved are returned by move extents command
+            KDSU.logInfo(myName, s"Ingestion skipped: Provided ingest-by tags are present in the destination table '$table'")
+          }
           KDSU.logInfo(myName, s"write to Kusto table '${table.get}' finished successfully requestId: $requestId $batchIdIfExists")
         } else {
           KDSU.logWarn(myName, s"write to Kusto table '${table.get}' finished with no data written requestId: $requestId $batchIdIfExists")
@@ -221,6 +227,28 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
         }
       }
     }
+  }
+
+  def fetchTableExtentsTags(database: String, table: String): KustoResultSetTable = {
+    engineClient.execute(database, CslCommandsGenerator.generateFetchTableIngestByTagsCommand(table)).getPrimaryResults
+  }
+
+  def shouldIngestData(database: String, table: String, ingestionProperties: Option[String]): Boolean = {
+    var shouldIngest = true
+    if (ingestionProperties.isDefined){
+      val ingestIfNotExistsTags = SparkIngestionProperties.fromString(ingestionProperties.get).ingestIfNotExists
+      if (ingestIfNotExistsTags != null && !ingestIfNotExistsTags.isEmpty) {
+        val res = fetchTableExtentsTags(database, table)
+        if(res.next()) {
+          val tagsArray = res.getObject(0).asInstanceOf[JSONArray]
+          val tagsSeq = tagsArray.asScala.toSeq
+          if (tagsSeq.intersect(ingestIfNotExistsTags.asScala).nonEmpty){
+            shouldIngest = false
+          }
+        }
+      }
+    }
+    shouldIngest
   }
 
   private def readIngestionResult(statusRecord: IngestionStatus): String = {
