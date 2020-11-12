@@ -16,6 +16,6 @@ object KustoConstants {
   val oneGiga: Int = oneMega * 1024
   // The restriction from kusto is 50000 rows but 5000 can still be really big
   val directQueryUpperBoundRows = 5000
-  // less?
   val timeoutForCountCheck : FiniteDuration = 3 seconds
+  val ingestByPrefix = "ingest-by:"
 }
