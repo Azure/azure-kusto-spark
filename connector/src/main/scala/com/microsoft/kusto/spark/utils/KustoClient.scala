@@ -238,12 +238,15 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
     if (ingestionProperties.isDefined){
       val ingestIfNotExistsTags = SparkIngestionProperties.fromString(ingestionProperties.get).ingestIfNotExists
       if (ingestIfNotExistsTags != null && !ingestIfNotExistsTags.isEmpty) {
+        val ingestIfNotExistsTagsSet = ingestIfNotExistsTags.asScala.toSet
+
         val res = fetchTableExtentsTags(database, table)
-        if(res.next()) {
+        if (res.next()) {
           val tagsArray = res.getObject(0).asInstanceOf[JSONArray]
-          val tagsSeq = tagsArray.asScala.toSeq
-          if (tagsSeq.intersect(ingestIfNotExistsTags.asScala).nonEmpty){
-            shouldIngest = false
+          for (i <- 0 until tagsArray.length) {
+            if (ingestIfNotExistsTagsSet.contains(tagsArray.getString(i))) {
+              shouldIngest = false
+            }
           }
         }
       }
