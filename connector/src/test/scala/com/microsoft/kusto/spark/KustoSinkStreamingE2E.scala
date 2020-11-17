@@ -3,7 +3,7 @@ package com.microsoft.kusto.spark
 import java.util.UUID
 
 import com.microsoft.azure.kusto.data.{ClientFactory, ConnectionStringBuilder}
-import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode}
+import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode, SparkIngestionProperties}
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.streaming.Trigger
@@ -16,9 +16,9 @@ import org.scalatest.{BeforeAndAfterAll, FlatSpec}
 
 @RunWith(classOf[JUnitRunner])
 class KustoSinkStreamingE2E extends FlatSpec with BeforeAndAfterAll {
-  val expectedNumberOfRows: Int = 100
+  val expectedNumberOfRows: Int = 300
   val timeoutMs: Int = 8 * 60 * 1000 // 8 minutes
-  val sleepTimeTillTableCreate: Int = 2 * 60 * 1000 // 2 minutes
+  val sleepTimeTillTableCreate: Int = 3 * 60 * 1000 // 2 minutes
   val spark: SparkSession = SparkSession.builder()
     .appName("KustoSink")
     .master("local[4]")
@@ -45,17 +45,17 @@ class KustoSinkStreamingE2E extends FlatSpec with BeforeAndAfterAll {
   val cluster: String = System.getProperty(KustoSinkOptions.KUSTO_CLUSTER)
   val database: String = System.getProperty(KustoSinkOptions.KUSTO_DATABASE)
 
-  val csvPath: String = System.getProperty("path", "src/test/resources/TestData")
+  val csvPath: String = System.getProperty("path", "src/test/resources/TestData/csv")
   val customSchema: StructType = new StructType().add("colA", StringType, nullable = true).add("colB", IntegerType, nullable = true)
 
-  "KustoStreamingSinkSyncWithTableCreate" should "ingest structured data to a Kusto cluster" taggedAs KustoE2E in {
+  "KustoStreamingSinkSyncWithTableCreateAndIngestIfNotExist" should "ingest structured data to a Kusto cluster" taggedAs KustoE2E in {
 
-    if(appId == null || appKey == null || authority == null || cluster == null || database == null){
+    if (appId == null || appKey == null || authority == null || cluster == null || database == null) {
       fail()
     }
 
     val prefix = "KustoStreamingSparkE2E_Ingest"
-    val table = s"${prefix}_${UUID.randomUUID().toString.replace("-","_")}"
+    val table = s"${prefix}_${UUID.randomUUID().toString.replace("-", "_")}"
     val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://$cluster.kusto.windows.net", appId, appKey, authority)
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
 
@@ -68,8 +68,13 @@ class KustoSinkStreamingE2E extends FlatSpec with BeforeAndAfterAll {
       .writeStream
       .format("console")
       .trigger(Trigger.Once)
+    consoleQ.start()
 
-    consoleQ.start().awaitTermination()
+    val sp = new SparkIngestionProperties
+    val tags = new java.util.ArrayList[String]()
+    tags.add("tagytag")
+    sp.ingestByTags = tags
+    sp.ingestIfNotExists = tags
 
     spark.conf.set("spark.sql.streaming.checkpointLocation", "target/temp/checkpoint")
 
@@ -83,7 +88,8 @@ class KustoSinkStreamingE2E extends FlatSpec with BeforeAndAfterAll {
         KustoSinkOptions.KUSTO_AAD_APP_ID -> appId,
         KustoSinkOptions.KUSTO_AAD_APP_SECRET -> appKey,
         KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID -> authority,
-        KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS -> SinkTableCreationMode.CreateIfNotExist.toString))
+        KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS -> SinkTableCreationMode.CreateIfNotExist.toString,
+        KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON -> sp.toString))
       .trigger(Trigger.Once)
 
     kustoQ.start()

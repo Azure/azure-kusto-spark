@@ -69,7 +69,6 @@ object KustoWriter {
       kustoClient.cleanupTempTables(tableCoordinates)
 
       // KustoWriter will create a temporary table ingesting the data to it.
-      // If the destination table does not exist tableCreateOptions are taken into consideration.
       // Only if all executors succeeded the table will be appended to the original destination table.
       kustoClient.initializeTablesBySchema(tableCoordinates, tmpTableName, writeOptions.tableCreateOptions, data.schema, schemaShowCommandResult)
       KDSU.logInfo(myName, s"Successfully created temporary table $tmpTableName, will be deleted after completing the operation")
@@ -142,7 +141,12 @@ object KustoWriter {
 
   private def getIngestionProperties(writeOptions: WriteOptions, parameters: KustoWriteResource): IngestionProperties = {
     if (writeOptions.IngestionProperties.isDefined) {
-      SparkIngestionProperties.fromString(writeOptions.IngestionProperties.get).toIngestionProperties(parameters.coordinates.database, parameters.tmpTableName)
+      val ingestionProperties = SparkIngestionProperties.fromString(writeOptions.IngestionProperties.get)
+        .toIngestionProperties(parameters.coordinates.database, parameters.tmpTableName)
+
+      // Remove the ingestIfNotExists tags because several partitions can ingest into the staging table and should not interfere one another
+      ingestionProperties.setIngestIfNotExists(new util.ArrayList[String]())
+      ingestionProperties
     } else {
       new IngestionProperties(parameters.coordinates.database, parameters.tmpTableName)
     }
@@ -164,8 +168,7 @@ object KustoWriter {
     ingestRowsIntoKusto(rows, ingestClient, partitionsResults, batchIdForTracing)
   }
 
-  def createBlobWriter(schema: StructType,
-                       tableCoordinates: KustoCoordinates,
+  def createBlobWriter(tableCoordinates: KustoCoordinates,
                        tmpTableName: String,
                        client: KustoClient): BlobWriteResource = {
     val blobName = s"${KustoQueryUtils.simplifyName(tableCoordinates.database)}_${tmpTableName}_${UUID.randomUUID.toString}_spark.csv.gz"
@@ -174,7 +177,7 @@ object KustoWriter {
     val currentBlob = new CloudBlockBlob(new URI(containerAndSas.containerUrl + '/' + blobName + containerAndSas.sas))
     val currentSas = containerAndSas.sas
     val options = new BlobRequestOptions()
-    options.setConcurrentRequestCount(4) //should be configured from outside
+    options.setConcurrentRequestCount(4) // Should be configured from outside
     val gzip: GZIPOutputStream = new GZIPOutputStream(currentBlob.openOutputStream(null, options, null))
 
     val writer = new OutputStreamWriter(gzip, StandardCharsets.UTF_8)
@@ -212,7 +215,7 @@ object KustoWriter {
     val kustoClient = KustoClientCache.getClient(coordinates.clusterAlias, coordinates.clusterUrl, authentication)
     val maxBlobSize = writeOptions.batchLimit * KCONST.oneMega
     //This blobWriter will be used later to write the rows to blob storage from which it will be ingested to Kusto
-    val initialBlobWriter: BlobWriteResource = createBlobWriter(schema, coordinates, tmpTableName, kustoClient)
+    val initialBlobWriter: BlobWriteResource = createBlobWriter(coordinates, tmpTableName, kustoClient)
     val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone(writeOptions.timeZone))
 
     val ingestionTasks: util.ArrayList[Future[Unit]] = new util.ArrayList()
@@ -232,7 +235,7 @@ object KustoWriter {
           finalizeBlobWrite(blobWriter)
           val task = ingest(blobWriter.blob, blobWriter.csvWriter.getCounter, blobWriter.sas, flushImmediately = true)
           ingestionTasks.add(task)
-          createBlobWriter(schema, coordinates, tmpTableName, kustoClient)
+          createBlobWriter(coordinates, tmpTableName, kustoClient)
         }
     }
 

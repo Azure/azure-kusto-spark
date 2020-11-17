@@ -35,7 +35,7 @@ class WriterTests extends FlatSpec with Matchers {
 
     val customSchema = if (isNestedSchema) StructType(Array(StructField("Name", StringType, nullable = true), StructField("Number", IntegerType, nullable = true))) else null
     if (isNestedSchema) sparkSession.read.format("csv").option("header", "false").schema(customSchema).load("src/test/resources/ShortTestData/ShortTestData.csv")
-    else sparkSession.read.format("json").option("header", "true").load("src/test/resources/TestData/TestDynamicFields.json")
+    else sparkSession.read.format("json").option("header", "true").load("src/test/resources/TestData/json/TestDynamicFields.json")
   }
 
   "convertRowToCsv" should "convert the row as expected" in {
