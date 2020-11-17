@@ -15,6 +15,7 @@ import com.microsoft.azure.kusto.ingest.{IngestClient, IngestionProperties}
 import com.microsoft.azure.storage.blob.{BlobRequestOptions, CloudBlockBlob}
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
+import com.microsoft.kusto.spark.utils.CslCommandsGenerator.generateTableGetSchemaAsRowsCommand
 import com.microsoft.kusto.spark.utils.{KustoClient, KustoClientCache, KustoQueryUtils, KustoConstants => KCONST, KustoDataSourceUtils => KDSU}
 import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.spark.TaskContext
@@ -56,9 +57,11 @@ object KustoWriter {
     val stagingTableIngestionProperties = getIngestionProperties(writeOptions, parameters)
     val ingestIfNotExistsTags = stagingTableIngestionProperties.getIngestIfNotExists
 
+    val schemaShowCommandResult = kustoClient.engineClient.execute(tableCoordinates.database, generateTableGetSchemaAsRowsCommand(tableCoordinates.table.get)).getPrimaryResults
+
     // Remove the ingestIfNotExists tags because several partitions can ingest into the staging table and should not interfere one another
     stagingTableIngestionProperties.setIngestIfNotExists(new util.ArrayList())
-    val shouldIngest = kustoClient.shouldIngestData(tableCoordinates.database, table, writeOptions.IngestionProperties)
+    val shouldIngest = kustoClient.shouldIngestData(tableCoordinates, writeOptions.IngestionProperties, tableExists = schemaShowCommandResult.count() > 0)
 
     if (!shouldIngest) {
       KDSU.logInfo(myName, s"Ingestion skipped: Provided ingest-by tags are present in the destination table '$table'")
@@ -66,8 +69,9 @@ object KustoWriter {
       kustoClient.cleanupTempTables(tableCoordinates)
 
       // KustoWriter will create a temporary table ingesting the data to it.
+      // If the destination table does not exist tableCreateOptions are taken into consideration.
       // Only if all executors succeeded the table will be appended to the original destination table.
-      kustoClient.createTmpTableWithSameSchema(tableCoordinates, tmpTableName, writeOptions.tableCreateOptions, data.schema)
+      kustoClient.initializeTablesBySchema(tableCoordinates, tmpTableName, writeOptions.tableCreateOptions, data.schema, schemaShowCommandResult)
       KDSU.logInfo(myName, s"Successfully created temporary table $tmpTableName, will be deleted after completing the operation")
 
       kustoClient.setMappingOnStagingTableIfNeeded(stagingTableIngestionProperties, table)

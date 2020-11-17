@@ -39,20 +39,20 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
   private lazy val  exportContainersContainerProvider = new ContainerProvider(dmClient, clusterAlias, generateGetExportContainersCommand(), exportProviderEntryCreator)
 
   private val myName = this.getClass.getSimpleName
-  def createTmpTableWithSameSchema(tableCoordinates: KustoCoordinates,
-                                   tmpTableName: String,
-                                   tableCreation: SinkTableCreationMode = SinkTableCreationMode.FailIfNotExist,
-                                   schema: StructType): Unit = {
+  def initializeTablesBySchema(tableCoordinates: KustoCoordinates,
+                               tmpTableName: String,
+                               tableCreation: SinkTableCreationMode = SinkTableCreationMode.FailIfNotExist,
+                               schema: StructType,
+                               schemaShowCommandResult: KustoResultSetTable): Unit = {
 
-    val schemaShowCommandResult = engineClient.execute(tableCoordinates.database, generateTableGetSchemaAsRowsCommand(tableCoordinates.table.get)).getPrimaryResults
     var tmpTableSchema: String = ""
     val database = tableCoordinates.database
     val table = tableCoordinates.table.get
 
-    if (schemaShowCommandResult.count() == 0) {
+    if  (schemaShowCommandResult.count() == 0) {
       // Table Does not exist
       if (tableCreation == SinkTableCreationMode.FailIfNotExist) {
-        throw new RuntimeException("Table '" + table + "' doesn't exist in database '" + database + "', in cluster '" + tableCoordinates.clusterAlias + "'")
+        throw new RuntimeException(s"Table '$table' doesn't exist in database '$database', cluster '${tableCoordinates.clusterAlias} and tableCreateOptions is set to FailIfNotExist.")
       } else {
         // Parse dataframe schema and create a destination table with that schema
         val tableSchemaBuilder = new StringJoiner(",")
@@ -233,14 +233,15 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
     engineClient.execute(database, CslCommandsGenerator.generateFetchTableIngestByTagsCommand(table)).getPrimaryResults
   }
 
-  def shouldIngestData(database: String, table: String, ingestionProperties: Option[String]): Boolean = {
+  def shouldIngestData(tableCoordinates: KustoCoordinates, ingestionProperties: Option[String], tableExists: Boolean): Boolean = {
     var shouldIngest = true
-    if (ingestionProperties.isDefined){
+
+    if (tableExists && ingestionProperties.isDefined){
       val ingestIfNotExistsTags = SparkIngestionProperties.fromString(ingestionProperties.get).ingestIfNotExists
       if (ingestIfNotExistsTags != null && !ingestIfNotExistsTags.isEmpty) {
         val ingestIfNotExistsTagsSet = ingestIfNotExistsTags.asScala.toSet
 
-        val res = fetchTableExtentsTags(database, table)
+        val res = fetchTableExtentsTags(tableCoordinates.database, tableCoordinates.table.get)
         if (res.next()) {
           val tagsArray = res.getObject(0).asInstanceOf[JSONArray]
           for (i <- 0 until tagsArray.length) {
@@ -251,6 +252,7 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
         }
       }
     }
+
     shouldIngest
   }
 
