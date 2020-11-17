@@ -86,7 +86,7 @@ class KustoSinkStreamingE2E extends FlatSpec with BeforeAndAfterAll {
         KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS -> SinkTableCreationMode.CreateIfNotExist.toString))
       .trigger(Trigger.Once)
 
-    kustoQ.start().awaitTermination()
+    kustoQ.start()
 
     // Sleep util table is expected to be created
     Thread.sleep(sleepTimeTillTableCreate)
