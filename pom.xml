@@ -8,13 +8,13 @@
     <packaging>pom</packaging>
     <version>${revision}</version>
     <properties>
-        <revision>2.3.3</revision>
+        <revision>2.4.0</revision>
         <scala.version.major>2.12</scala.version.major>
         <scala.version.minor>11</scala.version.minor>
         <specs2.version>3.6.5</specs2.version>
         <spark.version.major>3.0</spark.version.major>
         <spark.version.minor>1</spark.version.minor>
-        <kusto-sdk.version>2.3.1</kusto-sdk.version>
+        <kusto-sdk.version>2.4.1</kusto-sdk.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven-source-plugin.version>3.0.1</maven-source-plugin.version>
         <maven-javadoc-plugin.version>3.1.0</maven-javadoc-plugin.version>
