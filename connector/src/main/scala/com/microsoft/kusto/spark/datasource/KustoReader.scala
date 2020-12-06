@@ -73,7 +73,7 @@ private[kusto] object KustoReader {
     setupBlobAccess(request, storage)
     val partitions = calculatePartitions(partitionInfo)
     val reader = new KustoReader(kustoClient, request, storage)
-    val directory = KustoQueryUtils.simplifyName(s"${request.kustoCoordinates.database}/dir${UUID.randomUUID()}/")
+    val directory = s"${request.kustoCoordinates.database}/dir${UUID.randomUUID()}/".replaceAll("[^0-9a-zA-Z/]","_")
 
     for (partition <- partitions) {
       reader.exportPartitionToBlob(
@@ -94,7 +94,7 @@ private[kusto] object KustoReader {
       container.getDirectoryReference(directory).listBlobsSegmented().getLength > 0
     }
     val paths = storage.filter(directoryExists).map(params => s"wasbs://${params.container}@${params.account}.blob.${params.endpointSuffix}/$directory")
-    KDSU.logInfo(myName, s"Finished exporting from Kusto to '${paths.toString()}'" +
+    KDSU.logInfo(myName, s"Finished exporting from Kusto to ${paths.mkString(",")}" +
       s", on requestId: ${request.requestId}, will start parquet reading now")
     val rdd = try {
       request.sparkSession.read.parquet(paths:_*).rdd
@@ -141,9 +141,9 @@ private[kusto] object KustoReader {
         }
       }
 
-      if (!KustoAzureFsSetupCache.updateAndGetPrevNativeAzureFs(now)) {
+//      if (!KustoAzureFsSetupCache.updateAndGetPrevNativeAzureFs(now)) {
         config.set("fs.azure", "org.apache.hadoop.fs.azure.NativeAzureFileSystem")
-      }
+//      }
     }
   }
 
