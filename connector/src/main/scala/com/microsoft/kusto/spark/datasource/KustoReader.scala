@@ -141,9 +141,9 @@ private[kusto] object KustoReader {
         }
       }
 
-//      if (!KustoAzureFsSetupCache.updateAndGetPrevNativeAzureFs(now)) {
+      if (!KustoAzureFsSetupCache.updateAndGetPrevNativeAzureFs(now)) {
         config.set("fs.azure", "org.apache.hadoop.fs.azure.NativeAzureFileSystem")
-//      }
+      }
     }
   }
 
