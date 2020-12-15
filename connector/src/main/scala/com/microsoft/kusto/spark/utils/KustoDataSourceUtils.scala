@@ -88,8 +88,8 @@ object KustoDataSourceUtils {
     tableSchemaBuilder.toString
   }
 
-  private[kusto] def getSchema(database: String, query: String, client: Client): KustoSchema = {
-    KustoResponseDeserializer(client.execute(database, query).getPrimaryResults).getSchema
+  private[kusto] def getSchema(database: String, query: String, client: Client, clientRequestProperties: Option[ClientRequestProperties]): KustoSchema = {
+    KustoResponseDeserializer(client.execute(database, query, clientRequestProperties.orNull).getPrimaryResults).getSchema
   }
 
   def parseSourceParameters(parameters: Map[String, String]): SourceParameters = {
