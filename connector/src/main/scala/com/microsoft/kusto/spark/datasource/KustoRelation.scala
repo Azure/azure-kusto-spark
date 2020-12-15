@@ -128,7 +128,7 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
       throw new RuntimeException("Spark connector cannot run Kusto commands. Please provide a valid query")
     }
 
-    KDSU.getSchema(kustoCoordinates.database, getSchemaQuery, KustoClientCache.getClient(kustoCoordinates.clusterAlias, kustoCoordinates.clusterUrl, authentication).engineClient)
+    KDSU.getSchema(kustoCoordinates.database, getSchemaQuery, KustoClientCache.getClient(kustoCoordinates.clusterAlias, kustoCoordinates.clusterUrl, authentication).engineClient, clientRequestProperties)
   }
 
   private def getPartitioningColumn: String = {
@@ -155,7 +155,7 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
 
   // Used for cached results
   override def equals(other: Any): Boolean = other match  {
-    case that: KustoRelation => kustoCoordinates == kustoCoordinates && query == that.query
+    case that: KustoRelation => kustoCoordinates == that.kustoCoordinates && query == that.query && authentication == that.authentication
     case _ => false
   }
 
