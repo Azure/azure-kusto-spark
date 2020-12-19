@@ -121,11 +121,13 @@ class DefaultSource extends CreatableRelationProvider
 
     KDSU.logInfo(myName, "Finished serializing parameters for reading")
 
+    val exportQueryOnlyOnce = java.lang.Boolean.parseBoolean(parameters.getOrElse(KustoSourceOptions.KUSTO_DISTRIBUTED_MODE_EXPORT_QUERY_ONLY_ONCE, "false"))
+
     KustoRelation(
       kustoCoordinates,
       kustoAuthentication.get,
       parameters.getOrElse(KustoSourceOptions.KUSTO_QUERY, ""),
-      KustoReadOptions(readMode, shouldCompressOnExport, exportSplitLimitMb),
+      KustoReadOptions(readMode, shouldCompressOnExport, exportSplitLimitMb, exportQueryOnlyOnce),
       timeout,
       numPartitions,
       parameters.get(KustoDebugOptions.KUSTO_PARTITION_COLUMN),

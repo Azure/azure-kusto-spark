@@ -1,9 +1,5 @@
 package com.microsoft.kusto.spark.datasource
 
-import java.net.URI
-import java.security.InvalidParameterException
-import java.util.UUID
-
 import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties, KustoResultSetTable}
 import com.microsoft.azure.storage.StorageCredentialsAccountAndKey
 import com.microsoft.azure.storage.blob.CloudBlobContainer
@@ -17,6 +13,11 @@ import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.{Row, SparkSession}
 import org.joda.time.{DateTime, DateTimeZone}
 
+import java.net.URI
+import java.security.InvalidParameterException
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
+import scala.collection.convert.decorateAsScala._
 import scala.concurrent.duration.FiniteDuration
 
 private[kusto] case class KustoPartition(predicate: Option[String], idx: Int) extends Partition {
@@ -43,9 +44,11 @@ private[kusto] case class KustoReadRequest(sparkSession: SparkSession,
 
 private[kusto] case class KustoReadOptions(readMode: Option[ReadMode] = None,
                                            shouldCompressOnExport: Boolean = true,
-                                           exportSplitLimitMb: Long = 1024)
+                                           exportSplitLimitMb: Long = 1024,
+                                           exportQueryOnlyOnce: Boolean = false)
 private[kusto] object KustoReader {
   private val myName = this.getClass.getSimpleName
+  private val cachedQueryPaths = new ConcurrentHashMap[String, Seq[String]]().asScala
 
   private[kusto] def singleBuildScan(kustoClient: Client,
                                      request: KustoReadRequest,
@@ -66,6 +69,47 @@ private[kusto] object KustoReader {
                                           partitionInfo: KustoPartitionParameters,
                                           options: KustoReadOptions,
                                           filtering: KustoFiltering): RDD[Row] = {
+    var paths: Seq[String] = Seq()
+    // if exportQueryOnlyOnce is set to true, then check if path is cached and use it
+    // if not export and cache the path for reuse later
+    if (options.exportQueryOnlyOnce) {
+      if (cachedQueryPaths.contains(request.query)) {
+        paths = cachedQueryPaths(request.query)
+      } else {
+        paths = exportToStorage(kustoClient, request, storage, partitionInfo, options, filtering)
+        cachedQueryPaths(request.query) = paths
+      }
+    } else{
+      // export always as exportQueryOnlyOnce is false
+      paths = exportToStorage(kustoClient, request, storage, partitionInfo, options, filtering)
+    }
+
+    val rdd = try {
+      request.sparkSession.read.parquet(paths: _*).rdd
+    } catch {
+      case ex: Exception =>
+        // Check whether the result is empty, causing an IO exception on reading empty parquet file
+        // We don't mind generating the filtered query again - it only happens upon exception
+        val filteredQuery = KustoFilter.pruneAndFilter(request.schema, request.query, filtering)
+        val count = KDSU.countRows(kustoClient, filteredQuery, request.kustoCoordinates.database)
+
+        if (count == 0) {
+          request.sparkSession.emptyDataFrame.rdd
+        } else {
+          throw ex
+        }
+    }
+
+    KDSU.logInfo(myName, "Transaction data read from blob storage, paths:" + paths)
+    rdd
+  }
+
+  private def exportToStorage(kustoClient: Client,
+                              request: KustoReadRequest,
+                              storage: Seq[KustoStorageParameters],
+                              partitionInfo: KustoPartitionParameters,
+                              options: KustoReadOptions,
+                              filtering: KustoFiltering) = {
     KDSU.logInfo(myName, "Starting exporting data from Kusto to blob storage")
 
     setupBlobAccess(request, storage)
@@ -86,7 +130,7 @@ private[kusto] object KustoReader {
 
     val directoryExists = (params: KustoStorageParameters) => {
       val container = if (params.secretIsAccountKey) {
-        new CloudBlobContainer(new URI(s"https://${params.account}.blob.${params.endpointSuffix}/${params.container}"), new StorageCredentialsAccountAndKey(params.account,params.secret))
+        new CloudBlobContainer(new URI(s"https://${params.account}.blob.${params.endpointSuffix}/${params.container}"), new StorageCredentialsAccountAndKey(params.account, params.secret))
       } else {
         new CloudBlobContainer(new URI(s"https://${params.account}.blob.${params.endpointSuffix}/${params.container}${params.secret}"))
       }
@@ -95,24 +139,7 @@ private[kusto] object KustoReader {
     val paths = storage.filter(directoryExists).map(params => s"wasbs://${params.container}@${params.account}.blob.${params.endpointSuffix}/$directory")
     KDSU.logInfo(myName, s"Finished exporting from Kusto to '${paths.toString()}'" +
       s", will start parquet reading now")
-    val rdd = try {
-      request.sparkSession.read.parquet(paths:_*).rdd
-    } catch {
-      case ex: Exception =>
-        // Check whether the result is empty, causing an IO exception on reading empty parquet file
-        // We don't mind generating the filtered query again - it only happens upon exception
-        val filteredQuery = KustoFilter.pruneAndFilter(request.schema, request.query, filtering)
-        val count = KDSU.countRows(kustoClient, filteredQuery, request.kustoCoordinates.database)
-
-        if (count == 0) {
-          request.sparkSession.emptyDataFrame.rdd
-        } else {
-          throw ex
-        }
-    }
-
-    KDSU.logInfo(myName, "Transaction data read from blob storage, paths:" + paths)
-    rdd
+    paths
   }
 
   private[kusto] def deleteTransactionBlobsSafe(storage: KustoStorageParameters, directory: String): Unit = {
