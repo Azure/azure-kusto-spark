@@ -126,6 +126,8 @@ class DefaultSource extends CreatableRelationProvider
 
     val exportQueryOnlyOnce = java.lang.Boolean.parseBoolean(parameters.getOrElse(KustoSourceOptions.KUSTO_DISTRIBUTED_MODE_EXPORT_QUERY_ONLY_ONCE, "false"))
 
+    val exportQueryOnlyOnce = java.lang.Boolean.parseBoolean(parameters.getOrElse(KustoSourceOptions.KUSTO_DISTRIBUTED_MODE_EXPORT_QUERY_ONLY_ONCE, "false"))
+
     KustoRelation(
       kustoCoordinates,
       kustoAuthentication.get,
