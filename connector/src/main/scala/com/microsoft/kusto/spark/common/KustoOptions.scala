@@ -24,6 +24,16 @@ trait KustoOptions {
   val KUSTO_AAD_APP_SECRET: String = newOption("kustoAadAppSecret")
 
   val KUSTO_ACCESS_TOKEN: String = newOption("accessToken")
+  // AAD application pfx certificate path
+  val KUSTO_AAD_APP_CERTIFICATE_PATH: String = newOption("kutoAadAppCertPath")
+  // AAD application certificate password
+  val KUSTO_AAD_APP_CERTIFICATE_PASSWORD: String = newOption("kutoAadAppCertPassword")
+
+  // Classpath to a class that its constructor accepts one argument of type CaseInsensitiveMap[String] which will contain
+  // the options provided to the connector. The class should extend Callable[String] with Serializeable and is expected
+  // to return an AAD token upon invoking the call method.
+  // The provider will be called for every request to the kusto service
+  val KUSTO_TOKEN_PROVIDER_CALLBACK_CLASSPATH: String = newOption("tokenProviderCallbackClasspath")
 
   // Target/source Kusto cluster for writing/reading the data.
   val KUSTO_CLUSTER: String = newOption("kustoCluster")
@@ -33,6 +43,9 @@ trait KustoOptions {
 
   // An integer number corresponding to the period in seconds after which the operation will timeout. Default: '5400' (90 minutes)
   val KUSTO_TIMEOUT_LIMIT: String = newOption("timeoutLimit")
+
+  // An id of the source used for tracing of the write operation
+  val KUSTO_REQUEST_ID: String = newOption("requestId")
 }
 
 case class KustoCoordinates(clusterUrl: String, clusterAlias:String, database: String, table: Option[String] = None)

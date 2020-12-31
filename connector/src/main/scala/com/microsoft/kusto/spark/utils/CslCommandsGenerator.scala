@@ -1,9 +1,21 @@
 package com.microsoft.kusto.spark.utils
 
+import java.util
+
 import com.microsoft.kusto.spark.datasink.KustoWriter.TempIngestionTablePrefix
 import com.microsoft.kusto.spark.datasource.KustoStorageParameters
+import scala.collection.JavaConverters._
 
 private[kusto] object CslCommandsGenerator {
+  def generateFetchTableIngestByTagsCommand(table: String): String = {
+    s""".show table $table  extents;
+       $$command_results
+       | mv-apply split(Tags, "\\r\\n") on (
+         where Tags startswith "ingest-by" | project Tags = substring(Tags,10)
+         )
+       | summarize make_set(Tags)"""
+  }
+
 
   // Not used. Here in case we prefer this approach
   def generateFindOldTemporaryTablesCommand2(database: String): String = {
@@ -11,11 +23,11 @@ private[kusto] object CslCommandsGenerator {
   }
 
   def generateFindOldTempTablesCommand(database: String): String = {
-    s""".show journal | where Event == 'CREATE-TABLE' | where Database == '$database' | where EntityName startswith '$TempIngestionTablePrefix' | where EventTimestamp < ago(1h) and EventTimestamp > ago(3d) | project EntityName """
+    s""".show journal | where Event == 'CREATE-TABLE' | where Database == '$database' | where EntityName startswith '$TempIngestionTablePrefix' | where EventTimestamp < ago(3d) | project EntityName """
   }
 
   def generateFindCurrentTempTablesCommand(prefix: String): String = {
-    s""".show tables | where TableName startswith '$prefix' | project TableName """
+    s""".show tables with (IncludeHiddenTables=true) | where TableName startswith '$prefix' | project TableName """
   }
 
   def generateDropTablesCommand(tables: String): String = {
@@ -51,8 +63,24 @@ private[kusto] object CslCommandsGenerator {
     s".show export containers"
   }
 
-  def generateTableMoveExtentsCommand(sourceTableName: String, destinationTableName: String): String = {
-    s".move extents all from table $sourceTableName to table ${KustoQueryUtils.normalizeTableName(destinationTableName)}"
+  def generateTableMoveExtentsCommand(sourceTableName: String, destinationTableName: String, ingestIfNotExistsTags: util.ArrayList[String]): String = {
+    val quotedTags = ingestIfNotExistsTags.asScala.map((tag: String) => s""""$tag"""").asJava
+    s""".move extents to table $destinationTableName <|
+       .show tables ( $sourceTableName,  $destinationTableName) extents;
+        $$command_results
+       | where TableName ==  '$sourceTableName'
+       | extend extentsSource = todynamic('$quotedTags')
+       |extend extentsDest = toscalar(
+              $$command_results
+               | where TableName == '$destinationTableName'
+               | mv-apply Tags=split(Tags, '\\r\\n') on
+                (
+                 extend Tags = substring(Tags, ${KustoConstants.ingestByPrefix.length})
+                )
+                |summarize make_set(Tags)
+        )
+      | where array_length(set_intersect(extentsSource,extentsDest))==0
+      |  distinct ExtentId"""
   }
 
   def generateTableAlterMergePolicyCommand(table: String, allowMerge: Boolean, allowRebuild: Boolean): String = {

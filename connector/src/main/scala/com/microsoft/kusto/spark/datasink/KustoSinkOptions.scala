@@ -1,5 +1,7 @@
 package com.microsoft.kusto.spark.datasink
 
+import java.util.UUID
+
 import com.microsoft.kusto.spark.common.KustoOptions
 
 import scala.concurrent.duration.FiniteDuration
@@ -43,4 +45,5 @@ case class WriteOptions(tableCreateOptions: SinkTableCreationMode.SinkTableCreat
                         writeResultLimit: String = KustoSinkOptions.NONE_RESULT_LIMIT,
                         timeZone: String = "UTC", timeout: FiniteDuration,
                         IngestionProperties: Option[String] = None,
-                        batchLimit: Int = 100)
+                        batchLimit: Int = 100,
+                        requestId: String = UUID.randomUUID().toString)

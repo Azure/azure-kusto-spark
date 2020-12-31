@@ -39,7 +39,8 @@ private[kusto] case class KustoReadRequest(sparkSession: SparkSession,
                                            query: String,
                                            authentication: KustoAuthentication,
                                            timeout: FiniteDuration,
-                                           clientRequestProperties: Option[ClientRequestProperties])
+                                           clientRequestProperties: Option[ClientRequestProperties],
+                                           requestId: String)
 
 private[kusto] case class KustoReadOptions(readMode: Option[ReadMode] = None,
                                            shouldCompressOnExport: Boolean = true,
@@ -51,6 +52,7 @@ private[kusto] object KustoReader {
                                      request: KustoReadRequest,
                                      filtering: KustoFiltering): RDD[Row] = {
 
+    KDSU.logInfo(myName, s"Executing query. requestId: ${request.requestId}")
     val filteredQuery = KustoFilter.pruneAndFilter(KustoSchema(request.schema.sparkSchema, Set()), request.query, filtering)
     val kustoResult: KustoResultSetTable = kustoClient.execute(request.kustoCoordinates.database,
       filteredQuery,
@@ -66,12 +68,12 @@ private[kusto] object KustoReader {
                                           partitionInfo: KustoPartitionParameters,
                                           options: KustoReadOptions,
                                           filtering: KustoFiltering): RDD[Row] = {
-    KDSU.logInfo(myName, "Starting exporting data from Kusto to blob storage")
+    KDSU.logInfo(myName, s"Starting exporting data from Kusto to blob storage. requestId: ${request.requestId}")
 
     setupBlobAccess(request, storage)
     val partitions = calculatePartitions(partitionInfo)
     val reader = new KustoReader(kustoClient, request, storage)
-    val directory = KustoQueryUtils.simplifyName(s"${request.kustoCoordinates.database}/dir${UUID.randomUUID()}/")
+    val directory = s"${request.kustoCoordinates.database}/dir${UUID.randomUUID()}/".replaceAll("[^0-9a-zA-Z/]","_")
 
     for (partition <- partitions) {
       reader.exportPartitionToBlob(
@@ -80,8 +82,7 @@ private[kusto] object KustoReader {
         storage,
         directory,
         options,
-        filtering,
-        request.clientRequestProperties)
+        filtering)
     }
 
     val directoryExists = (params: KustoStorageParameters) => {
@@ -93,8 +94,8 @@ private[kusto] object KustoReader {
       container.getDirectoryReference(directory).listBlobsSegmented().getLength > 0
     }
     val paths = storage.filter(directoryExists).map(params => s"wasbs://${params.container}@${params.account}.blob.${params.endpointSuffix}/$directory")
-    KDSU.logInfo(myName, s"Finished exporting from Kusto to '${paths.toString()}'" +
-      s", will start parquet reading now")
+    KDSU.logInfo(myName, s"Finished exporting from Kusto to ${paths.mkString(",")}" +
+      s", on requestId: ${request.requestId}, will start parquet reading now")
     val rdd = try {
       request.sparkSession.read.parquet(paths:_*).rdd
     } catch {
@@ -176,8 +177,7 @@ private[kusto] class KustoReader(client: Client, request: KustoReadRequest, stor
                                            storage: Seq[KustoStorageParameters],
                                            directory: String,
                                            options: KustoReadOptions,
-                                           filtering: KustoFiltering,
-                                           clientRequestProperties: Option[ClientRequestProperties]): Unit = {
+                                           filtering: KustoFiltering): Unit = {
 
     val limit = if (options.exportSplitLimitMb <= 0) None else Some(options.exportSplitLimitMb)
 
@@ -193,7 +193,7 @@ private[kusto] class KustoReader(client: Client, request: KustoReadRequest, stor
 
     val commandResult: KustoResultSetTable = client.execute(request.kustoCoordinates.database,
       exportCommand,
-      clientRequestProperties.orNull).getPrimaryResults
-    KDSU.verifyAsyncCommandCompletion(client, request.kustoCoordinates.database, commandResult, timeOut = request.timeout)
+      request.clientRequestProperties.orNull).getPrimaryResults
+    KDSU.verifyAsyncCommandCompletion(client, request.kustoCoordinates.database, commandResult, directory,timeOut = request.timeout)
   }
 }

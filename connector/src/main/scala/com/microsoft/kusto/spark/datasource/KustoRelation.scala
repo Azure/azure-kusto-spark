@@ -27,7 +27,8 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
                                         partitioningMode: Option[String],
                                         customSchema: Option[String] = None,
                                         storageParameters: Option[KustoStorageParameters],
-                                        clientRequestProperties: Option[ClientRequestProperties])
+                                        clientRequestProperties: Option[ClientRequestProperties],
+                                        requestId: String)
                                        (@transient val sparkSession: SparkSession)
   extends BaseRelation with TableScan with PrunedFilteredScan with Serializable with InsertableRelation  {
 
@@ -85,7 +86,7 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
         try {
           res = Some(KustoReader.singleBuildScan(
             kustoClient,
-            KustoReadRequest(sparkSession, cachedSchema, kustoCoordinates, query, authentication, timeout, clientRequestProperties),
+            KustoReadRequest(sparkSession, cachedSchema, kustoCoordinates, query, authentication, timeout, clientRequestProperties, requestId),
             KustoFiltering(requiredColumns, filters)))
         } catch {
           case ex: Exception => exception = Some(ex)
@@ -94,11 +95,11 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
 
       if (!useSingleMode || exception.isDefined) {
         if(exception.isDefined){
-            KDSU.logError("KustoRelation",s"Failed with lean mode, falling back to distributed mode. Exception : ${exception.get.getMessage}")
+            KDSU.logError("KustoRelation",s"Failed with lean mode, falling back to distributed mode, requestId: $requestId. Exception : ${exception.get.getMessage}")
         }
         res = Some(KustoReader.distributedBuildScan(
           kustoClient,
-          KustoReadRequest(sparkSession, cachedSchema, kustoCoordinates, query, authentication, timeout, clientRequestProperties),
+          KustoReadRequest(sparkSession, cachedSchema, kustoCoordinates, query, authentication, timeout, clientRequestProperties, requestId),
           if (storageParameters.isDefined) Seq(storageParameters.get) else
             KustoClientCache.getClient(kustoCoordinates.clusterAlias, kustoCoordinates.clusterUrl, authentication).getTempBlobsForExport,
           KustoPartitionParameters(numPartitions, getPartitioningColumn, getPartitioningMode),
@@ -113,7 +114,7 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
       }
     }
 
-    KDSU.logInfo("KustoRelation", s"Finished reading")
+    KDSU.logInfo("KustoRelation", s"Finished reading. OperationId: $requestId")
     res.get
   }
 
@@ -127,7 +128,7 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
       throw new RuntimeException("Spark connector cannot run Kusto commands. Please provide a valid query")
     }
 
-    KDSU.getSchema(kustoCoordinates.database, getSchemaQuery, KustoClientCache.getClient(kustoCoordinates.clusterAlias, kustoCoordinates.clusterUrl, authentication).engineClient)
+    KDSU.getSchema(kustoCoordinates.database, getSchemaQuery, KustoClientCache.getClient(kustoCoordinates.clusterAlias, kustoCoordinates.clusterUrl, authentication).engineClient, clientRequestProperties)
   }
 
   private def getPartitioningColumn: String = {
@@ -154,7 +155,7 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
 
   // Used for cached results
   override def equals(other: Any): Boolean = other match  {
-    case that: KustoRelation => kustoCoordinates == kustoCoordinates && query == that.query
+    case that: KustoRelation => kustoCoordinates == that.kustoCoordinates && query == that.query && authentication == that.authentication
     case _ => false
   }
 

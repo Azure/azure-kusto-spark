@@ -1,6 +1,7 @@
 package com.microsoft.kusto.spark.datasource
 
 import java.security.InvalidParameterException
+import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 import com.microsoft.azure.kusto.data.ClientRequestProperties
@@ -81,15 +82,16 @@ class DefaultSource extends CreatableRelationProvider
       if (storageSecret.isDefined) storageSecretIsAccountKey = false
     }
 
+    val requestIdOption = parameters.get(KustoSinkOptions.KUSTO_REQUEST_ID)
     if (authenticationParameters.isEmpty) {
       // Parse parameters if haven't got parsed before
       val sourceParameters = KDSU.parseSourceParameters(parameters)
       authenticationParameters = Some(sourceParameters.authenticationParameters)
       kustoCoordinates = sourceParameters.kustoCoordinates
       keyVaultAuthentication = sourceParameters.keyVaultAuth
-      clientRequestProperties = KDSU.getClientRequestProperties(parameters)
+      clientRequestProperties = Some(KDSU.getClientRequestProperties(parameters))
+      if (requestIdOption.isDefined) clientRequestProperties.get.setClientRequestId(requestIdOption.get)
     }
-
     val (kustoAuthentication, storageParameters): (Option[KustoAuthentication], Option[KustoStorageParameters]) =
       if (keyVaultAuthentication.isDefined) {
         // Get params from keyVault
@@ -118,9 +120,9 @@ class DefaultSource extends CreatableRelationProvider
     } else {
       None
     }
+    val requestId = requestIdOption.getOrElse(UUID.randomUUID().toString)
 
-    KDSU.logInfo(myName, "Finished serializing parameters for reading")
-
+    KDSU.logInfo(myName, s"Finished serializing parameters for reading: {requestId: $requestId, timeout: $timeout, readMode: ${readMode.getOrElse("Default")}, clientRequestProperties: $clientRequestProperties")
     KustoRelation(
       kustoCoordinates,
       kustoAuthentication.get,
@@ -132,7 +134,8 @@ class DefaultSource extends CreatableRelationProvider
       partitioningMode,
       parameters.get(KustoSourceOptions.KUSTO_CUSTOM_DATAFRAME_COLUMN_TYPES),
       storageParameters,
-      clientRequestProperties
+      clientRequestProperties,
+      requestId
     )(sqlContext.sparkSession)
   }
 

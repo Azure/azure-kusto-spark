@@ -108,6 +108,10 @@ that is using it. Please verify the following before using Kusto connector:
     this is done for each partition. The ingestion Kusto also aggregates data, default suggested by Kusto is 1GB but here
     we suggest to cut it at 100MB to adjust it to spark pulling of data.
     
+* **KUSTO_REQUEST_ID**:
+    'requestId' - A unique identifier UUID for this ingestion command. Will be used as part of the staging table name as well
+    , should be unique.
+    
  >**Note:**
  For both synchronous and asynchronous operation, 'write' is an atomic transaction, i.e. 
  either all data is written to Kusto, or no data is written. 
@@ -194,7 +198,6 @@ df.write
        .csv("/FileStore/tables")
  
  spark.conf.set("spark.sql.streaming.checkpointLocation", "/FileStore/temp/checkpoint")
- spark.conf.set("spark.sql.codegen.wholeStage", "false")
  
  val kustoQ = csvDf
        .writeStream

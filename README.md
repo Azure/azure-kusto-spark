@@ -14,7 +14,7 @@ Azure Data Explorer (A.K.A. [Kusto](https://azure.microsoft.com/en-us/services/d
 [Spark](https://spark.apache.org/) is a unified analytics engine for large-scale data processing.
 
 Making Azure Data Explorer and Spark work together enables building fast and scalable applications, targeting a variety of Machine Learning, Extract-Transform-Load, Log Analytics and other data driven scenarios. 
- 
+
 ## Changelog
 
 For main changes from previous releases please refer to [Releases](https://github.com/Azure/azure-kusto-spark/releases).
@@ -24,20 +24,22 @@ For known or new issues please refer to the [issues](https://github.com/Azure/az
 
 ### Linking 
 
+Starting version 2.3.0 we introduce new artifact Ids: `kusto-spark_3.x_2.12` targeting Spark 3.x and Scala 2.12 
+and `kusto-spark_2.4_2.11` targeting Spark 2.4.x and scala 2.11.
 For Scala/Java applications using Maven project definitions, 
 link your application with the artifact below in order to use the Azure Data Explorer connector for Spark. 
 
 ```
 groupId = com.microsoft.azure.kusto
-artifactId = spark-kusto-connector
-version = 2.0.0
+artifactId = kusto-spark_3.0_2.12
+version = 2.3.0
 ```
 
 **In Maven**:
 
 Look for the following coordinates: 
 ```
-com.microsoft.azure.kusto:spark-kusto-connector:2.0.0
+com.microsoft.azure.kusto:kusto-spark_3.0_2.12:2.3.0
 ```
 
 Or clone this repository and build it locally to add it to your local maven repository, 
@@ -47,16 +49,16 @@ the jar can also be found under the [released package](https://github.com/Azure/
    <dependency>
      <groupId>com.microsoft.azure.kusto</groupId>
      <artifactId>spark-kusto-connector</artifactId>
-     <version>2.0.0</version>
+     <version>2.3.0</version>
    </dependency>
 ```
 
 **In Databricks**:
 
-Create Library -> Maven with the following coordinates:
+Libraries -> Install New -> Maven -> copy the following coordinates:
 
 ```
-com.microsoft.azure.kusto:spark-kusto-connector:2.0.0
+com.microsoft.azure.kusto:kusto-spark_3.0_2.12:2.3.0
 ```
 
 #### Building Samples Module
@@ -79,11 +81,10 @@ In order to use the connector, you need to have:
 
 - Java 1.8 SDK installed
 - [Maven 3.x](https://maven.apache.org/download.cgi) installed
-- Spark version 2.4.x 
+- Spark - with the respective version as the reflected by the artifact Id (either 2.4 or 3.0)
 
-> Note: when working with 2.3 Spark version or lower, please refer to [Building for legacy Spark versions](docs/CHANGELIST.md#building-for-legacy-spark-versions)
- section of the [CHANGELIST](docs/CHANGELIST.md) document
-
+> Note: when working with 2.3 Spark version or lower, build the jar locally from branch 2.4 and 
+simply change the spark version in the pom file. 
 
 ## Build Commands
    
@@ -96,11 +97,12 @@ mvn clean install
 ```
 
 ## Pre-Compiled Libraries
-In order to facilitate ramp-up on platforms such as Azure Databricks, pre-compiled libraries
+In order to facilitate ramp-up from local jar on platforms such as Azure Databricks, pre-compiled libraries
 are published under [GitHub Releases](https://github.com/Azure/azure-kusto-spark/releases).
 These libraries include:
 * Azure Data Explorer connector library
-* May also include Kusto Java data and ingestion client libraries (kusto-data and kusto-ingest)
+* User may also need to include Kusto Java SDK libraries (kusto-data and kusto-ingest), which are published under
+[GitHub Releases](https://github.com/Azure/azure-kusto-java/releases)
 
 ## Dependencies
 Spark Azure Data Explorer connector takes dependency on [Azure Data Explorer Data Client Library](https://mvnrepository.com/artifact/com.microsoft.azure.kusto/kusto-data) 

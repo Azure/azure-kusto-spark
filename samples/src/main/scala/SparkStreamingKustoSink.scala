@@ -41,7 +41,6 @@ object SparkStreamingKustoSink {
     val df = eventhubs.withColumn("body", toString(eventhubs("body")))
 
     spark.conf.set("spark.sql.streaming.checkpointLocation", "target/temp/checkpoint/")
-    spark.conf.set("spark.sql.codegen.wholeStage", "false")
 
     // Write to a Kusto table from a streaming source
     val df1 = df

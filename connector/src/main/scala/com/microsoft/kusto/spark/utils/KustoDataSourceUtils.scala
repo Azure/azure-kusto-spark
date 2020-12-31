@@ -1,12 +1,14 @@
 package com.microsoft.kusto.spark.utils
 
 import java.io.InputStream
+import java.net.URI
 import java.security.InvalidParameterException
 import java.util
-import java.util.concurrent.{CountDownLatch, TimeUnit, TimeoutException}
-import java.util.{NoSuchElementException, StringJoiner, Timer, TimerTask}
+import java.util.concurrent.{Callable, CountDownLatch, TimeUnit, TimeoutException}
+import java.util.{NoSuchElementException, StringJoiner, Timer, TimerTask, UUID}
 
 import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties, KustoResultSetTable}
+import com.microsoft.azure.kusto.data.exceptions.{DataClientException, DataServiceException}
 import com.microsoft.kusto.spark.authentication._
 import com.microsoft.kusto.spark.common.{KustoCoordinates, KustoDebugOptions}
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
@@ -26,6 +28,8 @@ import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
 import scala.util.matching.Regex
 import org.apache.commons.lang3.StringUtils
+import org.apache.http.client.utils.URIBuilder
+import org.json.JSONObject
 
 object KustoDataSourceUtils {
   private val klog = Logger.getLogger("KustoConnector")
@@ -33,19 +37,20 @@ object KustoDataSourceUtils {
   val sasPattern: Regex = raw"(?:https://)?([^.]+).blob.([^/]+)/([^?]+)?(.+)".r
 
   val NewLine = sys.props("line.separator")
-  val MaxWaitTime: FiniteDuration = 1 minute
+  val ReadMaxWaitTime: FiniteDuration = 30 seconds
+  val WriteMaxWaitTime: FiniteDuration = 5 seconds
 
-  val input: InputStream = getClass.getClassLoader.getResourceAsStream("app.properties")
-  val prop = new Properties( )
-  prop.load(input)
-  val version: String = prop.getProperty("application.version")
-  val clientName = s"Kusto.Spark.Connector:$version"
-  val ingestPrefix: String = prop.getProperty("ingestPrefix")
-  val enginePrefix: String = prop.getProperty("enginePrefix")
-  val defaultDomainPostfix: String = prop.getProperty("defaultDomainPostfix")
-  val defaultClusterSuffix: String = prop.getProperty("defaultClusterSuffix")
-  val ariaClustersPrefix: String = prop.getProperty("ariaClustersPrefix")
-  val ariaClustersSuffix: String = prop.getProperty("ariaClustersSuffix")
+  val input: InputStream = getClass.getClassLoader.getResourceAsStream("spark.kusto.properties")
+  val props = new Properties( )
+  props.load(input)
+  var version: String = props.getProperty("application.version")
+  var clientName = s"Kusto.Spark.Connector:$version"
+  val ingestPrefix: String = props.getProperty("ingestPrefix","ingest-")
+  val enginePrefix: String = props.getProperty("enginePrefix","https://")
+  val defaultDomainPostfix: String = props.getProperty("defaultDomainPostfix","core.windows.net")
+  val defaultClusterSuffix: String = props.getProperty("defaultClusterSuffix","kusto.windows.net")
+  val ariaClustersProxy: String = props.getProperty("ariaClustersProxy", "https://kusto.aria.microsoft.com")
+  val ariaClustersAlias: String = "Aria proxy"
 
   def setLoggingLevel(level: String): Unit = {
     setLoggingLevel(Level.toLevel(level))
@@ -83,8 +88,8 @@ object KustoDataSourceUtils {
     tableSchemaBuilder.toString
   }
 
-  private[kusto] def getSchema(database: String, query: String, client: Client): KustoSchema = {
-    KustoResponseDeserializer(client.execute(database, query).getPrimaryResults).getSchema
+  private[kusto] def getSchema(database: String, query: String, client: Client, clientRequestProperties: Option[ClientRequestProperties]): KustoSchema = {
+    KustoResponseDeserializer(client.execute(database, query, clientRequestProperties.orNull).getPrimaryResults).getSchema
   }
 
   def parseSourceParameters(parameters: Map[String, String]): SourceParameters = {
@@ -106,34 +111,61 @@ object KustoDataSourceUtils {
     // Parse KustoAuthentication
     val applicationId = parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_APP_ID, "")
     val applicationKey = parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_APP_SECRET, "")
-    var authentication: KustoAuthentication = null
+    val applicationCertPath = parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_APP_CERTIFICATE_PATH, "")
+    val applicationCertPassword = parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_APP_CERTIFICATE_PASSWORD, "")
+    val tokenProviderCoordinates = parameters.getOrElse(KustoSourceOptions.KUSTO_TOKEN_PROVIDER_CALLBACK_CLASSPATH, "")
+    val keyVaultAppId: String = parameters.getOrElse(KustoSourceOptions.KEY_VAULT_APP_ID, "")
+    val keyVaultAppKey = parameters.getOrElse(KustoSourceOptions.KEY_VAULT_APP_KEY, "")
     val keyVaultUri: String = parameters.getOrElse(KustoSourceOptions.KEY_VAULT_URI, "")
-    var accessToken: String = ""
+    val keyVaultPemFile = parameters.getOrElse(KustoDebugOptions.KEY_VAULT_PEM_FILE_PATH, "")
+    val keyVaultCertKey = parameters.getOrElse(KustoDebugOptions.KEY_VAULT_CERTIFICATE_KEY, "")
+    val accessToken: String = parameters.getOrElse(KustoSourceOptions.KUSTO_ACCESS_TOKEN, "")
+    var authentication: KustoAuthentication = null
     var keyVaultAuthentication: Option[KeyVaultAuthentication] = None
-    if (keyVaultUri != "") {
-      // KeyVault Authentication
-      val keyVaultAppId: String = parameters.getOrElse(KustoSourceOptions.KEY_VAULT_APP_ID, "")
 
+    // Check KeyVault Authentication
+    if (keyVaultUri != "") {
       if (!keyVaultAppId.isEmpty) {
         keyVaultAuthentication = Some(KeyVaultAppAuthentication(keyVaultUri,
           keyVaultAppId,
-          parameters.getOrElse(KustoSourceOptions.KEY_VAULT_APP_KEY, "")))
+          keyVaultAppKey))
       } else {
         keyVaultAuthentication = Some(KeyVaultCertificateAuthentication(keyVaultUri,
-          parameters.getOrElse(KustoDebugOptions.KEY_VAULT_PEM_FILE_PATH, ""),
-          parameters.getOrElse(KustoDebugOptions.KEY_VAULT_CERTIFICATE_KEY, "")))
+          keyVaultPemFile,
+          keyVaultCertKey))
       }
     }
 
-    if (!applicationId.isEmpty || !applicationKey.isEmpty) {
-      authentication = AadApplicationAuthentication(applicationId, applicationKey, parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com"))
+    // Look for conflicts
+    var numberOfAuthenticationMethods = 0
+    if (!applicationId.isEmpty) numberOfAuthenticationMethods += 1
+    if (!accessToken.isEmpty) numberOfAuthenticationMethods += 1
+    if (!tokenProviderCoordinates.isEmpty) numberOfAuthenticationMethods += 1
+    if (!keyVaultUri.isEmpty) numberOfAuthenticationMethods += 1
+    if(numberOfAuthenticationMethods > 1){
+      throw new IllegalArgumentException("More than one authentication methods were provided. Failing.")
     }
-    else if ( {
-      accessToken = parameters.getOrElse(KustoSourceOptions.KUSTO_ACCESS_TOKEN, "")
-      !accessToken.isEmpty
-    }) {
+
+    // Resolve authentication
+    if (!applicationId.isEmpty) {
+      // Application authentication
+      if(!applicationKey.isEmpty){
+        authentication = AadApplicationAuthentication(applicationId, applicationKey, parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com"))
+      } else if(!applicationCertPath.isEmpty){
+        authentication = AadApplicationCertificateAuthentication(applicationId, applicationCertPath, applicationCertPassword)
+      }
+    } else if (!accessToken.isEmpty) {
+      // Authentication by token
       authentication = KustoAccessTokenAuthentication(accessToken)
+    }  else if (!tokenProviderCoordinates.isEmpty) {
+      // Authentication by token provider
+      val classLoader = Thread.currentThread().getContextClassLoader
+      val c1 = classLoader.loadClass(tokenProviderCoordinates).getConstructor(parameters.getClass).newInstance(parameters)
+      val tokenProviderCallback = c1.asInstanceOf[Callable[String]]
+
+      authentication = KustoTokenProviderAuthentication(tokenProviderCallback)
     } else if (keyVaultUri.isEmpty) {
+      logWarn("parseSourceParameters", "No authentication method was not supplied - using device authentication")
       val token = DeviceAuthentication.acquireAccessTokenUsingDeviceCodeFlow(clusterUrl)
       authentication = KustoAccessTokenAuthentication(token)
     }
@@ -156,7 +188,6 @@ object KustoDataSourceUtils {
     var isAsync: Boolean = false
     var isAsyncParam: String = ""
     var batchLimit: Int = 0
-
     try {
       isAsyncParam = parameters.getOrElse(KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC, "false")
       isAsync = parameters.getOrElse(KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC, "false").trim.toBoolean
@@ -169,6 +200,7 @@ object KustoDataSourceUtils {
     }
 
     val timeout = new FiniteDuration(parameters.getOrElse(KustoSinkOptions.KUSTO_TIMEOUT_LIMIT, KCONST.defaultWaitingIntervalLongRunning).toLong, TimeUnit.SECONDS)
+    val requestId = parameters.getOrElse(KustoSinkOptions.KUSTO_REQUEST_ID, UUID.randomUUID().toString)
 
     val ingestionPropertiesAsJson = parameters.get(KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON)
 
@@ -179,7 +211,8 @@ object KustoDataSourceUtils {
       parameters.getOrElse(DateTimeUtils.TIMEZONE_OPTION, "UTC"),
       timeout,
       ingestionPropertiesAsJson,
-      batchLimit
+      batchLimit,
+      requestId
     )
 
     val sourceParameters = parseSourceParameters(parameters)
@@ -190,19 +223,19 @@ object KustoDataSourceUtils {
 
     logInfo("parseSinkParameters", s"Parsed write options for sink: {'timeout': ${writeOptions.timeout}, 'async': ${writeOptions.isAsync}, " +
       s"'tableCreationMode': ${writeOptions.tableCreateOptions}, 'writeLimit': ${writeOptions.writeResultLimit}, 'batchLimit': ${writeOptions.batchLimit}" +
-      s", 'timeout': ${writeOptions.timeout}, 'timezone': ${writeOptions.timeZone}, 'ingestionProperties': $ingestionPropertiesAsJson}")
+      s", 'timeout': ${writeOptions.timeout}, 'timezone': ${writeOptions.timeZone}, 'ingestionProperties': $ingestionPropertiesAsJson, requestId: $requestId}")
 
     SinkParameters(writeOptions, sourceParameters)
   }
 
-  def getClientRequestProperties(parameters: Map[String, String]): Option[ClientRequestProperties] = {
+  def getClientRequestProperties(parameters: Map[String, String]): ClientRequestProperties = {
     val crpOption = parameters.get(KustoSourceOptions.KUSTO_CLIENT_REQUEST_PROPERTIES_JSON)
 
     if (crpOption.isDefined) {
       val crp = ClientRequestProperties.fromString(crpOption.get)
-      Some(crp)
+      crp
     } else {
-      None
+      new ClientRequestProperties
     }
   }
 
@@ -228,13 +261,13 @@ object KustoDataSourceUtils {
   }
 
   private[kusto] def getClusterNameFromUrlIfNeeded(cluster: String): String = {
-    if(cluster.startsWith(ariaClustersPrefix) && cluster.endsWith(ariaClustersSuffix)){
-      val secondDotIndex = cluster.indexOf(".",cluster.indexOf(".") + 1)
-      cluster.substring(ariaClustersPrefix.length,secondDotIndex)
+    if (cluster.equals(ariaClustersProxy)){
+      ariaClustersAlias
     }
     else if (cluster.startsWith(enginePrefix) ){
-      val startIdx = if (cluster.startsWith(ingestPrefix)) ingestPrefix.length else enginePrefix.length
-      cluster.substring(startIdx,cluster.indexOf(".kusto."))
+      val host = new URI(cluster).getHost
+      val startIdx = if (host.startsWith(ingestPrefix)) ingestPrefix.length else 0
+      host.substring(startIdx,host.indexOf(".kusto."))
     } else {
       cluster
     }
@@ -242,13 +275,16 @@ object KustoDataSourceUtils {
 
   private[kusto] def getEngineUrlFromAliasIfNeeded(cluster: String): String = {
     if(cluster.startsWith(enginePrefix)){
-      if(cluster.startsWith(ingestPrefix)){
-        cluster.replace(ingestPrefix, "https://")
+      val host = new URI(cluster).getHost
+      if(host.startsWith(ingestPrefix)){
+        val uriBuilder = new URIBuilder()
+        uriBuilder.setHost(ingestPrefix + host).toString
       } else{
         cluster
       }
     } else {
-      s"https://$cluster.kusto.windows.net"
+      val uriBuilder = new URIBuilder()
+      uriBuilder.setScheme("https").setHost(s"$cluster.kusto.windows.net").toString
     }
   }
 
@@ -268,7 +304,7 @@ object KustoDataSourceUtils {
     * @param stopCondition            - stop jobs if condition holds for the func.apply output
     * @param finalWork          - do final work with the last func.apply output
     */
-    def doWhile[A](func: () => A, delayBeforeStart: Long, delayBeforeEach: Int, timesToRun: Int, stopCondition: A => Boolean, finalWork: A => Unit): CountDownLatch = {
+    def doWhile[A](func: () => A, delayBeforeStart: Long, delayBeforeEach: Int, timesToRun: Int, stopCondition: A => Boolean, finalWork: A => Unit, maxWaitTimeBetweenCalls: Int): CountDownLatch = {
     val latch = new CountDownLatch(if (timesToRun > 0) timesToRun else 1)
     val t = new Timer()
     var currentWaitTime = delayBeforeEach
@@ -289,7 +325,7 @@ object KustoDataSourceUtils {
             finalWork.apply(res)
             while (latch.getCount > 0) latch.countDown()
           } else {
-            currentWaitTime = if (currentWaitTime > MaxWaitTime.toMillis) currentWaitTime else currentWaitTime + currentWaitTime
+            currentWaitTime = if (currentWaitTime + currentWaitTime > maxWaitTimeBetweenCalls) maxWaitTimeBetweenCalls else currentWaitTime + currentWaitTime
             t.schedule(new ExponentialBackoffTask(), currentWaitTime)
           }
         } catch {
@@ -308,6 +344,7 @@ object KustoDataSourceUtils {
   def verifyAsyncCommandCompletion(client: Client,
                                    database: String,
                                    commandResult: KustoResultSetTable,
+                                   directory: String,
                                    samplePeriod: FiniteDuration = KCONST.defaultPeriodicSamplePeriod,
                                    timeOut: FiniteDuration): Unit = {
     commandResult.next()
@@ -320,29 +357,45 @@ object KustoDataSourceUtils {
 
     val stateCol = "State"
     val statusCol = "Status"
-
+    val statusCheck: () => Option[KustoResultSetTable] = () => {
+      try {
+        Some(client.execute(database, operationsShowCommand).getPrimaryResults)
+      }
+      catch{
+        case e: DataServiceException => {
+          val error = new JSONObject(e.getCause.getMessage).getJSONObject("error")
+          val isPermanent = error.getBoolean("@permanent")
+          if (isPermanent) {
+            val message = s"Couldn't monitor the progress of the export command from the service, you may track it using " +
+              s"the command '$operationsShowCommand' and read from the blob directory: ('$directory'), once it completes."
+            logError("verifyAsyncCommandCompletion", message)
+            throw new Exception(message, e)
+          }
+          logWarn("verifyAsyncCommandCompletion", "Failed transiently to retrieve export status, trying again in a few seconds")
+          None
+        }
+        case _: DataClientException => None
+      }}
     var lastResponse: Option[KustoResultSetTable] = None
-    val task = doWhile[KustoResultSetTable](
-      func = () => client.execute(database, operationsShowCommand).getPrimaryResults,
+    val task = doWhile[Option[KustoResultSetTable]](
+      func = statusCheck,
       delayBeforeStart = 0, delayBeforeEach = delayPeriodBetweenCalls, timesToRun = timesToRun,
-      stopCondition = (result: KustoResultSetTable) => {
-        result.next()
-        result.getString(stateCol) == "InProgress"
-      },
-      finalWork = result => {
-        lastResponse = Some(result)
-      })
+      stopCondition = (result: Option[KustoResultSetTable]) =>
+        result.isEmpty || (result.get.next() && result.get.getString(stateCol) == "InProgress"),
+      finalWork = (result: Option[KustoResultSetTable]) => {
+        lastResponse = result
+      }, maxWaitTimeBetweenCalls = ReadMaxWaitTime.toMillis.toInt)
     var success = true
     if (timeOut < FiniteDuration.apply(0, SECONDS)) {
       task.await()
     } else {
-      if (!task.await(timeoutInMillis, TimeUnit.SECONDS)) {
+      if (!task.await(timeoutInMillis, TimeUnit.MILLISECONDS)) {
         // Timed out
         success = false
       }
     }
 
-    if (lastResponse.isDefined && lastResponse.get.getString(stateCol) != "Completed") {
+    if (lastResponse.isEmpty || lastResponse.get.getString(stateCol) != "Completed") {
       throw new RuntimeException(
         s"Failed to execute Kusto operation with OperationId '$operationId', State: '${lastResponse.get.getString(stateCol)}'," +
           s" Status: '${lastResponse.get.getString(statusCol)}'"

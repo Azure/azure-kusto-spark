@@ -15,7 +15,7 @@ class ContainerProvider[A](val dmClient: Client, val clusterAlias: String, val c
   def getContainer: A = {
     // Refresh if storageExpiryMinutes have passed since last refresh for this cluster as SAS should be valid for at least 120 minutes
     if (storageUris.isEmpty ||
-      new Period(lastRefresh, new DateTime(DateTimeZone.UTC)).getMinutes > KustoConstants.storageExpiryMinutes) {
+      new Period(lastRefresh, new DateTime(DateTimeZone.UTC)).toStandardMinutes.getMinutes > KustoConstants.storageExpiryMinutes) {
       refresh
     } else {
       roundRobinIdx = (roundRobinIdx + 1) % storageUris.size
@@ -25,7 +25,7 @@ class ContainerProvider[A](val dmClient: Client, val clusterAlias: String, val c
 
   def getAllContainers: Seq[A] = {
     if (storageUris.isEmpty ||
-      new Period(lastRefresh, new DateTime(DateTimeZone.UTC)).getMinutes > KustoConstants.storageExpiryMinutes){
+      new Period(lastRefresh, new DateTime(DateTimeZone.UTC)).toStandardMinutes.getMinutes > KustoConstants.storageExpiryMinutes){
       refresh
     }
     storageUris
