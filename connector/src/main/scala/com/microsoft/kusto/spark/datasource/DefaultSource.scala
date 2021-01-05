@@ -123,11 +123,14 @@ class DefaultSource extends CreatableRelationProvider
     val requestId = requestIdOption.getOrElse(UUID.randomUUID().toString)
 
     KDSU.logInfo(myName, s"Finished serializing parameters for reading: {requestId: $requestId, timeout: $timeout, readMode: ${readMode.getOrElse("Default")}, clientRequestProperties: $clientRequestProperties")
+
+    val exportQueryOnlyOnce = java.lang.Boolean.parseBoolean(parameters.getOrElse(KustoSourceOptions.KUSTO_DISTRIBUTED_MODE_EXPORT_QUERY_ONLY_ONCE, "false"))
+
     KustoRelation(
       kustoCoordinates,
       kustoAuthentication.get,
       parameters.getOrElse(KustoSourceOptions.KUSTO_QUERY, ""),
-      KustoReadOptions(readMode, shouldCompressOnExport, exportSplitLimitMb),
+      KustoReadOptions(readMode, shouldCompressOnExport, exportSplitLimitMb, exportQueryOnlyOnce),
       timeout,
       numPartitions,
       parameters.get(KustoDebugOptions.KUSTO_PARTITION_COLUMN),
