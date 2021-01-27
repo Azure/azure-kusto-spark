@@ -6,7 +6,7 @@ import com.microsoft.azure.storage.blob.CloudBlobContainer
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasource.ReadMode.ReadMode
-import com.microsoft.kusto.spark.utils.{CslCommandsGenerator, KustoAzureFsSetupCache, KustoBlobStorageUtils, KustoQueryUtils, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.{CslCommandsGenerator, KustoAzureFsSetupCache, KustoBlobStorageUtils, KustoDataSourceUtils => KDSU}
 import org.apache.spark.Partition
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.sources.Filter
@@ -46,10 +46,14 @@ private[kusto] case class KustoReadRequest(sparkSession: SparkSession,
 private[kusto] case class KustoReadOptions(readMode: Option[ReadMode] = None,
                                            shouldCompressOnExport: Boolean = true,
                                            exportSplitLimitMb: Long = 1024,
-                                           exportQueryOnlyOnce: Boolean = false)
+                                           distributedReadModeTransientCacheEnabled: Boolean = false)
+
+private[kusto] case class DistributedReadModeTransientCacheKey(query: String,
+                                                               kustoCoordinates: KustoCoordinates,
+                                                               authentication: KustoAuthentication)
 private[kusto] object KustoReader {
   private val myName = this.getClass.getSimpleName
-  private val cachedQueryPaths = new ConcurrentHashMap[String, Seq[String]]().asScala
+  private val distributedReadModeTransientCache = new ConcurrentHashMap[DistributedReadModeTransientCacheKey, Seq[String]]().asScala
 
   private[kusto] def singleBuildScan(kustoClient: Client,
                                      request: KustoReadRequest,
@@ -71,19 +75,21 @@ private[kusto] object KustoReader {
                                           partitionInfo: KustoPartitionParameters,
                                           options: KustoReadOptions,
                                           filtering: KustoFiltering): RDD[Row] = {
-    KDSU.logInfo(myName, s"Starting exporting data from Kusto to blob storage. requestId: ${request.requestId}")
     var paths: Seq[String] = Seq()
-    // if exportQueryOnlyOnce is set to true, then check if path is cached and use it
-    // if not export and cache the path for reuse later
-    if (options.exportQueryOnlyOnce) {
-      if (cachedQueryPaths.contains(request.query)) {
-        paths = cachedQueryPaths(request.query)
+    // if distributedReadModeTransientCacheEnabled is set to true, then check if path is cached and use it
+    // if not export and cache the path for reuse
+    if (options.distributedReadModeTransientCacheEnabled) {
+      val key = DistributedReadModeTransientCacheKey(request.query, request.kustoCoordinates, request.authentication)
+      if (distributedReadModeTransientCache.contains(key)) {
+        KDSU.logInfo(myName, s"distributedReadModeTransientCache: ${options.distributedReadModeTransientCacheEnabled} cache: hit, reusing cached export paths")
+        paths = distributedReadModeTransientCache(key)
       } else {
+        KDSU.logInfo(myName, s"distributedReadModeTransientCache: ${options.distributedReadModeTransientCacheEnabled} cache: miss, exporting to cache paths")
         paths = exportToStorage(kustoClient, request, storage, partitionInfo, options, filtering)
-        cachedQueryPaths(request.query) = paths
+        distributedReadModeTransientCache(key) = paths
       }
     } else{
-      // export always as exportQueryOnlyOnce is false
+      KDSU.logInfo(myName, s"distributedReadModeTransientCache: ${options.distributedReadModeTransientCacheEnabled}. ")
       paths = exportToStorage(kustoClient, request, storage, partitionInfo, options, filtering)
     }
 
@@ -113,7 +119,8 @@ private[kusto] object KustoReader {
                               partitionInfo: KustoPartitionParameters,
                               options: KustoReadOptions,
                               filtering: KustoFiltering) = {
-    KDSU.logInfo(myName, "Starting exporting data from Kusto to blob storage")
+
+    KDSU.logInfo(myName, s"Starting exporting data from Kusto to blob storage. requestId: ${request.requestId}")
 
     setupBlobAccess(request, storage)
     val partitions = calculatePartitions(partitionInfo)
