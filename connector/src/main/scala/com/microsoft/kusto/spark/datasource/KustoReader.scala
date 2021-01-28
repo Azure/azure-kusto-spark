@@ -81,15 +81,14 @@ private[kusto] object KustoReader {
     if (options.distributedReadModeTransientCacheEnabled) {
       val key = DistributedReadModeTransientCacheKey(request.query, request.kustoCoordinates, request.authentication)
       if (distributedReadModeTransientCache.contains(key)) {
-        KDSU.logInfo(myName, s"distributedReadModeTransientCache: ${options.distributedReadModeTransientCacheEnabled} cache: hit, reusing cached export paths")
+        KDSU.logInfo(myName, "Fetching from distributedReadModeTransientCache: hit, reusing cached export paths")
         paths = distributedReadModeTransientCache(key)
       } else {
-        KDSU.logInfo(myName, s"distributedReadModeTransientCache: ${options.distributedReadModeTransientCacheEnabled} cache: miss, exporting to cache paths")
+        KDSU.logInfo(myName, "distributedReadModeTransientCache: miss, exporting to cache paths")
         paths = exportToStorage(kustoClient, request, storage, partitionInfo, options, filtering)
         distributedReadModeTransientCache(key) = paths
       }
     } else{
-      KDSU.logInfo(myName, s"distributedReadModeTransientCache: ${options.distributedReadModeTransientCacheEnabled}. ")
       paths = exportToStorage(kustoClient, request, storage, partitionInfo, options, filtering)
     }
 
