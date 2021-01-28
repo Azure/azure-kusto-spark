@@ -85,7 +85,7 @@ private[kusto] object KustoReader {
         paths = distributedReadModeTransientCache(key)
       } else {
         KDSU.logInfo(myName, "distributedReadModeTransientCache: miss, exporting to cache paths")
-        // remove filters as we want exported data to have all the query results.
+        // not using filters as we want exported data to have all the query results for request.query
         // filters will be applied by spark after rdd reads the exported data
         paths = exportToStorage(kustoClient, request, storage, partitionInfo, options, KustoFiltering())
         distributedReadModeTransientCache(key) = paths
