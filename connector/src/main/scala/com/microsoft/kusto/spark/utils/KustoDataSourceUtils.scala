@@ -264,10 +264,15 @@ object KustoDataSourceUtils {
     if (cluster.equals(ariaClustersProxy)){
       ariaClustersAlias
     }
-    else if (cluster.startsWith(enginePrefix) ){
+    else if (cluster.startsWith(enginePrefix)){
+      if(!cluster.contains(".kusto.")){
+        throw new InvalidParameterException("KUSTO_CLUSTER parameter accepts either a full url with https scheme or the cluster's" +
+          "alias and tries to construct the full URL from it. Parameter given: " + cluster)
+      }
       val host = new URI(cluster).getHost
       val startIdx = if (host.startsWith(ingestPrefix)) ingestPrefix.length else 0
       host.substring(startIdx,host.indexOf(".kusto."))
+
     } else {
       cluster
     }
