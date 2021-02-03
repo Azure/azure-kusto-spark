@@ -124,13 +124,14 @@ class DefaultSource extends CreatableRelationProvider
 
     KDSU.logInfo(myName, s"Finished serializing parameters for reading: {requestId: $requestId, timeout: $timeout, readMode: ${readMode.getOrElse("Default")}, clientRequestProperties: $clientRequestProperties")
 
-    val distributedReadModeTransientCacheEnabled = java.lang.Boolean.parseBoolean(parameters.getOrElse(KustoSourceOptions.KUSTO_DISTRIBUTED_READ_MODE_TRANSIENT_CACHE, "false"))
+    val distributedReadModeTransientCacheEnabled = parameters.getOrElse(KustoSourceOptions.KUSTO_DISTRIBUTED_READ_MODE_TRANSIENT_CACHE, "false").trim.toBoolean
+    val queryFilterPushDown = parameters.get(KustoSourceOptions.KUSTO_QUERY_FILTER_PUSH_DOWN).map(s=> s.trim.toBoolean)
 
     KustoRelation(
       kustoCoordinates,
       kustoAuthentication.get,
       parameters.getOrElse(KustoSourceOptions.KUSTO_QUERY, ""),
-      KustoReadOptions(readMode, shouldCompressOnExport, exportSplitLimitMb, distributedReadModeTransientCacheEnabled),
+      KustoReadOptions(readMode, shouldCompressOnExport, exportSplitLimitMb, distributedReadModeTransientCacheEnabled, queryFilterPushDown),
       timeout,
       numPartitions,
       parameters.get(KustoDebugOptions.KUSTO_PARTITION_COLUMN),

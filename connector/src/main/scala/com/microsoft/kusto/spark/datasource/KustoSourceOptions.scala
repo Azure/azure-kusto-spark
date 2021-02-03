@@ -37,6 +37,11 @@ object KustoSourceOptions extends KustoOptions {
   val KUSTO_READ_MODE: String = newOption("readMode")
   // set to 'true' to export request Query only once and cache the exported path to for reuse
   val KUSTO_DISTRIBUTED_READ_MODE_TRANSIENT_CACHE: String = newOption("distributedReadModeTransientCache")
+  // if 'true', query executed on Kusto cluster will include the selected columns and filters. Set to 'false' to
+  // execute request query on kusto cluster as is, columns and filters will be applied by spark on the data read from cluster.
+  // Defaults to 'true' if KUSTO_DISTRIBUTED_READ_MODE_TRANSIENT_CACHE=false
+  // Defaults to 'false' if KUSTO_DISTRIBUTED_READ_MODE_TRANSIENT_CACHE=true
+  val KUSTO_QUERY_FILTER_PUSH_DOWN: String = newOption("queryFilterPushDown")
 }
 
 object ReadMode extends Enumeration {

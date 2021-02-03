@@ -46,7 +46,8 @@ private[kusto] case class KustoReadRequest(sparkSession: SparkSession,
 private[kusto] case class KustoReadOptions(readMode: Option[ReadMode] = None,
                                            shouldCompressOnExport: Boolean = true,
                                            exportSplitLimitMb: Long = 1024,
-                                           distributedReadModeTransientCacheEnabled: Boolean = false)
+                                           distributedReadModeTransientCacheEnabled: Boolean = false,
+                                           queryFilterPushDown: Option[Boolean])
 
 private[kusto] case class DistributedReadModeTransientCacheKey(query: String,
                                                                kustoCoordinates: KustoCoordinates,
@@ -85,13 +86,23 @@ private[kusto] object KustoReader {
         paths = distributedReadModeTransientCache(key)
       } else {
         KDSU.logInfo(myName, "distributedReadModeTransientCache: miss, exporting to cache paths")
-        // not using filters as we want exported data to have all the query results for request.query
-        // filters will be applied by spark after rdd reads the exported data
-        paths = exportToStorage(kustoClient, request, storage, partitionInfo, options, KustoFiltering())
+        val filter = determineFilterPushDown(options.queryFilterPushDown, false, filtering)
+        paths = exportToStorage(kustoClient, request, storage, partitionInfo, options, filter)
         distributedReadModeTransientCache(key) = paths
       }
     } else{
-      paths = exportToStorage(kustoClient, request, storage, partitionInfo, options, filtering)
+      val filter = determineFilterPushDown(options.queryFilterPushDown, true, filtering)
+      paths = exportToStorage(kustoClient, request, storage, partitionInfo, options, filter)
+    }
+
+    def determineFilterPushDown(queryFilterPushDown: Option[Boolean], queryFilterPushDownDefault: Boolean, inputFilter: KustoFiltering): KustoFiltering = {
+      if (queryFilterPushDown.getOrElse(queryFilterPushDownDefault)) {
+        KDSU.logInfo(myName, s"using ${KustoSourceOptions.KUSTO_QUERY_FILTER_PUSH_DOWN}")
+        inputFilter
+      } else{
+        KDSU.logInfo(myName, s"not using ${KustoSourceOptions.KUSTO_QUERY_FILTER_PUSH_DOWN}")
+        KustoFiltering()
+      }
     }
 
     val rdd = try {
