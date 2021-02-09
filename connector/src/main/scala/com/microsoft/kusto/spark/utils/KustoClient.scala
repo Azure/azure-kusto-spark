@@ -9,7 +9,7 @@ import com.microsoft.azure.kusto.ingest.result.{IngestionStatus, OperationStatus
 import com.microsoft.azure.kusto.ingest.{IngestClient, IngestClientFactory, IngestionProperties}
 import com.microsoft.azure.storage.StorageException
 import com.microsoft.kusto.spark.common.KustoCoordinates
-import com.microsoft.kusto.spark.datasink.KustoWriter.{TempIngestionTablePrefix, delayPeriodBetweenCalls}
+import com.microsoft.kusto.spark.datasink.KustoWriter.{tempIngestionTablePrefix, legacyTempIngestionTablePrefix,delayPeriodBetweenCalls}
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
 import com.microsoft.kusto.spark.datasink.{PartitionResult, SinkTableCreationMode, SparkIngestionProperties}
 import com.microsoft.kusto.spark.datasource.KustoStorageParameters
@@ -183,19 +183,22 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
 
   def cleanupTempTables(coordinates: KustoCoordinates): Unit = {
     Future {
-      val tempTablesOld: Seq[String] =
-        engineClient.execute(generateFindOldTempTablesCommand(coordinates.database))
-          .getPrimaryResults.getData.asInstanceOf[util.ArrayList[util.ArrayList[String]]].asScala
-          .headOption.map(_.asScala)
-          .getOrElse(Seq())
-
       // Try delete temporary tablesToCleanup created and not used
-      val tempTablesCurr = engineClient.execute(coordinates.database, generateFindCurrentTempTablesCommand(TempIngestionTablePrefix)).getPrimaryResults
+      val tempTablesCurr = engineClient.execute(
+        coordinates.database,
+        generateFindCurrentTempTablesCommand(Array(tempIngestionTablePrefix,legacyTempIngestionTablePrefix))
+      ).getPrimaryResults
       if (tempTablesCurr.count() > 0) {
-        tempTablesCurr.next()
-        val tablesToCleanup: Seq[String] = tempTablesOld.intersect(tempTablesCurr.getCurrentRow.asScala)
+      val tempTablesOld = engineClient.execute(generateFindOldTempTablesCommand(coordinates.database,Array(tempIngestionTablePrefix,legacyTempIngestionTablePrefix)))
+        .getPrimaryResults.getData.asInstanceOf[util.ArrayList[util.ArrayList[String]]].asScala
+        .map(_.asScala.head)
+
+        val tablesToCleanup = tempTablesOld.intersect(tempTablesCurr.getData.asInstanceOf[util.ArrayList[util.ArrayList[String]]].asScala
+          .map(_.asScala.head))
         if (tablesToCleanup.nonEmpty) {
+          KDSU.logInfo(myName, "Starting cleaning up old temporary tables")
           engineClient.execute(coordinates.database, generateDropTablesCommand(tablesToCleanup.mkString(",")))
+          KDSU.logInfo(myName, "Finished cleaning up old temporary tables")
         }
       }
     } onFailure {
