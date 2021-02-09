@@ -58,7 +58,7 @@ private [kusto] object KustoTestUtils {
   def tryDropAllTablesByPrefix(kustoAdminClient: Client, database: String, tablePrefix: String): Unit =
   {
     try{
-      val res = kustoAdminClient.execute(database, generateFindCurrentTempTablesCommand(tablePrefix))
+      val res = kustoAdminClient.execute(database, generateFindCurrentTempTablesCommand(Array(tablePrefix)))
       val tablesToCleanup = res.getPrimaryResults.getData.asScala.map(row => row.get(0))
 
       if (tablesToCleanup.nonEmpty) {

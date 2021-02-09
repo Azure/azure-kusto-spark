@@ -31,7 +31,8 @@ import scala.concurrent.{Await, Future, TimeoutException}
 
 object KustoWriter {
   private val myName = this.getClass.getSimpleName
-  val TempIngestionTablePrefix = "_tmpTable"
+  val legacyTempIngestionTablePrefix = "_tmpTable"
+  val tempIngestionTablePrefix = "sparkTempTable_"
   val delayPeriodBetweenCalls: Int = KCONST.defaultPeriodicSamplePeriod.toMillis.toInt
   val GZIP_BUFFER_SIZE: Int = 1000 * KCONST.defaultBufferSize
 
@@ -49,7 +50,7 @@ object KustoWriter {
     }
 
     val table = tableCoordinates.table.get
-    val tmpTableName: String = KustoQueryUtils.simplifyName(TempIngestionTablePrefix +
+    val tmpTableName: String = KustoQueryUtils.simplifyName(tempIngestionTablePrefix +
       data.sparkSession.sparkContext.appName +
       "_" + table + batchId.map(b=>s"_${b.toString}").getOrElse("") + "_" + writeOptions.requestId)
 

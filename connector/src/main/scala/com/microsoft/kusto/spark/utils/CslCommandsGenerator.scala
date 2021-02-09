@@ -2,7 +2,7 @@ package com.microsoft.kusto.spark.utils
 
 import java.util
 
-import com.microsoft.kusto.spark.datasink.KustoWriter.TempIngestionTablePrefix
+import com.microsoft.kusto.spark.datasink.KustoWriter.tempIngestionTablePrefix
 import com.microsoft.kusto.spark.datasource.KustoStorageParameters
 import scala.collection.JavaConverters._
 
@@ -18,16 +18,26 @@ private[kusto] object CslCommandsGenerator {
 
 
   // Not used. Here in case we prefer this approach
-  def generateFindOldTemporaryTablesCommand2(database: String): String = {
-    s""".show database $database extents metadata | where TableName startswith '$TempIngestionTablePrefix' | project TableName, maxDate = todynamic(ExtentMetadata).MaxDateTime | where maxDate > ago(1h)"""
+//  def generateFindOldTemporaryTablesCommand2(database: String): String = {
+//    s""".show database $database extents metadata | where TableName startswith '$TempIngestionTablePrefix' | project TableName, maxDate = todynamic(ExtentMetadata).MaxDateTime | where maxDate > ago(1h)"""
+//  }
+
+  def generateFindOldTempTablesCommand(database: String,tempTablePrefixes: Array[String]): String = {
+    val whereClause = tempTablePrefixes.zipWithIndex.foldLeft[String](""){(res: String,cur:(String,Int))=>{
+      val (c,i) = cur
+      val state= s"${if(i==0) "" else "or"} EntityName startswith '$c'"
+      res+state
+    } }
+    s""".show journal | where Event == 'CREATE-TABLE' | where Database == '$database' | where $whereClause | where EventTimestamp < ago(3d) and EventTimestamp >ago(14d) | project EntityName """
   }
 
-  def generateFindOldTempTablesCommand(database: String): String = {
-    s""".show journal | where Event == 'CREATE-TABLE' | where Database == '$database' | where EntityName startswith '$TempIngestionTablePrefix' | where EventTimestamp < ago(3d) | project EntityName """
-  }
-
-  def generateFindCurrentTempTablesCommand(prefix: String): String = {
-    s""".show tables with (IncludeHiddenTables=true) | where TableName startswith '$prefix' | project TableName """
+  def generateFindCurrentTempTablesCommand(tempTablePrefixes: Array[String]): String = {
+    val whereClause = tempTablePrefixes.zipWithIndex.foldLeft[String](""){(res: String,cur:(String,Int))=>{
+      val (c,i) = cur
+      val state= s"${if(i==0) "" else "or"} TableName startswith '$c'"
+      res+state
+    } }
+    s""".show tables with (IncludeHiddenTables=true) |where $whereClause | project TableName """
   }
 
   def generateDropTablesCommand(tables: String): String = {
