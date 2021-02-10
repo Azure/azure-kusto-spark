@@ -122,6 +122,15 @@ Once the RDD is no longer required by the caller application, the container and/
 'readMode' - Override the connector heuristic to choose between 'Single' and 'Distributed' mode.
 Options are - 'ForceSingleMode', 'ForceDistributedMode'.
 Scala and java users may take these options from com.microsoft.kusto.spark.datasource.ReadMode.
+
+* **KUSTO_DISTRIBUTED_READ_MODE_TRANSIENT_CACHE**
+When 'Distributed' read mode is used and this is set to 'true' then request query is exported only once and exported data is reused.
+
+* **KUSTO_QUERY_FILTER_PUSH_DOWN**
+If set to 'true', query executed on kusto cluster will include the filters.
+  'false' by default if KUSTO_DISTRIBUTED_READ_MODE_TRANSIENT_CACHE=true
+  'true' by default if KUSTO_DISTRIBUTED_READ_MODE_TRANSIENT_CACHE=false
+  
   
  ### Examples
  
