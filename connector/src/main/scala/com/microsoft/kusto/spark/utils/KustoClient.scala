@@ -19,7 +19,7 @@ import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import org.apache.commons.lang3.StringUtils
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.CollectionAccumulator
-import org.json.JSONArray
+import org.json.{JSONArray, JSONObject}
 import shaded.parquet.org.codehaus.jackson.map.ObjectMapper
 
 import scala.collection.JavaConverters._
@@ -65,7 +65,7 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
       }
     } else {
       // Table exists. Parse kusto table schema and check if it matches the dataframes schema
-      tmpTableSchema = extractSchemaFromResultTable(schemaShowCommandResult.getData.asInstanceOf[util.ArrayList[util.ArrayList[String]]])
+      tmpTableSchema = extractSchemaFromResultTable(schemaShowCommandResult.getData.asScala.map(c=>c.get(0).asInstanceOf[JSONObject]))
     }
 
     // Create a temporary table with the kusto or dataframe parsed schema with 1 day retention

@@ -14,6 +14,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
+import org.json.JSONObject
 import org.junit.runner.RunWith
 import org.mockito.Mockito._
 import org.scalatest.junit.JUnitRunner
@@ -103,27 +104,28 @@ class WriterTests extends FlatSpec with Matchers {
   "getColumnsSchema" should "parse table schema correctly" in {
     //Verify part of the following schema:
     // "{\"Name\":\"Subscriptions\",\"OrderedColumns\":[{\"Name\":\"SubscriptionGuid\",\"Type\":\"System.String\",\"CslType\":\"string\"},{\"Name\":\"Identifier\",\"Type\":\"System.String\",\"CslType\":\"string\"},{\"Name\":\"SomeNumber\",\"Type\":\"System.Int64\",\"CslType\":\"long\"},{\"Name\":\"IsCurrent\",\"Type\":\"System.SByte\",\"CslType\":\"bool\"},{\"Name\":\"LastModifiedOn\",\"Type\":\"System.DateTime\",\"CslType\":\"datetime\"},{\"Name\":\"IntegerValue\",\"Type\":\"System.Int32\",\"CslType\":\"int\"}]}"
-    val element1 = new util.ArrayList[String]
-    element1.add("SubscriptionGuid")
-    element1.add("string")
-    element1.add("System.String")
+    val element1 = new JSONObject()
+    element1.put("CslType","string")
+    element1.put("Name","SubscriptionGuid")
+    element1.put("Type","System.String")
 
-    val element2 = new util.ArrayList[String]
-    element2.add("Identifier")
-    element2.add("string")
-    element2.add("System.String")
+    val element2 = new JSONObject()
+    element2.put("Name","Identifier")
+    element2.put("CslType","string")
+    element2.put("Type","System.String")
 
-    val element3 = new util.ArrayList[String]
-    element3.add("SomeNumber")
-    element3.add("long")
-    element3.add("System.Int64")
+    val element3 = new JSONObject()
+    element3.put("Type","System.Int64")
+    element3.put("CslType","long")
+    element3.put("Name","SomeNumber")
 
-    val resultTable = new util.ArrayList[util.ArrayList[String]]
+    val resultTable = new util.ArrayList[JSONObject]
     resultTable.add(element1)
     resultTable.add(element2)
     resultTable.add(element3)
+    import scala.collection.JavaConverters._
 
-    val parsedSchema = KDSU.extractSchemaFromResultTable(resultTable)
+    val parsedSchema = KDSU.extractSchemaFromResultTable(resultTable.asScala)
     // We could add new elements for IsCurrent:bool,LastModifiedOn:datetime,IntegerValue:int
     parsedSchema shouldEqual "['SubscriptionGuid']:string,['Identifier']:string,['SomeNumber']:long"
   }
