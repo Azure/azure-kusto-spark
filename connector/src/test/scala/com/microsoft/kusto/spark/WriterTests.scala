@@ -105,8 +105,8 @@ class WriterTests extends FlatSpec with Matchers {
     //Verify part of the following schema:
     // "{\"Name\":\"Subscriptions\",\"OrderedColumns\":[{\"Name\":\"SubscriptionGuid\",\"Type\":\"System.String\",\"CslType\":\"string\"},{\"Name\":\"Identifier\",\"Type\":\"System.String\",\"CslType\":\"string\"},{\"Name\":\"SomeNumber\",\"Type\":\"System.Int64\",\"CslType\":\"long\"},{\"Name\":\"IsCurrent\",\"Type\":\"System.SByte\",\"CslType\":\"bool\"},{\"Name\":\"LastModifiedOn\",\"Type\":\"System.DateTime\",\"CslType\":\"datetime\"},{\"Name\":\"IntegerValue\",\"Type\":\"System.Int32\",\"CslType\":\"int\"}]}"
     val element1 = new JSONObject()
-    element1.put("Name","SubscriptionGuid")
     element1.put("CslType","string")
+    element1.put("Name","SubscriptionGuid")
     element1.put("Type","System.String")
 
     val element2 = new JSONObject()
@@ -115,9 +115,9 @@ class WriterTests extends FlatSpec with Matchers {
     element2.put("Type","System.String")
 
     val element3 = new JSONObject()
-    element3.put("Name","SomeNumber")
-    element3.put("CslType","long")
     element3.put("Type","System.Int64")
+    element3.put("CslType","long")
+    element3.put("Name","SomeNumber")
 
     val resultTable = new util.ArrayList[JSONObject]
     resultTable.add(element1)
