@@ -1,6 +1,5 @@
 package com.microsoft.kusto.spark.utils
 
-import java.util
 import java.util.StringJoiner
 import java.util.concurrent.TimeUnit
 
@@ -9,7 +8,7 @@ import com.microsoft.azure.kusto.ingest.result.{IngestionStatus, OperationStatus
 import com.microsoft.azure.kusto.ingest.{IngestClient, IngestClientFactory, IngestionProperties}
 import com.microsoft.azure.storage.StorageException
 import com.microsoft.kusto.spark.common.KustoCoordinates
-import com.microsoft.kusto.spark.datasink.KustoWriter.delayPeriodBetweenCalls
+import com.microsoft.kusto.spark.datasink.KustoWriter.{tempIngestionTablePrefix, legacyTempIngestionTablePrefix,delayPeriodBetweenCalls}
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
 import com.microsoft.kusto.spark.datasink.{PartitionResult, SinkTableCreationMode}
 import com.microsoft.kusto.spark.datasource.KustoStorageParameters
@@ -19,6 +18,7 @@ import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import org.apache.commons.lang3.StringUtils
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.CollectionAccumulator
+import org.json.JSONObject
 import shaded.parquet.org.codehaus.jackson.map.ObjectMapper
 
 import scala.collection.JavaConverters._
@@ -66,7 +66,7 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
       }
     } else {
       // Table exists. Parse kusto table schema and check if it matches the dataframes schema
-      tmpTableSchema = extractSchemaFromResultTable(schemaShowCommandResult.getData.asInstanceOf[util.ArrayList[util.ArrayList[String]]])
+      tmpTableSchema = extractSchemaFromResultTable(schemaShowCommandResult.getData.asScala.map(c=>c.get(0).asInstanceOf[JSONObject]))
     }
 
     // Create a temporary table with the kusto or dataframe parsed schema with 1 day retention

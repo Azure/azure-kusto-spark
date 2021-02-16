@@ -23,7 +23,6 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import java.util.Properties
 
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.collection.JavaConversions._
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
 import scala.util.matching.Regex
@@ -76,13 +75,13 @@ object KustoDataSourceUtils {
     klog.fatal(s"$reporter: $message")
   }
 
-  private[kusto] def extractSchemaFromResultTable(resultRows: util.ArrayList[util.ArrayList[String]]): String = {
+  private[kusto] def extractSchemaFromResultTable(result: Iterable[JSONObject]): String = {
 
     val tableSchemaBuilder = new StringJoiner(",")
 
-    for (row <- resultRows) {
+    for (row <- result) {
       // Each row contains {Name, CslType, Type}, converted to (Name:CslType) pairs
-      tableSchemaBuilder.add(s"['${row.get(0)}']:${row.get(1)}")
+      tableSchemaBuilder.add(s"['${row.getString("Name")}']:${row.getString("CslType")}")
     }
 
     tableSchemaBuilder.toString

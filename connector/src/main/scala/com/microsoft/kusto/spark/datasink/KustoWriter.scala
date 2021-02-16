@@ -15,7 +15,7 @@ import com.microsoft.azure.kusto.ingest.{IngestClient, IngestionProperties}
 import com.microsoft.azure.storage.blob.{BlobRequestOptions, CloudBlockBlob}
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
-import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
+import com.microsoft.kusto.spark.utils.CslCommandsGenerator.{generateDropTablesCommand, generateFindCurrentTempTablesCommand, generateFindOldTempTablesCommand, generateTableGetSchemaAsRowsCommand}
 import com.microsoft.kusto.spark.utils.{KustoClient, KustoClientCache, KustoQueryUtils, KustoConstants => KCONST, KustoDataSourceUtils => KDSU}
 import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.spark.TaskContext
@@ -31,7 +31,8 @@ import scala.concurrent.{Await, Future, TimeoutException}
 
 object KustoWriter {
   private val myName = this.getClass.getSimpleName
-  val TempIngestionTablePrefix = "_tmpTable"
+  val legacyTempIngestionTablePrefix = "_tmpTable"
+  val tempIngestionTablePrefix = "sparkTempTable_"
   val delayPeriodBetweenCalls: Int = KCONST.defaultPeriodicSamplePeriod.toMillis.toInt
   val GZIP_BUFFER_SIZE: Int = 1000 * KCONST.defaultBufferSize
 
@@ -49,7 +50,7 @@ object KustoWriter {
     }
 
     val table = tableCoordinates.table.get
-    val tmpTableName: String = KustoQueryUtils.simplifyName(TempIngestionTablePrefix +
+    val tmpTableName: String = KustoQueryUtils.simplifyName(tempIngestionTablePrefix +
       data.sparkSession.sparkContext.appName +
       "_" + table + batchId.map(b=>s"_${b.toString}").getOrElse("") + "_" + writeOptions.requestId)
     implicit val parameters: KustoWriteResource = KustoWriteResource(authentication, tableCoordinates, data.schema, writeOptions, tmpTableName)
@@ -104,19 +105,22 @@ object KustoWriter {
 
   def cleanupTempTables(kustoClient: KustoClient, coordinates: KustoCoordinates): Unit = {
     Future {
-      val tempTablesOld: Seq[String] =
-        kustoClient.engineClient.execute(generateFindOldTempTablesCommand(coordinates.database))
-          .getPrimaryResults.getData.asInstanceOf[util.ArrayList[util.ArrayList[String]]].asScala
-          .headOption.map(_.asScala)
-          .getOrElse(Seq())
-
       // Try delete temporary tablesToCleanup created and not used
-      val tempTablesCurr = kustoClient.engineClient.execute(coordinates.database, generateFindCurrentTempTablesCommand(TempIngestionTablePrefix)).getPrimaryResults
+      val tempTablesCurr = kustoClient.engineClient.execute(
+        coordinates.database,
+        generateFindCurrentTempTablesCommand(Array(tempIngestionTablePrefix,legacyTempIngestionTablePrefix))
+      ).getPrimaryResults
       if (tempTablesCurr.count() > 0) {
-        tempTablesCurr.next()
-        val tablesToCleanup: Seq[String] = tempTablesOld.intersect(tempTablesCurr.getCurrentRow.asScala)
+        val tempTablesOld = kustoClient.engineClient.execute(generateFindOldTempTablesCommand(coordinates.database,Array(tempIngestionTablePrefix,legacyTempIngestionTablePrefix)))
+          .getPrimaryResults.getData.asInstanceOf[util.ArrayList[util.ArrayList[String]]].asScala
+          .map(_.asScala.head)
+
+        val tablesToCleanup = tempTablesOld.intersect(tempTablesCurr.getData.asInstanceOf[util.ArrayList[util.ArrayList[String]]].asScala
+          .map(_.asScala.head))
         if (tablesToCleanup.nonEmpty) {
+          KDSU.logInfo(myName, "Starting cleaning up old temporary tables")
           kustoClient.engineClient.execute(coordinates.database, generateDropTablesCommand(tablesToCleanup.mkString(",")))
+          KDSU.logInfo(myName, "Finished cleaning up old temporary tables")
         }
       }
     } onFailure {

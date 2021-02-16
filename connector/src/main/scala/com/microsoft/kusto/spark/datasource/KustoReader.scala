@@ -94,7 +94,7 @@ private[kusto] object KustoReader {
       container.getDirectoryReference(directory).listBlobsSegmented().getLength > 0
     }
     val paths = storage.filter(directoryExists).map(params => s"wasbs://${params.container}@${params.account}.blob.${params.endpointSuffix}/$directory")
-    KDSU.logInfo(myName, s"Finished exporting from Kusto to '${paths.toString()}'" +
+    KDSU.logInfo(myName, s"Finished exporting from Kusto to ${paths.mkString(",")}" +
       s", on requestId: ${request.requestId}, will start parquet reading now")
     val rdd = try {
       request.sparkSession.read.parquet(paths:_*).rdd
