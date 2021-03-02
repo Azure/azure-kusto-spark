@@ -2,7 +2,8 @@ package com.microsoft.kusto.spark
 
 import java.util.UUID
 
-import com.microsoft.azure.kusto.data.{ClientFactory, ConnectionStringBuilder}
+import com.microsoft.azure.kusto.data.ClientFactory
+import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode, SparkIngestionProperties}
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import org.apache.spark.SparkContext

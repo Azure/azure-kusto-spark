@@ -164,9 +164,8 @@ object KustoDataSourceUtils {
 
       authentication = KustoTokenProviderAuthentication(tokenProviderCallback)
     } else if (keyVaultUri.isEmpty) {
-      logWarn("parseSourceParameters", "No authentication method was not supplied - using device authentication")
-      val token = DeviceAuthentication.acquireAccessTokenUsingDeviceCodeFlow(clusterUrl)
-      authentication = KustoAccessTokenAuthentication(token)
+      logWarn("parseSourceParameters", "No authentication method was not supplied - using user prompt authentication")
+      authentication = KustoUserPromptAuthentication()
     }
 
     SourceParameters(authentication, KustoCoordinates(clusterUrl, alias, database.get, table), keyVaultAuthentication)

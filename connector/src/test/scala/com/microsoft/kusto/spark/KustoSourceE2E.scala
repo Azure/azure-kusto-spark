@@ -2,7 +2,8 @@ package com.microsoft.kusto.spark
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 
-import com.microsoft.azure.kusto.data.{ClientFactory, ConnectionStringBuilder}
+import com.microsoft.azure.kusto.data.ClientFactory
+import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.kusto.spark.datasink.KustoSinkOptions
 import com.microsoft.kusto.spark.datasource.{KustoSourceOptions, ReadMode}
 import com.microsoft.kusto.spark.sql.extension.SparkExtension._
@@ -94,7 +95,7 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
     val expectedNumberOfRows: Int =  100
     val rows: immutable.IndexedSeq[(String, Int)] = (1 to expectedNumberOfRows).map(v => (newRow(), v))
     val dfOrig = rows.toDF("name", "value")
-    val table = KustoQueryUtils.simplifyName(s"KustoSparkReadWriteTest_${UUID.randomUUID()}")
+    val table = "KustoSparkReadWriteTest_d8471fa5_93fc_4d0a_9ee0_74a4e994d114"
 
     // Create a new table.
     val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://$cluster.kusto.windows.net", appId, appKey, authority)
@@ -106,9 +107,9 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
       .option(KustoSinkOptions.KUSTO_CLUSTER, cluster)
       .option(KustoSinkOptions.KUSTO_DATABASE, database)
       .option(KustoSinkOptions.KUSTO_TABLE, table)
-      .option(KustoSinkOptions.KUSTO_AAD_APP_ID, appId)
-      .option(KustoSinkOptions.KUSTO_AAD_APP_SECRET, appKey)
-      .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, authority)
+//      .option(KustoSinkOptions.KUSTO_AAD_APP_ID, appId)
+//      .option(KustoSinkOptions.KUSTO_AAD_APP_SECRET, appKey)
+//      .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, authority)
       .option(KustoSinkOptions.KUSTO_REQUEST_ID, "04ec0408-3cc3_.asd")
       .mode(SaveMode.Append)
       .save()
@@ -119,7 +120,7 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
     )
 
     val dfResult = spark.read.kusto(cluster, database, table, conf)
-
+    dfResult.show()
     val orig = dfOrig.select("name", "value").rdd.map(x => (x.getString(0), x.getInt(1))).collect().sortBy(_._2)
     val result = dfResult.select("ColA", "ColB").rdd.map(x => (x.getString(0), x.getInt(1))).collect().sortBy(_._2)
 
