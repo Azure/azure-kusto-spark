@@ -112,9 +112,8 @@ available on maven repository.
 When [Key Vault based authentication](./docs/Authentication.md) is used, there is an additional dependency 
 on [Microsoft Azure SDK For Key Vault](https://mvnrepository.com/artifact/com.microsoft.azure/azure-keyvault). 
 
-> **Note:** When working with Databricks, Azure Data Explorer connector requires Azure Data Explorer java client libraries (and azure key-vault library if used) to be installed.
-This can be done by accessing Databricks Create Library -> Maven and specifying the following coordinates:
-- com.microsoft.azure.kusto:spark-kusto-connector:1.1.4
+> **Note:** When working with JARs , Azure Data Explorer connector requires Azure Data Explorer java client libraries (and azure key-vault library if used) to be installed.
+To find the right version to install [look in the relevant release's pom](https://github.com/Azure/azure-kusto-spark/releases))
 
 ## Documentation
 
