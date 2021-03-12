@@ -151,7 +151,7 @@ object KustoDataSourceUtils {
       if(!applicationKey.isEmpty){
         authentication = AadApplicationAuthentication(applicationId, applicationKey, parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com"))
       } else if(!applicationCertPath.isEmpty){
-        authentication = AadApplicationCertificateAuthentication(applicationId, applicationCertPath, applicationCertPassword)
+        authentication = AadApplicationCertificateAuthentication(applicationId, applicationCertPath, applicationCertPassword, parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com"))
       }
     } else if (!accessToken.isEmpty) {
       // Authentication by token

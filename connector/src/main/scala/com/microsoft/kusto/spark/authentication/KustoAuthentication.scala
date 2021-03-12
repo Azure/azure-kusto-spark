@@ -22,11 +22,11 @@ case class AadApplicationAuthentication(ID: String, password: String, authority:
   override def hashCode(): Int = ID.hashCode + authority.hashCode
 }
 
-case class AadApplicationCertificateAuthentication(appId: String, certFilePath: String, certPassword: String) extends KustoAuthentication {
+case class AadApplicationCertificateAuthentication(appId: String, certFilePath: String, certPassword: String, authority: String) extends KustoAuthentication {
   def canEqual(that: Any) : Boolean = that.isInstanceOf[AadApplicationCertificateAuthentication]
   override def equals(that: Any) : Boolean = that match {
     case auth : AadApplicationCertificateAuthentication =>
-      appId == auth.appId && certFilePath == auth.certFilePath && certPassword == auth.certPassword
+      appId == auth.appId && certFilePath == auth.certFilePath && certPassword == auth.certPassword && authority == auth.authority
     case _ => false
   }
 
