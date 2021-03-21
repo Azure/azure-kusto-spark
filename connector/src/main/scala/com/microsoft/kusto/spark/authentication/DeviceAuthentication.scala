@@ -2,15 +2,14 @@ package com.microsoft.kusto.spark.authentication
 
 import java.awt.{Desktop, Toolkit}
 import java.awt.datatransfer.{DataFlavor, StringSelection}
-import java.net.URI
+import java.net.{MalformedURLException, URI, URISyntaxException}
+import java.util
+import java.util.HashSet
 import java.util.concurrent.{ExecutionException, ExecutorService, Executors}
+import java.util.function.Consumer
 
 import com.microsoft.aad.adal4j.{AuthenticationContext, AuthenticationResult}
-import com.microsoft.aad.msal4j._
-import com.microsoft.aad.msal4j.DeviceCodeFlowParameters
-import com.microsoft.aad.msal4j.IAuthenticationResult
-import com.microsoft.aad.msal4j.PublicClientApplication
-import java.util.concurrent.CompletableFuture
+import com.microsoft.aad.msal4j.{DeviceCode, DeviceCodeFlowParameters, PublicClientApplication}
 import javax.naming.ServiceUnavailableException
 import org.apache.log4j.{Level, Logger}
 
@@ -18,31 +17,25 @@ import scala.util.Try
 
 object DeviceAuthentication {
   // This is the Kusto client id from the java client used for device authentication.
-  private val CLIENT_ID = "db662dc1-0cfe-4e1c-a843-19a68e65be58"
 
-  def acquireDeviceCode(clusterUrl: String, authority: String = "common"): PublicClientApplication = {
+  def getAuthoirtyUrl(clusterUrl: String, authority: String = "common") = {
     var aadAuthorityUri = ""
     val aadAuthorityFromEnv = System.getenv("AadAuthorityUri")
     if (aadAuthorityFromEnv == null) {
-      aadAuthorityUri = String.format("https://login.microsoftonline.com/%s", authority)
+      String.format("https://login.microsoftonline.com/%s", authority)
     } else {
-      aadAuthorityUri = String.format("%s%s%s", aadAuthorityFromEnv, if (aadAuthorityFromEnv.endsWith("/")) "" else "/", authority)
+      String.format("%s%s%s", aadAuthorityFromEnv, if (aadAuthorityFromEnv.endsWith("/")) "" else "/", authority)
     }
-
-    val service = Executors.newSingleThreadExecutor
-    val context: AuthenticationContext =  new AuthenticationContext(aadAuthorityUri, true, service)
-    PublicClientApplication.builder(CLIENT_ID).authority(aadAuthorityUri).build
   }
 
   def acquireAccessTokenUsingDeviceCodeFlow(clusterUrl: String, authority: String = "common", userDeviceCode: Option[DeviceCode] = None) : String = {
-    val deviceCode = if (userDeviceCode.isDefined) userDeviceCode.get else acquireDeviceCode(clusterUrl, authority)
+    val deviceCode = if (userDeviceCode.isDefined) userDeviceCode.get else getAuthoirtyUrl(clusterUrl, authority)
     val aadAuthorityUri = s"https://login.microsoftonline.com/$authority"
     val service: ExecutorService =
       Executors.newSingleThreadExecutor
     val context: AuthenticationContext =  new AuthenticationContext(aadAuthorityUri, true, service)
 
-    val future: String = app.acquireToken(DeviceCodeFlowParameters.builder(scope, deviceCodeConsumer).build)
-    var text = null
+    var text: String = null
     Try {
       val clipboard = Toolkit.getDefaultToolkit.getSystemClipboard
       val dataFlavor = DataFlavor.stringFlavor
@@ -92,29 +85,61 @@ object DeviceAuthentication {
   }
 }
 
-// This class helps using device authentication in pyspark
-class DeviceAuthentication(val clusterUrl: String, val authority: String = "common") {
-  import DeviceAuthentication._
+class DeviceAuthTokenProvider(clusterUrl:String, authorityId:String, consumer: Option[Consumer[DeviceCode]]) {
+  private val CLIENT_ID = "db662dc1-0cfe-4e1c-a843-19a68e65be58"
+  var authorityUrl: String = DeviceAuthentication.getAuthoirtyUrl(authorityId)
+  var clientApplication: PublicClientApplication = try {
+    PublicClientApplication.builder(CLIENT_ID).authority(authorityUrl).build()
+  } catch {
+    case e: MalformedURLException =>
+      throw new URISyntaxException(authorityUrl, "Error acquiring ApplicationAccessToken due to invalid Authority URL")
+  }
 
-  var currentDeviceCode: Option[DeviceCode] = None
+  val scope: String = String.format("%s/%s", clusterUrl, ".default")
+  val scopes = new util.HashSet[String]
+  scopes.add(scope)
+  def auth(): Unit = {
+    val deviceCodeFlowParams = DeviceCodeFlowParameters.builder(scopes,if (consumer.isDefined) consumer.get else deviceCodeConsumer).build()
+    clientApplication.acquireToken(deviceCodeFlowParams).join()
+  }
+  private def deviceCodeConsumer: Consumer[DeviceCode] = {
+    new Consumer[DeviceCode] {
+      override def accept(t: DeviceCode): Unit = {
+        //print deviceCode.message()
+      }
+    }
+  }
 
-  def getDeviceCodeMessage: String = {
-    if (currentDeviceCode.isEmpty) {
-      refreshDeviceCode()
+  // This class helps using device authentication in pyspark
+  class DeviceAuthentication(val clusterUrl: String, val authority: String = "common") {
+    import DeviceAuthentication._
+    var deviceCode: Option[DeviceCode] = None
+    private val consumer = new Consumer[DeviceCode] {
+      override def accept(code: DeviceCode): Unit= {deviceCode = Some(code)}}
+    val provider = new DeviceAuthTokenProvider(clusterUrl, authority, consumer)
+    var currentDeviceCode: Option[DeviceCode] = None
+
+    def getDeviceCodeMessage: String = {
+      if (currentDeviceCode.isEmpty) {
+        refreshDeviceCode()
+      }
+
+      currentDeviceCode.get.message()
     }
 
-    currentDeviceCode.get.getMessage
-  }
+    def acquireToken(): String = {
+      if (currentDeviceCode.isEmpty) {
+        refreshDeviceCode()
+      }
 
-  def acquireToken(): String = {
-    if (currentDeviceCode.isEmpty) {
-      refreshDeviceCode()
+      acquireAccessTokenUsingDeviceCodeFlow(clusterUrl, authority, currentDeviceCode)
     }
 
-    acquireAccessTokenUsingDeviceCodeFlow(clusterUrl, authority, currentDeviceCode)
-  }
+    def deviceCodeConsumer(): Consumer[DeviceCode]{
+    }
 
-  def refreshDeviceCode(): Unit = {
-    currentDeviceCode = Some(acquireDeviceCode(clusterUrl, authority))
+
+    def refreshDeviceCode(): Unit = {
+      currentDeviceCode = Some(getAuthoirtyUrl(clusterUrl, authority))
+    }
   }
-}
