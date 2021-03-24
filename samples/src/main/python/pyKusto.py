@@ -152,8 +152,9 @@ kustoQ.start().awaitTermination(60*8)
 # Device Authentication #
 #########################
 
-# Device authentication for databricks
-# Acquire a token with device authentication and pass the token to the connector
+# Device authentication for databricks (use only on python - on scala one can just not provide any authentication parameters)
+# Acquire a token with device authentication and pass the token to the connector, this token will expire in one hour but
+# it should be enough for reading as the call to the service is done at the start of the flow but writing should be done when
 # Prints done inside the JVM are not shown in the notebooks, therefore the user has to print himself the device code.
 
 deviceAuth = sc._jvm.com.microsoft.kusto.spark.authentication.DeviceAuthentication(

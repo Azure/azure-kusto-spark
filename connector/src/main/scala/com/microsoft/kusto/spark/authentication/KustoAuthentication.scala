@@ -76,9 +76,19 @@ case class KustoTokenProviderAuthentication(tokenProviderCallback: Callable[Stri
 case class KustoUserPromptAuthentication() extends KustoAuthentication {
   def canEqual(that: Any) : Boolean = that.isInstanceOf[KustoUserPromptAuthentication]
   override def equals(that: Any) : Boolean = that match {
-    case auth : KustoUserPromptAuthentication => true
+    case _ : KustoUserPromptAuthentication => true
     case _ => false
   }
 
   override def hashCode(): Int = "KustoUserPromptAuthentication".hashCode
+}
+
+case class KustoDeviceCodeAuthentication() extends KustoAuthentication {
+  def canEqual(that: Any) : Boolean = that.isInstanceOf[KustoDeviceCodeAuthentication]
+  override def equals(that: Any) : Boolean = that match {
+    case _ : KustoDeviceCodeAuthentication => true
+    case _ => false
+  }
+
+  override def hashCode(): Int = "KustoDeviceCodeAuthentication".hashCode
 }

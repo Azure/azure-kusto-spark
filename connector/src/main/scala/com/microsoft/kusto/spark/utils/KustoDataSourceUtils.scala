@@ -119,6 +119,7 @@ object KustoDataSourceUtils {
     val keyVaultPemFile = parameters.getOrElse(KustoDebugOptions.KEY_VAULT_PEM_FILE_PATH, "")
     val keyVaultCertKey = parameters.getOrElse(KustoDebugOptions.KEY_VAULT_CERTIFICATE_KEY, "")
     val accessToken: String = parameters.getOrElse(KustoSourceOptions.KUSTO_ACCESS_TOKEN, "")
+    val userPrompt: Option[String] = parameters.get(KustoSourceOptions.KUSTO_USER_PROMPT)
     var authentication: KustoAuthentication = null
     var keyVaultAuthentication: Option[KeyVaultAuthentication] = None
 
@@ -164,8 +165,14 @@ object KustoDataSourceUtils {
 
       authentication = KustoTokenProviderAuthentication(tokenProviderCallback)
     } else if (keyVaultUri.isEmpty) {
-      logWarn("parseSourceParameters", "No authentication method was not supplied - using user prompt authentication")
-      authentication = KustoUserPromptAuthentication()
+      if (userPrompt.isDefined){
+        // TODO authoirty
+        authentication = KustoUserPromptAuthentication()
+      } else {
+        logWarn("parseSourceParameters", "No authentication method was not supplied - using device code authentication")
+        // TODO authoirty
+        authentication = KustoDeviceCodeAuthentication()
+      }
     }
 
     SourceParameters(authentication, KustoCoordinates(clusterUrl, alias, database.get, table), keyVaultAuthentication)

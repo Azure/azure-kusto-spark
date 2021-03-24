@@ -89,19 +89,25 @@ object DeviceAuthentication {
 }
 
 class DeviceAuthTokenProvider (val cluster: String, val authority:String) extends auth.DeviceAuthTokenProvider(cluster, authority) {
+  var deviceCode: Option[DeviceCode] = None
+  var expiresAt: Option[Long] = None
   override def acquireNewAccessToken(): IAuthenticationResult = {
     val deviceCodeConsumer: Consumer[DeviceCode] = (deviceCode: DeviceCode) => {
-      def foo(deviceCode: DeviceCode) = {
-        System.out.println(deviceCode.message)
-      }
-
-      foo(deviceCode)
+        this.deviceCode = Some(deviceCode)
+        expiresAt = Some(System.currentTimeMillis + deviceCode.expiresIn() * 1000)
+        System.out.println(deviceCode.message())
     }
 
     val deviceCodeFlowParams: DeviceCodeFlowParameters = DeviceCodeFlowParameters.builder(scopes, deviceCodeConsumer).build
-    clientApplication.acquireToken(deviceCodeFlowParams).join
+    clientApplication.acquireToken(deviceCodeFlowParams).join()
   }
-  def getDeviceCodeMessage: String = {""}
+
+  def getDeviceCode: DeviceCode = {
+    if (deviceCode.isEmpty || expiresAt.get <= System.currentTimeMillis){
+      acquireNewAccessToken()
+    }
+    deviceCode.get
+  }
 }
 
 //class DeviceAuthTokenProvider(clusterUrl:String, authorityId:String, consumer: Option[Consumer[DeviceCode]]) {
