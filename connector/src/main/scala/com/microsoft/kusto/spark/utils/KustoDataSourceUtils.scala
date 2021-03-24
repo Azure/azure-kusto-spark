@@ -532,7 +532,7 @@ object KustoDataSourceUtils {
 
   private[kusto] def estimateRowsCount(client: Client, query: String, database: String): Int = {
     var count = 0
-    val estimationResult: util.ArrayList[AnyRef] = Await.result(Future {
+    val estimationResult: util.List[AnyRef] = Await.result(Future {
       val res = client.execute(database, generateEstimateRowsCountQuery(query)).getPrimaryResults
       res.next()
       res.getCurrentRow

@@ -40,8 +40,12 @@ object KustoClientCache {
           ConnectionStringBuilder.createWithAadApplicationCredentials(aliasAndAuth.engineUri, app.ID, app.password, app.authority),
           ConnectionStringBuilder.createWithAadApplicationCredentials(aliasAndAuth.ingestUri, app.ID, app.password, app.authority)
         )
-      case userToken: KustoUserPromptAuthentication => (
+      case _: KustoUserPromptAuthentication => (
         ConnectionStringBuilder.createWithUserPrompt(aliasAndAuth.engineUri),
+        ConnectionStringBuilder.createWithUserPrompt(aliasAndAuth.ingestUri)
+      )
+      case userToken: KustoAccessTokenAuthentication => (
+        ConnectionStringBuilder.createWithAadAccessTokenAuthentication(aliasAndAuth.engineUri, userToken.token),
         ConnectionStringBuilder.createWithUserPrompt(aliasAndAuth.ingestUri)
       )
       case tokenProvider: KustoTokenProviderAuthentication => (
