@@ -40,36 +40,6 @@
             <version>${scala.version.major}.${scala.version.minor}</version>
         </dependency>
         <dependency>
-            <groupId>com.azure</groupId>
-            <artifactId>azure-security-keyvault-secrets</artifactId>
-            <version>4.1.5</version>
-            <exclusions>
-                <exclusion>
-                    <artifactId>jackson-annotations</artifactId>
-                    <groupId>com.fasterxml.jackson.core</groupId>
-                </exclusion>
-                <exclusion>
-                    <artifactId>jackson-core</artifactId>
-                    <groupId>com.fasterxml.jackson.core</groupId>
-                </exclusion>
-                <exclusion>
-                    <artifactId>jackson-databind</artifactId>
-                    <groupId>com.fasterxml.jackson.core</groupId>
-                </exclusion>
-                <exclusion>
-                    <artifactId>slf4j-api</artifactId>
-                    <groupId>org.slf4j</groupId>
-                </exclusion>
-            </exclusions>
-
-            <!--            <exclusions>-->
-<!--                <exclusion>-->
-<!--                    <artifactId>azure-core</artifactId>-->
-<!--                    <groupId>com.azure</groupId>-->
-<!--                </exclusion>-->
-<!--            </exclusions>-->
-        </dependency>
-        <dependency>
             <groupId>com.microsoft.azure.kusto</groupId>
             <artifactId>kusto-data</artifactId>
             <version>${kusto-sdk.version}</version>
@@ -87,10 +57,6 @@
                     <groupId>com.univocity</groupId>
                     <artifactId>univocity-parsers</artifactId>
                 </exclusion>
-                <exclusion>
-                    <artifactId>jackson-annotations</artifactId>
-                    <groupId>com.fasterxml.jackson.core</groupId>
-                </exclusion>
             </exclusions>
         </dependency>
         <dependency>
@@ -106,34 +72,23 @@
         </dependency>
         <dependency>
             <groupId>com.azure</groupId>
-            <artifactId>azure-identity</artifactId>
-            <version>1.2.2</version>
+            <artifactId>azure-security-keyvault-secrets</artifactId>
+            <version>4.1.5</version>
             <exclusions>
                 <exclusion>
-                    <artifactId>nimbus-jose-jwt</artifactId>
-                    <groupId>com.nimbusds</groupId>
-                </exclusion>
-                <exclusion>
-                    <artifactId>lang-tag</artifactId>
-                    <groupId>com.nimbusds</groupId>
-                </exclusion>
-                <exclusion>
-                    <artifactId>content-type</artifactId>
-                    <groupId>com.nimbusds</groupId>
-                </exclusion>
-                <exclusion>
-                    <artifactId>oauth2-oidc-sdk</artifactId>
-                    <groupId>com.nimbusds</groupId>
+                    <artifactId>azure-core</artifactId>
+                    <groupId>com.azure</groupId>
                 </exclusion>
                 <exclusion>
                     <artifactId>azure-core-http-netty</artifactId>
                     <groupId>com.azure</groupId>
                 </exclusion>
-                <exclusion>
-                    <artifactId>azure-core</artifactId>
-                    <groupId>com.azure</groupId>
-                </exclusion>
             </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>com.azure</groupId>
+            <artifactId>azure-identity</artifactId>
+            <version>1.2.4</version>
         </dependency>
         <!--might need 2.7.0 here for local run query-->
         <dependency>
@@ -144,14 +99,6 @@
                 <exclusion>
                     <artifactId>commons-lang</artifactId>
                     <groupId>commons-lang</groupId>
-                </exclusion>
-                <exclusion>
-                    <artifactId>jackson-core</artifactId>
-                    <groupId>com.fasterxml.jackson.core</groupId>
-                </exclusion>
-                <exclusion>
-                    <artifactId>netty</artifactId>
-                    <groupId>io.netty</groupId>
                 </exclusion>
             </exclusions>
         </dependency>
@@ -181,12 +128,6 @@
             <artifactId>spark-sql_${scala.version.major}</artifactId>
             <version>${spark.version.major}.${spark.version.minor}</version>
             <scope>provided</scope>
-            <exclusions>
-                <exclusion>
-                    <artifactId>jackson-annotations</artifactId>
-                    <groupId>com.fasterxml.jackson.core</groupId>
-                </exclusion>
-            </exclusions>
         </dependency>
         <dependency>
             <groupId>org.apache.spark</groupId>
