@@ -122,17 +122,20 @@ object KustoDataSourceUtils {
     val userPrompt: Option[String] = parameters.get(KustoSourceOptions.KUSTO_USER_PROMPT)
     var authentication: KustoAuthentication = null
     var keyVaultAuthentication: Option[KeyVaultAuthentication] = None
+    val authorityId: String = parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID, null)
 
     // Check KeyVault Authentication
     if (keyVaultUri != "") {
       if (!keyVaultAppId.isEmpty) {
         keyVaultAuthentication = Some(KeyVaultAppAuthentication(keyVaultUri,
           keyVaultAppId,
-          keyVaultAppKey))
+          keyVaultAppKey,
+          authorityId))
       } else {
         keyVaultAuthentication = Some(KeyVaultCertificateAuthentication(keyVaultUri,
           keyVaultPemFile,
-          keyVaultCertKey))
+          keyVaultCertKey,
+          authorityId))
       }
     }
 
@@ -150,9 +153,9 @@ object KustoDataSourceUtils {
     if (!applicationId.isEmpty) {
       // Application authentication
       if(!applicationKey.isEmpty){
-        authentication = AadApplicationAuthentication(applicationId, applicationKey, parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com"))
+        authentication = AadApplicationAuthentication(applicationId, applicationKey, authorityId)
       } else if(!applicationCertPath.isEmpty){
-        authentication = AadApplicationCertificateAuthentication(applicationId, applicationCertPath, applicationCertPassword, parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com"))
+        authentication = AadApplicationCertificateAuthentication(applicationId, applicationCertPath, applicationCertPassword, authorityId)
       }
     } else if (!accessToken.isEmpty) {
       // Authentication by token
@@ -166,12 +169,13 @@ object KustoDataSourceUtils {
       authentication = KustoTokenProviderAuthentication(tokenProviderCallback)
     } else if (keyVaultUri.isEmpty) {
       if (userPrompt.isDefined){
-        // TODO authoirty
-        authentication = KustoUserPromptAuthentication()
+        // Use only for local run where you can open the browser and logged in as your user
+        authentication = KustoUserPromptAuthentication(authorityId)
       } else {
-        logWarn("parseSourceParameters", "No authentication method was not supplied - using device code authentication")
-        // TODO authoirty
-        authentication = KustoDeviceCodeAuthentication()
+        logWarn("parseSourceParameters", "No authentication method was not supplied - using device code authentication. The token should last for one hour")
+        val deviceCodeProvider = new DeviceAuthentication(clusterUrl, authorityId)
+        val accessToken = deviceCodeProvider.acquireToken()
+        authentication = KustoAccessTokenAuthentication(accessToken)
       }
     }
 
