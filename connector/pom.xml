@@ -2,7 +2,7 @@
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
     <modelVersion>4.0.0</modelVersion>
-    <artifactId>kusto-spark_3.0_2.12</artifactId>
+    <artifactId>kusto-spark_${spark.version.major}_${scala.version.major}</artifactId>
     <name>Spark Kusto connector</name>
     <description>Kusto connector for Spark to query and ingest data</description>
     <parent>
@@ -76,10 +76,6 @@
             <version>4.1.5</version>
             <exclusions>
                 <exclusion>
-                    <artifactId>azure-core</artifactId>
-                    <groupId>com.azure</groupId>
-                </exclusion>
-                <exclusion>
                     <artifactId>azure-core-http-netty</artifactId>
                     <groupId>com.azure</groupId>
                 </exclusion>
@@ -94,7 +90,7 @@
         <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-azure</artifactId>
-            <version>2.7.0</version>
+            <version>[3.2.0,3.3.0)</version>
             <exclusions>
                 <exclusion>
                     <artifactId>commons-lang</artifactId>

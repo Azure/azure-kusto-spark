@@ -9,7 +9,8 @@ import com.azure.security.keyvault.secrets.{SecretClient, SecretClientBuilder}
  * using ADAL.
  */
 class KeyVaultADALAuthenticator(uri: String, clientId: String, clientKey: String, authority: String) {
-  val authorityId: String = if (authority == null) "72f988bf-86f1-41af-91ab-2d7cd011db47" else authority
+  val MICROSOFT_DEFAULT_AUTHORITY: String = "72f988bf-86f1-41af-91ab-2d7cd011db47"
+  val authorityId: String = if (authority == null) MICROSOFT_DEFAULT_AUTHORITY else authority
 
   def getAuthenticatedClient: SecretClient = {
     new SecretClientBuilder()

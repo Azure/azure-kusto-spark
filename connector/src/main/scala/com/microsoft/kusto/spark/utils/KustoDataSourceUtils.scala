@@ -172,7 +172,7 @@ object KustoDataSourceUtils {
         // Use only for local run where you can open the browser and logged in as your user
         authentication = KustoUserPromptAuthentication(authorityId)
       } else {
-        logWarn("parseSourceParameters", "No authentication method was not supplied - using device code authentication. The token should last for one hour")
+        logWarn("parseSourceParameters", "No authentication method was supplied - using device code authentication. The token should last for one hour")
         val deviceCodeProvider = new DeviceAuthentication(clusterUrl, authorityId)
         val accessToken = deviceCodeProvider.acquireToken()
         authentication = KustoAccessTokenAuthentication(accessToken)
