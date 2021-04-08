@@ -21,8 +21,8 @@ class DeviceAuthentication (val cluster: String, val authority:String) extends a
   def acquireNewAccessTokenAsync(): CompletableFuture[IAuthenticationResult] = {
     val deviceCodeConsumer: Consumer[DeviceCode] = (deviceCode: DeviceCode) => {
       this.deviceCode = Some(deviceCode)
-      expiresAt = Some(System.currentTimeMillis + deviceCode.expiresIn() * 1000)
-      System.out.println(deviceCode.message())
+      expiresAt = Some(System.currentTimeMillis + (deviceCode.expiresIn() * 1000))
+      println(deviceCode.message())
     }
 
     val deviceCodeFlowParams: DeviceCodeFlowParameters = DeviceCodeFlowParameters.builder(scopes, deviceCodeConsumer).build
@@ -45,12 +45,12 @@ class DeviceAuthentication (val cluster: String, val authority:String) extends a
     }
   }
 
-  def getDeviceCodeMessage(): String  = {
+  def getDeviceCodeMessage: String  = {
     refreshIfNeeded()
     deviceCode.get.message()
   }
 
-  def getDeviceCode(): DeviceCode = {
+  def getDeviceCode: DeviceCode = {
     refreshIfNeeded()
     deviceCode.get
   }
