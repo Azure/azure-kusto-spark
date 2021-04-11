@@ -79,6 +79,10 @@
                     <artifactId>azure-core-http-netty</artifactId>
                     <groupId>com.azure</groupId>
                 </exclusion>
+                <exclusion>
+                    <artifactId>azure-core</artifactId>
+                    <groupId>com.azure</groupId>
+                </exclusion>
             </exclusions>
         </dependency>
         <dependency>
