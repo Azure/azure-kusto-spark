@@ -2,7 +2,8 @@ package com.microsoft.kusto.spark
 
 import java.util
 
-import com.microsoft.azure.kusto.data.{ConnectionStringBuilder, KustoOperationResult, KustoResultSetTable}
+import com.microsoft.azure.kusto.data.{KustoOperationResult, KustoResultSetTable}
+import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.SparkIngestionProperties
 import com.microsoft.kusto.spark.utils.KustoClient

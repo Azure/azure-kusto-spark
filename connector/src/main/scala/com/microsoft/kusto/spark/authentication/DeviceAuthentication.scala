@@ -1,115 +1,63 @@
 package com.microsoft.kusto.spark.authentication
 
-import java.awt.{Desktop, Toolkit}
-import java.awt.datatransfer.{DataFlavor, StringSelection}
-import java.net.URI
-import java.util.concurrent.{ExecutionException, ExecutorService, Executors}
+import java.util.concurrent.CompletableFuture
+import java.util.function.Consumer
 
-import com.microsoft.aad.adal4j.{AuthenticationContext, AuthenticationResult, DeviceCode}
-import javax.naming.ServiceUnavailableException
-import org.apache.log4j.{Level, Logger}
+import com.microsoft.aad.msal4j.{DeviceCode, DeviceCodeFlowParameters, IAuthenticationResult}
+import com.microsoft.azure.kusto.data.auth
 
-import scala.util.Try
+import scala.concurrent.TimeoutException
 
-object DeviceAuthentication {
-  // This is the Kusto client id from the java client used for device authentication.
-  private val CLIENT_ID = "db662dc1-0cfe-4e1c-a843-19a68e65be58"
-
-  def acquireDeviceCode(clusterUrl: String, authority: String = "common"): DeviceCode = {
-    var aadAuthorityUri = ""
-    val aadAuthorityFromEnv = System.getenv("AadAuthorityUri")
-    if (aadAuthorityFromEnv == null) {
-      aadAuthorityUri = String.format("https://login.microsoftonline.com/%s", authority)
-    } else {
-      aadAuthorityUri = String.format("%s%s%s", aadAuthorityFromEnv, if (aadAuthorityFromEnv.endsWith("/")) "" else "/", authority)
-    }
-
-    val service = Executors.newSingleThreadExecutor
-    val context: AuthenticationContext =  new AuthenticationContext(aadAuthorityUri, true, service)
-
-    context.acquireDeviceCode(CLIENT_ID, clusterUrl, null).get
+class DeviceAuthentication (val cluster: String, val authority:String) extends auth.DeviceAuthTokenProvider(cluster, authority) {
+  var deviceCode: Option[DeviceCode] = None
+  var expiresAt: Option[Long] = None
+  var awaitAuthentication: Option[CompletableFuture[IAuthenticationResult]] = None
+  val NEW_DEVICE_CODE_FETCH_TIMEOUT = 5000
+  val INTERVAL = 500
+  override def acquireNewAccessToken(): IAuthenticationResult = {
+    awaitAuthentication = Some(acquireNewAccessTokenAsync())
+    awaitAuthentication.get.join()
   }
 
-  def acquireAccessTokenUsingDeviceCodeFlow(clusterUrl: String, authority: String = "common", userDeviceCode: Option[DeviceCode] = None) : String = {
-    val deviceCode = if (userDeviceCode.isDefined) userDeviceCode.get else acquireDeviceCode(clusterUrl, authority)
-    val aadAuthorityUri = s"https://login.microsoftonline.com/$authority"
-    val service: ExecutorService =
-      Executors.newSingleThreadExecutor
-    val context: AuthenticationContext =  new AuthenticationContext(aadAuthorityUri, true, service)
-
-    var text: String = null
-    Try {
-      val clipboard = Toolkit.getDefaultToolkit.getSystemClipboard
-      val dataFlavor = DataFlavor.stringFlavor
-      if (clipboard.isDataFlavorAvailable(dataFlavor)) {
-        text = clipboard.getData(dataFlavor).asInstanceOf[String]
-      }
-      clipboard.setContents(new StringSelection(deviceCode.getUserCode), null)
+  def acquireNewAccessTokenAsync(): CompletableFuture[IAuthenticationResult] = {
+    val deviceCodeConsumer: Consumer[DeviceCode] = (deviceCode: DeviceCode) => {
+      this.deviceCode = Some(deviceCode)
+      expiresAt = Some(System.currentTimeMillis + (deviceCode.expiresIn() * 1000))
+      println(deviceCode.message())
     }
 
-    println(deviceCode.getMessage +
-      (if (!Desktop.isDesktopSupported) deviceCode
-      else " device code is already copied to clipboard - just press ctrl+v in the web"))
-    if (Desktop.isDesktopSupported) Desktop.getDesktop.browse(new URI(deviceCode.getVerificationUrl))
-    val result = waitAndAcquireTokenByDeviceCode(deviceCode, context)
-    if(text != null) {
-      Try {
-        val clipboard = Toolkit.getDefaultToolkit.getSystemClipboard
-        clipboard.setContents(new StringSelection(text), null)
-      }
-    }
-    if (result == null) throw new ServiceUnavailableException("authentication result was null")
-    result.getAccessToken
+    val deviceCodeFlowParams: DeviceCodeFlowParameters = DeviceCodeFlowParameters.builder(scopes, deviceCodeConsumer).build
+    clientApplication.acquireToken(deviceCodeFlowParams)
   }
 
-  @throws[InterruptedException]
-  private def waitAndAcquireTokenByDeviceCode(deviceCode: DeviceCode, context: AuthenticationContext): AuthenticationResult = {
-    var timeout = 15 * 1000
-    var result: AuthenticationResult = null
-
-    // Logging is set to Fatal as root
-    val prevLevel = Logger.getLogger(classOf[AuthenticationContext]).getLevel
-    Thread.sleep(5000)
-    Logger.getLogger(classOf[AuthenticationContext]).setLevel(Level.FATAL)
-    while ( result == null && timeout > 0) {
-      try {
-        result = context.acquireTokenByDeviceCode(deviceCode, null).get
-
-      } catch {
-        case e: ExecutionException =>
-          Thread.sleep(1000)
-          timeout -= 1000
+  def refreshIfNeeded(): Unit = {
+    if (deviceCode.isEmpty || expiresAt.get <= System.currentTimeMillis) {
+      val oldDeviceCode = this.deviceCode
+      awaitAuthentication = Some(acquireNewAccessTokenAsync())
+      var awaitTime = NEW_DEVICE_CODE_FETCH_TIMEOUT
+      while (this.deviceCode == oldDeviceCode){
+        if (awaitTime <= 0) {
+          throw new TimeoutException("Timed out waiting for a new device code")
+        }
+        Thread.sleep(INTERVAL)
+        awaitTime = awaitTime - INTERVAL
       }
     }
-
-    Logger.getLogger(classOf[AuthenticationContext]).setLevel(prevLevel)
-    result
   }
-}
 
-// This class helps using device authentication in pyspark
-class DeviceAuthentication(val clusterUrl: String, val authority: String = "common") {
-  import DeviceAuthentication._
+  def getDeviceCodeMessage: String  = {
+    refreshIfNeeded()
+    deviceCode.get.message()
+  }
 
-  var currentDeviceCode: Option[DeviceCode] = None
-
-  def getDeviceCodeMessage: String = {
-    if (currentDeviceCode.isEmpty) {
-      refreshDeviceCode()
-    }
-
-    currentDeviceCode.get.getMessage
+  def getDeviceCode: DeviceCode = {
+    refreshIfNeeded()
+    deviceCode.get
   }
 
   def acquireToken(): String = {
-    if (currentDeviceCode.isEmpty) {
-      refreshDeviceCode()
-    }
-
-    acquireAccessTokenUsingDeviceCodeFlow(clusterUrl, authority, currentDeviceCode)
-  }
-
-  def refreshDeviceCode(): Unit = {
-    currentDeviceCode = Some(acquireDeviceCode(clusterUrl, authority))
+    refreshIfNeeded()
+    awaitAuthentication.get.join().accessToken()
   }
 }
+

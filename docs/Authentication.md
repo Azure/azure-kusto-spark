@@ -161,8 +161,7 @@ df.write
 ## Device Authentication
 If no authentication parameters were passed, the connector will request for user authentication by writing a token 
 to the console. This token can be used to authenticate at https://login.microsoftonline.com/common/oauth2/deviceauth 
-and will allow temporary access. When using **databricks** please use com.microsoft.kusto.spark.authentication.DeviceAuthentication 
-and use the returned token for [authentication with access token](#Authentication-with-Access-Token).
+and will allow temporary access (about one hour). For Python use this [sample](../samples/src/main/python/pyKusto.py).
 The user needs appropriate privileges for the Kusto cluster as explained in [Kusto Sink authentication section](KustoSink.md#authentication). 
 
 ### Device Authentication for PySpark
