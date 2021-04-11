@@ -13,6 +13,7 @@ class DeviceAuthentication (val cluster: String, val authority:String) extends a
   var expiresAt: Option[Long] = None
   var awaitAuthentication: Option[CompletableFuture[IAuthenticationResult]] = None
   val NEW_DEVICE_CODE_FETCH_TIMEOUT = 5000
+  val INTERVAL = 500
   override def acquireNewAccessToken(): IAuthenticationResult = {
     awaitAuthentication = Some(acquireNewAccessTokenAsync())
     awaitAuthentication.get.join()
@@ -34,13 +35,12 @@ class DeviceAuthentication (val cluster: String, val authority:String) extends a
       val oldDeviceCode = this.deviceCode
       awaitAuthentication = Some(acquireNewAccessTokenAsync())
       var awaitTime = NEW_DEVICE_CODE_FETCH_TIMEOUT
-      val interval = 500
       while (this.deviceCode == oldDeviceCode){
         if (awaitTime <= 0) {
           throw new TimeoutException("Timed out waiting for a new device code")
         }
-        Thread.sleep(interval)
-        awaitTime = awaitTime - interval
+        Thread.sleep(INTERVAL)
+        awaitTime = awaitTime - INTERVAL
       }
     }
   }
