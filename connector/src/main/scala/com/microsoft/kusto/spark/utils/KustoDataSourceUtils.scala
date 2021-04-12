@@ -34,7 +34,7 @@ object KustoDataSourceUtils {
   private val klog = Logger.getLogger("KustoConnector")
 
   val SasPattern: Regex = raw"(?:https://)?([^.]+).blob.([^/]+)/([^?]+)?(.+)".r
-
+  val DefaultMicrosoftTenant = "microsoft.com"
   val NewLine: String = sys.props("line.separator")
   val ReadMaxWaitTime: FiniteDuration = 30 seconds
   val WriteMaxWaitTime: FiniteDuration = 5 seconds
@@ -123,8 +123,7 @@ object KustoDataSourceUtils {
     var authentication: KustoAuthentication = null
     var keyVaultAuthentication: Option[KeyVaultAuthentication] = None
 
-    // If not specified a null value is used as the Java SDK will use the right default value
-    val authorityId: String = parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID, null)
+    val authorityId: String = parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID, DefaultMicrosoftTenant)
 
     // Check KeyVault Authentication
     if (keyVaultUri != "") {
