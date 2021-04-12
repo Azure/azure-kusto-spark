@@ -10,7 +10,7 @@ import com.microsoft.azure.kusto.ingest.result.{IngestionStatus, OperationStatus
 import com.microsoft.azure.kusto.ingest.{IngestClient, IngestClientFactory, IngestionProperties}
 import com.microsoft.azure.storage.StorageException
 import com.microsoft.kusto.spark.common.KustoCoordinates
-import com.microsoft.kusto.spark.datasink.KustoWriter.{tempIngestionTablePrefix, legacyTempIngestionTablePrefix,delayPeriodBetweenCalls}
+import com.microsoft.kusto.spark.datasink.KustoWriter.{TempIngestionTablePrefix, LegacyTempIngestionTablePrefix,DelayPeriodBetweenCalls}
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
 import com.microsoft.kusto.spark.datasink.{PartitionResult, SinkTableCreationMode, SparkIngestionProperties}
 import com.microsoft.kusto.spark.datasource.KustoStorageParameters
@@ -112,8 +112,8 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
                 }
               },
               0,
-              delayPeriodBetweenCalls,
-              (timeout.toMillis / delayPeriodBetweenCalls + 5).toInt,
+              DelayPeriodBetweenCalls,
+              (timeout.toMillis / DelayPeriodBetweenCalls + 5).toInt,
               res => res.isDefined && res.get.status == OperationStatus.Pending,
               res => finalRes = res,
               maxWaitTimeBetweenCalls = KDSU.WriteMaxWaitTime.toMillis.toInt).await(timeout.toMillis, TimeUnit.MILLISECONDS)
@@ -187,10 +187,10 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
       // Try delete temporary tablesToCleanup created and not used
       val tempTablesCurr = engineClient.execute(
         coordinates.database,
-        generateFindCurrentTempTablesCommand(Array(tempIngestionTablePrefix,legacyTempIngestionTablePrefix))
+        generateFindCurrentTempTablesCommand(Array(TempIngestionTablePrefix,LegacyTempIngestionTablePrefix))
       ).getPrimaryResults
       if (tempTablesCurr.count() > 0) {
-      val tempTablesOld = engineClient.execute(generateFindOldTempTablesCommand(coordinates.database,Array(tempIngestionTablePrefix,legacyTempIngestionTablePrefix)))
+      val tempTablesOld = engineClient.execute(generateFindOldTempTablesCommand(coordinates.database,Array(TempIngestionTablePrefix,LegacyTempIngestionTablePrefix)))
         .getPrimaryResults.getData.asInstanceOf[util.ArrayList[util.ArrayList[String]]].asScala
         .map(_.asScala.head)
 

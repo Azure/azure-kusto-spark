@@ -5,7 +5,7 @@ import org.apache.spark.sql.types.{ArrayType, DataType, DataTypes, DecimalType, 
 
 object DataTypeMapping {
 
-  val kustoTypeToSparkTypeMap: Map[String, DataType] = Map(
+  val KustoTypeToSparkTypeMap: Map[String, DataType] = Map(
     "string" -> StringType,
     "long" -> LongType,
     "datetime" -> TimestampType,// Kusto datetime is equivalent to TimestampType
@@ -19,7 +19,7 @@ object DataTypeMapping {
     "dynamic" -> StringType
   )
 
-  val kustoJavaTypeToSparkTypeMap: Map[String, DataType] = Map(
+  val KustoJavaTypeToSparkTypeMap: Map[String, DataType] = Map(
     "string" -> StringType,
     "int64" -> LongType,
     "datetime" -> TimestampType,
@@ -32,7 +32,7 @@ object DataTypeMapping {
     "object" -> StringType
   )
 
-  val sparkTypeToKustoTypeMap: Map[DataType, String] = Map(
+  val SparkTypeToKustoTypeMap: Map[DataType, String] = Map(
     StringType ->  "string",
     BooleanType -> "bool",
     DateType -> "datetime",
@@ -49,6 +49,6 @@ object DataTypeMapping {
   def getSparkTypeToKustoTypeMap(fieldType: DataType): String ={
       if(fieldType.isInstanceOf[DecimalType]) "decimal"
       else if (fieldType.isInstanceOf[ArrayType] || fieldType.isInstanceOf[StructType] || fieldType.isInstanceOf[MapType]) "dynamic"
-      else DataTypeMapping.sparkTypeToKustoTypeMap.getOrElse(fieldType, "string")
+      else DataTypeMapping.SparkTypeToKustoTypeMap.getOrElse(fieldType, "string")
   }
 }

@@ -31,10 +31,10 @@ import scala.concurrent.{Await, Future, TimeoutException}
 
 object KustoWriter {
   private val myName = this.getClass.getSimpleName
-  val legacyTempIngestionTablePrefix = "_tmpTable"
-  val tempIngestionTablePrefix = "sparkTempTable_"
-  val delayPeriodBetweenCalls: Int = KCONST.defaultPeriodicSamplePeriod.toMillis.toInt
-  val GZIP_BUFFER_SIZE: Int = 1000 * KCONST.defaultBufferSize
+  val LegacyTempIngestionTablePrefix = "_tmpTable"
+  val TempIngestionTablePrefix = "sparkTempTable_"
+  val DelayPeriodBetweenCalls: Int = KCONST.DefaultPeriodicSamplePeriod.toMillis.toInt
+  val GzipBufferSize: Int = 1000 * KCONST.DefaultBufferSize
 
   private[kusto] def write(batchId: Option[Long],
                            data: DataFrame,
@@ -50,7 +50,7 @@ object KustoWriter {
     }
 
     val table = tableCoordinates.table.get
-    val tmpTableName: String = KustoQueryUtils.simplifyName(tempIngestionTablePrefix +
+    val tmpTableName: String = KustoQueryUtils.simplifyName(TempIngestionTablePrefix +
       data.sparkSession.sparkContext.appName +
       "_" + table + batchId.map(b=>s"_${b.toString}").getOrElse("") + "_" + writeOptions.requestId)
 
@@ -134,7 +134,7 @@ object KustoWriter {
     KDSU.logInfo(myName, s"Ingesting from blob - partition: ${TaskContext.getPartitionId()} requestId: '${writeOptions.requestId}' $batchIdForTracing")
 
     tasks.asScala.foreach(t => try {
-      Await.result(t, KCONST.defaultIngestionTaskTime)
+      Await.result(t, KCONST.DefaultIngestionTaskTime)
     } catch {
       case _: TimeoutException => KDSU.logWarn(myName, s"Timed out trying to ingest requestId: '${writeOptions.requestId}', no need to fail as the ingest might succeed")
     })
@@ -183,7 +183,7 @@ object KustoWriter {
 
     val writer = new OutputStreamWriter(gzip, StandardCharsets.UTF_8)
 
-    val buffer: BufferedWriter = new BufferedWriter(writer, GZIP_BUFFER_SIZE)
+    val buffer: BufferedWriter = new BufferedWriter(writer, GzipBufferSize)
     val csvWriter = CountingWriter(buffer)
     BlobWriteResource(buffer, gzip, csvWriter, currentBlob, currentSas)
   }
@@ -214,7 +214,7 @@ object KustoWriter {
     import parameters._
 
     val kustoClient = KustoClientCache.getClient(coordinates.clusterAlias, coordinates.clusterUrl, authentication)
-    val maxBlobSize = writeOptions.batchLimit * KCONST.oneMega
+    val maxBlobSize = writeOptions.batchLimit * KCONST.OneMega
     //This blobWriter will be used later to write the rows to blob storage from which it will be ingested to Kusto
     val initialBlobWriter: BlobWriteResource = createBlobWriter(coordinates, tmpTableName, kustoClient)
     val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone(writeOptions.timeZone))
