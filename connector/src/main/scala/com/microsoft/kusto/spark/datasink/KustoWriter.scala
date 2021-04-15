@@ -41,7 +41,7 @@ object KustoWriter {
                            tableCoordinates: KustoCoordinates,
                            authentication: KustoAuthentication,
                            writeOptions: WriteOptions): Unit = {
-    val batchIdIfExists = batchId.map(b=>s",batch: ${b.toString}").getOrElse("")
+    val batchIdIfExists = batchId.map(b => s",batch: ${b.toString}").getOrElse("")
     val kustoClient = KustoClientCache.getClient(tableCoordinates.clusterAlias, tableCoordinates.clusterUrl, authentication)
 
     if (tableCoordinates.table.isEmpty) {
@@ -52,7 +52,8 @@ object KustoWriter {
     val table = tableCoordinates.table.get
     val tmpTableName: String = KustoQueryUtils.simplifyName(tempIngestionTablePrefix +
       data.sparkSession.sparkContext.appName +
-      "_" + table + batchId.map(b=>s"_${b.toString}").getOrElse("") + "_" + writeOptions.requestId)
+      "_" + table + batchId.map(b => s"_${b.toString}").getOrElse("") + "_" + writeOptions.requestId + UUID.randomUUID()
+      .toString)
 
     implicit val parameters: KustoWriteResource = KustoWriteResource(authentication, tableCoordinates, data.schema, writeOptions, tmpTableName)
     val stagingTableIngestionProperties = getIngestionProperties(writeOptions, parameters)
@@ -75,7 +76,7 @@ object KustoWriter {
       KDSU.logInfo(myName, s"Successfully created temporary table $tmpTableName, will be deleted after completing the operation")
 
       kustoClient.setMappingOnStagingTableIfNeeded(stagingTableIngestionProperties, table)
-      if (stagingTableIngestionProperties.getFlushImmediately){
+      if (stagingTableIngestionProperties.getFlushImmediately) {
         KDSU.logWarn(myName, "Its not recommended to set flushImmediately to true")
       }
       val rdd = data.queryExecution.toRdd
@@ -199,7 +200,7 @@ object KustoWriter {
       val partitionId = TaskContext.getPartitionId
       Future {
         var props = ingestionProperties
-        if(!ingestionProperties.getFlushImmediately && flushImmediately){
+        if (!ingestionProperties.getFlushImmediately && flushImmediately) {
           // Need to copy the ingestionProperties so that only this one will be flushed immediately
           props = SparkIngestionProperties.cloneIngestionProperties(ingestionProperties)
           props.setFlushImmediately(true)
@@ -227,7 +228,7 @@ object KustoWriter {
         RowCSVWriterUtils.writeRowAsCSV(row, schema, dateFormat, blobWriter.csvWriter)
 
         val count = blobWriter.csvWriter.getCounter
-        val shouldNotCommitBlockBlob =  count < maxBlobSize
+        val shouldNotCommitBlockBlob = count < maxBlobSize
         if (shouldNotCommitBlockBlob) {
           blobWriter
         } else {
