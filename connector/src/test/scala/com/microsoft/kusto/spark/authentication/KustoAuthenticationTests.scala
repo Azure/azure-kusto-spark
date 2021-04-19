@@ -18,11 +18,11 @@ class TokenProvider2(map: CaseInsensitiveMap[String]) extends Callable[String] w
 @RunWith(classOf[JUnitRunner])
 class kustoAuthenticationTests extends FlatSpec {
   "KeyVaultAppAuthentication Equals" should "Check equality and inequality between different KeyVaultAppAuthentication" in {
-    val kvaa11 = KeyVaultAppAuthentication("uri1", "appId1", "pass1")
-    val kvaa11Duplicate = KeyVaultAppAuthentication("uri1", "appId1", "pass2")
-    val kvaa12 = KeyVaultAppAuthentication("uri1", "appId2", "pass123")
-    val kvaa21 = KeyVaultAppAuthentication("uri2", "appId1", "pass12")
-    val kvaa22 = KeyVaultAppAuthentication("uri2", "appId2", "pass12")
+    val kvaa11 = KeyVaultAppAuthentication("uri1", "appId1", "pass1", null)
+    val kvaa11Duplicate = KeyVaultAppAuthentication("uri1", "appId1", "pass2", null)
+    val kvaa12 = KeyVaultAppAuthentication("uri1", "appId2", "pass123", null)
+    val kvaa21 = KeyVaultAppAuthentication("uri2", "appId1", "pass12", null)
+    val kvaa22 = KeyVaultAppAuthentication("uri2", "appId2", "pass12", null)
     assert(kvaa11 == kvaa11Duplicate)
     assert(kvaa11 != kvaa12)
     assert(kvaa11 != kvaa21)
@@ -33,11 +33,11 @@ class kustoAuthenticationTests extends FlatSpec {
   }
 
   "KeyVaultCertificateAuthentication Equals" should "Check equality and inequality between different KeyVaultCertificateAuthentication" in {
-    val kvca11 = KeyVaultCertificateAuthentication("uri1", "path1", "pass1")
-    val kvca11Duplicate = KeyVaultCertificateAuthentication("uri1", "path1", "pass2")
-    val kvca12 = KeyVaultCertificateAuthentication("uri1", "path2", "pass123")
-    val kvca21 = KeyVaultCertificateAuthentication("uri2", "path1", "pass12")
-    val kvca22 = KeyVaultCertificateAuthentication("uri2", "path2", "pass12")
+    val kvca11 = KeyVaultCertificateAuthentication("uri1", "path1", "pass1", null)
+    val kvca11Duplicate = KeyVaultCertificateAuthentication("uri1", "path1", "pass2", null)
+    val kvca12 = KeyVaultCertificateAuthentication("uri1", "path2", "pass123", null)
+    val kvca21 = KeyVaultCertificateAuthentication("uri2", "path1", "pass12", null)
+    val kvca22 = KeyVaultCertificateAuthentication("uri2", "path2", "pass12", null)
 
     assert(kvca11 == kvca11Duplicate)
     assert(kvca11 != kvca12)
@@ -58,8 +58,8 @@ class kustoAuthenticationTests extends FlatSpec {
   }
 
   "KustoAccessTokenAuthentication Equals" should "Verify that different types of authentication won't equal" in {
-    val kvaa11 = KeyVaultAppAuthentication("uri1", "appId1", "pass1")
-    val kvca11 = KeyVaultCertificateAuthentication("uri1", "path1", "pass1")
+    val kvaa11 = KeyVaultAppAuthentication("uri1", "appId1", "pass1", null)
+    val kvca11 = KeyVaultCertificateAuthentication("uri1", "path1", "pass1", null)
     val kata1 = KustoAccessTokenAuthentication("token1")
 
     assert(kvaa11 != kvca11)
@@ -68,7 +68,7 @@ class kustoAuthenticationTests extends FlatSpec {
   }
 
   "KustoTokenProviderAuthentication Equals" should "Verify that different types of authentication won't equal" in {
-    val params = CaseInsensitiveMap(Map[String,String]("token" -> "token"))
+    val params = CaseInsensitiveMap(Map[String, String]("token" -> "token"))
 
     val tokenProvider1 = java.lang.ClassLoader.getSystemClassLoader
       .loadClass("com.microsoft.kusto.spark.authentication.TokenProvider1")

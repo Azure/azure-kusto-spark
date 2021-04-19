@@ -6,7 +6,8 @@ import java.text.SimpleDateFormat
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 
-import com.microsoft.azure.kusto.data.{ClientFactory, ConnectionStringBuilder}
+import com.microsoft.azure.kusto.data.ClientFactory
+import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode}
 import com.microsoft.kusto.spark.datasource.{KustoSourceOptions, ReadMode}
 import com.microsoft.kusto.spark.sql.extension.SparkExtension._

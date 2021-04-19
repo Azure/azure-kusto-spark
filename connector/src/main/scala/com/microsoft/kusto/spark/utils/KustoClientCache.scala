@@ -4,7 +4,7 @@ import java.net.URI
 import java.util.concurrent.ConcurrentHashMap
 import java.util.function
 
-import com.microsoft.azure.kusto.data.ConnectionStringBuilder
+import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.kusto.spark.authentication._
 import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
 import org.apache.http.client.utils.URIBuilder
@@ -40,6 +40,11 @@ object KustoClientCache {
           ConnectionStringBuilder.createWithAadApplicationCredentials(aliasAndAuth.engineUri, app.ID, app.password, app.authority),
           ConnectionStringBuilder.createWithAadApplicationCredentials(aliasAndAuth.ingestUri, app.ID, app.password, app.authority)
         )
+      case userPrompt: KustoUserPromptAuthentication => (
+        // TODO authoirty
+        ConnectionStringBuilder.createWithUserPrompt(aliasAndAuth.engineUri, userPrompt.authority),
+        ConnectionStringBuilder.createWithUserPrompt(aliasAndAuth.ingestUri, userPrompt.authority)
+      )
       case userToken: KustoAccessTokenAuthentication => (
         ConnectionStringBuilder.createWithAadAccessTokenAuthentication(aliasAndAuth.engineUri, userToken.token),
         ConnectionStringBuilder.createWithAadAccessTokenAuthentication(aliasAndAuth.ingestUri, userToken.token)
