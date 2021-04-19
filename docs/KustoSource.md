@@ -165,6 +165,9 @@ If set to 'true', query executed on kusto cluster will include the filters.
   .load()
   ```
   
+>Note:
+ Kusto uses case-sensitive column names while Spark does not, therefore the following Kusto table will fail reading (cola:string,ColA:string).
+   
  For more reference code examples please see: 
     
  [SimpleKustoDataSink](../samples/src/main/scala/SimpleKustoDataSink.scala)

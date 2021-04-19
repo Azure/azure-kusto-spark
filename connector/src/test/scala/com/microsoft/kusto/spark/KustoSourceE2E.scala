@@ -2,7 +2,8 @@ package com.microsoft.kusto.spark
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 
-import com.microsoft.azure.kusto.data.{ClientFactory, ConnectionStringBuilder}
+import com.microsoft.azure.kusto.data.ClientFactory
+import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.kusto.spark.datasink.KustoSinkOptions
 import com.microsoft.kusto.spark.datasource.{KustoSourceOptions, ReadMode}
 import com.microsoft.kusto.spark.sql.extension.SparkExtension._
@@ -18,8 +19,6 @@ import scala.collection.immutable
 
 @RunWith(classOf[JUnitRunner])
 class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
-  private val myName = this.getClass.getSimpleName
-
   private val nofExecutors = 4
   private val spark: SparkSession = SparkSession.builder()
     .appName("KustoSink")
@@ -51,40 +50,39 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
   private val loggingLevel: Option[String] = Option(System.getProperty("logLevel"))
   if (loggingLevel.isDefined) KDSU.setLoggingLevel(loggingLevel.get)
 
-//  "KustoSource" should "execute a read query on Kusto cluster in single mode" taggedAs KustoE2E in {
-//    val table: String = System.getProperty(KustoSinkOptions.KUSTO_TABLE)
-//    val query: String = System.getProperty(KustoSourceOptions.KUSTO_QUERY, s"$table | where (toint(ColB) % 1000 == 0) | distinct ColA ")
-//
-//    val conf: Map[String, String] = Map(
-//      KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceSingleMode.toString,
-//      KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
-//      KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey
-//    )
-//
-//    val df = spark.read.kusto(cluster, database, query, conf)
-//    df.show()
-//  }
-//
-//  "KustoSource" should "execute a read query on Kusto cluster in distributed mode" taggedAs KustoE2E in {
-//    val table: String = System.getProperty(KustoSinkOptions.KUSTO_TABLE)
-//    val query: String = System.getProperty(KustoSourceOptions.KUSTO_QUERY, s"$table | where (toint(ColB) % 1 == 0)")
-//
-//    val storageAccount: String = System.getProperty("storageAccount")
-//    val container: String = System.getProperty("container")
-//    val blobKey: String = System.getProperty("blobKey")
+  "KustoSource" should "execute a read query on Kusto cluster in single mode" taggedAs KustoE2E in {
+    val table: String = System.getProperty(KustoSinkOptions.KUSTO_TABLE)
+    val query: String = System.getProperty(KustoSourceOptions.KUSTO_QUERY, s"$table | where (toint(ColB) % 1000 == 0) | distinct ColA ")
+
+    val conf: Map[String, String] = Map(
+      KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceSingleMode.toString,
+      KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
+      KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey
+    )
+
+    val df = spark.read.kusto(cluster, database, query, conf)
+    df.show()
+  }
+
+  "KustoSource" should "execute a read query on Kusto cluster in distributed mode" taggedAs KustoE2E in {
+    val table: String = System.getProperty(KustoSinkOptions.KUSTO_TABLE)
+    val query: String = System.getProperty(KustoSourceOptions.KUSTO_QUERY, s"$table | where (toint(ColB) % 1 == 0)")
+
+    val storageAccount: String = System.getProperty("storageAccount")
+    val container: String = System.getProperty("container")
+    val blobKey: String = System.getProperty("blobKey")
 //    val blobSas: String = System.getProperty("blobSas")
-//    val blobSasConnectionString: String = System.getProperty("blobSasQuery")
-//
-//    val conf: Map[String, String] = Map(
-//      KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
-//      KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey,
-//      KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME -> storageAccount,
-//      KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_KEY -> blobKey,
-//      KustoSourceOptions.KUSTO_BLOB_CONTAINER -> container
-//    )
-//
-//    spark.read.kusto(cluster, database, query, conf).show(20)
-//  }
+
+    val conf: Map[String, String] = Map(
+      KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
+      KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey,
+      KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME -> storageAccount,
+      KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_KEY -> blobKey,
+      KustoSourceOptions.KUSTO_BLOB_CONTAINER -> container
+    )
+
+    spark.read.kusto(cluster, database, query, conf).show(20)
+  }
 
   "KustoConnector" should "write to a kusto table and read it back in default mode" taggedAs KustoE2E in {
     import spark.implicits._

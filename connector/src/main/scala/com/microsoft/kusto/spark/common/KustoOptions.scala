@@ -24,6 +24,9 @@ trait KustoOptions {
   val KUSTO_AAD_APP_SECRET: String = newOption("kustoAadAppSecret")
 
   val KUSTO_ACCESS_TOKEN: String = newOption("accessToken")
+
+  // Use only for local runs where one can open the browser
+  val KUSTO_USER_PROMPT: String = newOption("userPrompt")
   // AAD application pfx certificate path
   val KUSTO_AAD_APP_CERTIFICATE_PATH: String = newOption("kutoAadAppCertPath")
   // AAD application certificate password

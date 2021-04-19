@@ -2,10 +2,11 @@ package com.microsoft.kusto.spark.utils
 
 import java.io.IOException
 
-import com.microsoft.azure.CloudException
-import com.microsoft.azure.keyvault.KeyVaultClient
+import com.azure.security.keyvault.secrets.SecretClient
 import com.microsoft.kusto.spark.authentication._
 import com.microsoft.kusto.spark.datasource._
+
+import scala.util.{Try}
 
 object KeyVaultUtils {
   val AppId = "kustoAppId"
@@ -15,67 +16,72 @@ object KeyVaultUtils {
   val StorageAccountId = "blobStorageAccountName"
   val StorageAccountKey = "blobStorageAccountKey"
   val Container = "blobContainer"
-  var cachedClient: KeyVaultClient = _
+  var cachedClient: SecretClient = _
 
-  private def getClient(clientID: String, clientPassword: String): KeyVaultClient ={
+  private def getClient(uri: String, clientID: String, clientPassword: String, authority: String): SecretClient ={
     if(cachedClient == null) {
-      cachedClient = new KeyVaultADALAuthenticator(clientID, clientPassword).getAuthenticatedClient
+      cachedClient = new KeyVaultADALAuthenticator(uri, clientID, clientPassword, authority).getAuthenticatedClient
     }
     cachedClient
   }
 
-  @throws[CloudException]
   @throws[IOException]
   def getStorageParamsFromKeyVault(keyVaultAuthentication: KeyVaultAuthentication): KustoStorageParameters = {
     keyVaultAuthentication match {
       case app: KeyVaultAppAuthentication =>
-        val client = getClient(app.keyVaultAppID, app.keyVaultAppKey)
+        val client = getClient(app.uri, app.keyVaultAppID, app.keyVaultAppKey, app.authority)
         getStorageParamsFromKeyVaultImpl(client, app.uri)
       case certificate: KeyVaultCertificateAuthentication => throw new UnsupportedOperationException("certificates are not yet supported")
     }
   }
 
-  @throws[CloudException]
   @throws[IOException]
   def getAadAppParametersFromKeyVault(keyVaultAuthentication: KeyVaultAuthentication): AadApplicationAuthentication={
     keyVaultAuthentication match {
       case app: KeyVaultAppAuthentication =>
-        val client = getClient(app.keyVaultAppID, app.keyVaultAppKey)
+        val client = getClient(app.uri, app.keyVaultAppID, app.keyVaultAppKey, app.authority)
         getAadAppParamsFromKeyVaultImpl(client, app.uri)
-      case certificate: KeyVaultCertificateAuthentication => throw new UnsupportedOperationException("certificates are not yet supported")
+      case _: KeyVaultCertificateAuthentication => throw new UnsupportedOperationException("certificates are not yet supported")
     }
   }
 
-  private def getAadAppParamsFromKeyVaultImpl(client: KeyVaultClient, uri: String): AadApplicationAuthentication ={
-    val id = client.getSecret(uri, AppId)
-    val key = client.getSecret(uri, AppKey)
+  private def getAadAppParamsFromKeyVaultImpl(client: SecretClient, uri: String): AadApplicationAuthentication ={
+    val id = client.getSecret(AppId)
+    val key = client.getSecret(AppKey)
 
-    var authority = client.getSecret(uri, AppAuthority).value()
+    var authority :Option[String] = None
+    try{
+      authority = Some(client.getSecret(AppAuthority).getValue)
+    } catch {
+      case e:Exception => {
+        println(e)
+      }
+    }
     if(authority.isEmpty){
-      authority = "microsoft.com"
+      authority = Some("microsoft.com")
     }
 
     AadApplicationAuthentication(
-      ID = if (id == null) null else id.value(),
-      password = if (key == null) null else key.value(),
-      authority = authority)
+      ID = if (id == null) null else id.getValue,
+      password = if (key == null) null else key.getValue,
+      authority = authority.get)
   }
 
-  private def getStorageParamsFromKeyVaultImpl(client: KeyVaultClient, uri: String): KustoStorageParameters = {
-    val sasUrl = Option(client.getSecret(uri, SasUrl))
+  private def getStorageParamsFromKeyVaultImpl(client: SecretClient, uri: String): KustoStorageParameters = {
+    val sasUrl = Try(client.getSecret(SasUrl))
 
-    val accountId =  Option(client.getSecret(uri, StorageAccountId))
-    val accountKey = Option(client.getSecret(uri, StorageAccountKey))
-    val container = Option(client.getSecret(uri, Container))
+    val accountId =  Try(client.getSecret(StorageAccountId))
+    val accountKey = Try(client.getSecret(StorageAccountKey))
+    val container = Try(client.getSecret(Container))
 
-    if(sasUrl.isEmpty) {
+    if(sasUrl.isFailure) {
       KustoStorageParameters(
-        account = if(accountId.isDefined) accountId.get.value else "",
-        secret = if (accountKey.isDefined) accountKey.get.value else "",
-        container = if (container.isDefined) container.get.value else "",
+        account = if(accountId.isFailure) accountId.get.getValue else "",
+        secret = if (accountKey.isFailure) accountKey.get.getValue else "",
+        container = if (container.isFailure) container.get.getValue else "",
         secretIsAccountKey = true)
     } else {
-      KustoDataSourceUtils.parseSas(sasUrl.get.value)
+      KustoDataSourceUtils.parseSas(sasUrl.get.getValue)
     }
   }
 }
