@@ -52,7 +52,8 @@ object KustoWriter {
     val table = tableCoordinates.table.get
     val tmpTableName: String = KustoQueryUtils.simplifyName(tempIngestionTablePrefix +
       data.sparkSession.sparkContext.appName +
-      "_" + table + batchId.map(b=>s"_${b.toString}").getOrElse("") + "_" + writeOptions.requestId)
+      "_" + table + batchId.map(b=>s"_${b.toString}").getOrElse("") + "_" + writeOptions
+      .requestId + UUID.randomUUID())
 
     implicit val parameters: KustoWriteResource = KustoWriteResource(authentication, tableCoordinates, data.schema, writeOptions, tmpTableName)
     val stagingTableIngestionProperties = getIngestionProperties(writeOptions, parameters)
