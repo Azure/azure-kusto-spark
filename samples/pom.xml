@@ -10,7 +10,11 @@
         <!--suppress MavenPropertyInParent -->
         <version>${revision}</version>
     </parent>
-
+    <url>https://github.com/Azure/azure-kusto-spark/tree/master/samples</url>
+    <scm>
+        <url>scm:git:https://github.com/Azure/azure-kusto-spark</url>
+        <connection>scm:git:https://github.com/Azure/azure-kusto-spark</connection>
+    </scm>
     <dependencies>
         <!-- Compile Scope -->
         <dependency>

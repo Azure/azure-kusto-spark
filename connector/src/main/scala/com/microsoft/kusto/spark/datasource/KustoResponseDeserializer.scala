@@ -55,7 +55,7 @@ class KustoResponseDeserializer(val kustoResult: KustoResultSetTable) {
       val columns = kustoResult.getColumns
 
       KustoSchema(StructType(columns.map(col => StructField(col.getColumnName,
-            DataTypeMapping.kustoTypeToSparkTypeMap.getOrElse(col.getColumnType.toLowerCase, StringType)))),
+            DataTypeMapping.KustoTypeToSparkTypeMap.getOrElse(col.getColumnType.toLowerCase, StringType)))),
         columns.filter(c => c.getColumnType.equalsIgnoreCase("TimeSpan")).map(c => c.getColumnName).toSet)
     }
   }

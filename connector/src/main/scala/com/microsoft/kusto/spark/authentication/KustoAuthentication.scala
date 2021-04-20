@@ -9,6 +9,8 @@ trait KustoAuthentication {
     case auth: KustoAuthentication => auth.canEqual(this) && auth == this
     case _ => false
   }
+
+  override def hashCode(): Int = this.hashCode
 }
 
 abstract class KeyVaultAuthentication(uri: String, authority: String) extends KustoAuthentication
@@ -21,7 +23,7 @@ case class AadApplicationAuthentication(ID: String, password: String, authority:
     case _ => false
   }
 
-  override def hashCode(): Int = ID.hashCode + authority.hashCode
+  override def hashCode(): Int = ID.hashCode + (if (authority == null) 0 else (authority.hashCode))
 }
 
 case class AadApplicationCertificateAuthentication(appId: String, certFilePath: String, certPassword: String, authority: String) extends KustoAuthentication {

@@ -76,7 +76,7 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
         res = Some(sparkSession.emptyDataFrame.rdd)
       } else {
         // Use distributed mode if count is high or in case of a time out
-        useSingleMode =  !(timedOutCounting || count > KustoConstants.directQueryUpperBoundRows)
+        useSingleMode =  !(timedOutCounting || count > KustoConstants.DirectQueryUpperBoundRows)
       }
     }
 
@@ -161,6 +161,6 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
 
   override def insert(data: DataFrame, overwrite: Boolean): Unit = {
     KustoWriter.write(Some(0), data, kustoCoordinates, authentication, writeOptions =
-      WriteOptions.apply(timeout = new FiniteDuration(KustoConstants.defaultWaitingIntervalLongRunning.toLong, TimeUnit.MINUTES)))
+      WriteOptions.apply(timeout = new FiniteDuration(KustoConstants.DefaultWaitingIntervalLongRunning.toLong, TimeUnit.MINUTES)))
   }
 }

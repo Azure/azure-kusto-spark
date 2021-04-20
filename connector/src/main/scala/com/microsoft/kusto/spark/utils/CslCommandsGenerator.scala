@@ -2,7 +2,7 @@ package com.microsoft.kusto.spark.utils
 
 import java.util
 
-import com.microsoft.kusto.spark.datasink.KustoWriter.tempIngestionTablePrefix
+import com.microsoft.kusto.spark.datasink.KustoWriter.TempIngestionTablePrefix
 import com.microsoft.kusto.spark.datasource.KustoStorageParameters
 import scala.collection.JavaConverters._
 
@@ -85,7 +85,7 @@ private[kusto] object CslCommandsGenerator {
                | where TableName == '$destinationTableName'
                | mv-apply Tags=split(Tags, '\\r\\n') on
                 (
-                 extend Tags = substring(Tags, ${KustoConstants.ingestByPrefix.length})
+                 extend Tags = substring(Tags, ${KustoConstants.IngestByPrefix.length})
                 )
                 |summarize make_set(Tags)
         )

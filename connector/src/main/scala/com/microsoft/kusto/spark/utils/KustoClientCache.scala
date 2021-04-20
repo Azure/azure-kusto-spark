@@ -55,8 +55,8 @@ object KustoClientCache {
       )
     }
 
-    engineKcsb.setClientVersionForTracing(KCONST.clientName)
-    ingestKcsb.setClientVersionForTracing(KCONST.clientName)
+    engineKcsb.setClientVersionForTracing(KCONST.ClientName)
+    ingestKcsb.setClientVersionForTracing(KCONST.ClientName)
 
     new KustoClient(aliasAndAuth.clusterAlias, engineKcsb, ingestKcsb)
   }
@@ -64,7 +64,7 @@ object KustoClientCache {
   private[kusto] case class AliasAndAuth(clusterAlias: String, engineUrl: String, authentication: KustoAuthentication) {
     val engineUri: String = engineUrl
     val ingestUri: String = new URIBuilder().setScheme("https")
-      .setHost(KustoDataSourceUtils.ingestPrefix + new URI(engineUrl).getHost)
+      .setHost(KustoDataSourceUtils.IngestPrefix + new URI(engineUrl).getHost)
       .toString
 
     override def equals(that: Any): Boolean = that match {

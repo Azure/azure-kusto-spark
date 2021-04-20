@@ -33,23 +33,23 @@ import org.json.JSONObject
 object KustoDataSourceUtils {
   private val klog = Logger.getLogger("KustoConnector")
 
-  val sasPattern: Regex = raw"(?:https://)?([^.]+).blob.([^/]+)/([^?]+)?(.+)".r
-
-  val NewLine = sys.props("line.separator")
+  val SasPattern: Regex = raw"(?:https://)?([^.]+).blob.([^/]+)/([^?]+)?(.+)".r
+  val DefaultMicrosoftTenant = "microsoft.com"
+  val NewLine: String = sys.props("line.separator")
   val ReadMaxWaitTime: FiniteDuration = 30 seconds
   val WriteMaxWaitTime: FiniteDuration = 5 seconds
 
   val input: InputStream = getClass.getClassLoader.getResourceAsStream("spark.kusto.properties")
   val props = new Properties()
   props.load(input)
-  var version: String = props.getProperty("application.version")
-  var clientName = s"Kusto.Spark.Connector:$version"
-  val ingestPrefix: String = props.getProperty("ingestPrefix", "ingest-")
-  val enginePrefix: String = props.getProperty("enginePrefix", "https://")
-  val defaultDomainPostfix: String = props.getProperty("defaultDomainPostfix", "core.windows.net")
-  val defaultClusterSuffix: String = props.getProperty("defaultClusterSuffix", "kusto.windows.net")
-  val ariaClustersProxy: String = props.getProperty("ariaClustersProxy", "https://kusto.aria.microsoft.com")
-  val ariaClustersAlias: String = "Aria proxy"
+  var Version: String = props.getProperty("application.version")
+  var clientName = s"Kusto.Spark.Connector:$Version"
+  val IngestPrefix: String = props.getProperty("ingestPrefix", "ingest-")
+  val EnginePrefix: String = props.getProperty("enginePrefix", "https://")
+  val DefaultDomainPostfix: String = props.getProperty("defaultDomainPostfix", "core.windows.net")
+  val DefaultClusterSuffix: String = props.getProperty("defaultClusterSuffix", "kusto.windows.net")
+  val AriaClustersProxy: String = props.getProperty("ariaClustersProxy", "https://kusto.aria.microsoft.com")
+  val AriaClustersAlias: String = "Aria proxy"
 
   def setLoggingLevel(level: String): Unit = {
     setLoggingLevel(Level.toLevel(level))
@@ -123,8 +123,7 @@ object KustoDataSourceUtils {
     var authentication: KustoAuthentication = null
     var keyVaultAuthentication: Option[KeyVaultAuthentication] = None
 
-    // If not specified a null value is used as the Java SDK will use the right default value
-    val authorityId: String = parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID, null)
+    val authorityId: String = parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID, DefaultMicrosoftTenant)
 
     // Check KeyVault Authentication
     if (keyVaultUri != "") {
@@ -210,7 +209,7 @@ object KustoDataSourceUtils {
       case _: java.lang.IllegalArgumentException => throw new InvalidParameterException(s"KUSTO_WRITE_ENABLE_ASYNC is expecting either 'true' or 'false', got: '$isAsyncParam'")
     }
 
-    val timeout = new FiniteDuration(parameters.getOrElse(KustoSinkOptions.KUSTO_TIMEOUT_LIMIT, KCONST.defaultWaitingIntervalLongRunning).toLong, TimeUnit.SECONDS)
+    val timeout = new FiniteDuration(parameters.getOrElse(KustoSinkOptions.KUSTO_TIMEOUT_LIMIT, KCONST.DefaultWaitingIntervalLongRunning).toLong, TimeUnit.SECONDS)
     val requestId = parameters.getOrElse(KustoSinkOptions.KUSTO_REQUEST_ID, UUID.randomUUID().toString)
 
     val ingestionPropertiesAsJson = parameters.get(KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON)
@@ -272,16 +271,16 @@ object KustoDataSourceUtils {
   }
 
   private[kusto] def getClusterNameFromUrlIfNeeded(cluster: String): String = {
-    if (cluster.equals(ariaClustersProxy)) {
-      ariaClustersAlias
+    if (cluster.equals(AriaClustersProxy)) {
+      AriaClustersAlias
     }
-    else if (cluster.startsWith(enginePrefix)) {
+    else if (cluster.startsWith(EnginePrefix)) {
       if (!cluster.contains(".kusto.")) {
         throw new InvalidParameterException("KUSTO_CLUSTER parameter accepts either a full url with https scheme or the cluster's" +
           "alias and tries to construct the full URL from it. Parameter given: " + cluster)
       }
       val host = new URI(cluster).getHost
-      val startIdx = if (host.startsWith(ingestPrefix)) ingestPrefix.length else 0
+      val startIdx = if (host.startsWith(IngestPrefix)) IngestPrefix.length else 0
       host.substring(startIdx, host.indexOf(".kusto."))
 
     } else {
@@ -290,11 +289,11 @@ object KustoDataSourceUtils {
   }
 
   private[kusto] def getEngineUrlFromAliasIfNeeded(cluster: String): String = {
-    if (cluster.startsWith(enginePrefix)) {
+    if (cluster.startsWith(EnginePrefix)) {
       val host = new URI(cluster).getHost
-      if (host.startsWith(ingestPrefix)) {
+      if (host.startsWith(IngestPrefix)) {
         val uriBuilder = new URIBuilder()
-        uriBuilder.setHost(ingestPrefix + host).toString
+        uriBuilder.setHost(IngestPrefix + host).toString
       } else {
         cluster
       }
@@ -361,7 +360,7 @@ object KustoDataSourceUtils {
                                    database: String,
                                    commandResult: KustoResultSetTable,
                                    directory: String,
-                                   samplePeriod: FiniteDuration = KCONST.defaultPeriodicSamplePeriod,
+                                   samplePeriod: FiniteDuration = KCONST.DefaultPeriodicSamplePeriod,
                                    timeOut: FiniteDuration): Unit = {
     commandResult.next()
     val operationId = commandResult.getString(0)
@@ -402,6 +401,7 @@ object KustoDataSourceUtils {
       finalWork = (result: Option[KustoResultSetTable]) => {
         lastResponse = result
       }, maxWaitTimeBetweenCalls = ReadMaxWaitTime.toMillis.toInt)
+
     var success = true
     if (timeOut < FiniteDuration.apply(0, SECONDS)) {
       task.await()
@@ -426,7 +426,7 @@ object KustoDataSourceUtils {
 
   private[kusto] def parseSas(url: String): KustoStorageParameters = {
     url match {
-      case sasPattern(storageAccountId, cloud, container, sasKey) => KustoStorageParameters(storageAccountId, sasKey, container, secretIsAccountKey = false, cloud)
+      case SasPattern(storageAccountId, cloud, container, sasKey) => KustoStorageParameters(storageAccountId, sasKey, container, secretIsAccountKey = false, cloud)
       case _ => throw new InvalidParameterException(
         "SAS url couldn't be parsed. Should be https://<storage-account>.blob.<domainEndpointSuffix>/<container>?<SAS-Token>"
       )
@@ -532,7 +532,7 @@ object KustoDataSourceUtils {
       if (storageAccount.get == null || storageAccountSecret.get == null || storageContainer.get == null) {
         throw new InvalidParameterException("storageAccount key from parameters is null")
       }
-      val postfix = domainPostfix.getOrElse(defaultDomainPostfix)
+      val postfix = domainPostfix.getOrElse(DefaultDomainPostfix)
       Some(KustoStorageParameters(storageAccount.get, storageAccountSecret.get, storageContainer.get, storageSecretIsAccountKey, postfix))
     }
     else None
@@ -550,14 +550,14 @@ object KustoDataSourceUtils {
       val res = client.execute(database, generateEstimateRowsCountQuery(query)).getPrimaryResults
       res.next()
       res.getCurrentRow
-    }, KustoConstants.timeoutForCountCheck)
+    }, KustoConstants.TimeoutForCountCheck)
     if (StringUtils.isBlank(estimationResult.get(1).toString)) {
       // Estimation can be empty for certain cases
       Await.result(Future {
         val res = client.execute(database, generateCountQuery(query)).getPrimaryResults
         res.next()
         res.getInt(0)
-      }, KustoConstants.timeoutForCountCheck)
+      }, KustoConstants.TimeoutForCountCheck)
     } else {
       // Zero estimation count does not indicate zero results, therefore we add 1 here so that we won't return an empty RDD
       count = estimationResult.get(1).asInstanceOf[Int] + 1
