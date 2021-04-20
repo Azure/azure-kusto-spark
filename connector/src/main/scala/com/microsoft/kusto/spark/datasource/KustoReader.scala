@@ -16,8 +16,8 @@ import org.joda.time.{DateTime, DateTimeZone}
 import java.net.URI
 import java.security.InvalidParameterException
 import java.util.UUID
-import java.util.concurrent.ConcurrentHashMap
-import scala.collection.convert.decorateAsScala._
+
+import scala.collection.concurrent
 import scala.concurrent.duration.FiniteDuration
 
 private[kusto] case class KustoPartition(predicate: Option[String], idx: Int) extends Partition {
@@ -30,7 +30,7 @@ private[kusto] case class KustoStorageParameters(account: String,
                                                  secret: String,
                                                  container: String,
                                                  secretIsAccountKey: Boolean,
-                                                 endpointSuffix: String = KDSU.defaultDomainPostfix)
+                                                 endpointSuffix: String = KDSU.DefaultDomainPostfix)
 
 private[kusto] case class KustoFiltering(columns: Array[String] = Array.empty, filters: Array[Filter] = Array.empty)
 
@@ -54,7 +54,8 @@ private[kusto] case class DistributedReadModeTransientCacheKey(query: String,
                                                                authentication: KustoAuthentication)
 private[kusto] object KustoReader {
   private val myName = this.getClass.getSimpleName
-  private val distributedReadModeTransientCache = new ConcurrentHashMap[DistributedReadModeTransientCacheKey, Seq[String]]().asScala
+  private val distributedReadModeTransientCache: concurrent.Map[DistributedReadModeTransientCacheKey,Seq[String]] =
+    new concurrent.TrieMap()
 
   private[kusto] def singleBuildScan(kustoClient: Client,
                                      request: KustoReadRequest,
@@ -108,7 +109,7 @@ private[kusto] object KustoReader {
     val rdd = try {
       request.sparkSession.read.parquet(paths: _*).rdd
     } catch {
-      case ex: Exception =>
+      case ex: Exception => {
         // Check whether the result is empty, causing an IO exception on reading empty parquet file
         // We don't mind generating the filtered query again - it only happens upon exception
         val filteredQuery = KustoFilter.pruneAndFilter(request.schema, request.query, filtering)
@@ -119,6 +120,7 @@ private[kusto] object KustoReader {
         } else {
           throw ex
         }
+      }
     }
 
     KDSU.logInfo(myName, "Transaction data read from blob storage, paths:" + paths)

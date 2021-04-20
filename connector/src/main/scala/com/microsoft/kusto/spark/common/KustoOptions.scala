@@ -44,7 +44,8 @@ trait KustoOptions {
   // required permissions
   val KUSTO_DATABASE: String = newOption("kustoDatabase")
 
-  // An integer number corresponding to the period in seconds after which the operation will timeout. Default: '5400' (90 minutes)
+  // An integer number corresponding to the period in seconds after which the operation will timeout. Default: '5400'
+  // (90 minutes)
   val KUSTO_TIMEOUT_LIMIT: String = newOption("timeoutLimit")
 
   // An id of the source used for tracing of the write operation
@@ -53,12 +54,12 @@ trait KustoOptions {
 
 case class KustoCoordinates(clusterUrl: String, clusterAlias:String, database: String, table: Option[String] = None)
 
-/** **********************************************************************************/
+/** ******************************************************************************* */
 /*                                    NOTE!!!                                       */
 /* These options are intended for testing, experimentation and debug.               */
 /* They may not be used in a production environment                                 */
 /* Interface stability is not guaranteed: options may be removed or changed freely  */
-/** **********************************************************************************/
+/** ******************************************************************************* */
 private[kusto] object KustoDebugOptions {
   private val kustoOptionNames = collection.mutable.Set[String]()
 

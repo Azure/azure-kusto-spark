@@ -3,7 +3,6 @@ package com.microsoft.kusto.spark.utils
 import com.microsoft.azure.storage.CloudStorageAccount
 import com.microsoft.azure.storage.blob.CloudBlockBlob
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
-import scala.collection.JavaConversions._
 
 object KustoBlobStorageUtils {
   def deleteFromBlob(account: String, directory: String, container: String, secret: String, keyIsSas: Boolean = false): Unit = {
@@ -38,7 +37,7 @@ object KustoBlobStorageUtils {
     val blobContainer = blobClient.getContainerReference(container)
     val blobsWithPrefix = blobContainer.listBlobs(directory)
 
-    blobsWithPrefix.foreach(blob => {
+    blobsWithPrefix.forEach(blob => {
       val cloudBlob = blobContainer.getBlockBlobReference(new CloudBlockBlob(blob.getUri).getName)
       cloudBlob.deleteIfExists()
     })

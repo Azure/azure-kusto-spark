@@ -49,6 +49,6 @@ private[kusto] object KustoAzureFsSetupCache {
   }
 
   private[kusto] def checkIfRefreshNeeded(utcNow: DateTime) = {
-    new Period(utcNow, lastRefresh).getMinutes > KustoConstants.sparkSettingsRefreshMinutes
+    new Period(utcNow, lastRefresh).getMinutes > KustoConstants.SparkSettingsRefreshMinutes
   }
 }

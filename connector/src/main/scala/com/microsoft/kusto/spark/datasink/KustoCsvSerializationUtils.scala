@@ -10,7 +10,7 @@ import org.apache.spark.sql.types.DataTypes._
 import org.apache.spark.sql.types.StructType
 
 private[kusto] class KustoCsvSerializationUtils (val schema: StructType, timeZone: String){
-  private[kusto] val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone(timeZone))
+  private[kusto] val DateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone(timeZone))
 
   private[kusto] def convertRow(row: InternalRow) = {
     val values = new Array[String](row.numFields)
@@ -19,7 +19,7 @@ private[kusto] class KustoCsvSerializationUtils (val schema: StructType, timeZon
       val dataType = schema.fields(i).dataType
       values(i) = dataType match {
           case DateType => DateTimeUtils.toJavaDate(row.getInt(i)).toString
-          case TimestampType => dateFormat.format(DateTimeUtils.toJavaTimestamp(row.getLong(i)))
+          case TimestampType => DateFormat.format(DateTimeUtils.toJavaTimestamp(row.getLong(i)))
           case _ => row.get(i, dataType).toString
         }
     }
@@ -42,7 +42,7 @@ private[kusto] object KustoCsvMapper {
         val mapping = new json.JSONObject()
         mapping.put("Name", field.name)
         mapping.put("Ordinal", i)
-        mapping.put("DataType", DataTypeMapping.sparkTypeToKustoTypeMap.getOrElse(dataType, StringType))
+        mapping.put("DataType", DataTypeMapping.SparkTypeToKustoTypeMap.getOrElse(dataType, StringType))
 
         csvMapping.put(mapping)
       }

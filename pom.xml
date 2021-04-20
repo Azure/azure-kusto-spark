@@ -9,15 +9,27 @@
     <version>${revision}</version>
     <properties>
         <revision>2.6.0</revision>
+
+        <!-- Spark dependencies -->
         <scala.version.major>2.12</scala.version.major>
         <scala.version.minor>11</scala.version.minor>
         <specs2.version>3.6.5</specs2.version>
         <spark.version.major>3.0</spark.version.major>
         <spark.version.minor>1</spark.version.minor>
-        <kusto-sdk.version>2.6.0</kusto-sdk.version>
+
+        <!-- other dependencies -->
+        <kusto-sdk.version>2.7.0</kusto-sdk.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven-source-plugin.version>3.0.1</maven-source-plugin.version>
         <maven-javadoc-plugin.version>3.1.0</maven-javadoc-plugin.version>
+        <azure-storage.version>8.6.5</azure-storage.version>
+        <keyvault-secrets.version>4.1.5</keyvault-secrets.version>
+        <azure-identity.version>1.2.4</azure-identity.version>
+        <commons-lang3.version>3.9</commons-lang3.version>
+        <fasterxml.jackson.version>[2.11.0,2.12.0)</fasterxml.jackson.version>
+        <slf4j.version>1.8.0-beta4</slf4j.version>
+        <joda-time.version>2.10.2</joda-time.version>
+        <json.version>20201115</json.version>
     </properties>
 
     <inceptionYear>2018</inceptionYear>

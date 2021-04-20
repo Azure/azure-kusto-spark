@@ -113,7 +113,7 @@ class DefaultSource extends CreatableRelationProvider
           parameters.get(KustoSourceOptions.KUSTO_BLOB_STORAGE_ENDPOINT_SUFFIX)))
       }
 
-    val timeout = new FiniteDuration(parameters.getOrElse(KustoSourceOptions.KUSTO_TIMEOUT_LIMIT, KCONST.defaultWaitingIntervalLongRunning).toLong, TimeUnit.SECONDS)
+    val timeout = new FiniteDuration(parameters.getOrElse(KustoSourceOptions.KUSTO_TIMEOUT_LIMIT, KCONST.DefaultWaitingIntervalLongRunning).toLong, TimeUnit.SECONDS)
     val readModeOption = parameters.get(KustoSourceOptions.KUSTO_READ_MODE)
     val readMode: Option[ReadMode]  = if (readModeOption.isDefined){
       Some(ReadMode.withName(readModeOption.get))

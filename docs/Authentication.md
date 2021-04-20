@@ -58,7 +58,7 @@ For details, refer to [Databricks documentation](https://docs.databricks.com/use
  'keyVaultAppKey' - AAD application key for the application.
                                                                                              
 **The connector will look for the following secret names:**
-
+![Import libraries](KeyVaultSecrets.png)
 ### Kusto Cluster Authentication 
  * **kustoAppId**
  AAD application (client) identifier.
