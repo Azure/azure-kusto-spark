@@ -49,7 +49,9 @@ object KustoDataSourceUtils {
   val DefaultDomainPostfix: String = props.getProperty("defaultDomainPostfix", "core.windows.net")
   val DefaultClusterSuffix: String = props.getProperty("defaultClusterSuffix", "kusto.windows.net")
   val AriaClustersProxy: String = props.getProperty("ariaClustersProxy", "https://kusto.aria.microsoft.com")
+  val PlayFabClustersProxy: String = props.getProperty("playFabProxy", "https://insights.playfab.com")
   val AriaClustersAlias: String = "Aria proxy"
+  val PlayFabClustersAlias: String = "PlayFab proxy"
 
   def setLoggingLevel(level: String): Unit = {
     setLoggingLevel(Level.toLevel(level))
@@ -273,6 +275,8 @@ object KustoDataSourceUtils {
   private[kusto] def getClusterNameFromUrlIfNeeded(cluster: String): String = {
     if (cluster.equals(AriaClustersProxy)) {
       AriaClustersAlias
+    } else if(cluster.equals(PlayFabClustersProxy)) {
+      PlayFabClustersAlias
     }
     else if (cluster.startsWith(EnginePrefix)) {
       if (!cluster.contains(".kusto.")) {
