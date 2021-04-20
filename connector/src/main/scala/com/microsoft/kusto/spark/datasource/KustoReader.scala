@@ -109,7 +109,7 @@ private[kusto] object KustoReader {
     val rdd = try {
       request.sparkSession.read.parquet(paths: _*).rdd
     } catch {
-      case ex: Exception =>
+      case ex: Exception => {
         // Check whether the result is empty, causing an IO exception on reading empty parquet file
         // We don't mind generating the filtered query again - it only happens upon exception
         val filteredQuery = KustoFilter.pruneAndFilter(request.schema, request.query, filtering)
@@ -120,6 +120,7 @@ private[kusto] object KustoReader {
         } else {
           throw ex
         }
+      }
     }
 
     KDSU.logInfo(myName, "Transaction data read from blob storage, paths:" + paths)

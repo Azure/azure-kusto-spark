@@ -401,6 +401,7 @@ object KustoDataSourceUtils {
       finalWork = (result: Option[KustoResultSetTable]) => {
         lastResponse = result
       }, maxWaitTimeBetweenCalls = ReadMaxWaitTime.toMillis.toInt)
+
     var success = true
     if (timeOut < FiniteDuration.apply(0, SECONDS)) {
       task.await()

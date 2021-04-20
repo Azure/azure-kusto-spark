@@ -1,4 +1,5 @@
 package com.microsoft.kusto.spark
+
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -10,7 +11,8 @@ import com.microsoft.kusto.spark.sql.extension.SparkExtension._
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.{SQLContext, SaveMode, SparkSession}
+import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode, SparkSession}
+import org.joda.time.DateTime
 import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
 import org.scalatest.{BeforeAndAfterAll, FlatSpec}
@@ -49,13 +51,16 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
 
   private val loggingLevel: Option[String] = Option(System.getProperty("logLevel"))
   if (loggingLevel.isDefined) KDSU.setLoggingLevel(loggingLevel.get)
+
   import spark.implicits._
 
   val rowId = new AtomicInteger(1)
+
   def newRow(): String = s"row-${rowId.getAndIncrement()}"
-  val expectedNumberOfRows: Int =  100
+
+  val expectedNumberOfRows: Int = 100
   val rows: immutable.IndexedSeq[(String, Int)] = (1 to expectedNumberOfRows).map(v => (newRow(), v))
-  val dfOrig = rows.toDF("name", "value")
+  val dfOrig: DataFrame = rows.toDF("name", "value")
 
   "KustoSource" should "execute a read query on Kusto cluster in single mode" taggedAs KustoE2E in {
     val table: String = System.getProperty(KustoSinkOptions.KUSTO_TABLE)
@@ -75,9 +80,9 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
     val table: String = System.getProperty(KustoSinkOptions.KUSTO_TABLE)
     val query: String = System.getProperty(KustoSourceOptions.KUSTO_QUERY, s"$table | where (toint(ColB) % 1 == 0)")
 
-//    val storageAccount: String = System.getProperty("storageAccount")
-//    val container: String = System.getProperty("container")
-//    val blobKey: String = System.getProperty("blobKey")
+    //    val storageAccount: String = System.getProperty("storageAccount")
+    //    val container: String = System.getProperty("container")
+    //    val blobKey: String = System.getProperty("blobKey")
     val blobSas: String = System.getProperty("blobSas")
 
     val conf: Map[String, String] = Map(
@@ -85,15 +90,15 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
       KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey,
       KustoSourceOptions.KUSTO_BLOB_STORAGE_SAS_URL -> blobSas
       //      KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME -> storageAccount,
-//      KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_KEY -> blobKey,
-//      KustoSourceOptions.KUSTO_BLOB_CONTAINER -> container
+      //      KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_KEY -> blobKey,
+      //      KustoSourceOptions.KUSTO_BLOB_CONTAINER -> container
     )
 
     spark.read.kusto(cluster, database, query, conf).show(20)
   }
 
   "KustoConnector" should "write to a kusto table and read it back in default mode" taggedAs KustoE2E in {
-     val table = KustoQueryUtils.simplifyName(s"KustoSparkReadWriteTest_${UUID.randomUUID()}")
+    val table = KustoQueryUtils.simplifyName(s"KustoSparkReadWriteTest_${UUID.randomUUID()}")
 
     // Create a new table.
     val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://$cluster.kusto.windows.net", appId, appKey, authority)
@@ -158,17 +163,19 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
 
     val df = spark.read.kusto("ohadprod.westeurope", database, table, conf)
 
+    val time = new DateTime()
     assert(df.count() == expectedNumberOfRows)
     assert(df.count() == expectedNumberOfRows)
 
-    val res3 = kustoAdminClient.execute(s""".show commands | where StartedOn > ago(2m)  | where CommandType ==
-      "DataExportToFile" | where Text has "$table"""")
-
-    val df2 = df.where($"value">50)
-    assert(df2.count() == 50)
+    val df2 = df.where(($"value").cast("Int") > 50)
+    assert(df2.collect().length == 50)
 
     // Should take up to another 10 seconds for .show commands to come up
-    Thread.sleep(10000)
+    Thread.sleep(5000 * 60)
+    val res3 = kustoAdminClient.execute(
+      s""".show commands | where StartedOn > datetime(${time.toString()})  | where
+                                        CommandType ==
+      "DataExportToFile" | where Text has "$table"""")
     assert(res3.getPrimaryResults.count() == 1)
   }
 }

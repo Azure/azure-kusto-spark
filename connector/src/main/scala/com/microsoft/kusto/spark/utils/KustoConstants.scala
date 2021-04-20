@@ -11,9 +11,9 @@ object KustoConstants {
   val DefaultBufferSize: Int = 16 * 1024
   val StorageExpiryMinutes: Int = 120
   val SparkSettingsRefreshMinutes: Int = 120
-  val OneKilo: Int = 1024
-  val OneMega: Int = OneKilo * 1024
-  val OneGiga: Int = OneMega * 1024
+  val OneKiloByte: Int = 1024
+  val OneMegaByte: Int = OneKiloByte * OneKiloByte
+  val OneGigaByte: Int = OneMegaByte * OneKiloByte
   // The restriction from kusto is 50000 rows but 5000 can still be really big
   val DirectQueryUpperBoundRows = 5000
   val TimeoutForCountCheck : FiniteDuration = 3 seconds

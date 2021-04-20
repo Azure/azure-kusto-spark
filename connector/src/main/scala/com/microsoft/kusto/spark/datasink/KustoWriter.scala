@@ -214,7 +214,7 @@ object KustoWriter {
     import parameters._
 
     val kustoClient = KustoClientCache.getClient(coordinates.clusterAlias, coordinates.clusterUrl, authentication)
-    val maxBlobSize = writeOptions.batchLimit * KCONST.OneMega
+    val maxBlobSize = writeOptions.batchLimit * KCONST.OneMegaByte
     //This blobWriter will be used later to write the rows to blob storage from which it will be ingested to Kusto
     val initialBlobWriter: BlobWriteResource = createBlobWriter(coordinates, tmpTableName, kustoClient)
     val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone(writeOptions.timeZone))

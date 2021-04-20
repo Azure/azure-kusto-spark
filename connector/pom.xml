@@ -11,13 +11,12 @@
         <!--suppress MavenPropertyInParent -->
         <version>${revision}</version>
     </parent>
-
     <dependencies>
         <!-- Compile Scope -->
         <dependency>
             <groupId>com.fasterxml.jackson.module</groupId>
             <artifactId>jackson-module-scala_${scala.version.major}</artifactId>
-            <version>[2.11.0,2.12.0)</version>
+            <version>${fasterxml.jackson.version}</version>
             <exclusions>
                 <exclusion>
                     <artifactId>scala-library</artifactId>
@@ -28,7 +27,7 @@
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-lang3</artifactId>
-            <version>3.9</version>
+            <version>${commons-lang3.version}</version>
         </dependency>
         <dependency>
             <groupId>org.scala-lang</groupId>
@@ -108,7 +107,7 @@
         <dependency>
             <groupId>com.azure</groupId>
             <artifactId>azure-security-keyvault-secrets</artifactId>
-            <version>4.1.5</version>
+            <version>${keyvault-secrets.version}</version>
             <exclusions>
                 <exclusion>
                     <artifactId>azure-core-http-netty</artifactId>
@@ -123,7 +122,7 @@
         <dependency>
             <groupId>com.azure</groupId>
             <artifactId>azure-identity</artifactId>
-            <version>1.2.4</version>
+            <version>${azure-identity.version}</version>
             <exclusions>
                 <exclusion>
                     <artifactId>jackson-annotations</artifactId>
@@ -182,22 +181,12 @@
         <dependency>
             <groupId>org.json</groupId>
             <artifactId>json</artifactId>
-            <version>20201115</version>
+            <version>${json.version}</version>
         </dependency>
         <dependency>
             <groupId>joda-time</groupId>
             <artifactId>joda-time</artifactId>
-            <version>2.10.2</version>
-        </dependency>
-        <dependency>
-            <groupId>org.joda</groupId>
-            <artifactId>joda-convert</artifactId>
-            <version>2.2.1</version>
-        </dependency>
-        <dependency>
-            <groupId>commons-beanutils</groupId>
-            <artifactId>commons-beanutils</artifactId>
-            <version>1.9.4</version>
+            <version>${joda-time.version}</version>
         </dependency>
         <!-- Provided Scope -->
         <dependency>
@@ -243,7 +232,7 @@
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
-            <version>1.8.0-beta4</version>
+            <version>${slf4j.version}</version>
         </dependency>
 
         <!-- Test Scope -->
