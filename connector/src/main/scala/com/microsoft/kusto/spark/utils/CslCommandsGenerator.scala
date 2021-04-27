@@ -16,6 +16,15 @@ private[kusto] object CslCommandsGenerator {
        | summarize make_set(Tags)"""
   }
 
+  def generateFindCurrentTempTablesCommand(tempTablePrefixes: Array[String]): String = {
+    val whereClause = tempTablePrefixes.zipWithIndex.foldLeft[String](""){(res: String,cur:(String,Int))=>{
+      val (c,i) = cur
+      val state= s"${if(i==0) "" else "or"} TableName startswith '$c'"
+      res+state
+    } }
+    s""".show tables with (IncludeHiddenTables=true) |where $whereClause | project TableName """
+  }
+
   def generateDropTablesCommand(tables: String): String = {
     s".drop tables ($tables) ifexists"
   }
