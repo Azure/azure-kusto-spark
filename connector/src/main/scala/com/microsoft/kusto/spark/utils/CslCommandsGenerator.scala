@@ -16,30 +16,6 @@ private[kusto] object CslCommandsGenerator {
        | summarize make_set(Tags)"""
   }
 
-
-  // Not used. Here in case we prefer this approach
-//  def generateFindOldTemporaryTablesCommand2(database: String): String = {
-//    s""".show database $database extents metadata | where TableName startswith '$TempIngestionTablePrefix' | project TableName, maxDate = todynamic(ExtentMetadata).MaxDateTime | where maxDate > ago(1h)"""
-//  }
-
-  def generateFindOldTempTablesCommand(database: String,tempTablePrefixes: Array[String]): String = {
-    val whereClause = tempTablePrefixes.zipWithIndex.foldLeft[String](""){(res: String,cur:(String,Int))=>{
-      val (c,i) = cur
-      val state= s"${if(i==0) "" else "or"} EntityName startswith '$c'"
-      res+state
-    } }
-    s""".show journal | where Event == 'CREATE-TABLE' | where Database == '$database' | where $whereClause | where EventTimestamp < ago(3d) and EventTimestamp >ago(14d) | project EntityName """
-  }
-
-  def generateFindCurrentTempTablesCommand(tempTablePrefixes: Array[String]): String = {
-    val whereClause = tempTablePrefixes.zipWithIndex.foldLeft[String](""){(res: String,cur:(String,Int))=>{
-      val (c,i) = cur
-      val state= s"${if(i==0) "" else "or"} TableName startswith '$c'"
-      res+state
-    } }
-    s""".show tables with (IncludeHiddenTables=true) |where $whereClause | project TableName """
-  }
-
   def generateDropTablesCommand(tables: String): String = {
     s".drop tables ($tables) ifexists"
   }
@@ -146,6 +122,10 @@ private[kusto] object CslCommandsGenerator {
 
   def generateTableAlterRetentionPolicy(tmpTableName: String, period: String, recoverable: Boolean): String = {
     s""".alter table ${KustoQueryUtils.normalizeTableName(tmpTableName)} policy retention '{ "SoftDeletePeriod": "$period", "Recoverability":"${if (recoverable) "Enabled" else "Disabled"}" }' """
+  }
+
+  def generateTableAlterAutoDeletePolicy(tmpTableName: String, expiryDate: String): String = {
+    s""".alter table ${KustoQueryUtils.normalizeTableName(tmpTableName)} policy auto_delete @'{ "ExpiryDate": "$expiryDate","DeleteIfNotEmpty": true }' """
   }
 
   def generateShowTableMappingsCommand(tableName: String, kind: String): String = {

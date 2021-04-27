@@ -68,11 +68,10 @@ object KustoWriter {
     if (!shouldIngest) {
       KDSU.logInfo(myName, s"Ingestion skipped: Provided ingest-by tags are present in the destination table '$table'")
     } else {
-      kustoClient.cleanupTempTables(tableCoordinates)
-
       // KustoWriter will create a temporary table ingesting the data to it.
       // Only if all executors succeeded the table will be appended to the original destination table.
-      kustoClient.initializeTablesBySchema(tableCoordinates, tmpTableName, writeOptions.tableCreateOptions, data.schema, schemaShowCommandResult)
+      kustoClient.initializeTablesBySchema(tableCoordinates, tmpTableName, writeOptions.tableCreateOptions, data
+        .schema, schemaShowCommandResult, writeOptions.timeout)
       KDSU.logInfo(myName, s"Successfully created temporary table $tmpTableName, will be deleted after completing the operation")
 
       kustoClient.setMappingOnStagingTableIfNeeded(stagingTableIngestionProperties, table)
