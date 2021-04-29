@@ -85,7 +85,7 @@ All the options that can be use in the Kusto source are under the object KustoSo
  'timeoutLimit' - An integer number corresponding to the period in seconds after which the operation will timeout.
  This is an upper limit that may coexist with addition timeout limits as configured on Spark or Kusto clusters.
  
-    **Default:** '5400' (90 minutes)    
+    **Default:** '172000' (2 days)    
     
 * **KUSTO_CLIENT_REQUEST_PROPERTIES_JSON**:
   'clientRequestPropertiesJson' - A json representation for [ClientRequestProperties](https://github.com/Azure/azure-kusto-java/blob/master/data/src/main/java/com/microsoft/azure/kusto/data/ClientRequestProperties.java)
