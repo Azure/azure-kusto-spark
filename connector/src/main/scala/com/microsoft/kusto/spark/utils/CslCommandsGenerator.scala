@@ -1,9 +1,11 @@
 package com.microsoft.kusto.spark.utils
 
+import java.time.Instant
 import java.util
 
 import com.microsoft.kusto.spark.datasink.KustoWriter.TempIngestionTablePrefix
 import com.microsoft.kusto.spark.datasource.KustoStorageParameters
+
 import scala.collection.JavaConverters._
 
 private[kusto] object CslCommandsGenerator {
@@ -133,8 +135,8 @@ private[kusto] object CslCommandsGenerator {
     s""".alter table ${KustoQueryUtils.normalizeTableName(tmpTableName)} policy retention '{ "SoftDeletePeriod": "$period", "Recoverability":"${if (recoverable) "Enabled" else "Disabled"}" }' """
   }
 
-  def generateTableAlterAutoDeletePolicy(tmpTableName: String, expiryDate: String): String = {
-    s""".alter table ${KustoQueryUtils.normalizeTableName(tmpTableName)} policy auto_delete @'{ "ExpiryDate": "$expiryDate","DeleteIfNotEmpty": true }' """
+  def generateTableAlterAutoDeletePolicy(tmpTableName: String, expiryDate: Instant): String = {
+    s""".alter table ${KustoQueryUtils.normalizeTableName(tmpTableName)} policy auto_delete @'{"ExpiryDate": "${expiryDate.toString}","DeleteIfNotEmpty": true }' """
   }
 
   def generateShowTableMappingsCommand(tableName: String, kind: String): String = {

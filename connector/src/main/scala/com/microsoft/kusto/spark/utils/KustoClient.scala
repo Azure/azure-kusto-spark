@@ -74,13 +74,13 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
     }
 
     // Create a temporary table with the kusto or dataframe parsed schema with retention and delete set to after the
-    // write operation times out
+    // write operation times out. Engine recommended keeping the retention although we use auto delete.
     engineClient.execute(database, generateTempTableCreateCommand(tmpTableName, tmpTableSchema))
     engineClient.execute(database, generateTableAlterRetentionPolicy(tmpTableName,
       DurationFormatUtils.formatDuration(writeTimeout.toMillis, durationFormat,true),
       recoverable=false))
-    val instant = Instant.now.plusSeconds(writeTimeout.toSeconds.intValue())
-    engineClient.execute(database, generateTableAlterAutoDeletePolicy(tmpTableName, instant.toString))
+    val instant = Instant.now.plusSeconds(writeTimeout.toSeconds)
+    engineClient.execute(database, generateTableAlterAutoDeletePolicy(tmpTableName, instant))
   }
 
   def getTempBlobForIngestion: ContainerAndSas = {
