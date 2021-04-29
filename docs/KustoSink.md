@@ -84,7 +84,7 @@ that is using it. Please verify the following before using Kusto connector:
  * **KUSTO_TIMEOUT_LIMIT**:
    'timeoutLimit' - An integer number corresponding to the period in seconds after which the write operation will timeout.
    This is an upper limit that may coexist with addition timeout limits as configured on Spark or Kusto clusters.  
-   Default: '5400' (90 minutes)
+   Default: '172000' (2 days)
 
 * **KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON**:
     'sparkIngestionPropertiesJson' - A json representation of a `SparkIngestionProperties` (use `toString` to make a json of an instance).
