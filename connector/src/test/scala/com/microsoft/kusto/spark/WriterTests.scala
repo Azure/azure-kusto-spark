@@ -2,14 +2,15 @@ package com.microsoft.kusto.spark
 
 import java.io.{BufferedWriter, ByteArrayOutputStream, OutputStreamWriter}
 import java.nio.charset.StandardCharsets
-import java.sql.Date
+import java.sql.{Date, Timestamp}
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 import java.util
 import java.util.TimeZone
 import java.util.zip.GZIPOutputStream
 
 import com.microsoft.kusto.spark.datasink._
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
-import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
@@ -32,8 +33,6 @@ class WriterTests extends FlatSpec with Matchers {
   val sparkSession: SparkSession = SparkSession.builder().config(sparkConf).getOrCreate()
 
   def getDF(isNestedSchema: Boolean): DataFrame = {
-
-
     val customSchema = if (isNestedSchema) StructType(Array(StructField("Name", StringType, nullable = true), StructField("Number", IntegerType, nullable = true))) else null
     if (isNestedSchema) sparkSession.read.format("csv").option("header", "false").schema(customSchema).load("src/test/resources/ShortTestData/ShortTestData.csv")
     else sparkSession.read.format("json").option("header", "true").load("src/test/resources/TestData/json/TestDynamicFields.json")
@@ -42,12 +41,12 @@ class WriterTests extends FlatSpec with Matchers {
   "convertRowToCsv" should "convert the row as expected" in {
     val df: DataFrame = getDF(isNestedSchema = true)
     val dfRow: InternalRow = df.queryExecution.toRdd.collect().head
-    val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone("UTC"))
+
     val byteArrayOutputStream = new ByteArrayOutputStream()
     val streamWriter = new OutputStreamWriter(byteArrayOutputStream)
     val writer = new BufferedWriter(streamWriter)
     val csvWriter = CountingWriter(writer)
-    RowCSVWriterUtils.writeRowAsCSV(dfRow, df.schema, dateFormat, csvWriter)
+    RowCSVWriterUtils.writeRowAsCSV(dfRow, df.schema, TimeZone.getTimeZone("UTC").toZoneId, csvWriter)
     writer.flush()
     writer.close()
     byteArrayOutputStream.toString() shouldEqual "\"John,\"\" Doe\",1" + lineSep
@@ -56,14 +55,13 @@ class WriterTests extends FlatSpec with Matchers {
   "convertRowToCsv" should "convert the row as expected, including nested types." in {
     val df: DataFrame = getDF(isNestedSchema = false)
     val dfRow: InternalRow = df.queryExecution.toRdd.collect().head
-    val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone("UTC"))
     val expected = """"[true,false,null]","[1,2,3,null]",,"value","[""a"",""b"",""c"",null]","[[""a"",""b"",""c""],null]","{""bool"":true,""dict_ar"":[{""int"":1,""string"":""a""},{""int"":2,""string"":""b""}],""int"":1,""int_ar"":[1,2,3],""string"":""abc"",""string_ar"":[""a"",""b"",""c""]}"""".concat(lineSep)
 
     val byteArrayOutputStream = new ByteArrayOutputStream()
     val streamWriter = new OutputStreamWriter(byteArrayOutputStream)
     val writer = new BufferedWriter(streamWriter)
     var csvWriter = CountingWriter(writer)
-    RowCSVWriterUtils.writeRowAsCSV(dfRow, df.schema, dateFormat, csvWriter)
+    RowCSVWriterUtils.writeRowAsCSV(dfRow, df.schema, TimeZone.getTimeZone("UTC").toZoneId, csvWriter)
     writer.flush()
     val got = byteArrayOutputStream.toString()
 
@@ -74,13 +72,12 @@ class WriterTests extends FlatSpec with Matchers {
     val df: DataFrame = getDF(isNestedSchema = true)
     val dfRow: InternalRow = df.queryExecution.toRdd.collect().head
     val expectedSize = ("\"John,\"\" Doe\",1" + lineSep).getBytes(StandardCharsets.UTF_8).length
-    val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone("UTC"))
     val byteArrayOutputStream = new ByteArrayOutputStream()
     val streamWriter = new OutputStreamWriter(byteArrayOutputStream)
     val writer = new BufferedWriter(streamWriter)
     val csvWriter = CountingWriter(writer)
 
-    RowCSVWriterUtils.writeRowAsCSV(dfRow, df.schema, dateFormat, csvWriter)
+    RowCSVWriterUtils.writeRowAsCSV(dfRow, df.schema, TimeZone.getTimeZone("UTC").toZoneId, csvWriter)
     writer.flush()
     writer.close()
     csvWriter.getCounter shouldEqual expectedSize
@@ -142,8 +139,8 @@ class WriterTests extends FlatSpec with Matchers {
         "asd2" -> Row(Array("stringVal2\b\f")))
     )
 
-    // 2018-06-18 16:04:00.0 in GMT
-    val ts = new java.sql.Timestamp(1529337840000l)
+    val tz  = ZonedDateTime.parse("2018-06-18T15:00:00.123456789+03:00[Asia/Jerusalem]")
+    val ts = Timestamp.valueOf(tz.toLocalDateTime)
 
     val someDateData = List(
       Map("asd" -> Row(Date.valueOf("1991-09-07"), ts, false, java.math.BigDecimal.valueOf(1/100000.toDouble)))
@@ -212,35 +209,36 @@ class WriterTests extends FlatSpec with Matchers {
     val dfRows4 = someDecimalDf.queryExecution.toRdd.collect
     val dfRows5 = otherDecimalDf.queryExecution.toRdd.collect
 
-    val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone("GMT"))
-
     val byteArrayOutputStream = new ByteArrayOutputStream()
     val streamWriter = new OutputStreamWriter(byteArrayOutputStream)
     val writer = new BufferedWriter(streamWriter)
     val csvWriter = CountingWriter(writer)
 
-    RowCSVWriterUtils.writeRowAsCSV(dfRow, df.schema, dateFormat, csvWriter)
+    RowCSVWriterUtils.writeRowAsCSV(dfRow, df.schema, tz.getZone, csvWriter)
 
     writer.flush()
     val res1 = byteArrayOutputStream.toString
     res1 shouldEqual "\"{\"\"asd\"\":{\"\"arrayStrings\"\":[\"\"stringVal\\n\\r\\\\\\\"\"\"\"]},\"\"asd2\"\":{\"\"arrayStrings\"\":[\"\"stringVal2\\b\\f\"\"]}}\"" + lineSep
+    val sdf = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSSSS")
 
     byteArrayOutputStream.reset()
-    RowCSVWriterUtils.writeRowAsCSV(dfRow2, dateDf.schema, dateFormat, csvWriter)
+    RowCSVWriterUtils.writeRowAsCSV(dfRow2, dateDf.schema, tz.getZone, csvWriter)
     writer.flush()
     val res2 = byteArrayOutputStream.toString
-    res2 shouldEqual "\"{\"\"asd\"\":{\"\"date\"\":\"\"1991-09-07\"\",\"\"time\"\":\"\"2018-06-18T16:04:00.000Z\"\",\"\"booly\"\":false,\"\"deci\"\":\"\"0.00001000000000\"\"}}\"" + lineSep
+    res2 shouldEqual "\"{\"\"asd\"\":{\"\"date\"\":\"\"1991-09-07\"\"," +
+      s"""""time"":""${sdf.format(ts.toLocalDateTime)}"",""" +
+      "\"\"booly\"\":false,\"\"deci\"\":\"\"0.00001000000000\"\"}}\"" + lineSep
 
     byteArrayOutputStream.reset()
-    RowCSVWriterUtils.writeRowAsCSV(dfRows3(0), emptyArraysDf.schema, dateFormat, csvWriter)
-    RowCSVWriterUtils.writeRowAsCSV(dfRows3(1), emptyArraysDf.schema, dateFormat, csvWriter)
+    RowCSVWriterUtils.writeRowAsCSV(dfRows3(0), emptyArraysDf.schema, tz.getZone, csvWriter)
+    RowCSVWriterUtils.writeRowAsCSV(dfRows3(1), emptyArraysDf.schema, tz.getZone, csvWriter)
     writer.flush()
     val res3 = byteArrayOutputStream.toString
     res3 shouldEqual "\"{\"\"emptyArray\"\":[null,\"\"\"\"],\"\"emptyString\"\":\"\"\"\"}\"" + lineSep + "\"{\"\"emptyString\"\":\"\"\"\"}\"" + lineSep
 
     byteArrayOutputStream.reset()
     for(row<- dfRows4){
-      RowCSVWriterUtils.writeRowAsCSV(row, someDecimalDf.schema, dateFormat, csvWriter)
+      RowCSVWriterUtils.writeRowAsCSV(row, someDecimalDf.schema, tz.getZone, csvWriter)
     }
 
     writer.flush()
@@ -250,7 +248,7 @@ class WriterTests extends FlatSpec with Matchers {
 
     byteArrayOutputStream.reset()
     for(row<- dfRows5){
-      RowCSVWriterUtils.writeRowAsCSV(row, someDecimalDf.schema, dateFormat, csvWriter)
+      RowCSVWriterUtils.writeRowAsCSV(row, someDecimalDf.schema, tz.getZone, csvWriter)
     }
 
     writer.flush()
