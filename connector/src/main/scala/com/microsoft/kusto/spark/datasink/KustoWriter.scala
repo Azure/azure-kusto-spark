@@ -217,14 +217,14 @@ object KustoWriter {
     val maxBlobSize = writeOptions.batchLimit * KCONST.OneMegaByte
     //This blobWriter will be used later to write the rows to blob storage from which it will be ingested to Kusto
     val initialBlobWriter: BlobWriteResource = createBlobWriter(coordinates, tmpTableName, kustoClient)
-    val dateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone(writeOptions.timeZone))
+    val timeZone = TimeZone.getTimeZone(writeOptions.timeZone).toZoneId
 
     val ingestionTasks: util.ArrayList[Future[Unit]] = new util.ArrayList()
 
     // Serialize rows to ingest and send to blob storage.
     val lastBlobWriter = rows.foldLeft[BlobWriteResource](initialBlobWriter) {
       case (blobWriter, row) =>
-        RowCSVWriterUtils.writeRowAsCSV(row, schema, dateFormat, blobWriter.csvWriter)
+        RowCSVWriterUtils.writeRowAsCSV(row, schema, timeZone, blobWriter.csvWriter)
 
         val count = blobWriter.csvWriter.getCounter
         val shouldNotCommitBlockBlob =  count < maxBlobSize
