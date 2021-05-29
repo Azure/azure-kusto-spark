@@ -139,8 +139,8 @@ class WriterTests extends FlatSpec with Matchers {
         "asd2" -> Row(Array("stringVal2\b\f")))
     )
 
-    val tz  = ZonedDateTime.parse("2018-06-18T15:00:00.123456789+03:00[Asia/Jerusalem]")
-    val ts = Timestamp.valueOf(tz.toLocalDateTime)
+    val tz  = ZonedDateTime.parse("2018-06-18T15:00:00.123456789+04:00")
+    val ts = Timestamp.valueOf(tz.withZoneSameInstant(TimeZone.getDefault.toZoneId).toLocalDateTime)
 
     val someDateData = List(
       Map("asd" -> Row(Date.valueOf("1991-09-07"), ts, false, java.math.BigDecimal.valueOf(1/100000.toDouble)))
@@ -226,7 +226,7 @@ class WriterTests extends FlatSpec with Matchers {
     writer.flush()
     val res2 = byteArrayOutputStream.toString
     res2 shouldEqual "\"{\"\"asd\"\":{\"\"date\"\":\"\"1991-09-07\"\"," +
-      s"""""time"":""${sdf.format(ts.toLocalDateTime)}"",""" +
+      s"""""time"":""${sdf.format(ts.toInstant.atZone(tz.getZone))}"",""" +
       "\"\"booly\"\":false,\"\"deci\"\":\"\"0.00001000000000\"\"}}\"" + lineSep
 
     byteArrayOutputStream.reset()
