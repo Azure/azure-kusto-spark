@@ -83,6 +83,7 @@ class KustoSinkBatchE2E extends FlatSpec with BeforeAndAfterAll{
 
     val dataTypesRows: immutable.IndexedSeq[(String, Int, java.sql.Date, Boolean, Short, Byte, Float ,java.sql.Timestamp, Double, java.math.BigDecimal, Long)] = (1 to expectedNumberOfRows).map(v => newAllDataTypesRow(v))
     val dfOrig = dataTypesRows.toDF("String", "Int", "Date", "Boolean", "short", "Byte", "floatie", "Timestamp", "Double", "BigDecimal", "Long")
+    sqlContext.sql("select current_timestamp()").show(false)
 
     dfOrig.write
       .format("com.microsoft.kusto.spark.datasource")
