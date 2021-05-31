@@ -36,8 +36,9 @@ object RowCSVWriterUtils {
       writer.writeStringField(json)
     }
   }
-  private def tss (l:Long, timeZone: ZoneId) ={
-    LocalDateTime.ofInstant(Instant.EPOCH.plus(l, ChronoUnit.MICROS), timeZone).toString
+
+  private def getLocalDateTimeFromTimestampWithZone (timestamp:Long, timeZone: ZoneId) ={
+    LocalDateTime.ofInstant(Instant.EPOCH.plus(timestamp, ChronoUnit.MICROS), timeZone)
   }
 
   // This method does not check for null at the current row idx and should be checked before !
@@ -46,7 +47,8 @@ object RowCSVWriterUtils {
     dataType match {
       case StringType => writeStringFromUTF8(row.getUTF8String(fieldIndexInRow), writer)
       case DateType => writer.writeStringField(DateTimeUtils.toJavaDate(row.getInt(fieldIndexInRow)).toString)
-      case TimestampType => writer.writeStringField(tss(row.getLong(fieldIndexInRow), timeZone))
+      case TimestampType => writer.writeStringField(getLocalDateTimeFromTimestampWithZone(row.getLong
+        (fieldIndexInRow), timeZone).toString)
       case BooleanType => writer.write(row.getBoolean(fieldIndexInRow).toString)
       case structType: StructType => writeJsonField(convertStructToJson(row.getStruct(fieldIndexInRow, structType.length),
         structType, timeZone), writer, nested)
