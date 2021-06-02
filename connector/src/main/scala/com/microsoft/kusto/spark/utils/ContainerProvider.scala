@@ -2,7 +2,7 @@ package com.microsoft.kusto.spark.utils
 
 import com.microsoft.azure.kusto.data.Client
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
-import org.joda.time.{DateTime, DateTimeZone, Period}
+import org.joda.time.{DateTime, DateTimeZone, Period, PeriodType}
 
 import scala.collection.JavaConverters._
 
@@ -25,7 +25,9 @@ class ContainerProvider[A](val dmClient: Client, val clusterAlias: String, val c
 
   def getAllContainers: Seq[A] = {
     if (storageUris.isEmpty ||
-      new Period(lastRefresh, new DateTime(DateTimeZone.UTC)).toStandardMinutes.getMinutes > KustoConstants.StorageExpiryMinutes){
+      new Period(lastRefresh, new DateTime(DateTimeZone.UTC), PeriodType.minutes()).getMinutes >
+        KustoConstants
+        .StorageExpiryMinutes){
       refresh
     }
     storageUris

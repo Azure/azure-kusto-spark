@@ -8,7 +8,7 @@
     <packaging>pom</packaging>
     <version>${revision}</version>
     <properties>
-        <revision>2.7.3</revision>
+        <revision>2.7.4</revision>
 
         <!-- Spark dependencies -->
         <scala.version.major>2.12</scala.version.major>
