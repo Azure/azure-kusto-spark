@@ -178,7 +178,7 @@ df.write
  
  ### Command Syntax
   ```scala
-  <queue-name> = <streaming-source-name>
+  <query-name> = <streaming-source-name>
    .writeStream
    .format("com.microsoft.kusto.spark.datasink.KustoSinkProvider")
    .options(Map(
