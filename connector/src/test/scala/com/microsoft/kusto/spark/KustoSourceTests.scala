@@ -90,8 +90,6 @@ class KustoSourceTests extends FlatSpec with MockFactory with Matchers with Befo
 
     assert(ingestUrl.equals(AliasAndAuth(alias,engineUrl,null).ingestUri))
 
-    val engine2 = KDSU.getEngineUrlFromAliasIfNeeded(ingestUrl)
-    assert(engine2.equals(engineUrl))
   }
 
   "KustoDataSource" should "match cluster custom domain url or aria old cluster" in {

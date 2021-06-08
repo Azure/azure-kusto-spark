@@ -6,13 +6,14 @@ import java.util.StringJoiner
 import java.util.concurrent.TimeUnit
 
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
-import com.microsoft.azure.kusto.data.{Client, ClientFactory, ClientRequestProperties, KustoResultSetTable}
+import com.microsoft.azure.kusto.data.{Client, ClientFactory, KustoResultSetTable}
 import com.microsoft.azure.kusto.ingest.result.{IngestionStatus, OperationStatus}
 import com.microsoft.azure.kusto.ingest.{IngestClient, IngestClientFactory, IngestionProperties}
 import com.microsoft.azure.storage.StorageException
 import com.microsoft.kusto.spark.common.KustoCoordinates
-import com.microsoft.kusto.spark.datasink.KustoWriter.DelayPeriodBetweenCalls
-import com.microsoft.kusto.spark.datasink.{PartitionResult, SinkTableCreationMode, SparkIngestionProperties, WriteOptions}
+import com.microsoft.kusto.spark.datasink.KustoWriter.{DelayPeriodBetweenCalls, LegacyTempIngestionTablePrefix, TempIngestionTablePrefix}
+import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
+import com.microsoft.kusto.spark.datasink.{PartitionResult, SinkTableCreationMode, SparkIngestionProperties}
 import com.microsoft.kusto.spark.datasource.KustoStorageParameters
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.KustoDataSourceUtils.extractSchemaFromResultTable
@@ -26,6 +27,7 @@ import shaded.parquet.org.codehaus.jackson.map.ObjectMapper
 
 import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{Await, Future}
 
 class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuilder, val ingestKcsb: ConnectionStringBuilder) {
@@ -41,13 +43,12 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
 
   private val myName = this.getClass.getSimpleName
   private val durationFormat = "dd:HH:mm:ss"
-
   def initializeTablesBySchema(tableCoordinates: KustoCoordinates,
                                tmpTableName: String,
+                               tableCreation: SinkTableCreationMode = SinkTableCreationMode.FailIfNotExist,
                                schema: StructType,
                                schemaShowCommandResult: KustoResultSetTable,
-                               writeOptions: WriteOptions,
-                               crp: ClientRequestProperties): Unit = {
+                               writeTimeout: FiniteDuration): Unit = {
 
     var tmpTableSchema: String = ""
     val database = tableCoordinates.database
@@ -55,7 +56,7 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
 
     if (schemaShowCommandResult.count() == 0) {
       // Table Does not exist
-      if (writeOptions.tableCreateOptions == SinkTableCreationMode.FailIfNotExist) {
+      if (tableCreation == SinkTableCreationMode.FailIfNotExist) {
         throw new RuntimeException(s"Table '$table' doesn't exist in database '$database', cluster '${tableCoordinates.clusterAlias} and tableCreateOptions is set to FailIfNotExist.")
       } else {
         // Parse dataframe schema and create a destination table with that schema
@@ -65,7 +66,7 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
           tableSchemaBuilder.add(s"['${field.name}']:$fieldType")
         }
         tmpTableSchema = tableSchemaBuilder.toString
-        engineClient.execute(database, generateTableCreateCommand(table, tmpTableSchema), crp)
+        engineClient.execute(database, generateTableCreateCommand(table, tmpTableSchema))
       }
     } else {
       // Table exists. Parse kusto table schema and check if it matches the dataframes schema
@@ -74,12 +75,12 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
 
     // Create a temporary table with the kusto or dataframe parsed schema with retention and delete set to after the
     // write operation times out. Engine recommended keeping the retention although we use auto delete.
-    engineClient.execute(database, generateTempTableCreateCommand(tmpTableName, tmpTableSchema), crp)
+    engineClient.execute(database, generateTempTableCreateCommand(tmpTableName, tmpTableSchema))
     engineClient.execute(database, generateTableAlterRetentionPolicy(tmpTableName,
-      DurationFormatUtils.formatDuration(writeOptions.autoCleanupTime.toMillis, durationFormat, true),
-      recoverable = false), crp)
-    val instant = Instant.now.plusSeconds(writeOptions.autoCleanupTime.toSeconds)
-    engineClient.execute(database, generateTableAlterAutoDeletePolicy(tmpTableName, instant), crp)
+      DurationFormatUtils.formatDuration(writeTimeout.toMillis, durationFormat,true),
+      recoverable=false))
+    val instant = Instant.now.plusSeconds(writeTimeout.toSeconds)
+    engineClient.execute(database, generateTableAlterAutoDeletePolicy(tmpTableName, instant))
   }
 
   def getTempBlobForIngestion: ContainerAndSas = {
@@ -95,15 +96,14 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
                                                            kustoAdminClient: Client,
                                                            tmpTableName: String,
                                                            partitionsResults: CollectionAccumulator[PartitionResult],
-                                                           writeOptions: WriteOptions,
+                                                           timeout: FiniteDuration,
+                                                           requestId: String,
                                                            ingestIfNotExistsTags: util.ArrayList[String],
-                                                           crp: ClientRequestProperties
-                                                          ): Unit = {
+                                                           isAsync: Boolean = false): Unit = {
     import coordinates._
 
     val mergeTask = Future {
-      KDSU.logInfo(myName, s"Polling on ingestion results for requestId: ${writeOptions.requestId}, will move data to " +
-        s"destination table when finished")
+      KDSU.logInfo(myName, s"Polling on ingestion results for requestId: $requestId, will move data to destination table when finished")
 
       try {
         partitionsResults.value.asScala.foreach {
@@ -116,18 +116,17 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
                   finalRes
                 } catch {
                   case _: StorageException =>
-                    KDSU.logWarn(myName, s"Failed to fetch operation status transiently - will keep polling. RequestId: ${writeOptions.requestId}")
+                    KDSU.logWarn(myName, s"Failed to fetch operation status transiently - will keep polling. RequestId: $requestId")
                     None
-                  case e: Exception => KDSU.reportExceptionAndThrow(myName, e, s"Failed to fetch operation status. RequestId: ${writeOptions.requestId}"); None
+                  case e: Exception => KDSU.reportExceptionAndThrow(myName, e, s"Failed to fetch operation status. RequestId: $requestId"); None
                 }
               },
               0,
               DelayPeriodBetweenCalls,
-              (writeOptions.timeout.toMillis / DelayPeriodBetweenCalls + 5).toInt,
+              (timeout.toMillis / DelayPeriodBetweenCalls + 5).toInt,
               res => res.isDefined && res.get.status == OperationStatus.Pending,
               res => finalRes = res,
-              maxWaitTimeBetweenCalls = KDSU.WriteMaxWaitTime.toMillis.toInt)
-               .await(writeOptions.timeout.toMillis, TimeUnit.MILLISECONDS)
+              maxWaitTimeBetweenCalls = KDSU.WriteMaxWaitTime.toMillis.toInt).await(timeout.toMillis, TimeUnit.MILLISECONDS)
 
             if (finalRes.isDefined) {
               finalRes.get.status match {
@@ -155,17 +154,15 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
           // Protect tmp table from merge/rebuild and move data to the table requested by customer. This operation is atomic.
           // We are using the ingestIfNotExists Tags here too (on top of the check at the start of the flow) so that if
           // several flows started together only one of them would ingest
-          kustoAdminClient.execute(database, generateTableAlterMergePolicyCommand(tmpTableName, allowMerge = false,
-            allowRebuild = false), crp)
-          val res = kustoAdminClient.execute(database, generateTableMoveExtentsCommand(tmpTableName, table.get,
-            ingestIfNotExistsTags), crp).getPrimaryResults
+          kustoAdminClient.execute(database, generateTableAlterMergePolicyCommand(tmpTableName, allowMerge = false, allowRebuild = false))
+          val res = kustoAdminClient.execute(database, generateTableMoveExtentsCommand(tmpTableName, table.get, ingestIfNotExistsTags)).getPrimaryResults
           if (!res.next()) {
             // Extents that were moved are returned by move extents command
             KDSU.logInfo(myName, s"Ingestion skipped: Provided ingest-by tags are present in the destination table '$table'")
           }
-          KDSU.logInfo(myName, s"write to Kusto table '${table.get}' finished successfully requestId: ${writeOptions.requestId} $batchIdIfExists")
+          KDSU.logInfo(myName, s"write to Kusto table '${table.get}' finished successfully requestId: $requestId $batchIdIfExists")
         } else {
-          KDSU.logWarn(myName, s"write to Kusto table '${table.get}' finished with no data written requestId: ${writeOptions.requestId} $batchIdIfExists")
+          KDSU.logWarn(myName, s"write to Kusto table '${table.get}' finished with no data written requestId: $requestId $batchIdIfExists")
         }
       } catch {
         case ex: Exception =>
@@ -175,29 +172,27 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
             "Trying to poll on pending ingestions", coordinates.clusterUrl, coordinates.database, coordinates.table.getOrElse("Unspecified table name")
           )
       } finally {
-        cleanupIngestionByproducts(database, kustoAdminClient, tmpTableName, crp)
+        cleanupIngestionByproducts(database, kustoAdminClient, tmpTableName)
       }
     }
 
-    if (!writeOptions.isAsync) {
-      Await.result(mergeTask, writeOptions.timeout)
+    if (!isAsync) {
+      Await.result(mergeTask, timeout)
     }
   }
 
-  private[kusto] def cleanupIngestionByproducts(database: String, kustoAdminClient: Client, tmpTableName: String,
-                                                crp: ClientRequestProperties): Unit = {
+  private[kusto] def cleanupIngestionByproducts(database: String, kustoAdminClient: Client, tmpTableName: String): Unit = {
     try {
-      kustoAdminClient.execute(database, generateTableDropCommand(tmpTableName), crp)
+      kustoAdminClient.execute(database, generateTableDropCommand(tmpTableName))
       KDSU.logInfo(myName, s"Temporary table '$tmpTableName' deleted successfully")
     }
     catch {
       case exception: Exception =>
-        KDSU.reportExceptionAndThrow(myName, exception, s"deleting temporary table $tmpTableName", database, shouldNotThrow = false)
+        KDSU.reportExceptionAndThrow(myName, exception, s"deleting temporary table $tmpTableName", database = database, shouldNotThrow = false)
     }
   }
 
-  private[kusto] def setMappingOnStagingTableIfNeeded(stagingTableIngestionProperties: IngestionProperties,
-                                                      originalTable: String, crp: ClientRequestProperties): Unit = {
+  private[kusto] def setMappingOnStagingTableIfNeeded(stagingTableIngestionProperties: IngestionProperties, originalTable: String): Unit = {
     val mapping = stagingTableIngestionProperties.getIngestionMapping
     val mappingReferenceName = mapping.getIngestionMappingReference
     if (StringUtils.isNotBlank(mappingReferenceName)) {
@@ -209,21 +204,19 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
       while (mappings.next && !found) {
         if (mappings.getString(0).equals(mappingReferenceName)) {
           val policyJson = mappings.getString(2).replace("\"", "'")
-          val cmd = generateCreateTableMappingCommand(stagingTableIngestionProperties.getTableName, mappingKind,
-            mappingReferenceName, policyJson)
-          engineClient.execute(stagingTableIngestionProperties.getDatabaseName, cmd, crp)
+          val c = generateCreateTableMappingCommand(stagingTableIngestionProperties.getTableName, mappingKind, mappingReferenceName, policyJson)
+          engineClient.execute(stagingTableIngestionProperties.getDatabaseName, c)
           found = true
         }
       }
     }
   }
 
-  def fetchTableExtentsTags(database: String, table: String, crp: ClientRequestProperties): KustoResultSetTable = {
+  def fetchTableExtentsTags(database: String, table: String): KustoResultSetTable = {
     engineClient.execute(database, CslCommandsGenerator.generateFetchTableIngestByTagsCommand(table)).getPrimaryResults
   }
 
-  def shouldIngestData(tableCoordinates: KustoCoordinates, ingestionProperties: Option[String],
-                       tableExists: Boolean, crp: ClientRequestProperties): Boolean = {
+  def shouldIngestData(tableCoordinates: KustoCoordinates, ingestionProperties: Option[String], tableExists: Boolean): Boolean = {
     var shouldIngest = true
 
     if (tableExists && ingestionProperties.isDefined) {
@@ -231,7 +224,7 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
       if (ingestIfNotExistsTags != null && !ingestIfNotExistsTags.isEmpty) {
         val ingestIfNotExistsTagsSet = ingestIfNotExistsTags.asScala.toSet
 
-        val res = fetchTableExtentsTags(tableCoordinates.database, tableCoordinates.table.get, crp)
+        val res = fetchTableExtentsTags(tableCoordinates.database, tableCoordinates.table.get)
         if (res.next()) {
           val tagsArray = res.getObject(0).asInstanceOf[JSONArray]
           for (i <- 0 until tagsArray.length) {

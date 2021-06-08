@@ -211,10 +211,7 @@ object KustoDataSourceUtils {
       case _: java.lang.IllegalArgumentException => throw new InvalidParameterException(s"KUSTO_WRITE_ENABLE_ASYNC is expecting either 'true' or 'false', got: '$isAsyncParam'")
     }
 
-    val timeout = new FiniteDuration(parameters.getOrElse(KustoSinkOptions.KUSTO_TIMEOUT_LIMIT, KCONST
-      .DefaultWaitingIntervalLongRunning).toInt, TimeUnit.SECONDS)
-    val autoCleanupTime = new FiniteDuration(parameters.getOrElse(KustoSinkOptions.KUSTO_STAGING_RESOURCES_CLEANUP, KCONST
-      .DefaultCleaningInterval).toInt, TimeUnit.SECONDS)
+    val timeout = new FiniteDuration(parameters.getOrElse(KustoSinkOptions.KUSTO_TIMEOUT_LIMIT, KCONST.DefaultWaitingIntervalLongRunning).toLong, TimeUnit.SECONDS)
     val requestId = parameters.getOrElse(KustoSinkOptions.KUSTO_REQUEST_ID, UUID.randomUUID().toString)
 
     val ingestionPropertiesAsJson = parameters.get(KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON)
@@ -227,8 +224,7 @@ object KustoDataSourceUtils {
       timeout,
       ingestionPropertiesAsJson,
       batchLimit,
-      requestId,
-      autoCleanupTime
+      requestId
     )
 
     val sourceParameters = parseSourceParameters(parameters)
@@ -298,13 +294,10 @@ object KustoDataSourceUtils {
 
   private[kusto] def getEngineUrlFromAliasIfNeeded(cluster: String): String = {
     if (cluster.startsWith(EnginePrefix)) {
-      val uri = new URI(cluster)
-      val host = uri.getHost
+      val host = new URI(cluster).getHost
       if (host.startsWith(IngestPrefix)) {
-        val startIdx = if (host.startsWith(IngestPrefix)) IngestPrefix.length else 0
         val uriBuilder = new URIBuilder()
-        uriBuilder.setHost(s"${host.substring(startIdx, host.indexOf(".kusto."))}.kusto.windows.net")
-        uriBuilder.setScheme("https").toString
+        uriBuilder.setHost(IngestPrefix + host).toString
       } else {
         cluster
       }
@@ -549,23 +542,23 @@ object KustoDataSourceUtils {
     else None
   }
 
-  private[kusto] def countRows(client: Client, query: String, database: String, crp: ClientRequestProperties): Int = {
-    val res = client.execute(database, generateCountQuery(query), crp).getPrimaryResults
+  private[kusto] def countRows(client: Client, query: String, database: String): Int = {
+    val res = client.execute(database, generateCountQuery(query)).getPrimaryResults
     res.next()
     res.getInt(0)
   }
 
-  private[kusto] def estimateRowsCount(client: Client, query: String, database: String, crp: ClientRequestProperties): Int = {
+  private[kusto] def estimateRowsCount(client: Client, query: String, database: String): Int = {
     var count = 0
     val estimationResult: util.List[AnyRef] = Await.result(Future {
-      val res = client.execute(database, generateEstimateRowsCountQuery(query), crp).getPrimaryResults
+      val res = client.execute(database, generateEstimateRowsCountQuery(query)).getPrimaryResults
       res.next()
       res.getCurrentRow
     }, KustoConstants.TimeoutForCountCheck)
     if (StringUtils.isBlank(estimationResult.get(1).toString)) {
       // Estimation can be empty for certain cases
       Await.result(Future {
-        val res = client.execute(database, generateCountQuery(query), crp).getPrimaryResults
+        val res = client.execute(database, generateCountQuery(query)).getPrimaryResults
         res.next()
         res.getInt(0)
       }, KustoConstants.TimeoutForCountCheck)
