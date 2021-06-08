@@ -61,7 +61,8 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
     if (readOptions.readMode.isEmpty){
       var count = 0
       try {
-        count = KDSU.estimateRowsCount(kustoClient, query, kustoCoordinates.database)
+        count = KDSU.
+          estimateRowsCount(kustoClient, query, kustoCoordinates.database, clientRequestProperties.orNull)
       }catch {
         // Assume count is high if estimation got timed out
         case e: Exception =>
@@ -161,6 +162,8 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
 
   override def insert(data: DataFrame, overwrite: Boolean): Unit = {
     KustoWriter.write(Some(0), data, kustoCoordinates, authentication, writeOptions =
-      WriteOptions.apply(timeout = new FiniteDuration(KustoConstants.DefaultWaitingIntervalLongRunning.toLong, TimeUnit.MINUTES)))
+      WriteOptions.apply(timeout = new FiniteDuration(KustoConstants.DefaultWaitingIntervalLongRunning.toInt,
+        TimeUnit.SECONDS), autoCleanupTime = new FiniteDuration(KustoConstants.DefaultCleaningInterval.toInt,
+        TimeUnit.SECONDS)))
   }
 }

@@ -5,8 +5,10 @@ import scala.concurrent.duration._
 object KustoConstants {
   // Setting high value to have no timeout on Await commands
   val DefaultWaitingIntervalLongRunning: String = (2 days).toSeconds.toString
+  val DefaultCleaningInterval: String = (7 days).toSeconds.toString
   val DefaultPeriodicSamplePeriod: FiniteDuration = 1 seconds
   val DefaultIngestionTaskTime: FiniteDuration = 20 seconds
+  val NoTimeout: String = (-1 seconds).toSeconds.toString
   val ClientName: String = KustoDataSourceUtils.clientName
   val DefaultBufferSize: Int = 16 * 1024
   val StorageExpiryMinutes: Int = 120
