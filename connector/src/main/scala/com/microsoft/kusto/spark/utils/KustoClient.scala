@@ -13,7 +13,7 @@ import com.microsoft.azure.storage.StorageException
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.KustoWriter.{DelayPeriodBetweenCalls, LegacyTempIngestionTablePrefix, TempIngestionTablePrefix}
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
-import com.microsoft.kusto.spark.datasink.{PartitionResult, SinkTableCreationMode, SparkIngestionProperties}
+import com.microsoft.kusto.spark.datasink.{PartitionResult, SinkTableCreationMode, SparkIngestionProperties, WriteOptions}
 import com.microsoft.kusto.spark.datasource.KustoStorageParameters
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.KustoDataSourceUtils.extractSchemaFromResultTable
@@ -43,12 +43,12 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
 
   private val myName = this.getClass.getSimpleName
   private val durationFormat = "dd:HH:mm:ss"
+
   def initializeTablesBySchema(tableCoordinates: KustoCoordinates,
                                tmpTableName: String,
-                               tableCreation: SinkTableCreationMode = SinkTableCreationMode.FailIfNotExist,
                                schema: StructType,
                                schemaShowCommandResult: KustoResultSetTable,
-                               writeTimeout: FiniteDuration): Unit = {
+                               writeOptions: WriteOptions): Unit = {
 
     var tmpTableSchema: String = ""
     val database = tableCoordinates.database
@@ -56,7 +56,7 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
 
     if (schemaShowCommandResult.count() == 0) {
       // Table Does not exist
-      if (tableCreation == SinkTableCreationMode.FailIfNotExist) {
+      if (writeOptions.tableCreateOptions == SinkTableCreationMode.FailIfNotExist) {
         throw new RuntimeException(s"Table '$table' doesn't exist in database '$database', cluster '${tableCoordinates.clusterAlias} and tableCreateOptions is set to FailIfNotExist.")
       } else {
         // Parse dataframe schema and create a destination table with that schema
@@ -77,9 +77,9 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
     // write operation times out. Engine recommended keeping the retention although we use auto delete.
     engineClient.execute(database, generateTempTableCreateCommand(tmpTableName, tmpTableSchema))
     engineClient.execute(database, generateTableAlterRetentionPolicy(tmpTableName,
-      DurationFormatUtils.formatDuration(writeTimeout.toMillis, durationFormat,true),
+      DurationFormatUtils.formatDuration(writeOptions.autoCleanupTime.toMillis, durationFormat,true),
       recoverable=false))
-    val instant = Instant.now.plusSeconds(writeTimeout.toSeconds)
+    val instant = Instant.now.plusSeconds(writeOptions.autoCleanupTime.toSeconds)
     engineClient.execute(database, generateTableAlterAutoDeletePolicy(tmpTableName, instant))
   }
 

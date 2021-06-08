@@ -211,7 +211,10 @@ object KustoDataSourceUtils {
       case _: java.lang.IllegalArgumentException => throw new InvalidParameterException(s"KUSTO_WRITE_ENABLE_ASYNC is expecting either 'true' or 'false', got: '$isAsyncParam'")
     }
 
-    val timeout = new FiniteDuration(parameters.getOrElse(KustoSinkOptions.KUSTO_TIMEOUT_LIMIT, KCONST.DefaultWaitingIntervalLongRunning).toLong, TimeUnit.SECONDS)
+    val timeout = new FiniteDuration(parameters.getOrElse(KustoSinkOptions.KUSTO_TIMEOUT_LIMIT, KCONST
+      .DefaultWaitingIntervalLongRunning).toInt, TimeUnit.SECONDS)
+    val autoCleanupTime = new FiniteDuration(parameters.getOrElse(KustoSinkOptions.KUSTO_STAGING_RESOURCES_CLEANUP, KCONST
+      .DefaultCleaningInterval).toInt, TimeUnit.SECONDS)
     val requestId = parameters.getOrElse(KustoSinkOptions.KUSTO_REQUEST_ID, UUID.randomUUID().toString)
 
     val ingestionPropertiesAsJson = parameters.get(KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON)
@@ -224,7 +227,8 @@ object KustoDataSourceUtils {
       timeout,
       ingestionPropertiesAsJson,
       batchLimit,
-      requestId
+      requestId,
+      autoCleanupTime
     )
 
     val sourceParameters = parseSourceParameters(parameters)
