@@ -213,7 +213,7 @@ object KustoDataSourceUtils {
 
     val timeout = new FiniteDuration(parameters.getOrElse(KustoSinkOptions.KUSTO_TIMEOUT_LIMIT, KCONST
       .DefaultWaitingIntervalLongRunning).toInt, TimeUnit.SECONDS)
-    val autoCleanupTime = new FiniteDuration(parameters.getOrElse(KustoSinkOptions.KUSTO_STAGING_RESOURCES_CLEANUP, KCONST
+    val autoCleanupTime = new FiniteDuration(parameters.getOrElse(KustoSinkOptions.KUSTO_STAGING_RESOURCE_AUTO_CLEANUP_TIMEOUT, KCONST
       .DefaultCleaningInterval).toInt, TimeUnit.SECONDS)
     val requestId = parameters.getOrElse(KustoSinkOptions.KUSTO_REQUEST_ID, UUID.randomUUID().toString)
 
