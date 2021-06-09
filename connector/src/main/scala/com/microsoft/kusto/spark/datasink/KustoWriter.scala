@@ -70,8 +70,8 @@ object KustoWriter {
     } else {
       // KustoWriter will create a temporary table ingesting the data to it.
       // Only if all executors succeeded the table will be appended to the original destination table.
-      kustoClient.initializeTablesBySchema(tableCoordinates, tmpTableName, writeOptions.tableCreateOptions, data
-        .schema, schemaShowCommandResult, writeOptions.timeout)
+      kustoClient.initializeTablesBySchema(tableCoordinates, tmpTableName, data
+        .schema, schemaShowCommandResult, writeOptions)
       KDSU.logInfo(myName, s"Successfully created temporary table $tmpTableName, will be deleted after completing the operation")
 
       kustoClient.setMappingOnStagingTableIfNeeded(stagingTableIngestionProperties, table)

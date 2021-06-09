@@ -33,6 +33,10 @@ object KustoSinkOptions extends KustoOptions{
   // partition. Kusto's ingestion also aggregates data, default suggested by Kusto is 1GB but here we suggest to cut
   // it at 100MB to adjust it to spark pulling of data.
   val KUSTO_CLIENT_BATCHING_LIMIT: String = newOption("clientBatchingLimit")
+
+  // An integer number corresponding to the period in seconds after which the staging resources used for the writing
+  // are cleaned if they weren't cleaned at the end of the run
+  val KUSTO_STAGING_RESOURCE_AUTO_CLEANUP_TIMEOUT: String = newOption("stagingResourcesAutoCleanupTimeout")
 }
 
 object SinkTableCreationMode extends Enumeration {
@@ -43,7 +47,9 @@ object SinkTableCreationMode extends Enumeration {
 case class WriteOptions(tableCreateOptions: SinkTableCreationMode.SinkTableCreationMode = SinkTableCreationMode.FailIfNotExist,
                         isAsync: Boolean = false,
                         writeResultLimit: String = KustoSinkOptions.NONE_RESULT_LIMIT,
-                        timeZone: String = "UTC", timeout: FiniteDuration,
+                        timeZone: String = "UTC",
+                        timeout: FiniteDuration,
                         IngestionProperties: Option[String] = None,
                         batchLimit: Int = 100,
-                        requestId: String = UUID.randomUUID().toString)
+                        requestId: String = UUID.randomUUID().toString,
+                        autoCleanupTime: FiniteDuration)
