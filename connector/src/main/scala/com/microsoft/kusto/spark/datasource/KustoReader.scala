@@ -113,7 +113,8 @@ private[kusto] object KustoReader {
         // Check whether the result is empty, causing an IO exception on reading empty parquet file
         // We don't mind generating the filtered query again - it only happens upon exception
         val filteredQuery = KustoFilter.pruneAndFilter(request.schema, request.query, filtering)
-        val count = KDSU.countRows(kustoClient, filteredQuery, request.kustoCoordinates.database)
+        val count = KDSU.countRows(kustoClient, filteredQuery, request.kustoCoordinates.database, request
+          .clientRequestProperties.orNull)
 
         if (count == 0) {
           request.sparkSession.emptyDataFrame.rdd
