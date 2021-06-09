@@ -34,8 +34,9 @@ object KustoSinkOptions extends KustoOptions{
   // it at 100MB to adjust it to spark pulling of data.
   val KUSTO_CLIENT_BATCHING_LIMIT: String = newOption("clientBatchingLimit")
 
-  // Time after which staging resources are cleaned if they weren't cleaned at the end of the run
-  val KUSTO_STAGING_RESOURCES_CLEANUP: String = newOption("stagingResourcesCleanup")
+  // An integer number corresponding to the period in seconds after which the staging resources used for the writing
+  // are cleaned if they weren't cleaned at the end of the run
+  val KUSTO_STAGING_RESOURCE_AUTO_CLEANUP_TIMEOUT: String = newOption("stagingResourcesAutoCleanupTimeout")
 }
 
 object SinkTableCreationMode extends Enumeration {
