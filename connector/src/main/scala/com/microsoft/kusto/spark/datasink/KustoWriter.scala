@@ -96,7 +96,7 @@ object KustoWriter {
         }
         asyncWork.onFailure {
           case exception: Exception =>
-            kustoClient.cleanupIngestionByproducts(
+            kustoClient.cleanupIngestionByProducts(
               tableCoordinates.database, kustoClient.engineClient, tmpTableName, crp)
             KDSU.reportExceptionAndThrow(myName, exception, "writing data", tableCoordinates.clusterUrl, tableCoordinates.database, table, shouldNotThrow = true)
             KDSU.logError(myName, "The exception is not visible in the driver since we're in async mode")
@@ -106,7 +106,7 @@ object KustoWriter {
           rdd.foreachPartition { rows => ingestRowsIntoTempTbl(rows, batchIdIfExists, partitionsResults) }
         catch {
           case exception: Exception =>
-            kustoClient.cleanupIngestionByproducts(
+            kustoClient.cleanupIngestionByProducts(
               tableCoordinates.database, kustoClient.engineClient, tmpTableName, crp)
             throw exception
         }

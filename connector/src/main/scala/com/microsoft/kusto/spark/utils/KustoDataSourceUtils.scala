@@ -298,10 +298,10 @@ object KustoDataSourceUtils {
 
   private[kusto] def getEngineUrlFromAliasIfNeeded(cluster: String): String = {
     if (cluster.startsWith(EnginePrefix)) {
-      val uri = new URI(cluster)
-      val host = uri.getHost
+
+      val host = new URI(cluster).getHost
       if (host.startsWith(IngestPrefix)) {
-        val startIdx = if (host.startsWith(IngestPrefix)) IngestPrefix.length else 0
+        val startIdx = IngestPrefix.length
         val uriBuilder = new URIBuilder()
         uriBuilder.setHost(s"${host.substring(startIdx, host.indexOf(".kusto."))}.kusto.windows.net")
         uriBuilder.setScheme("https").toString

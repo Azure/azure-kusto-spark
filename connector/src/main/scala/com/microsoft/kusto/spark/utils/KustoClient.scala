@@ -175,7 +175,7 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
             "Trying to poll on pending ingestions", coordinates.clusterUrl, coordinates.database, coordinates.table.getOrElse("Unspecified table name")
           )
       } finally {
-        cleanupIngestionByproducts(database, kustoAdminClient, tmpTableName, crp)
+        cleanupIngestionByProducts(database, kustoAdminClient, tmpTableName, crp)
       }
     }
 
@@ -184,7 +184,7 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
     }
   }
 
-  private[kusto] def cleanupIngestionByproducts(database: String, kustoAdminClient: Client, tmpTableName: String,
+  private[kusto] def cleanupIngestionByProducts(database: String, kustoAdminClient: Client, tmpTableName: String,
                                                 crp: ClientRequestProperties): Unit = {
     try {
       kustoAdminClient.execute(database, generateTableDropCommand(tmpTableName), crp)
@@ -219,7 +219,8 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
   }
 
   def fetchTableExtentsTags(database: String, table: String, crp: ClientRequestProperties): KustoResultSetTable = {
-    engineClient.execute(database, CslCommandsGenerator.generateFetchTableIngestByTagsCommand(table)).getPrimaryResults
+    engineClient.execute(database, CslCommandsGenerator.generateFetchTableIngestByTagsCommand(table), crp)
+      .getPrimaryResults
   }
 
   def shouldIngestData(tableCoordinates: KustoCoordinates, ingestionProperties: Option[String],
