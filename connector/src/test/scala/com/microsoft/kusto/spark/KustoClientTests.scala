@@ -2,7 +2,7 @@ package com.microsoft.kusto.spark
 
 import java.util
 
-import com.microsoft.azure.kusto.data.{KustoOperationResult, KustoResultSetTable}
+import com.microsoft.azure.kusto.data.{ClientRequestProperties, KustoOperationResult, KustoResultSetTable}
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.SparkIngestionProperties
@@ -16,7 +16,8 @@ import scala.collection.JavaConverters._
 @RunWith(classOf[JUnitRunner])
 class KustoClientTests extends FlatSpec  with Matchers{
   class KustoClientStub (override  val clusterAlias: String, override  val engineKcsb: ConnectionStringBuilder, override val ingestKcsb: ConnectionStringBuilder, var tagsToReturn: util.ArrayList[String]) extends KustoClient(clusterAlias, engineKcsb, ingestKcsb){
-    override def fetchTableExtentsTags(database: String, table: String): KustoResultSetTable = {
+    override def fetchTableExtentsTags(database: String, table: String, crp: ClientRequestProperties)
+    : KustoResultSetTable = {
       val response =
         s"""{"Tables":[{"TableName":"Table_0","Columns":[{"ColumnName":"Tags","DataType":"Object","ColumnType":"dynamic"}],
            "Rows":[[${if (tagsToReturn.isEmpty) "" else tagsToReturn.asScala.map(t=>"\""+t+"\"").asJava}]]}]}"""
@@ -29,17 +30,20 @@ class KustoClientTests extends FlatSpec  with Matchers{
     val stubbedClient = new KustoClientStub("", null, null, null)
     stubbedClient.tagsToReturn = emptyTags
     val props = new SparkIngestionProperties
-    val shouldIngestWhenNoTags = stubbedClient.shouldIngestData(KustoCoordinates("", "", "database", Some("table")), Some(props.toString), tableExists = true)
+    val shouldIngestWhenNoTags = stubbedClient.shouldIngestData(KustoCoordinates("", "", "database", Some("table")),
+      Some(props.toString), tableExists = true, null)
 
     val tags = new util.ArrayList[String]
     tags.add("tag")
     stubbedClient.tagsToReturn = tags
     props.ingestIfNotExists = new util.ArrayList[String](){{add("otherTag")}}
-    val shouldIngestWhenNoOverlap = stubbedClient.shouldIngestData(KustoCoordinates("", "","database", Some("table")), Some(props.toString), tableExists = true)
+    val shouldIngestWhenNoOverlap = stubbedClient.shouldIngestData(KustoCoordinates("", "","database", Some("table")),
+      Some(props.toString), tableExists = true, null)
     shouldIngestWhenNoOverlap shouldEqual true
 
     tags.add("otherTag")
-    val shouldIngestWhenOverlap = stubbedClient.shouldIngestData(KustoCoordinates("", "","database", Some("table")), Some(props.toString), tableExists = true)
+    val shouldIngestWhenOverlap = stubbedClient.shouldIngestData(KustoCoordinates("", "","database", Some("table")),
+      Some(props.toString), tableExists = true, null)
     shouldIngestWhenOverlap shouldEqual false
   }
 }

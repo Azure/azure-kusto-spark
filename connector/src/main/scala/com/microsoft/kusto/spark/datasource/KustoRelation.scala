@@ -61,7 +61,8 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
     if (readOptions.readMode.isEmpty){
       var count = 0
       try {
-        count = KDSU.estimateRowsCount(kustoClient, query, kustoCoordinates.database)
+        count = KDSU.
+          estimateRowsCount(kustoClient, query, kustoCoordinates.database, clientRequestProperties.orNull)
       }catch {
         // Assume count is high if estimation got timed out
         case e: Exception =>

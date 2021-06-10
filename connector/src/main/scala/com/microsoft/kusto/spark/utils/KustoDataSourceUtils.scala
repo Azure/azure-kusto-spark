@@ -298,10 +298,13 @@ object KustoDataSourceUtils {
 
   private[kusto] def getEngineUrlFromAliasIfNeeded(cluster: String): String = {
     if (cluster.startsWith(EnginePrefix)) {
+
       val host = new URI(cluster).getHost
       if (host.startsWith(IngestPrefix)) {
+        val startIdx = IngestPrefix.length
         val uriBuilder = new URIBuilder()
-        uriBuilder.setHost(IngestPrefix + host).toString
+        uriBuilder.setHost(s"${host.substring(startIdx, host.indexOf(".kusto."))}.kusto.windows.net")
+        uriBuilder.setScheme("https").toString
       } else {
         cluster
       }
@@ -546,23 +549,23 @@ object KustoDataSourceUtils {
     else None
   }
 
-  private[kusto] def countRows(client: Client, query: String, database: String): Int = {
-    val res = client.execute(database, generateCountQuery(query)).getPrimaryResults
+  private[kusto] def countRows(client: Client, query: String, database: String, crp: ClientRequestProperties): Int = {
+    val res = client.execute(database, generateCountQuery(query), crp).getPrimaryResults
     res.next()
     res.getInt(0)
   }
 
-  private[kusto] def estimateRowsCount(client: Client, query: String, database: String): Int = {
+  private[kusto] def estimateRowsCount(client: Client, query: String, database: String, crp: ClientRequestProperties): Int = {
     var count = 0
     val estimationResult: util.List[AnyRef] = Await.result(Future {
-      val res = client.execute(database, generateEstimateRowsCountQuery(query)).getPrimaryResults
+      val res = client.execute(database, generateEstimateRowsCountQuery(query), crp).getPrimaryResults
       res.next()
       res.getCurrentRow
     }, KustoConstants.TimeoutForCountCheck)
     if (StringUtils.isBlank(estimationResult.get(1).toString)) {
       // Estimation can be empty for certain cases
       Await.result(Future {
-        val res = client.execute(database, generateCountQuery(query)).getPrimaryResults
+        val res = client.execute(database, generateCountQuery(query), crp).getPrimaryResults
         res.next()
         res.getInt(0)
       }, KustoConstants.TimeoutForCountCheck)
