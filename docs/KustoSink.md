@@ -65,28 +65,7 @@ that is using it. Please verify the following before using Kusto connector:
  If set to 'CreateIfNotExist' and the table is not found in the requested cluster and database,
  it will be created, with a schema matching the DataFrame that is being written.
  
- * **KUSTO_WRITE_ENABLE_ASYNC**:
-  'writeEnableAsync' - If set to 'false' (default), writing to Kusto is done synchronously. This means:
-   * Once the operation completes successfully, it is guaranteed that that data was written to
- the requested table in Kusto
-   * Exceptions will propagate to the client
- 
-   This is the recommended option for typical use cases. However, using it results in blocking
- Spark driver for as long as the operation is running, up to several minutes. 
- To **avoid blocking Spark driver**, it is possible to execute Kusto 'write' operation in an 
- opportunistic mode as an asynchronous operation, this is recommended only for spark streaming.
-  The resulted behavior is the following:
-   * Spark driver is not blocked
-   * In a success scenario, all data will eventually be written, only if the job is left running.  Job success status **DOES NOT** mean data is committed yet.
-   * In a failure scenario, error messages are logged on Spark executor nodes, 
- but exceptions will not propagate to the client. 
- 
- * **KUSTO_TIMEOUT_LIMIT**:
-   'timeoutLimit' - An integer number corresponding to the period in seconds after which the write operation will timeout.
-   This is an upper limit that may coexist with addition timeout limits as configured on Spark or Kusto clusters.  
-   Default: '172000' (2 days)
-
-* **KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON**:
+ * **KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON**:
     'sparkIngestionPropertiesJson' - A json representation of a `SparkIngestionProperties` (use `toString` to make a json of an instance).
     
     Properties:
@@ -103,12 +82,22 @@ that is using it. Please verify the following before using Kusto connector:
     
     - flushImmediately: Boolean - use with caution - flushes the data immidiatly upon ingestion without aggregation.
 
-* **KUSTO_CLIENT_BATCHING_LIMIT**:
+ * **KUSTO_TIMEOUT_LIMIT**:
+   'timeoutLimit' - After the dataframe is processed a polling operation begins, this integer number corresponding to the period in seconds after which the polling
+   process will timeout eventually deleting the staging resources and fail the command. This is an upper limit that may coexist with addition timeout limits as configured on Spark or Kusto clusters.  
+   Default: '172000' (2 days)
+
+ * **KUSTO_STAGING_RESOURCE_AUTO_CLEANUP_TIMEOUT**:
+  'stagingResourcesAutoCleanupTimeout' - An integer number corresponding to the period in seconds after which the staging resources used for the writing
+   operation are cleaned if they weren't cleaned gracefully at the end of the run.
+   Default: '172000' (7 days)
+
+ * **KUSTO_CLIENT_BATCHING_LIMIT**:
     'clientBatchingLimit' - A limit indicating the size in MB of the aggregated data before ingested to Kusto. Note that 
     this is done for each partition. The ingestion Kusto also aggregates data, default suggested by Kusto is 1GB but here
     we suggest to cut it at 100MB to adjust it to spark pulling of data.
     
-* **KUSTO_REQUEST_ID**:
+ * **KUSTO_REQUEST_ID**:
     'requestId' - A unique identifier UUID for this ingestion command. Will be used as part of the staging table name as well
     , should be unique.
     
