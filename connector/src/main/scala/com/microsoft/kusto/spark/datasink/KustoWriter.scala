@@ -6,7 +6,7 @@ import java.nio.charset.StandardCharsets
 import java.security.InvalidParameterException
 import java.util
 import java.util.zip.GZIPOutputStream
-import java.util.{TimeZone, UUID}
+import java.util.{Calendar, TimeZone, UUID}
 
 import com.microsoft.azure.kusto.ingest.IngestionProperties.DATA_FORMAT
 import com.microsoft.azure.kusto.ingest.result.IngestionResult
@@ -17,12 +17,13 @@ import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator.generateTableGetSchemaAsRowsCommand
 import com.microsoft.kusto.spark.utils.{KustoClient, KustoClientCache, KustoQueryUtils, KustoConstants => KCONST, KustoDataSourceUtils => KDSU}
-import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.CollectionAccumulator
+import org.json.JSONObject
+import org.joda.time.DateTime
 
 import scala.collection.Iterator
 import scala.collection.JavaConverters._
@@ -55,12 +56,32 @@ object KustoWriter {
       "_" + table + batchId.map(b => s"_${b.toString}").getOrElse("") + "_" + writeOptions.requestId + UUID.randomUUID()
       .toString)
 
-    implicit val parameters: KustoWriteResource = KustoWriteResource(authentication, tableCoordinates, data.schema, writeOptions, tmpTableName)
-    val stagingTableIngestionProperties = getIngestionProperties(writeOptions, parameters)
-    val ingestIfNotExistsTags = stagingTableIngestionProperties.getIngestIfNotExists
-
+    val stagingTableIngestionProperties = getIngestionProperties(writeOptions, tableCoordinates.database, tmpTableName)
     val schemaShowCommandResult = kustoClient.engineClient.execute(tableCoordinates.database, generateTableGetSchemaAsRowsCommand(tableCoordinates.table.get)).getPrimaryResults
+    val targetSchema = schemaShowCommandResult.getData.asScala.map(c => c.get(0).asInstanceOf[JSONObject]).toArray
+    KDSU.adjustSchema(writeOptions.adjustSchema, data.schema, targetSchema, stagingTableIngestionProperties)
 
+    val rebuildedIngestionProperties = new SparkIngestionProperties(stagingTableIngestionProperties.getFlushImmediately,
+      stagingTableIngestionProperties.getDropByTags,
+      stagingTableIngestionProperties.getIngestByTags,
+      stagingTableIngestionProperties.getAdditionalTags,
+      stagingTableIngestionProperties.getIngestIfNotExists,
+      new DateTime(Calendar.getInstance().getTime),
+      // TODO: check if we have mapping ref
+      KDSU.csvMappingToString(stagingTableIngestionProperties.getIngestionMapping.getColumnMappings),
+      stagingTableIngestionProperties.getIngestionMapping.getIngestionMappingReference
+    )
+
+    val rebuildedOptions = WriteOptions(writeOptions.tableCreateOptions, writeOptions.isAsync,
+      writeOptions.writeResultLimit,
+      writeOptions.timeZone, writeOptions.timeout,
+      Some(rebuildedIngestionProperties.toString()),
+      writeOptions.batchLimit,
+      writeOptions.requestId,
+      writeOptions.adjustSchema)
+    implicit val parameters: KustoWriteResource = KustoWriteResource(authentication, tableCoordinates, data.schema, rebuildedOptions, tmpTableName)
+
+    val ingestIfNotExistsTags = stagingTableIngestionProperties.getIngestIfNotExists
     // Remove the ingestIfNotExists tags because several partitions can ingest into the staging table and should not interfere one another
     stagingTableIngestionProperties.setIngestIfNotExists(new util.ArrayList())
     val shouldIngest = kustoClient.shouldIngestData(tableCoordinates, writeOptions.IngestionProperties, tableExists = schemaShowCommandResult.count() > 0)
@@ -71,7 +92,7 @@ object KustoWriter {
       // KustoWriter will create a temporary table ingesting the data to it.
       // Only if all executors succeeded the table will be appended to the original destination table.
       kustoClient.initializeTablesBySchema(tableCoordinates, tmpTableName, writeOptions.tableCreateOptions, data
-        .schema, schemaShowCommandResult, writeOptions.timeout)
+        .schema, targetSchema, writeOptions.timeout)
       KDSU.logInfo(myName, s"Successfully created temporary table $tmpTableName, will be deleted after completing the operation")
 
       kustoClient.setMappingOnStagingTableIfNeeded(stagingTableIngestionProperties, table)
@@ -124,7 +145,7 @@ object KustoWriter {
                          (implicit parameters: KustoWriteResource): Unit = {
     import parameters._
 
-    val ingestionProperties = getIngestionProperties(writeOptions, parameters)
+    val ingestionProperties = getIngestionProperties(writeOptions, parameters.coordinates.database, parameters.tmpTableName)
     ingestionProperties.setDataFormat(DATA_FORMAT.csv.name)
     ingestionProperties.setReportMethod(IngestionProperties.IngestionReportMethod.Table)
     ingestionProperties.setReportLevel(IngestionProperties.IngestionReportLevel.FailuresAndSuccesses)
@@ -140,16 +161,16 @@ object KustoWriter {
     })
   }
 
-  private def getIngestionProperties(writeOptions: WriteOptions, parameters: KustoWriteResource): IngestionProperties = {
+  private def getIngestionProperties(writeOptions: WriteOptions, database: String, tableName: String): IngestionProperties = {
     if (writeOptions.IngestionProperties.isDefined) {
       val ingestionProperties = SparkIngestionProperties.fromString(writeOptions.IngestionProperties.get)
-        .toIngestionProperties(parameters.coordinates.database, parameters.tmpTableName)
+        .toIngestionProperties(database, tableName)
 
       // Remove the ingestIfNotExists tags because several partitions can ingest into the staging table and should not interfere one another
       ingestionProperties.setIngestIfNotExists(new util.ArrayList[String]())
       ingestionProperties
     } else {
-      new IngestionProperties(parameters.coordinates.database, parameters.tmpTableName)
+      new IngestionProperties(database, tableName)
     }
   }
 

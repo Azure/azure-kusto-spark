@@ -46,22 +46,22 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
   def initializeTablesBySchema(tableCoordinates: KustoCoordinates,
                                tmpTableName: String,
                                tableCreation: SinkTableCreationMode = SinkTableCreationMode.FailIfNotExist,
-                               schema: StructType,
-                               schemaShowCommandResult: KustoResultSetTable,
+                               sourceSchema: StructType,
+                               targetSchema: Iterable[JSONObject],
                                writeTimeout: FiniteDuration): Unit = {
 
     var tmpTableSchema: String = ""
     val database = tableCoordinates.database
     val table = tableCoordinates.table.get
 
-    if (schemaShowCommandResult.count() == 0) {
+    if (targetSchema.isEmpty) {
       // Table Does not exist
       if (tableCreation == SinkTableCreationMode.FailIfNotExist) {
         throw new RuntimeException(s"Table '$table' doesn't exist in database '$database', cluster '${tableCoordinates.clusterAlias} and tableCreateOptions is set to FailIfNotExist.")
       } else {
         // Parse dataframe schema and create a destination table with that schema
         val tableSchemaBuilder = new StringJoiner(",")
-        schema.fields.foreach { field =>
+        sourceSchema.fields.foreach { field =>
           val fieldType = DataTypeMapping.getSparkTypeToKustoTypeMap(field.dataType)
           tableSchemaBuilder.add(s"['${field.name}']:$fieldType")
         }
@@ -70,7 +70,7 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
       }
     } else {
       // Table exists. Parse kusto table schema and check if it matches the dataframes schema
-      tmpTableSchema = extractSchemaFromResultTable(schemaShowCommandResult.getData.asScala.map(c => c.get(0).asInstanceOf[JSONObject]))
+      tmpTableSchema = extractSchemaFromResultTable(targetSchema)
     }
 
     // Create a temporary table with the kusto or dataframe parsed schema with retention and delete set to after the
@@ -112,7 +112,7 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
             KDSU.doWhile[Option[IngestionStatus]](
               () => {
                 try {
-                  finalRes = Some(partitionResult.ingestionResult.getIngestionStatusCollection.get(0));
+                  finalRes = Some(partitionResult.ingestionResult.getIngestionStatusCollection.get(0))
                   finalRes
                 } catch {
                   case _: StorageException =>

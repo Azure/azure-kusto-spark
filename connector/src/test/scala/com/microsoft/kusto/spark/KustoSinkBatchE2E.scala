@@ -29,6 +29,7 @@ class KustoSinkBatchE2E extends FlatSpec with BeforeAndAfterAll{
   private val rowId2 = new AtomicInteger(1)
 
   private def newRow(): String = s"row-${rowId.getAndIncrement()}"
+  private def newRow(index: Int): String = s"row-$index"
   private def newAllDataTypesRow(v: Int): (String, Int, java.sql.Date, Boolean, Short, Byte, Float ,java.sql.Timestamp, Double, java.math.BigDecimal, Long) ={
     val longie = 80000000 + v.toLong * 100000000
     (s"row-${rowId2.getAndIncrement()}", v, new java.sql.Date(longie), v % 2 == 0, v.toShort, v.toByte,
@@ -73,6 +74,8 @@ class KustoSinkBatchE2E extends FlatSpec with BeforeAndAfterAll{
     KDSU.logInfo(myName, "******** info ********")
     KDSU.logError(myName, "******** error ********")
     KDSU.logFatal(myName,"******** fatal  ********. Use a 'logLevel' system variable to change the logging level.")
+    KDSU.logInfo(myName,authority)
+    KDSU.logInfo(myName,cluster)
   }
 
   "KustoBatchSinkDataTypesTest" should "ingest structured data of all types to a Kusto cluster" taggedAs KustoE2E in {
@@ -163,13 +166,14 @@ class KustoSinkBatchE2E extends FlatSpec with BeforeAndAfterAll{
 
   "KustoBatchSinkSync" should "also ingest simple data to a Kusto cluster" taggedAs KustoE2E in {
     import spark.implicits._
-    val df = rows.toDF("name", "value")
+    val df = rows.toDF("ColA", "ColB")
     val prefix = "KustoBatchSinkE2E_Ingest"
     val table = KustoQueryUtils.simplifyName(s"${prefix}_${UUID.randomUUID()}")
     val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://$cluster.kusto.windows.net", appId, appKey, authority)
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
     kustoAdminClient.execute(database, generateTempTableCreateCommand(table, columnsTypesAndNames = "ColA:string, ColB:int"))
 
+    //https://www.scalatest.org/scaladoc/3.2.9/org/scalatest/flatspec/AnyFlatSpec.html
     df.write
       .format("com.microsoft.kusto.spark.datasource")
       .partitionBy("value")
@@ -179,6 +183,7 @@ class KustoSinkBatchE2E extends FlatSpec with BeforeAndAfterAll{
       .option(KustoSinkOptions.KUSTO_AAD_APP_ID, appId)
       .option(KustoSinkOptions.KUSTO_AAD_APP_SECRET, appKey)
       .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, authority)
+      .option(KustoSinkOptions.KUSTO_ADJUST_SCHEMA, "FailIfNotMatch")
       .option(KustoSinkOptions.KUSTO_TIMEOUT_LIMIT, (8 * 60).toString)
       .mode(SaveMode.Append)
       .save()
@@ -212,5 +217,38 @@ class KustoSinkBatchE2E extends FlatSpec with BeforeAndAfterAll{
     val timeoutMs: Int = 8 * 60 * 1000 // 8 minutes
 
     KustoTestUtils.validateResultsAndCleanup(kustoAdminClient, table, database, expectedNumberOfRows, timeoutMs, tableCleanupPrefix = prefix)
+  }
+
+  "Source DataFrame schema adjustment" should "not adjust" in {
+    import spark.implicits._
+    val sourceValues = (1 to expectedNumberOfRows).map(v => (newRow(), v))
+    val df = sourceValues.toDF("WrongColA", "WrongColB")
+    val targetSchema = "ColA:decimal, ColB:string"
+    val schemaAdjustmentMode = "NoAdjustment"
+
+    KustoTestUtils.ingestWithSchemaAdjustment(cluster, database, appId, appKey, authority, df, targetSchema, schemaAdjustmentMode)
+  }
+
+  "Source DataFrame schema adjustment"  should "produce RuntimeException when column names not match" in {
+      val thrown = intercept[RuntimeException]  {
+      import spark.implicits._
+      val sourceValues = (1 to expectedNumberOfRows).map(v => (newRow(), v))
+      val df = sourceValues.toDF("WrongColA", "WrongColB")
+      val targetSchema = "ColA:string, ColB:int"
+      val schemaAdjustmentMode = "FailIfNotMatch"
+
+      KustoTestUtils.ingestWithSchemaAdjustment(cluster, database, appId, appKey, authority, df, targetSchema, schemaAdjustmentMode)
+    }
+    assert(thrown.getMessage.startsWith("Target table schema does not match to DataFrame schema."))
+  }
+
+  "Source DataFrame schema adjustment"  should "generate dynamic csv mapping according to column names" in {
+      import spark.implicits._
+      val sourceValues = (1 to 3).map(v => (newRow(v), v))
+      val df = sourceValues.toDF("SourceColA", "SourceColB")
+      val targetSchema = "ColA:string, ColB:int, SourceColB:int, SourceColA:string"
+      val schemaAdjustmentMode = "GenerateDynamicCsvMapping"
+
+      KustoTestUtils.ingestWithSchemaAdjustment(cluster, database, appId, appKey, authority, df, targetSchema, schemaAdjustmentMode)
   }
 }

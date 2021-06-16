@@ -33,11 +33,24 @@ object KustoSinkOptions extends KustoOptions{
   // partition. Kusto's ingestion also aggregates data, default suggested by Kusto is 1GB but here we suggest to cut
   // it at 100MB to adjust it to spark pulling of data.
   val KUSTO_CLIENT_BATCHING_LIMIT: String = newOption("clientBatchingLimit")
+
+  // If set 'GenerateDynamicCsvMapping', dynamically generates csv mapping based on DataFrame and target Kusto table column names when writing to Kusto.
+  // If some Kusto table fields are missing in the DataFrame, they will be ingested as empty. If some DataFrame fields are missing in target table, fails.
+  // The existing IngestionMappingReference will be reset.
+  // If set 'FailIfNotMatch' adjust schemas equality (column name and order) for DataFrame and target Kusto table, fails if schemas don't match.
+  // If set 'NoAdjustment' do nothing.
+  // Default: 'NoAdjustment'
+  val KUSTO_ADJUST_SCHEMA: String = newOption("adjustSchema")
 }
 
 object SinkTableCreationMode extends Enumeration {
   type SinkTableCreationMode = Value
   val CreateIfNotExist, FailIfNotExist = Value
+}
+
+object SchemaAdjustmentMode extends Enumeration {
+  type SchemaAdjustmentMode = Value
+  val NoAdjustment, FailIfNotMatch, GenerateDynamicCsvMapping = Value
 }
 
 case class WriteOptions(tableCreateOptions: SinkTableCreationMode.SinkTableCreationMode = SinkTableCreationMode.FailIfNotExist,
@@ -46,4 +59,5 @@ case class WriteOptions(tableCreateOptions: SinkTableCreationMode.SinkTableCreat
                         timeZone: String = "UTC", timeout: FiniteDuration,
                         IngestionProperties: Option[String] = None,
                         batchLimit: Int = 100,
-                        requestId: String = UUID.randomUUID().toString)
+                        requestId: String = UUID.randomUUID().toString,
+                        adjustSchema: SchemaAdjustmentMode.SchemaAdjustmentMode = SchemaAdjustmentMode.NoAdjustment)
