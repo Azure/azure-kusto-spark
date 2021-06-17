@@ -1,7 +1,8 @@
 # Kusto Sink Connector
 
 Kusto sink connector allows writing data from Spark to a table 
-in the specified Kusto cluster and database
+in the specified Kusto cluster and database.
+>**Note:** You cannot write using the connector into into the source table of a materialized view.
 
 ## Authentication
 
