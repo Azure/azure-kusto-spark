@@ -67,7 +67,6 @@ object KustoWriter {
       stagingTableIngestionProperties.getAdditionalTags,
       stagingTableIngestionProperties.getIngestIfNotExists,
       new DateTime(Calendar.getInstance().getTime),
-      // TODO: check if we have mapping ref
       KDSU.csvMappingToString(stagingTableIngestionProperties.getIngestionMapping.getColumnMappings),
       stagingTableIngestionProperties.getIngestionMapping.getIngestionMappingReference
     )

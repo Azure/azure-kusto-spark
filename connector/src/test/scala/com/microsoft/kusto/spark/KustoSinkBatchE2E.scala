@@ -74,8 +74,6 @@ class KustoSinkBatchE2E extends FlatSpec with BeforeAndAfterAll{
     KDSU.logInfo(myName, "******** info ********")
     KDSU.logError(myName, "******** error ********")
     KDSU.logFatal(myName,"******** fatal  ********. Use a 'logLevel' system variable to change the logging level.")
-    KDSU.logInfo(myName,authority)
-    KDSU.logInfo(myName,cluster)
   }
 
   "KustoBatchSinkDataTypesTest" should "ingest structured data of all types to a Kusto cluster" taggedAs KustoE2E in {

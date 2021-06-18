@@ -23,6 +23,9 @@ import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import java.util.Properties
 
+import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility
+import com.fasterxml.jackson.annotation.PropertyAccessor
+import com.fasterxml.jackson.databind.ObjectMapper
 import com.microsoft.azure.kusto.ingest.IngestionMapping.IngestionMappingKind
 import com.microsoft.kusto.spark.datasink.SchemaAdjustmentMode.SchemaAdjustmentMode
 
@@ -33,13 +36,8 @@ import scala.concurrent.duration._
 import scala.util.matching.Regex
 import org.apache.commons.lang3.StringUtils
 import org.apache.http.client.utils.URIBuilder
-import org.apache.spark.sql.types.{DataType, StructType}
-import org.codehaus.jackson.annotate.JsonAutoDetect.Visibility
-import org.codehaus.jackson.annotate.JsonMethod
-import org.codehaus.jackson.map.ObjectMapper
+import org.apache.spark.sql.types.StructType
 import org.json.JSONObject
-
-import scala.collection.mutable.ArrayBuffer
 
 object KustoDataSourceUtils {
   private val klog = Logger.getLogger("KustoConnector")
@@ -132,11 +130,13 @@ object KustoDataSourceUtils {
 
     val columnMappingReset = targetSchemaColumns
       .map(tc => {
+        val columnMapping = new ColumnMapping(tc._1, tc._2)
         val sourceColumnIndex = sourceSchemaColumns.get(tc._1)
         if ( sourceColumnIndex.isDefined)
-          new ColumnMapping(tc._1, tc._2, Map(MappingConsts.ORDINAL.name() -> sourceColumnIndex.get.toString).asJava)
+          columnMapping.setOrdinal(sourceColumnIndex.get)
         else
-          new ColumnMapping(tc._1, tc._2)
+            columnMapping.setConstantValue("")
+        columnMapping
       })
 
     ingestionProperties.setIngestionMapping(columnMappingReset.toArray,
@@ -146,17 +146,13 @@ object KustoDataSourceUtils {
 
   private[kusto] def csvMappingToString(columnMappings: Array[ColumnMapping]) : String = {
 
-    val csvMapString = columnMappings
-      .map(cm=> {
-        // https://docs.microsoft.com/en-us/azure/data-explorer/kusto/management/create-ingestion-mapping-command
-        if(!cm.properties.isEmpty)
-          s"""{"Name": "${cm.columnName}", "DataType": "${cm.columnType}", "Ordinal": ${cm.properties.get(MappingConsts.ORDINAL.name())}}"""
-        else
-          s"""{"Name": "${cm.columnName}", "DataType": "${cm.columnType}", "ConstValue": ""}"""
-      })
-      .mkString(",")
+    if(columnMappings == null)
+      return ""
+    val objectMapper = new ObjectMapper
+    objectMapper.setVisibility(PropertyAccessor.ALL, Visibility.NONE)
+    objectMapper.setVisibility(PropertyAccessor.FIELD, Visibility.ANY)
+    objectMapper.writeValueAsString(columnMappings)
 
-    s"[$csvMapString]"
   }
 
   private[kusto] def getSchema(database: String, query: String, client: Client, clientRequestProperties: Option[ClientRequestProperties]): KustoSchema = {
