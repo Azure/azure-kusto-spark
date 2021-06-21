@@ -52,4 +52,6 @@ case class WriteOptions(tableCreateOptions: SinkTableCreationMode.SinkTableCreat
                         IngestionProperties: Option[String] = None,
                         batchLimit: Int = 100,
                         requestId: String = UUID.randomUUID().toString,
-                        autoCleanupTime: FiniteDuration)
+                        autoCleanupTime: FiniteDuration,
+                        maxRetriesOnMoveExtents: Int = 10,
+                        minimalExtentsCountForSplitMerge: Int = 400)

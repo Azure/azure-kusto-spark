@@ -95,4 +95,8 @@ private[kusto] object KustoDebugOptions {
 
   val KEY_VAULT_PEM_FILE_PATH = "keyVaultPemFilePath" // Not yet supported
   val KEY_VAULT_CERTIFICATE_KEY = "keyVaultPemFileKey" // Not yet supported
+
+  val KUSTO_MAXIMAL_EXTENTS_COUNT_FOR_SPLIT_MERGE_PER_NODE
+    :String =  newOption("maximalExtentsCountForSplitMergePerNode")
+  val KUSTO_MAX_RETRIES_ON_MOVR_EXTENTS: String = newOption("maxRetriesOnMoveExtents")
 }

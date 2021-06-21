@@ -20,4 +20,6 @@ object KustoConstants {
   val DirectQueryUpperBoundRows = 5000
   val TimeoutForCountCheck : FiniteDuration = 3 seconds
   val IngestByPrefix = "ingest-by:"
+  val IngestSkippedTrace = s"Ingestion skipped: Provided ingest-by tags are present in the destination table: "
+  val MaxSleepOnMoveExtents: Int = 3*60*1000
 }

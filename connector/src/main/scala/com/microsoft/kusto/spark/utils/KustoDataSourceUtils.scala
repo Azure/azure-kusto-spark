@@ -200,12 +200,18 @@ object KustoDataSourceUtils {
     var isAsync: Boolean = false
     var isAsyncParam: String = ""
     var batchLimit: Int = 0
+    var minimalExtentsCountForSplitMergePerNode: Int = 0
+    var maxRetriesOnMoveExtents: Int = 0
     try {
       isAsyncParam = parameters.getOrElse(KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC, "false")
       isAsync = parameters.getOrElse(KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC, "false").trim.toBoolean
       tableCreationParam = parameters.get(KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS)
       tableCreation = if (tableCreationParam.isEmpty) SinkTableCreationMode.FailIfNotExist else SinkTableCreationMode.withName(tableCreationParam.get)
       batchLimit = parameters.getOrElse(KustoSinkOptions.KUSTO_CLIENT_BATCHING_LIMIT, "100").trim.toInt
+      minimalExtentsCountForSplitMergePerNode = parameters.getOrElse(KustoDebugOptions
+        .KUSTO_MAXIMAL_EXTENTS_COUNT_FOR_SPLIT_MERGE_PER_NODE, "400").trim.toInt
+      maxRetriesOnMoveExtents = parameters.getOrElse(KustoDebugOptions.KUSTO_MAX_RETRIES_ON_MOVR_EXTENTS, "10").trim
+        .toInt
     } catch {
       case _: NoSuchElementException => throw new InvalidParameterException(s"No such SinkTableCreationMode option: '${tableCreationParam.get}'")
       case _: java.lang.IllegalArgumentException => throw new InvalidParameterException(s"KUSTO_WRITE_ENABLE_ASYNC is expecting either 'true' or 'false', got: '$isAsyncParam'")
@@ -228,7 +234,9 @@ object KustoDataSourceUtils {
       ingestionPropertiesAsJson,
       batchLimit,
       requestId,
-      autoCleanupTime
+      autoCleanupTime,
+      minimalExtentsCountForSplitMergePerNode,
+      maxRetriesOnMoveExtents
     )
 
     val sourceParameters = parseSourceParameters(parameters)
