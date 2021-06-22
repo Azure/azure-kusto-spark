@@ -203,7 +203,7 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
           consecutiveSuccesses = 0
           retry += 1
           KDSU.reportExceptionAndThrow(myName, e, s"moving extents, retry number: $retry", cluster, database, targetTable,
-            shouldNotThrow = retry < 2 && !e.isPermanent)
+            shouldNotThrow = retry < 2)// && !e.isPermanent)
           val params = handleRetryFail(curBatchSize, retry, delayPeriodBetweenCalls)
           curBatchSize = params._1
           delayPeriodBetweenCalls = params._2
