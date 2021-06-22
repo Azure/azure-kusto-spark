@@ -5,6 +5,7 @@ import java.util.StringJoiner
 import java.util.concurrent.TimeUnit
 
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
+import com.microsoft.azure.kusto.data.exceptions.DataServiceException
 import com.microsoft.azure.kusto.data.{Client, ClientFactory, ClientRequestProperties, KustoResultSetTable}
 import com.microsoft.azure.kusto.ingest.result.{IngestionStatus, OperationStatus}
 import com.microsoft.azure.kusto.ingest.{IngestClient, IngestClientFactory, IngestionProperties}
@@ -14,12 +15,12 @@ import com.microsoft.kusto.spark.datasink.KustoWriter.DelayPeriodBetweenCalls
 import com.microsoft.kusto.spark.datasink.{PartitionResult, SinkTableCreationMode, SparkIngestionProperties, WriteOptions}
 import com.microsoft.kusto.spark.datasource.KustoStorageParameters
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
-import com.microsoft.kusto.spark.utils.KustoConstants.{IngestSkippedTrace, MaxSleepOnMoveExtents}
+import com.microsoft.kusto.spark.utils.KustoConstants.{IngestSkippedTrace, MaxSleepOnMoveExtentsMillis}
 import com.microsoft.kusto.spark.utils.KustoDataSourceUtils.extractSchemaFromResultTable
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
-
 import org.apache.commons.lang3.StringUtils
 import org.apache.commons.lang3.time.DurationFormatUtils
+import org.apache.log4j.Level
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.CollectionAccumulator
 import org.json.{JSONArray, JSONObject}
@@ -94,7 +95,7 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
   def handleRetryFail(curBatchSize: Int, retry: Int, currentSleepTime: Int): (Int, Int) = {
     KDSU.logWarn(myName, s"Failed moving extents, retry number '$retry'. Sleeping for: $currentSleepTime")
     Thread.sleep(currentSleepTime)
-    val increasedSleepTime = Math.min(MaxSleepOnMoveExtents, currentSleepTime * 2)
+    val increasedSleepTime = Math.min(MaxSleepOnMoveExtentsMillis, currentSleepTime * 2)
     if (retry % 2 == 1) {
       val reducedBatchSize = Math.max(Math.abs(curBatchSize / 2), 50)
       (reducedBatchSize, increasedSleepTime)
@@ -107,7 +108,7 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
                       crp: ClientRequestProperties): Boolean = {
     // Could we get here ?
     KDSU.logFatal(myName, "Some extents were not processed and we got an empty move " +
-      s"result'${totalAmount - extentsProcessed}' Please open issue if you see this trace. at: https://github" +
+      s"result'${totalAmount - extentsProcessed}' Please open issue if you see this trace. At: https://github" +
       ".com/Azure/azure-kusto-spark/issues")
     val extentsLeftRes = engineClient.execute(database, generateExtentsCountCommand(tmpTableName), crp)
       .getPrimaryResults
@@ -116,32 +117,46 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
     extentsLeftRes.getInt(0) != 0
   }
 
-  def moveExtents(database: String, tmpTableName: String, targetTable: String, crp: ClientRequestProperties,
-                  cluster: String, writeOptions: WriteOptions): Unit = {
-    def moveExtentsWithRetries(batchSize: Int, totalAmount: Int): Unit = {
-      var extentsProcessed = 0
-      var retry = 0
-      var curBatchSize = batchSize
-      var delayPeriodBetweenCalls = DelayPeriodBetweenCalls
-      var consecutiveSuccesses = 0
-      while (extentsProcessed < totalAmount) {
-        try {
-          var failed = false
+  def moveExtentsWithRetries(batchSize: Int, totalAmount: Int, database: String, tmpTableName: String, targetTable: String, crp: ClientRequestProperties,
+                             cluster: String, writeOptions: WriteOptions): Unit = {
+    var extentsProcessed = 0
+    var retry = 0
+    var curBatchSize = batchSize
+    var delayPeriodBetweenCalls = DelayPeriodBetweenCalls
+    var consecutiveSuccesses = 0
+    while (extentsProcessed < totalAmount) {
+      try {
+        var failed = false
 
-          val res = engineClient.execute(database, generateTableMoveExtentsCommand(tmpTableName, targetTable,
-            curBatchSize), crp).getPrimaryResults
+        val res = engineClient.execute(database, generateTableMoveExtentsCommand(tmpTableName, targetTable,
+          curBatchSize), crp).getPrimaryResults
 
-          if (res.count() == 0) {
-            failed = handleNoResults(totalAmount, extentsProcessed, database, tmpTableName, crp)
-            if (!failed){
-              // No more extents to move - succeeded
-              extentsProcessed = totalAmount
-            }
+        if (res.count() == 0) {
+          failed = handleNoResults(totalAmount, extentsProcessed, database, tmpTableName, crp)
+          if (!failed){
+            // No more extents to move - succeeded
+            extentsProcessed = totalAmount
           }
+        }
 
-          // When some node fails move it will put "failed" as target extent id
-          var error: Object = null
-          while (!failed && res.next()) {
+        // When some node fails move it will put "failed" as target extent id
+        var error: Object = null
+        if (KDSU.getLoggingLevel == Level.DEBUG) {
+          var i = 0
+          while (res.next() && !failed) {
+            val targetExtent = res.getString(1)
+            error = res.getObject(2)
+            if (targetExtent == "Failed" || StringUtils.isNotBlank(error.asInstanceOf[String])) {
+              failed = true
+              if (i > 0) {
+                KDSU.logFatal(myName, "Failed extent was not reported on all extents!." +
+                  "Please open issue if you see this trace. At: https://github.com/Azure/azure-kusto-spark/issues")
+              }
+            }
+            i += 1
+          }
+        } else {
+          if (res.next()) {
             val targetExtent = res.getString(1)
             error = res.getObject(2)
             if (targetExtent == "Failed" || StringUtils.isNotBlank(error.asInstanceOf[String])) {
@@ -149,63 +164,67 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
             }
             // TODO handle specific errors
           }
+        }
 
-          if (failed) {
-            consecutiveSuccesses = 0
-            retry += 1
-            if (retry > writeOptions.maxRetriesOnMoveExtents) {
-              throw RetriesExhaustedException(s"Failed to move extents after $retry tries")
-            }
-
-            // Lower batch size, increase delay
-            val params = handleRetryFail(curBatchSize, retry, delayPeriodBetweenCalls)
-            KDSU.logWarn(myName,
-              s"moving extents to '$targetTable' failed, " +
-                s"retry number: $retry ${if (error == null) "" else s", error: ${error.asInstanceOf[String]}"}")
-            curBatchSize = params._1
-            delayPeriodBetweenCalls = params._2
-          } else {
-            consecutiveSuccesses += 1
-            if (consecutiveSuccesses > 2) {
-              curBatchSize = Math.min(curBatchSize * 2, batchSize)
-            }
-
-            extentsProcessed += res.count()
-            KDSU.logDebug(myName, s"Moving extents succeeded at retry: $retry," +
-              s" maxBatch: $curBatchSize, consecutive successfull batches: $consecutiveSuccesses, successes this " +
-              s"batch: ${res.count()}," +
-              s" extentsProcessed: $extentsProcessed, backoff: $delayPeriodBetweenCalls, total:$totalAmount")
-
-            retry = 0
-            // should we reset the curBatchSize to batchSize?
-            delayPeriodBetweenCalls = DelayPeriodBetweenCalls
+        if (failed) {
+          consecutiveSuccesses = 0
+          retry += 1
+          if (retry > writeOptions.maxRetriesOnMoveExtents) {
+            throw RetriesExhaustedException(s"Failed to move extents after $retry tries")
           }
-        } catch {
-          case e:RetriesExhaustedException => throw e
-          case e: Exception => {
-            // TODO add check permanent or transient
-            // Probably a permanent exception - try less then regular back
-            consecutiveSuccesses = 0
-            retry += 1
-            KDSU.reportExceptionAndThrow(myName, e, s"moving extents, retry number: $retry", cluster, database, targetTable,
-              shouldNotThrow = retry < 2)
-            val params = handleRetryFail(curBatchSize, retry, delayPeriodBetweenCalls)
-            curBatchSize = params._1
-            delayPeriodBetweenCalls = params._2
-          }}
-      }
-    }
 
-    val extentsCountQuery = engineClient.execute(database, generateExtentsCountCommand(tmpTableName), crp).getPrimaryResults
+          // Lower batch size, increase delay
+          val params = handleRetryFail(curBatchSize, retry, delayPeriodBetweenCalls)
+          KDSU.logWarn(myName,
+            s"moving extents to '$targetTable' failed, " +
+              s"retry number: $retry ${if (error == null) "" else s", error: ${error.asInstanceOf[String]}"}")
+          curBatchSize = params._1
+          delayPeriodBetweenCalls = params._2
+        } else {
+          consecutiveSuccesses += 1
+          if (consecutiveSuccesses > 2) {
+            curBatchSize = Math.min(curBatchSize * 2, batchSize)
+          }
+
+          extentsProcessed += res.count()
+          KDSU.logDebug(myName, s"Moving extents succeeded at retry: $retry," +
+            s" maxBatch: $curBatchSize, consecutive successfull batches: $consecutiveSuccesses, successes this " +
+            s"batch: ${res.count()}," +
+            s" extentsProcessed: $extentsProcessed, backoff: $delayPeriodBetweenCalls, total:$totalAmount")
+
+          retry = 0
+          // should we reset the curBatchSize to batchSize?
+          delayPeriodBetweenCalls = DelayPeriodBetweenCalls
+        }
+      } catch {
+        case e:RetriesExhaustedException => throw e
+        case e: DataServiceException => {
+          // Probably a permanent exception - try less then regular back
+          consecutiveSuccesses = 0
+          retry += 1
+          KDSU.reportExceptionAndThrow(myName, e, s"moving extents, retry number: $retry", cluster, database, targetTable,
+            shouldNotThrow = retry < 2 && !e.isPermanent)
+          val params = handleRetryFail(curBatchSize, retry, delayPeriodBetweenCalls)
+          curBatchSize = params._1
+          delayPeriodBetweenCalls = params._2
+        }}
+    }
+  }
+
+  def moveExtents(database: String, tmpTableName: String, targetTable: String, crp: ClientRequestProperties,
+                  cluster: String, writeOptions: WriteOptions): Unit = {
+        val extentsCountQuery = engineClient.execute(database, generateExtentsCountCommand(tmpTableName), crp).getPrimaryResults
     extentsCountQuery.next()
     val extentsCount = extentsCountQuery.getInt(0)
     if (extentsCount > writeOptions.minimalExtentsCountForSplitMerge) {
       val nodeCountQuery = engineClient.execute(database, generateNodesCountCommand(), crp).getPrimaryResults
       nodeCountQuery.next()
       val nodeCount = nodeCountQuery.getInt(0)
-      moveExtentsWithRetries(nodeCount * writeOptions.minimalExtentsCountForSplitMerge, extentsCount)
+      moveExtentsWithRetries(nodeCount * writeOptions.minimalExtentsCountForSplitMerge, extentsCount, database,
+        tmpTableName, targetTable, crp, cluster, writeOptions)
     } else {
-      moveExtentsWithRetries(extentsCount, extentsCount)
+      moveExtentsWithRetries(extentsCount, extentsCount, database,
+        tmpTableName, targetTable, crp, cluster, writeOptions)
     }
   }
 

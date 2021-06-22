@@ -58,9 +58,8 @@ private[kusto] object CslCommandsGenerator {
 
   def generateTableMoveExtentsCommand(sourceTableName: String, destinationTableName: String, batchSize:Int): String = {
     s""".move extents to table $destinationTableName <|
-       .show table $sourceTableName extents;
+       .show table $sourceTableName extents with(extentsShowFilteringRuntimePolicy='{"MaximumResultsCount":$batchSize}');
         $$command_results
-       | take $batchSize
        |  distinct ExtentId"""
   }
 
