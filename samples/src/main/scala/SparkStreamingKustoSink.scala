@@ -51,7 +51,7 @@ object SparkStreamingKustoSink {
       .option(KustoSinkOptions.KUSTO_TABLE, "Your Kusto Destination Table")
       .option(KustoSinkOptions.KUSTO_AAD_APP_ID, "Your Client ID")
       .option(KustoSinkOptions.KUSTO_AAD_APP_SECRET, "Your secret")
-      .trigger(Trigger.ProcessingTime(0))
+      .trigger(Trigger.ProcessingTime(10000))
       .start()
 
     df1.awaitTermination(TimeUnit.MINUTES.toMillis(8))

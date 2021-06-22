@@ -18,6 +18,11 @@ object KustoConstants {
   val OneGigaByte: Int = OneMegaByte * OneKiloByte
   // The restriction from kusto is 50000 rows but 5000 can still be really big
   val DirectQueryUpperBoundRows = 5000
-  val TimeoutForCountCheck : FiniteDuration = 3 seconds
+  val TimeoutForCountCheck: FiniteDuration = 3 seconds
   val IngestByPrefix = "ingest-by:"
+  val IngestSkippedTrace = s"Ingestion skipped: Provided ingest-by tags are present in the destination table: "
+  val MaxSleepOnMoveExtentsMillis: Int = 3 * 60 * 1000
+  val DefaultBatchingLimit: Int = 100
+  val DefaultExtentsCountForSplitMergePerNode: Int = 400
+  val DefaultMaxRetriesOnMoveExtents: Int = 10
 }
