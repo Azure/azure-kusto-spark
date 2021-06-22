@@ -1,12 +1,8 @@
 package com.microsoft.kusto.spark.utils
 
 import java.time.Instant
-import java.util
 
-import com.microsoft.kusto.spark.datasink.KustoWriter.TempIngestionTablePrefix
 import com.microsoft.kusto.spark.datasource.KustoStorageParameters
-
-import scala.collection.JavaConverters._
 
 private[kusto] object CslCommandsGenerator {
   def generateFetchTableIngestByTagsCommand(table: String): String = {
@@ -72,7 +68,7 @@ private[kusto] object CslCommandsGenerator {
     ".show cluster | count"
   }
 
-  def generateExtentsCountCommand(table: String): String = {
+  def generateExtentsCountCommand(table: String) = {
     s".show table $table extents | count"
   }
 

@@ -77,6 +77,10 @@ object KustoDataSourceUtils {
     klog.fatal(s"$reporter: $message")
   }
 
+  private[kusto] def logDebug(reporter: String, message: String): Unit = {
+    klog.debug(s"$reporter: $message")
+  }
+
   private[kusto] def extractSchemaFromResultTable(result: Iterable[JSONObject]): String = {
 
     val tableSchemaBuilder = new StringJoiner(",")

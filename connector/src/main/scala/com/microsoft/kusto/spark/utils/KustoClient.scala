@@ -110,8 +110,9 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
       var curBatchSize = batchSize
       var delayPeriodBetweenCalls = DelayPeriodBetweenCalls
       var consecutiveSuccesses = 0
-      while (extentsProcessed < totalAmount && retry < writeOptions.maxRetriesOnMoveExtents) {
+      while (extentsProcessed < totalAmount) {
         try {
+          KDSU.logDebug(myName, s"Moving extents retry: $retry, maxBatch: $curBatchSize, success: $consecutiveSuccesses")
           var failed = false
 
           val res = engineClient.execute(database, generateTableMoveExtentsCommand(tmpTableName, targetTable,
@@ -145,6 +146,9 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
           }
 
           if (failed) {
+            if (retry > writeOptions.maxRetriesOnMoveExtents) {
+              throw new RuntimeException(s"Failed to move extents after $retry tries")
+            }
             consecutiveSuccesses = 0
             retry += 1
             // Lower batch size, increase delay
