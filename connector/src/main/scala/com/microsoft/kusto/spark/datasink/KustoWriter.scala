@@ -223,12 +223,12 @@ object KustoWriter {
 
     val kustoClient = KustoClientCache.getClient(coordinates.clusterAlias, coordinates.clusterUrl, authentication)
     val maxBlobSize = writeOptions.batchLimit * KCONST.OneMegaByte
-    //This blobWriter will be used later to write the rows to blob storage from which it will be ingested to Kusto
+
+    // This blobWriter will be used later to write the rows to blob storage from which it will be ingested to Kusto
     val initialBlobWriter: BlobWriteResource = createBlobWriter(coordinates, tmpTableName, kustoClient)
     val timeZone = TimeZone.getTimeZone(writeOptions.timeZone).toZoneId
 
     val ingestionTasks: util.ArrayList[Future[Unit]] = new util.ArrayList()
-//    kustoClient.engineClient.execute(parameters.coordinates.database,s".drop table ${tmpTableName} ifexists")
 
     // Serialize rows to ingest and send to blob storage.
     val lastBlobWriter = rows.foldLeft[BlobWriteResource](initialBlobWriter) {
@@ -243,8 +243,6 @@ object KustoWriter {
           KDSU.logInfo(myName, s"Sealing blob in partition ${TaskContext.getPartitionId} for requestId: '${writeOptions.requestId}', " +
             s"blob number ${ingestionTasks.size}, with size $count")
           finalizeBlobWrite(blobWriter)
-          val r = scala.util.Random
-          Thread.sleep(r.nextInt(40) * 1000)
           val task = ingest(blobWriter.blob, blobWriter.csvWriter.getCounter, blobWriter.sas, flushImmediately = true)
           ingestionTasks.add(task)
           createBlobWriter(coordinates, tmpTableName, kustoClient)
