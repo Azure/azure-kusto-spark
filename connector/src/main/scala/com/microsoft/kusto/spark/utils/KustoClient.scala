@@ -113,11 +113,7 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
       .getPrimaryResults
     extentsLeftRes.next()
 
-    if (extentsLeftRes.getInt(0) == 0) {
-      false
-    } else {
-      true
-    }
+    extentsLeftRes.getInt(0) != 0
   }
 
   def moveExtents(database: String, tmpTableName: String, targetTable: String, crp: ClientRequestProperties,
