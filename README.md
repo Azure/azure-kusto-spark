@@ -28,19 +28,19 @@ Starting version 2.3.0 we introduce new artifact Ids: `kusto-spark_3.x_2.12` tar
 and `kusto-spark_2.4_2.11` targeting Spark 2.4.x and scala 2.11.
 For Scala/Java applications using Maven project definitions, 
 link your application with the artifact below in order to use the Azure Data Explorer connector for Spark. 
-> Note: Versions prior to 2.5.1 do not work anymore for ingest to an existing table, please update to the latest.
+> Note: Versions prior to 2.7.4 do not work anymore for ingest to an existing table, please update to the latest.
 
 ```
 groupId = com.microsoft.azure.kusto
 artifactId = kusto-spark_3.0_2.12
-version = 2.5.1
+version = 2.7.4
 ```
 
 **In Maven**:
 
 Look for the following coordinates: 
 ```
-com.microsoft.azure.kusto:kusto-spark_3.0_2.12:2.5.1
+com.microsoft.azure.kusto:kusto-spark_3.0_2.12:2.7.4
 ```
 
 Or clone this repository and build it locally to add it to your local maven repository, 
@@ -50,7 +50,7 @@ the jar can also be found under the [released package](https://github.com/Azure/
    <dependency>
      <groupId>com.microsoft.azure.kusto</groupId>
      <artifactId>spark-kusto-connector</artifactId>
-     <version>2.5.1</version>
+     <version>2.7.4</version>
    </dependency>
 ```
 
@@ -59,7 +59,7 @@ the jar can also be found under the [released package](https://github.com/Azure/
 Libraries -> Install New -> Maven -> copy the following coordinates:
 
 ```
-com.microsoft.azure.kusto:kusto-spark_3.0_2.12:2.5.1
+com.microsoft.azure.kusto:kusto-spark_3.0_2.12:2.7.4
 ```
 
 #### Building Samples Module
