@@ -303,13 +303,14 @@ object KustoDataSourceUtils {
       PlayFabClustersAlias
     }
     else if (cluster.startsWith(EnginePrefix)) {
-      if (!cluster.contains(".kusto.")) {
+      if (!cluster.contains(".kusto.") && !cluster.contains(".kustodev.")) {
         throw new InvalidParameterException("KUSTO_CLUSTER parameter accepts either a full url with https scheme or the cluster's" +
           "alias and tries to construct the full URL from it. Parameter given: " + cluster)
       }
       val host = new URI(cluster).getHost
       val startIdx = if (host.startsWith(IngestPrefix)) IngestPrefix.length else 0
-      host.substring(startIdx, host.indexOf(".kusto."))
+      val endIdx = if(cluster.contains(".kustodev.")) host.indexOf(".kustodev.") else host.indexOf(".kusto.")
+      host.substring(startIdx, endIdx)
 
     } else {
       cluster
