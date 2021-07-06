@@ -68,6 +68,7 @@ object KustoWriter {
       writeOptions.batchLimit,
       writeOptions.requestId,
       writeOptions.adjustSchema)
+
     implicit val parameters: KustoWriteResource = KustoWriteResource(authentication, tableCoordinates, data.schema, rebuildedOptions, tmpTableName)
 
     val ingestIfNotExistsTags = stagingTableIngestionProperties.getIngestIfNotExists

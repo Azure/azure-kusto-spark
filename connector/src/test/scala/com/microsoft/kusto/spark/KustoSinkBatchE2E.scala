@@ -1,7 +1,5 @@
 package com.microsoft.kusto.spark
 
-import com.fasterxml.jackson.databind.ObjectMapper
-
 import java.math.{BigDecimal, RoundingMode}
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
@@ -216,39 +214,6 @@ class KustoSinkBatchE2E extends FlatSpec with BeforeAndAfterAll{
     val timeoutMs: Int = 8 * 60 * 1000 // 8 minutes
 
     KustoTestUtils.validateResultsAndCleanup(kustoAdminClient, table, database, expectedNumberOfRows, timeoutMs, tableCleanupPrefix = prefix)
-  }
-
-  "Source DataFrame schema adjustment" should "not adjust" in {
-    import spark.implicits._
-    val sourceValues = (1 to expectedNumberOfRows).map(v => (newRow(), v))
-    val df = sourceValues.toDF("WrongColA", "WrongColB")
-    val targetSchema = "ColA:decimal, ColB:string"
-    val schemaAdjustmentMode = "NoAdjustment"
-
-    KustoTestUtils.ingestWithSchemaAdjustment(cluster, database, appId, appKey, authority, df, targetSchema, schemaAdjustmentMode)
-  }
-
-  "Source DataFrame schema adjustment"  should "produce RuntimeException when column names not match" in {
-      val thrown = intercept[RuntimeException]  {
-      import spark.implicits._
-      val sourceValues = (1 to expectedNumberOfRows).map(v => (newRow(), v))
-      val df = sourceValues.toDF("WrongColA", "WrongColB")
-      val targetSchema = "ColA:string, ColB:int"
-      val schemaAdjustmentMode = "FailIfNotMatch"
-
-      KustoTestUtils.ingestWithSchemaAdjustment(cluster, database, appId, appKey, authority, df, targetSchema, schemaAdjustmentMode)
-    }
-    assert(thrown.getMessage.startsWith("Target table schema does not match to DataFrame schema."))
-  }
-
-  "Source DataFrame schema adjustment"  should "generate dynamic csv mapping according to column names" in {
-      import spark.implicits._
-      val sourceValues = (1 to 3).map(v => (newRow(v), v))
-      val df = sourceValues.toDF("SourceColA", "SourceColB")
-      val targetSchema = "ColA:string, ColB:int, SourceColB:int, SourceColA:string"
-      val schemaAdjustmentMode = "GenerateDynamicCsvMapping"
-
-      KustoTestUtils.ingestWithSchemaAdjustment(cluster, database, appId, appKey, authority, df, targetSchema, schemaAdjustmentMode)
   }
 }
 

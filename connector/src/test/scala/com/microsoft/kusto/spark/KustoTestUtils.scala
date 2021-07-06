@@ -2,13 +2,15 @@ package com.microsoft.kusto.spark
 
 import java.security.InvalidParameterException
 import java.util.UUID
-
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.{Client, ClientFactory}
 import com.microsoft.kusto.spark.datasink.KustoSinkOptions
+import com.microsoft.kusto.spark.datasource.KustoSourceOptions
+import com.microsoft.kusto.spark.sql.extension.SparkExtension.DataFrameReaderExtension
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils => KDSU}
-import org.apache.spark.sql.{DataFrame, SaveMode}
+import org.apache.spark.sql.{Column, DataFrame, SaveMode, SparkSession, functions}
+
 
 import scala.collection.JavaConverters._
 import scala.concurrent.TimeoutException
@@ -73,36 +75,79 @@ private [kusto] object KustoTestUtils {
     }
   }
 
-  def ingestWithSchemaAdjustment(cluster: String,
-                                 database: String,
-                                 appId: String,
-                                 appKey: String,
-                                 authority: String,
-                                 df: DataFrame,
-                                 targetSchema: String,
-                                 schemaAdjustmentMode: String): Unit = {
-    val prefix = "KustoBatchSinkE2E_SchemaAdjust"
+  def createTestTable(kustoConnectionOptions: KustoConnectionOptions,
+                      prefix: String,
+                      targetSchema: String
+                     ): String = {
+
     val table = KustoQueryUtils.simplifyName(s"${prefix}_${UUID.randomUUID()}")
-    val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://$cluster.kusto.windows.net", appId, appKey, authority)
+    val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(
+      s"https://${kustoConnectionOptions.Cluster}.kusto.windows.net",
+      kustoConnectionOptions.AppId,
+      kustoConnectionOptions.AppKey,
+      kustoConnectionOptions.Authority)
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
-    kustoAdminClient.execute(database, generateTempTableCreateCommand(table, targetSchema))
+    kustoAdminClient.execute(kustoConnectionOptions.Database, generateTempTableCreateCommand(table, targetSchema))
+
+    table
+  }
+
+  def ingest(kustoConnectionOptions: KustoConnectionOptions,
+             df: DataFrame,
+             table: String,
+             schemaAdjustmentMode: String): Unit = {
 
     df.write
       .format("com.microsoft.kusto.spark.datasource")
       .partitionBy("value")
-      .option(KustoSinkOptions.KUSTO_CLUSTER, cluster)
-      .option(KustoSinkOptions.KUSTO_DATABASE, database)
+      .option(KustoSinkOptions.KUSTO_CLUSTER, kustoConnectionOptions.Cluster)
+      .option(KustoSinkOptions.KUSTO_DATABASE, kustoConnectionOptions.Database)
       .option(KustoSinkOptions.KUSTO_TABLE, table)
-      .option(KustoSinkOptions.KUSTO_AAD_APP_ID, appId)
-      .option(KustoSinkOptions.KUSTO_AAD_APP_SECRET, appKey)
-      .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, authority)
+      .option(KustoSinkOptions.KUSTO_AAD_APP_ID, kustoConnectionOptions.AppId)
+      .option(KustoSinkOptions.KUSTO_AAD_APP_SECRET, kustoConnectionOptions.AppKey)
+      .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, kustoConnectionOptions.Authority)
       .option(KustoSinkOptions.KUSTO_ADJUST_SCHEMA, schemaAdjustmentMode)
       .option(KustoSinkOptions.KUSTO_TIMEOUT_LIMIT, (8 * 60).toString)
       .mode(SaveMode.Append)
       .save()
 
-    val timeoutMs: Int = 8 * 60 * 1000 // 8 minutes
+   }
 
-    KustoTestUtils.validateResultsAndCleanup(kustoAdminClient, table, database, -1, timeoutMs, tableCleanupPrefix = prefix)
+  def cleanup(kustoConnectionOptions: KustoConnectionOptions,
+              tablePrefix: String): Unit = {
+
+    if (tablePrefix.isEmpty)
+      throw new InvalidParameterException("Tables cleanup prefix must be set")
+
+    val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(
+      s"https://${kustoConnectionOptions.Cluster}.kusto.windows.net",
+      kustoConnectionOptions.AppId,
+      kustoConnectionOptions.AppKey,
+      kustoConnectionOptions.Authority)
+    val kustoAdminClient = ClientFactory.createClient(engineKcsb)
+
+    tryDropAllTablesByPrefix(kustoAdminClient, kustoConnectionOptions.Database, tablePrefix)
+
   }
+
+  def validateTargetTable(kustoConnectionOptions: KustoConnectionOptions,
+                          tableName: String,
+                          expectedRows: DataFrame,
+                          spark: SparkSession) : Boolean = {
+
+    val conf = Map[String, String](
+      KustoSourceOptions.KUSTO_AAD_APP_ID -> kustoConnectionOptions.AppId,
+      KustoSourceOptions.KUSTO_AAD_APP_SECRET -> kustoConnectionOptions.AppKey,
+      KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID -> kustoConnectionOptions.Authority
+    )
+
+    val tableRows = spark.read
+      .kusto(s"https://${kustoConnectionOptions.Cluster}.kusto.windows.net",
+      kustoConnectionOptions.Database, tableName, conf)
+
+    tableRows.count() == tableRows.intersectAll(expectedRows).count()
+
+  }
+
+  case class KustoConnectionOptions(Cluster: String, Database: String, AppId: String, AppKey: String, Authority: String)
 }
