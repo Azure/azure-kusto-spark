@@ -28,7 +28,6 @@ class KustoSinkBatchE2E extends FlatSpec with BeforeAndAfterAll{
   private val rowId2 = new AtomicInteger(1)
 
   private def newRow(): String = s"row-${rowId.getAndIncrement()}"
-  private def newRow(index: Int): String = s"row-$index"
   private def newAllDataTypesRow(v: Int): (String, Int, java.sql.Date, Boolean, Short, Byte, Float ,java.sql.Timestamp, Double, java.math.BigDecimal, Long) ={
     val longie = 80000000 + v.toLong * 100000000
     (s"row-${rowId2.getAndIncrement()}", v, new java.sql.Date(longie), v % 2 == 0, v.toShort, v.toByte,
@@ -163,14 +162,13 @@ class KustoSinkBatchE2E extends FlatSpec with BeforeAndAfterAll{
 
   "KustoBatchSinkSync" should "also ingest simple data to a Kusto cluster" taggedAs KustoE2E in {
     import spark.implicits._
-    val df = rows.toDF("ColA", "ColB")
+    val df = rows.toDF("name", "value")
     val prefix = "KustoBatchSinkE2E_Ingest"
     val table = KustoQueryUtils.simplifyName(s"${prefix}_${UUID.randomUUID()}")
     val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://$cluster.kusto.windows.net", appId, appKey, authority)
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
     kustoAdminClient.execute(database, generateTempTableCreateCommand(table, columnsTypesAndNames = "ColA:string, ColB:int"))
 
-    //https://www.scalatest.org/scaladoc/3.2.9/org/scalatest/flatspec/AnyFlatSpec.html
     df.write
       .format("com.microsoft.kusto.spark.datasource")
       .partitionBy("value")
@@ -180,7 +178,6 @@ class KustoSinkBatchE2E extends FlatSpec with BeforeAndAfterAll{
       .option(KustoSinkOptions.KUSTO_AAD_APP_ID, appId)
       .option(KustoSinkOptions.KUSTO_AAD_APP_SECRET, appKey)
       .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, authority)
-      .option(KustoSinkOptions.KUSTO_ADJUST_SCHEMA, "FailIfNotMatch")
       .option(KustoSinkOptions.KUSTO_TIMEOUT_LIMIT, (8 * 60).toString)
       .mode(SaveMode.Append)
       .save()
