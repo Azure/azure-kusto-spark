@@ -6,8 +6,7 @@ import java.nio.charset.StandardCharsets
 import java.security.InvalidParameterException
 import java.util
 import java.util.zip.GZIPOutputStream
-import java.util.{Calendar, TimeZone, UUID}
-
+import java.util.{TimeZone, UUID}
 import com.microsoft.azure.kusto.ingest.IngestionProperties.DATA_FORMAT
 import com.microsoft.azure.kusto.ingest.result.IngestionResult
 import com.microsoft.azure.kusto.ingest.source.BlobSourceInfo
@@ -16,14 +15,13 @@ import com.microsoft.azure.storage.blob.{BlobRequestOptions, CloudBlockBlob}
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator.generateTableGetSchemaAsRowsCommand
-import com.microsoft.kusto.spark.utils.{KustoClient, KustoClientCache, KustoQueryUtils, KustoConstants => KCONST, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.{KustoClient, KustoClientCache, KustoIngestionUtils, KustoQueryUtils, KustoConstants => KCONST, KustoDataSourceUtils => KDSU}
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.CollectionAccumulator
 import org.json.JSONObject
-import org.joda.time.DateTime
 
 import scala.collection.Iterator
 import scala.collection.JavaConverters._
@@ -59,17 +57,9 @@ object KustoWriter {
     val stagingTableIngestionProperties = getIngestionProperties(writeOptions, tableCoordinates.database, tmpTableName)
     val schemaShowCommandResult = kustoClient.engineClient.execute(tableCoordinates.database, generateTableGetSchemaAsRowsCommand(tableCoordinates.table.get)).getPrimaryResults
     val targetSchema = schemaShowCommandResult.getData.asScala.map(c => c.get(0).asInstanceOf[JSONObject]).toArray
-    KDSU.adjustSchema(writeOptions.adjustSchema, data.schema, targetSchema, stagingTableIngestionProperties)
+    KustoIngestionUtils.adjustSchema(writeOptions.adjustSchema, data.schema, targetSchema, stagingTableIngestionProperties)
 
-    val rebuildedIngestionProperties = new SparkIngestionProperties(stagingTableIngestionProperties.getFlushImmediately,
-      stagingTableIngestionProperties.getDropByTags,
-      stagingTableIngestionProperties.getIngestByTags,
-      stagingTableIngestionProperties.getAdditionalTags,
-      stagingTableIngestionProperties.getIngestIfNotExists,
-      new DateTime(Calendar.getInstance().getTime),
-      KDSU.csvMappingToString(stagingTableIngestionProperties.getIngestionMapping.getColumnMappings),
-      stagingTableIngestionProperties.getIngestionMapping.getIngestionMappingReference
-    )
+    val rebuildedIngestionProperties = new SparkIngestionProperties(stagingTableIngestionProperties)
 
     val rebuildedOptions = WriteOptions(writeOptions.tableCreateOptions, writeOptions.isAsync,
       writeOptions.writeResultLimit,

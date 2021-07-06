@@ -1,11 +1,12 @@
 package com.microsoft.kusto.spark
 
+import com.fasterxml.jackson.databind.ObjectMapper
+
 import java.math.{BigDecimal, RoundingMode}
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
-
 import com.microsoft.azure.kusto.data.ClientFactory
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode}
@@ -250,3 +251,4 @@ class KustoSinkBatchE2E extends FlatSpec with BeforeAndAfterAll{
       KustoTestUtils.ingestWithSchemaAdjustment(cluster, database, appId, appKey, authority, df, targetSchema, schemaAdjustmentMode)
   }
 }
+

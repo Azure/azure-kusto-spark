@@ -1,8 +1,8 @@
 package com.microsoft.kusto.spark.datasink
 
 import java.util
-
 import com.microsoft.azure.kusto.ingest.{IngestionMapping, IngestionProperties}
+import com.microsoft.kusto.spark.utils.KustoIngestionUtils
 import org.codehaus.jackson.annotate.JsonAutoDetect.Visibility
 import org.codehaus.jackson.annotate.JsonMethod
 import org.codehaus.jackson.map.ObjectMapper
@@ -19,6 +19,19 @@ class SparkIngestionProperties(var flushImmediately: Boolean = false,
   // C'tor for serialization
   def this(){
     this(false)
+  }
+
+  def this(ingestionProperties: IngestionProperties){
+    this(
+      ingestionProperties.getFlushImmediately,
+      ingestionProperties.getDropByTags,
+      ingestionProperties.getIngestByTags,
+      ingestionProperties.getAdditionalTags,
+      ingestionProperties.getIngestIfNotExists,
+      null, // no ingestionProperties additionalProperties getter to extract creationTime value
+      KustoIngestionUtils.csvMappingToString(ingestionProperties.getIngestionMapping.getColumnMappings),
+      ingestionProperties.getIngestionMapping.getIngestionMappingReference
+    )
   }
 
   override def toString: String = {

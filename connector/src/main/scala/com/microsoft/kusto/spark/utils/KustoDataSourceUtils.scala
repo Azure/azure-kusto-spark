@@ -4,6 +4,7 @@ import java.io.InputStream
 import java.net.URI
 import java.security.InvalidParameterException
 import java.util
+import java.util.Properties
 import java.util.concurrent.{Callable, CountDownLatch, TimeUnit, TimeoutException}
 import java.util.{NoSuchElementException, StringJoiner, Timer, TimerTask, UUID}
 
@@ -16,27 +17,17 @@ import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SchemaAdjustmentMod
 import com.microsoft.kusto.spark.datasource.{KustoResponseDeserializer, KustoSchema, KustoSourceOptions, KustoStorageParameters}
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
-import com.microsoft.azure.kusto.ingest.{ColumnMapping, IngestionProperties, MappingConsts}
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import java.util.Properties
 
-import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility
-import com.fasterxml.jackson.annotation.PropertyAccessor
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.microsoft.azure.kusto.ingest.IngestionMapping.IngestionMappingKind
-import com.microsoft.kusto.spark.datasink.SchemaAdjustmentMode.SchemaAdjustmentMode
-
-import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
 import scala.util.matching.Regex
 import org.apache.commons.lang3.StringUtils
 import org.apache.http.client.utils.URIBuilder
-import org.apache.spark.sql.types.StructType
 import org.json.JSONObject
 
 object KustoDataSourceUtils {
@@ -96,63 +87,6 @@ object KustoDataSourceUtils {
     }
 
     tableSchemaBuilder.toString
-  }
-
-  private[kusto] def adjustSchema(mode: SchemaAdjustmentMode ,sourceSchema: StructType, targetSchema: Array[JSONObject], ingestionProperties: IngestionProperties) : Unit = {
-
-    mode match {
-      case SchemaAdjustmentMode.NoAdjustment =>
-      case SchemaAdjustmentMode.FailIfNotMatch => forceAdjustSchema(sourceSchema, targetSchema)
-      case SchemaAdjustmentMode.GenerateDynamicCsvMapping => setCsvMapping(sourceSchema, targetSchema, ingestionProperties)
-    }
-
-  }
-
-  private[kusto] def forceAdjustSchema(sourceSchema: StructType, targetSchema: Array[JSONObject]) : Unit ={
-
-    val targetSchemaColumns = targetSchema.map(c=> c.getString("Name")).toSeq
-    val sourceSchemaColumns = sourceSchema.map(c=> c.name)
-
-    if (targetSchemaColumns != sourceSchemaColumns) {
-      throw new RuntimeException(s"Target table schema does not match to DataFrame schema. " +
-        s"Target columns: ${targetSchemaColumns.mkString(", ")}. " +
-        s"Source columns: ${sourceSchemaColumns.mkString(", ")}. ")
-    }
-  }
-
-  private[kusto] def setCsvMapping(sourceSchema: StructType, targetSchema: Array[JSONObject], ingestionProperties: IngestionProperties): Unit = {
-
-    val targetSchemaColumns = targetSchema.map(c => (c.getString("Name"),c.getString("CslType"))).toSet
-    val sourceSchemaColumns = sourceSchema.fields.zipWithIndex.map(c => (c._1.name, c._2 )).toMap
-    val notFoundSourceColumns = sourceSchemaColumns.filter(c => !targetSchemaColumns.map(c=>c._1).contains(c._1)).keys
-    if(notFoundSourceColumns.nonEmpty)
-      throw new RuntimeException(s"Source schema has columns that are not represented in the target: ${notFoundSourceColumns.mkString(", ")}.")
-
-    val columnMappingReset = targetSchemaColumns
-      .map(tc => {
-        val columnMapping = new ColumnMapping(tc._1, tc._2)
-        val sourceColumnIndex = sourceSchemaColumns.get(tc._1)
-        if ( sourceColumnIndex.isDefined)
-          columnMapping.setOrdinal(sourceColumnIndex.get)
-        else
-            columnMapping.setConstantValue("")
-        columnMapping
-      })
-
-    ingestionProperties.setIngestionMapping(columnMappingReset.toArray,
-      IngestionMappingKind.Csv)
-
-  }
-
-  private[kusto] def csvMappingToString(columnMappings: Array[ColumnMapping]) : String = {
-
-    if(columnMappings == null)
-      return ""
-    val objectMapper = new ObjectMapper
-    objectMapper.setVisibility(PropertyAccessor.ALL, Visibility.NONE)
-    objectMapper.setVisibility(PropertyAccessor.FIELD, Visibility.ANY)
-    objectMapper.writeValueAsString(columnMappings)
-
   }
 
   private[kusto] def getSchema(database: String, query: String, client: Client, clientRequestProperties: Option[ClientRequestProperties]): KustoSchema = {
@@ -640,5 +574,3 @@ object KustoDataSourceUtils {
   }
 
 }
-
-case class TableColumnMap(Source: String, TargetType: String, Ordinal: Option[Int])
