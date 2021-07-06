@@ -19,6 +19,7 @@ import com.microsoft.kusto.spark.utils.KustoConstants.{IngestSkippedTrace, MaxSl
 import com.microsoft.kusto.spark.utils.KustoDataSourceUtils.extractSchemaFromResultTable
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import org.apache.commons.lang3.StringUtils
+import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.commons.lang3.time.DurationFormatUtils
 import org.apache.log4j.Level
 import org.apache.spark.sql.types.StructType
@@ -254,8 +255,9 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
                     finalRes = Some(partitionResult.ingestionResult.getIngestionStatusCollection.get(0))
                     finalRes
                   } catch {
-                    case _: StorageException =>
-                      KDSU.logWarn(myName, s"Failed to fetch operation status transiently - will keep polling. RequestId: ${writeOptions.requestId}")
+                    case e: StorageException =>
+                      KDSU.logWarn(myName, s"Failed to fetch operation status transiently - will keep polling. " +
+                        s"RequestId: ${writeOptions.requestId}. Error: ${ExceptionUtils.getStackTrace(e)}")
                       None
                     case e: Exception => KDSU.reportExceptionAndThrow(myName, e, s"Failed to fetch operation status. RequestId: ${writeOptions.requestId}"); None
                   }
