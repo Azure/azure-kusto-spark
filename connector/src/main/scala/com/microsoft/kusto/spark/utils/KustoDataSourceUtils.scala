@@ -22,6 +22,8 @@ import org.apache.log4j.{Level, Logger}
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 
+import com.microsoft.kusto.spark.utils.KustoConstants.{DefaultBatchingLimit, DefaultExtentsCountForSplitMergePerNode, DefaultMaxRetriesOnMoveExtents}
+
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
@@ -52,13 +54,18 @@ object KustoDataSourceUtils {
   val PlayFabClustersProxy: String = props.getProperty("playFabProxy", "https://insights.playfab.com")
   val AriaClustersAlias: String = "Aria proxy"
   val PlayFabClustersAlias: String = "PlayFab proxy"
-
+  var loggingLevel: Level = Level.INFO
   def setLoggingLevel(level: String): Unit = {
     setLoggingLevel(Level.toLevel(level))
   }
 
   def setLoggingLevel(level: Level): Unit = {
+    loggingLevel = level
     Logger.getLogger("KustoConnector").setLevel(level)
+  }
+
+  def getLoggingLevel: Level = {
+    loggingLevel
   }
 
   private[kusto] def logInfo(reporter: String, message: String): Unit = {
@@ -75,6 +82,10 @@ object KustoDataSourceUtils {
 
   private[kusto] def logFatal(reporter: String, message: String): Unit = {
     klog.fatal(s"$reporter: $message")
+  }
+
+  private[kusto] def logDebug(reporter: String, message: String): Unit = {
+    klog.debug(s"$reporter: $message")
   }
 
   private[kusto] def extractSchemaFromResultTable(result: Iterable[JSONObject]): String = {
@@ -200,12 +211,19 @@ object KustoDataSourceUtils {
     var isAsync: Boolean = false
     var isAsyncParam: String = ""
     var batchLimit: Int = 0
+    var minimalExtentsCountForSplitMergePerNode: Int = 0
+    var maxRetriesOnMoveExtents: Int = 0
     try {
       isAsyncParam = parameters.getOrElse(KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC, "false")
       isAsync = parameters.getOrElse(KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC, "false").trim.toBoolean
       tableCreationParam = parameters.get(KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS)
       tableCreation = if (tableCreationParam.isEmpty) SinkTableCreationMode.FailIfNotExist else SinkTableCreationMode.withName(tableCreationParam.get)
-      batchLimit = parameters.getOrElse(KustoSinkOptions.KUSTO_CLIENT_BATCHING_LIMIT, "100").trim.toInt
+      batchLimit = parameters.getOrElse(KustoSinkOptions.KUSTO_CLIENT_BATCHING_LIMIT, DefaultBatchingLimit.toString)
+        .trim.toInt
+      minimalExtentsCountForSplitMergePerNode = parameters.getOrElse(KustoDebugOptions
+        .KUSTO_MAXIMAL_EXTENTS_COUNT_FOR_SPLIT_MERGE_PER_NODE, DefaultExtentsCountForSplitMergePerNode.toString).trim.toInt
+      maxRetriesOnMoveExtents = parameters.getOrElse(KustoDebugOptions.KUSTO_MAX_RETRIES_ON_MOVR_EXTENTS,
+        DefaultMaxRetriesOnMoveExtents.toString).trim.toInt
     } catch {
       case _: NoSuchElementException => throw new InvalidParameterException(s"No such SinkTableCreationMode option: '${tableCreationParam.get}'")
       case _: java.lang.IllegalArgumentException => throw new InvalidParameterException(s"KUSTO_WRITE_ENABLE_ASYNC is expecting either 'true' or 'false', got: '$isAsyncParam'")
@@ -214,8 +232,12 @@ object KustoDataSourceUtils {
     val adjustSchemaParam = parameters.get(KustoSinkOptions.KUSTO_ADJUST_SCHEMA)
     val adjustSchema = if (adjustSchemaParam.isEmpty) SchemaAdjustmentMode.NoAdjustment else SchemaAdjustmentMode.withName(adjustSchemaParam.get)
 
-    val timeout = new FiniteDuration(parameters.getOrElse(KustoSinkOptions.KUSTO_TIMEOUT_LIMIT, KCONST.DefaultWaitingIntervalLongRunning).toLong, TimeUnit.SECONDS)
+    val timeout = new FiniteDuration(parameters.getOrElse(KustoSinkOptions.KUSTO_TIMEOUT_LIMIT, KCONST
+      .DefaultWaitingIntervalLongRunning).toInt, TimeUnit.SECONDS)
+    val autoCleanupTime = new FiniteDuration(parameters.getOrElse(KustoSinkOptions.KUSTO_STAGING_RESOURCE_AUTO_CLEANUP_TIMEOUT, KCONST
+      .DefaultCleaningInterval).toInt, TimeUnit.SECONDS)
     val requestId = parameters.getOrElse(KustoSinkOptions.KUSTO_REQUEST_ID, UUID.randomUUID().toString)
+
     val ingestionPropertiesAsJson = parameters.get(KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON)
 
     val writeOptions = WriteOptions(
@@ -227,6 +249,9 @@ object KustoDataSourceUtils {
       ingestionPropertiesAsJson,
       batchLimit,
       requestId,
+      autoCleanupTime,
+      minimalExtentsCountForSplitMergePerNode,
+      maxRetriesOnMoveExtents,
       adjustSchema
     )
 
@@ -282,13 +307,14 @@ object KustoDataSourceUtils {
       PlayFabClustersAlias
     }
     else if (cluster.startsWith(EnginePrefix)) {
-      if (!cluster.contains(".kusto.")) {
+      if (!cluster.contains(".kusto.") && !cluster.contains(".kustodev.")) {
         throw new InvalidParameterException("KUSTO_CLUSTER parameter accepts either a full url with https scheme or the cluster's" +
           "alias and tries to construct the full URL from it. Parameter given: " + cluster)
       }
       val host = new URI(cluster).getHost
       val startIdx = if (host.startsWith(IngestPrefix)) IngestPrefix.length else 0
-      host.substring(startIdx, host.indexOf(".kusto."))
+      val endIdx = if(cluster.contains(".kustodev.")) host.indexOf(".kustodev.") else host.indexOf(".kusto.")
+      host.substring(startIdx, endIdx)
 
     } else {
       cluster
@@ -297,10 +323,13 @@ object KustoDataSourceUtils {
 
   private[kusto] def getEngineUrlFromAliasIfNeeded(cluster: String): String = {
     if (cluster.startsWith(EnginePrefix)) {
+
       val host = new URI(cluster).getHost
       if (host.startsWith(IngestPrefix)) {
+        val startIdx = IngestPrefix.length
         val uriBuilder = new URIBuilder()
-        uriBuilder.setHost(IngestPrefix + host).toString
+        uriBuilder.setHost(s"${host.substring(startIdx, host.indexOf(".kusto."))}.kusto.windows.net")
+        uriBuilder.setScheme("https").toString
       } else {
         cluster
       }
@@ -545,23 +574,23 @@ object KustoDataSourceUtils {
     else None
   }
 
-  private[kusto] def countRows(client: Client, query: String, database: String): Int = {
-    val res = client.execute(database, generateCountQuery(query)).getPrimaryResults
+  private[kusto] def countRows(client: Client, query: String, database: String, crp: ClientRequestProperties): Int = {
+    val res = client.execute(database, generateCountQuery(query), crp).getPrimaryResults
     res.next()
     res.getInt(0)
   }
 
-  private[kusto] def estimateRowsCount(client: Client, query: String, database: String): Int = {
+  private[kusto] def estimateRowsCount(client: Client, query: String, database: String, crp: ClientRequestProperties): Int = {
     var count = 0
     val estimationResult: util.List[AnyRef] = Await.result(Future {
-      val res = client.execute(database, generateEstimateRowsCountQuery(query)).getPrimaryResults
+      val res = client.execute(database, generateEstimateRowsCountQuery(query), crp).getPrimaryResults
       res.next()
       res.getCurrentRow
     }, KustoConstants.TimeoutForCountCheck)
     if (StringUtils.isBlank(estimationResult.get(1).toString)) {
       // Estimation can be empty for certain cases
       Await.result(Future {
-        val res = client.execute(database, generateCountQuery(query)).getPrimaryResults
+        val res = client.execute(database, generateCountQuery(query), crp).getPrimaryResults
         res.next()
         res.getInt(0)
       }, KustoConstants.TimeoutForCountCheck)

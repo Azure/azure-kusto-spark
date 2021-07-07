@@ -44,8 +44,9 @@ trait KustoOptions {
   // required permissions
   val KUSTO_DATABASE: String = newOption("kustoDatabase")
 
-  // An integer number corresponding to the period in seconds after which the operation will timeout. Default: '5400'
-  // (90 minutes)
+  // An integer number corresponding to the period in seconds after which the operation will timeout.
+  // For write operations this limit starts ticking only after the data was processed by the connector and it starts
+  // polling on the ingestion results. Default 2 days
   val KUSTO_TIMEOUT_LIMIT: String = newOption("timeoutLimit")
 
   // An id of the source used for tracing of the write operation
@@ -94,4 +95,8 @@ private[kusto] object KustoDebugOptions {
 
   val KEY_VAULT_PEM_FILE_PATH = "keyVaultPemFilePath" // Not yet supported
   val KEY_VAULT_CERTIFICATE_KEY = "keyVaultPemFileKey" // Not yet supported
+
+  val KUSTO_MAXIMAL_EXTENTS_COUNT_FOR_SPLIT_MERGE_PER_NODE
+    :String =  newOption("maximalExtentsCountForSplitMergePerNode")
+  val KUSTO_MAX_RETRIES_ON_MOVR_EXTENTS: String = newOption("maxRetriesOnMoveExtents")
 }

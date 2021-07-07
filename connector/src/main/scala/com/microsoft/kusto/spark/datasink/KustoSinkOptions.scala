@@ -1,7 +1,6 @@
 package com.microsoft.kusto.spark.datasink
 
 import java.util.UUID
-
 import com.microsoft.kusto.spark.common.KustoOptions
 
 import scala.concurrent.duration.FiniteDuration
@@ -41,7 +40,12 @@ object KustoSinkOptions extends KustoOptions{
   // If set 'NoAdjustment' do nothing.
   // Default: 'NoAdjustment'
   val KUSTO_ADJUST_SCHEMA: String = newOption("adjustSchema")
+
+  // An integer number corresponding to the period in seconds after which the staging resources used for the writing
+  // are cleaned if they weren't cleaned at the end of the run
+  val KUSTO_STAGING_RESOURCE_AUTO_CLEANUP_TIMEOUT: String = newOption("stagingResourcesAutoCleanupTimeout")
 }
+
 
 object SinkTableCreationMode extends Enumeration {
   type SinkTableCreationMode = Value
@@ -56,8 +60,13 @@ object SchemaAdjustmentMode extends Enumeration {
 case class WriteOptions(tableCreateOptions: SinkTableCreationMode.SinkTableCreationMode = SinkTableCreationMode.FailIfNotExist,
                         isAsync: Boolean = false,
                         writeResultLimit: String = KustoSinkOptions.NONE_RESULT_LIMIT,
-                        timeZone: String = "UTC", timeout: FiniteDuration,
+                        timeZone: String = "UTC",
+                        timeout: FiniteDuration,
                         IngestionProperties: Option[String] = None,
                         batchLimit: Int = 100,
                         requestId: String = UUID.randomUUID().toString,
+                        autoCleanupTime: FiniteDuration,
+                        maxRetriesOnMoveExtents: Int = 10,
+                        minimalExtentsCountForSplitMerge: Int = 400,
                         adjustSchema: SchemaAdjustmentMode.SchemaAdjustmentMode = SchemaAdjustmentMode.NoAdjustment)
+

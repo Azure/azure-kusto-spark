@@ -1,12 +1,8 @@
 package com.microsoft.kusto.spark.utils
 
 import java.time.Instant
-import java.util
 
-import com.microsoft.kusto.spark.datasink.KustoWriter.TempIngestionTablePrefix
 import com.microsoft.kusto.spark.datasource.KustoStorageParameters
-
-import scala.collection.JavaConverters._
 
 private[kusto] object CslCommandsGenerator {
   def generateFetchTableIngestByTagsCommand(table: String): String = {
@@ -60,24 +56,19 @@ private[kusto] object CslCommandsGenerator {
     s".show export containers"
   }
 
-  def generateTableMoveExtentsCommand(sourceTableName: String, destinationTableName: String, ingestIfNotExistsTags: util.ArrayList[String]): String = {
-    val quotedTags = ingestIfNotExistsTags.asScala.map((tag: String) => s""""$tag"""").asJava
+  def generateTableMoveExtentsCommand(sourceTableName: String, destinationTableName: String, batchSize:Int): String = {
     s""".move extents to table $destinationTableName <|
-       .show tables ( $sourceTableName,  $destinationTableName) extents;
+       .show table $sourceTableName extents with(extentsShowFilteringRuntimePolicy='{"MaximumResultsCount":$batchSize}');
         $$command_results
-       | where TableName ==  '$sourceTableName'
-       | extend extentsSource = todynamic('$quotedTags')
-       |extend extentsDest = toscalar(
-              $$command_results
-               | where TableName == '$destinationTableName'
-               | mv-apply Tags=split(Tags, '\\r\\n') on
-                (
-                 extend Tags = substring(Tags, ${KustoConstants.IngestByPrefix.length})
-                )
-                |summarize make_set(Tags)
-        )
-      | where array_length(set_intersect(extentsSource,extentsDest))==0
-      |  distinct ExtentId"""
+       |  distinct ExtentId"""
+  }
+
+  def generateNodesCountCommand(): String = {
+    ".show cluster | count"
+  }
+
+  def generateExtentsCountCommand(table: String) = {
+    s".show table $table extents | count"
   }
 
   def generateTableAlterMergePolicyCommand(table: String, allowMerge: Boolean, allowRebuild: Boolean): String = {
