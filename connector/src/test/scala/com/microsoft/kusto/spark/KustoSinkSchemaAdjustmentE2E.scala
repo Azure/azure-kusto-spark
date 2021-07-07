@@ -75,6 +75,21 @@ class KustoSinkSchemaAdjustmentE2E extends FlatSpec
     assert(thrown.getMessage.startsWith("Target table schema does not match to DataFrame schema."))
   }
 
+  "Source DataFrame schema adjustment"  should "produce RuntimeException when source has additional columns" in {
+    val thrown = intercept[RuntimeException] {
+      import spark.implicits._
+      val sourceValues = (1 to expectedNumberOfRows).map(v => (newRow(v), v, "AdditionalData"))
+      val df = sourceValues.toDF("ColA", "ColB", "AdditionalColC")
+      val targetSchema = "ColA:string, ColB:int"
+      val schemaAdjustmentMode = "GenerateDynamicCsvMapping"
+
+      val testTable = KustoTestUtils.createTestTable(kustoConnectionOptions, "", targetSchema)
+      KustoTestUtils.ingest(kustoConnectionOptions, df, testTable, schemaAdjustmentMode)
+
+    }
+    assert(thrown.getMessage.startsWith("Source schema has columns that are not represented in the target"))
+  }
+
   "Source DataFrame schema adjustment"  should "generate dynamic csv mapping according to column names" in {
     import spark.implicits._
     val sourceValues = (1 to expectedNumberOfRows).map(v => (newRow(v), v))
