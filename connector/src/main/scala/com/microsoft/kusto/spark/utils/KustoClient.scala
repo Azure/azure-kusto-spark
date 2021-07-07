@@ -3,7 +3,6 @@ package com.microsoft.kusto.spark.utils
 import java.time.Instant
 import java.util.StringJoiner
 import java.util.concurrent.TimeUnit
-
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.exceptions.DataServiceException
 import com.microsoft.azure.kusto.data.{Client, ClientFactory, ClientRequestProperties, KustoResultSetTable}
@@ -30,7 +29,7 @@ import shaded.parquet.org.codehaus.jackson.map.ObjectMapper
 import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.FiniteDuration
-import scala.concurrent.{Await, Future}
+import scala.concurrent.{Await, Future, TimeoutException}
 
 class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuilder, val ingestKcsb: ConnectionStringBuilder) {
   lazy val engineClient: Client = ClientFactory.createClient(engineKcsb)
