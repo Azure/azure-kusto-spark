@@ -41,7 +41,7 @@ class KustoSinkSchemaAdjustmentE2E extends FlatSpec
 
 
 
-  "Source DataFrame schema adjustment" should "not adjust" in {
+  "Source DataFrame schema adjustment" should "not adjust" taggedAs KustoE2E in {
     import spark.implicits._
     val sourceValues = (1 to expectedNumberOfRows).map(v => (newRow(v), v))
     val df = sourceValues.toDF("WrongColA", "WrongColB")
@@ -60,7 +60,7 @@ class KustoSinkSchemaAdjustmentE2E extends FlatSpec
 
   }
 
-  "Source DataFrame schema adjustment"  should "produce RuntimeException when column names not match" in {
+  "Source DataFrame schema adjustment"  should "produce RuntimeException when column names not match" taggedAs KustoE2E in {
     val thrown = intercept[RuntimeException] {
       import spark.implicits._
       val sourceValues = (1 to expectedNumberOfRows).map(v => (newRow(v), v))
@@ -75,7 +75,7 @@ class KustoSinkSchemaAdjustmentE2E extends FlatSpec
     assert(thrown.getMessage.startsWith("Target table schema does not match to DataFrame schema."))
   }
 
-  "Source DataFrame schema adjustment"  should "produce RuntimeException when source has additional columns" in {
+  "Source DataFrame schema adjustment"  should "produce RuntimeException when source has additional columns" taggedAs KustoE2E in {
     val thrown = intercept[RuntimeException] {
       import spark.implicits._
       val sourceValues = (1 to expectedNumberOfRows).map(v => (newRow(v), v, "AdditionalData"))
@@ -90,7 +90,7 @@ class KustoSinkSchemaAdjustmentE2E extends FlatSpec
     assert(thrown.getMessage.startsWith("Source schema has columns that are not represented in the target"))
   }
 
-  "Source DataFrame schema adjustment"  should "generate dynamic csv mapping according to column names" in {
+  "Source DataFrame schema adjustment"  should "generate dynamic csv mapping according to column names" taggedAs KustoE2E in {
     import spark.implicits._
     val sourceValues = (1 to expectedNumberOfRows).map(v => (newRow(v), v))
     val df = sourceValues.toDF("SourceColA", "SourceColB")
