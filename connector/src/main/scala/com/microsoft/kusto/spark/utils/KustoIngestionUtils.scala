@@ -3,9 +3,7 @@ package com.microsoft.kusto.spark.utils
 import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility
 import com.fasterxml.jackson.annotation.PropertyAccessor
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.microsoft.azure.kusto.ingest.IngestionMapping.IngestionMappingKind
-import com.microsoft.azure.kusto.ingest.{ColumnMapping, IngestionProperties}
-import com.microsoft.azure.kusto.ingest.IngestionProperties.DATA_FORMAT
+import com.microsoft.azure.kusto.ingest.ColumnMapping
 import com.microsoft.kusto.spark.datasink.{SchemaAdjustmentMode, SparkIngestionProperties}
 import com.microsoft.kusto.spark.datasink.SchemaAdjustmentMode.SchemaAdjustmentMode
 import org.apache.spark.sql.types.StructType
@@ -32,7 +30,7 @@ object KustoIngestionUtils {
     val sourceSchemaColumns = sourceSchema.map(c=> c.name)
 
     if (targetSchemaColumns != sourceSchemaColumns) {
-      throw new RuntimeException(s"Target table schema does not match to DataFrame schema. " +
+      throw SchemaMatchException(s"Target table schema does not match to DataFrame schema. " +
         s"Target columns: ${targetSchemaColumns.mkString(", ")}. " +
         s"Source columns: ${sourceSchemaColumns.mkString(", ")}. ")
     }
@@ -46,7 +44,7 @@ object KustoIngestionUtils {
     val sourceSchemaColumns = sourceSchema.fields.zipWithIndex.map(c => (c._1.name, c._2 )).toMap
     val notFoundSourceColumns = sourceSchemaColumns.filter(c => !targetSchemaColumns.contains(c._1)).keys
     if(notFoundSourceColumns.nonEmpty)
-      throw new RuntimeException(s"Source schema has columns that are not present in the target: ${notFoundSourceColumns.mkString(", ")}.")
+      throw SchemaMatchException(s"Source schema has columns that are not present in the target: ${notFoundSourceColumns.mkString(", ")}.")
 
     val columnMappingReset = sourceSchemaColumns
       .map(sourceColumn => {

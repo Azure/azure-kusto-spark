@@ -2,6 +2,7 @@ package com.microsoft.kusto.spark
 
 import com.microsoft.kusto.spark.KustoTestUtils.KustoConnectionOptions
 import com.microsoft.kusto.spark.datasink.KustoSinkOptions
+import com.microsoft.kusto.spark.utils.SchemaMatchException
 import org.apache.spark.sql._
 import org.apache.spark.sql.types.StringType
 import org.junit.runner.RunWith
@@ -60,8 +61,8 @@ class KustoSinkSchemaAdjustmentE2E extends FlatSpec
 
   }
 
-  "Source DataFrame schema adjustment"  should "produce RuntimeException when column names not match" taggedAs KustoE2E in {
-    val thrown = intercept[RuntimeException] {
+  "Source DataFrame schema adjustment"  should "produce SchemaMatchException when column names not match" taggedAs KustoE2E in {
+    val thrown = intercept[SchemaMatchException] {
       import spark.implicits._
       val sourceValues = (1 to expectedNumberOfRows).map(v => (newRow(v), v))
       val df = sourceValues.toDF("WrongColA", "WrongColB")
