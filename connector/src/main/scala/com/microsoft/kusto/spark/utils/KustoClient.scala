@@ -347,14 +347,18 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
     }
   }
 
-  private[kusto] def setMappingOnStagingTableIfNeeded(stagingTableIngestionProperties: IngestionProperties,
-                                                      originalTable: String, crp: ClientRequestProperties): Unit = {
+  private[kusto] def setMappingOnStagingTableIfNeeded(stagingTableSparkIngestionProperties: SparkIngestionProperties,
+                                                      database: String,
+                                                      tempTable: String,
+                                                      originalTable: String,
+                                                      crp: ClientRequestProperties): Unit = {
+    val stagingTableIngestionProperties = stagingTableSparkIngestionProperties.toIngestionProperties(database, tempTable)
     val mapping = stagingTableIngestionProperties.getIngestionMapping
     val mappingReferenceName = mapping.getIngestionMappingReference
     if (StringUtils.isNotBlank(mappingReferenceName)) {
       val mappingKind = mapping.getIngestionMappingKind.toString
       val cmd = generateShowTableMappingsCommand(originalTable, mappingKind)
-      val mappings = engineClient.execute(stagingTableIngestionProperties.getDatabaseName, cmd).getPrimaryResults
+      val mappings = engineClient.execute(stagingTableIngestionProperties.getDatabaseName, cmd, crp).getPrimaryResults
 
       var found = false
       while (mappings.next && !found) {

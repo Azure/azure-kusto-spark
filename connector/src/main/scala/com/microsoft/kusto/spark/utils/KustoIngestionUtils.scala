@@ -6,14 +6,17 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.microsoft.azure.kusto.ingest.IngestionMapping.IngestionMappingKind
 import com.microsoft.azure.kusto.ingest.{ColumnMapping, IngestionProperties}
 import com.microsoft.azure.kusto.ingest.IngestionProperties.DATA_FORMAT
-import com.microsoft.kusto.spark.datasink.SchemaAdjustmentMode
+import com.microsoft.kusto.spark.datasink.{SchemaAdjustmentMode, SparkIngestionProperties}
 import com.microsoft.kusto.spark.datasink.SchemaAdjustmentMode.SchemaAdjustmentMode
 import org.apache.spark.sql.types.StructType
 import org.json.JSONObject
 
 object KustoIngestionUtils {
 
-  private[kusto] def adjustSchema(mode: SchemaAdjustmentMode ,sourceSchema: StructType, targetSchema: Array[JSONObject], ingestionProperties: IngestionProperties) : Unit = {
+  private[kusto] def adjustSchema(mode: SchemaAdjustmentMode,
+                                  sourceSchema: StructType,
+                                  targetSchema: Array[JSONObject],
+                                  ingestionProperties: SparkIngestionProperties) : Unit = {
 
     mode match {
       case SchemaAdjustmentMode.NoAdjustment =>
@@ -35,7 +38,9 @@ object KustoIngestionUtils {
     }
   }
 
-  private[kusto] def setCsvMapping(sourceSchema: StructType, targetSchema: Array[JSONObject], ingestionProperties: IngestionProperties): Unit = {
+  private[kusto] def setCsvMapping(sourceSchema: StructType,
+                                   targetSchema: Array[JSONObject],
+                                   ingestionProperties: SparkIngestionProperties): Unit = {
 
     val targetSchemaColumns = targetSchema.map(c => (c.getString("Name"),c.getString("CslType"))).toMap
     val sourceSchemaColumns = sourceSchema.fields.zipWithIndex.map(c => (c._1.name, c._2 )).toMap
@@ -51,8 +56,7 @@ object KustoIngestionUtils {
         columnMapping
       })
 
-    ingestionProperties.setIngestionMapping(columnMappingReset.toArray, IngestionMappingKind.Csv)
-    ingestionProperties.setDataFormat(DATA_FORMAT.csv)
+    ingestionProperties.csvMapping = csvMappingToString(columnMappingReset.toArray)
 
   }
 
