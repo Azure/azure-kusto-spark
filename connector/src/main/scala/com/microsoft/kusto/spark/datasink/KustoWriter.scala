@@ -64,12 +64,12 @@ object KustoWriter {
     val targetSchema = schemaShowCommandResult.getData.asScala.map(c => c.get(0).asInstanceOf[JSONObject]).toArray
     KustoIngestionUtils.adjustSchema(writeOptions.adjustSchema, data.schema, targetSchema, stagingTableIngestionProperties)
 
-    val rebuildedIngestionProperties = new SparkIngestionProperties(stagingTableIngestionProperties)
+    val rebuiltIngestionProperties = new SparkIngestionProperties(stagingTableIngestionProperties)
 
-    val rebuildedOptions = WriteOptions(writeOptions.tableCreateOptions, writeOptions.isAsync,
+    val rebuiltOptions = WriteOptions(writeOptions.tableCreateOptions, writeOptions.isAsync,
       writeOptions.writeResultLimit,
       writeOptions.timeZone, writeOptions.timeout,
-      Some(rebuildedIngestionProperties.toString()),
+      Some(rebuiltIngestionProperties.toString()),
       writeOptions.batchLimit,
       writeOptions.requestId,
       writeOptions.autoCleanupTime,
@@ -78,7 +78,7 @@ object KustoWriter {
       writeOptions.adjustSchema)
 
     implicit val parameters: KustoWriteResource = KustoWriteResource(authentication, tableCoordinates, data.schema,
-      rebuildedOptions, tmpTableName)
+      rebuiltOptions, tmpTableName)
 
     val ingestIfNotExistsTags = stagingTableIngestionProperties.getIngestIfNotExists
     // Remove the ingestIfNotExists tags because several partitions can ingest into the staging table and should not interfere one another
