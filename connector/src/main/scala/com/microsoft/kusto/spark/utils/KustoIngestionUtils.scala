@@ -46,7 +46,7 @@ object KustoIngestionUtils {
     val sourceSchemaColumns = sourceSchema.fields.zipWithIndex.map(c => (c._1.name, c._2 )).toMap
     val notFoundSourceColumns = sourceSchemaColumns.filter(c => !targetSchemaColumns.contains(c._1)).keys
     if(notFoundSourceColumns.nonEmpty)
-      throw new RuntimeException(s"Source schema has columns that are not represented in the target: ${notFoundSourceColumns.mkString(", ")}.")
+      throw new RuntimeException(s"Source schema has columns that are not present in the target: ${notFoundSourceColumns.mkString(", ")}.")
 
     val columnMappingReset = sourceSchemaColumns
       .map(sourceColumn => {
