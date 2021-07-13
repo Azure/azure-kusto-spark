@@ -4,13 +4,12 @@ import java.security.InvalidParameterException
 import java.util.UUID
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.{Client, ClientFactory}
-import com.microsoft.kusto.spark.datasink.KustoSinkOptions
+import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SparkIngestionProperties}
 import com.microsoft.kusto.spark.datasource.KustoSourceOptions
 import com.microsoft.kusto.spark.sql.extension.SparkExtension.DataFrameReaderExtension
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.spark.sql.{Column, DataFrame, SaveMode, SparkSession, functions}
-
 
 import scala.collection.JavaConverters._
 import scala.concurrent.TimeoutException
@@ -95,7 +94,9 @@ private [kusto] object KustoTestUtils {
   def ingest(kustoConnectionOptions: KustoConnectionOptions,
              df: DataFrame,
              table: String,
-             schemaAdjustmentMode: String): Unit = {
+             schemaAdjustmentMode: String,
+             sparkIngestionProperties: SparkIngestionProperties = new SparkIngestionProperties()
+             ): Unit = {
 
     df.write
       .format("com.microsoft.kusto.spark.datasource")
@@ -108,6 +109,7 @@ private [kusto] object KustoTestUtils {
       .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, kustoConnectionOptions.Authority)
       .option(KustoSinkOptions.KUSTO_ADJUST_SCHEMA, schemaAdjustmentMode)
       .option(KustoSinkOptions.KUSTO_TIMEOUT_LIMIT, (8 * 60).toString)
+      .option(KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON, sparkIngestionProperties.toString)
       .mode(SaveMode.Append)
       .save()
 

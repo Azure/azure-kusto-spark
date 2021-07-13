@@ -35,7 +35,7 @@ object KustoSinkOptions extends KustoOptions{
 
   // If set 'GenerateDynamicCsvMapping', dynamically generates csv mapping based on DataFrame and target Kusto table column names when writing to Kusto.
   // If some Kusto table fields are missing in the DataFrame, they will be ingested as empty. If some DataFrame fields are missing in target table, fails.
-  // The existing IngestionMappingReference will be reset.
+  // If SparkIngestionProperties.csvMappingNameReference exists, fails.
   // If set 'FailIfNotMatch' adjust schemas equality (column name and order) for DataFrame and target Kusto table, fails if schemas don't match.
   // If set 'NoAdjustment' do nothing.
   // Default: 'NoAdjustment'

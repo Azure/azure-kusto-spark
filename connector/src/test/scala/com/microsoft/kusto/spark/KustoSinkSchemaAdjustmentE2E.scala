@@ -1,7 +1,7 @@
 package com.microsoft.kusto.spark
 
 import com.microsoft.kusto.spark.KustoTestUtils.KustoConnectionOptions
-import com.microsoft.kusto.spark.datasink.KustoSinkOptions
+import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SparkIngestionProperties}
 import com.microsoft.kusto.spark.utils.SchemaMatchException
 import org.apache.spark.sql._
 import org.apache.spark.sql.types.StringType
@@ -76,8 +76,8 @@ class KustoSinkSchemaAdjustmentE2E extends FlatSpec
     assert(thrown.getMessage.startsWith("Target table schema does not match to DataFrame schema."))
   }
 
-  "Source DataFrame schema adjustment"  should "produce RuntimeException when source has additional columns" taggedAs KustoE2E in {
-    val thrown = intercept[RuntimeException] {
+  "Source DataFrame schema adjustment"  should "produce SchemaMatchException when source has additional columns" taggedAs KustoE2E in {
+    val thrown = intercept[SchemaMatchException] {
       import spark.implicits._
       val sourceValues = (1 to expectedNumberOfRows).map(v => (newRow(v), v, "AdditionalData"))
       val df = sourceValues.toDF("ColA", "ColB", "AdditionalColC")
@@ -88,7 +88,7 @@ class KustoSinkSchemaAdjustmentE2E extends FlatSpec
       KustoTestUtils.ingest(kustoConnectionOptions, df, testTable, schemaAdjustmentMode)
 
     }
-    assert(thrown.getMessage.startsWith("Source schema has columns that are not represented in the target"))
+    assert(thrown.getMessage.startsWith("Source schema has columns that are not present in the target"))
   }
 
   "Source DataFrame schema adjustment"  should "generate dynamic csv mapping according to column names" taggedAs KustoE2E in {
@@ -108,6 +108,22 @@ class KustoSinkSchemaAdjustmentE2E extends FlatSpec
 
     assert(KustoTestUtils.validateTargetTable(kustoConnectionOptions, testTable, expectedData, spark))
 
+  }
+
+  "Source DataFrame schema adjustment"  should "produce IllegalArgumentException when csvMappingNameReference in sink options" taggedAs KustoE2E in {
+    val thrown = intercept[IllegalArgumentException] {
+      import spark.implicits._
+      val sourceValues = (1 to expectedNumberOfRows).map(v => (newRow(v), v))
+      val df = sourceValues.toDF("ColA", "ColB")
+      val targetSchema = "ColA:string, ColB:int"
+      val schemaAdjustmentMode = "GenerateDynamicCsvMapping"
+
+      val testTable = KustoTestUtils.createTestTable(kustoConnectionOptions, "", targetSchema)
+      KustoTestUtils.ingest(kustoConnectionOptions, df, testTable, schemaAdjustmentMode,
+        new SparkIngestionProperties(csvMappingNameReference = "testError"))
+
+    }
+    assert(thrown.getMessage.contains("are not compatible"))
   }
 
 }

@@ -39,6 +39,8 @@ object KustoIngestionUtils {
   private[kusto] def setCsvMapping(sourceSchema: StructType,
                                    targetSchema: Array[JSONObject],
                                    ingestionProperties: SparkIngestionProperties): Unit = {
+    require(ingestionProperties.csvMappingNameReference == null || ingestionProperties.csvMappingNameReference.isEmpty,
+      "Sink options SparkIngestionProperties.csvMappingNameReference and adjustSchema.GenerateDynamicCsvMapping are not compatible. Use only one.")
 
     val targetSchemaColumns = targetSchema.map(c => (c.getString("Name"),c.getString("CslType"))).toMap
     val sourceSchemaColumns = sourceSchema.fields.zipWithIndex.map(c => (c._1.name, c._2 )).toMap
