@@ -1,7 +1,6 @@
 package com.microsoft.kusto.spark.datasink
 
 import java.util.UUID
-
 import com.microsoft.kusto.spark.common.KustoOptions
 
 import scala.concurrent.duration.FiniteDuration
@@ -34,14 +33,28 @@ object KustoSinkOptions extends KustoOptions{
   // it at 100MB to adjust it to spark pulling of data.
   val KUSTO_CLIENT_BATCHING_LIMIT: String = newOption("clientBatchingLimit")
 
+  // If set 'GenerateDynamicCsvMapping', dynamically generates csv mapping based on DataFrame and target Kusto table column names when writing to Kusto.
+  // If some Kusto table fields are missing in the DataFrame, they will be ingested as empty. If some DataFrame fields are missing in target table, fails.
+  // If SparkIngestionProperties.csvMappingNameReference exists, fails.
+  // If set 'FailIfNotMatch' adjust schemas equality (column name and order) for DataFrame and target Kusto table, fails if schemas don't match.
+  // If set 'NoAdjustment' do nothing.
+  // Default: 'NoAdjustment'
+  val KUSTO_ADJUST_SCHEMA: String = newOption("adjustSchema")
+
   // An integer number corresponding to the period in seconds after which the staging resources used for the writing
   // are cleaned if they weren't cleaned at the end of the run
   val KUSTO_STAGING_RESOURCE_AUTO_CLEANUP_TIMEOUT: String = newOption("stagingResourcesAutoCleanupTimeout")
 }
 
+
 object SinkTableCreationMode extends Enumeration {
   type SinkTableCreationMode = Value
   val CreateIfNotExist, FailIfNotExist = Value
+}
+
+object SchemaAdjustmentMode extends Enumeration {
+  type SchemaAdjustmentMode = Value
+  val NoAdjustment, FailIfNotMatch, GenerateDynamicCsvMapping = Value
 }
 
 case class WriteOptions(tableCreateOptions: SinkTableCreationMode.SinkTableCreationMode = SinkTableCreationMode.FailIfNotExist,
@@ -54,4 +67,6 @@ case class WriteOptions(tableCreateOptions: SinkTableCreationMode.SinkTableCreat
                         requestId: String = UUID.randomUUID().toString,
                         autoCleanupTime: FiniteDuration,
                         maxRetriesOnMoveExtents: Int = 10,
-                        minimalExtentsCountForSplitMerge: Int = 400)
+                        minimalExtentsCountForSplitMerge: Int = 400,
+                        adjustSchema: SchemaAdjustmentMode.SchemaAdjustmentMode = SchemaAdjustmentMode.NoAdjustment)
+

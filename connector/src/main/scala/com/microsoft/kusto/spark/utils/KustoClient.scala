@@ -3,7 +3,6 @@ package com.microsoft.kusto.spark.utils
 import java.time.Instant
 import java.util.StringJoiner
 import java.util.concurrent.TimeUnit
-
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.exceptions.DataServiceException
 import com.microsoft.azure.kusto.data.{Client, ClientFactory, ClientRequestProperties, KustoResultSetTable}
@@ -29,6 +28,7 @@ import shaded.parquet.org.codehaus.jackson.map.ObjectMapper
 
 import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{Await, Future, TimeoutException}
 
 class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuilder, val ingestKcsb: ConnectionStringBuilder) {
@@ -47,8 +47,8 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
 
   def initializeTablesBySchema(tableCoordinates: KustoCoordinates,
                                tmpTableName: String,
-                               schema: StructType,
-                               schemaShowCommandResult: KustoResultSetTable,
+                               sourceSchema: StructType,
+                               targetSchema: Iterable[JSONObject],
                                writeOptions: WriteOptions,
                                crp: ClientRequestProperties): Unit = {
 
@@ -56,14 +56,14 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
     val database = tableCoordinates.database
     val table = tableCoordinates.table.get
 
-    if (schemaShowCommandResult.count() == 0) {
+    if (targetSchema.isEmpty) {
       // Table Does not exist
       if (writeOptions.tableCreateOptions == SinkTableCreationMode.FailIfNotExist) {
         throw new RuntimeException(s"Table '$table' doesn't exist in database '$database', cluster '${tableCoordinates.clusterAlias} and tableCreateOptions is set to FailIfNotExist.")
       } else {
         // Parse dataframe schema and create a destination table with that schema
         val tableSchemaBuilder = new StringJoiner(",")
-        schema.fields.foreach { field =>
+        sourceSchema.fields.foreach { field =>
           val fieldType = DataTypeMapping.getSparkTypeToKustoTypeMap(field.dataType)
           tableSchemaBuilder.add(s"['${field.name}']:$fieldType")
         }
@@ -72,7 +72,7 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
       }
     } else {
       // Table exists. Parse kusto table schema and check if it matches the dataframes schema
-      tmpTableSchema = extractSchemaFromResultTable(schemaShowCommandResult.getData.asScala.map(c => c.get(0).asInstanceOf[JSONObject]))
+      tmpTableSchema = extractSchemaFromResultTable(targetSchema)
     }
 
     // Create a temporary table with the kusto or dataframe parsed schema with retention and delete set to after the
@@ -347,14 +347,18 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
     }
   }
 
-  private[kusto] def setMappingOnStagingTableIfNeeded(stagingTableIngestionProperties: IngestionProperties,
-                                                      originalTable: String, crp: ClientRequestProperties): Unit = {
+  private[kusto] def setMappingOnStagingTableIfNeeded(stagingTableSparkIngestionProperties: SparkIngestionProperties,
+                                                      database: String,
+                                                      tempTable: String,
+                                                      originalTable: String,
+                                                      crp: ClientRequestProperties): Unit = {
+    val stagingTableIngestionProperties = stagingTableSparkIngestionProperties.toIngestionProperties(database, tempTable)
     val mapping = stagingTableIngestionProperties.getIngestionMapping
     val mappingReferenceName = mapping.getIngestionMappingReference
     if (StringUtils.isNotBlank(mappingReferenceName)) {
       val mappingKind = mapping.getIngestionMappingKind.toString
       val cmd = generateShowTableMappingsCommand(originalTable, mappingKind)
-      val mappings = engineClient.execute(stagingTableIngestionProperties.getDatabaseName, cmd).getPrimaryResults
+      val mappings = engineClient.execute(stagingTableIngestionProperties.getDatabaseName, cmd, crp).getPrimaryResults
 
       var found = false
       while (mappings.next && !found) {

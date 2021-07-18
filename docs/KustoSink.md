@@ -93,6 +93,14 @@ that is using it. Please verify the following before using Kusto connector:
    operation are cleaned if they weren't cleaned gracefully at the end of the run.
    Default: '172000' (7 days)
 
+ * **KUSTO_ADJUST_SCHEMA**:
+    'adjustSchema' If set to 'NoAdjustment' (default) it does nothing.
+     If set to 'GenerateDynamicCsvMapping', dynamically generates csv mapping based on DataFrame schema and target Kusto
+      table column names. If some Kusto table fields are missing in the DataFrame,
+      they will be ingested as empty. If some DataFrame fields are missing in target table, it fails.
+     If SparkIngestionProperties.csvMappingNameReference exists, it fails.
+     If set to 'FailIfNotMatch' - fails if schemas don't agree on names and order. 
+
  * **KUSTO_CLIENT_BATCHING_LIMIT**:
     'clientBatchingLimit' - A limit indicating the size in MB of the aggregated data before ingested to Kusto. Note that 
     this is done for each partition. The ingestion Kusto also aggregates data, default suggested by Kusto is 1GB but here
