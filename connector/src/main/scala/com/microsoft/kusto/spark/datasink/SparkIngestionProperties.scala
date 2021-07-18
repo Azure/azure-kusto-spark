@@ -1,7 +1,6 @@
 package com.microsoft.kusto.spark.datasink
 
 import java.util
-
 import com.microsoft.azure.kusto.ingest.{IngestionMapping, IngestionProperties}
 import org.codehaus.jackson.annotate.JsonAutoDetect.Visibility
 import org.codehaus.jackson.annotate.JsonMethod
