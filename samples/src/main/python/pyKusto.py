@@ -51,7 +51,8 @@ crp = sc._jvm.com.microsoft.azure.kusto.data.ClientRequestProperties()
 crp.setOption("norequesttimeout",True)
 crp.toString()
 
-# Use customSchema to enforce the schema and remove the initial command to the service of schema inference. Schema provided must be a subset of the query result schema.
+# Use customSchema to enforce the schema and remove the initial command to the service for schema inference. 
+# The provided Schema must be a subset of the query result schema.
 ddl = spark.sparkContext._jvm.org.apache.spark.sql.types.DataType.fromJson(customSchema.json()).toDDL()
 
 kustoDf  = pyKusto.read. \
