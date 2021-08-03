@@ -51,17 +51,8 @@ crp = sc._jvm.com.microsoft.azure.kusto.data.ClientRequestProperties()
 crp.setOption("norequesttimeout",True)
 crp.toString()
 
-kustoDf  = pyKusto.read. \
-            format("com.microsoft.kusto.spark.datasource"). \
-            option("kustoCluster", kustoOptions["kustoCluster"]). \
-            option("kustoDatabase", kustoOptions["kustoDatabase"]). \
-            option("kustoQuery", kustoOptions["kustoTable"]). \
-            option("kustoAadAppId", kustoOptions["kustoAadAppId"]). \
-            option("kustoAadAppSecret", kustoOptions["kustoAadAppSecret"]). \
-            option("kustoAadAuthorityID", kustoOptions["kustoAadAuthorityID"]). \
-            option("clientRequestPropertiesJson", crp.toString()). \
-            option("readMode", 'ForceDistributedMode'). \
-            load()
+# Use customSchema to enforce the schema and remove the initial command to the service of schema inference. Schema provided must be a subset of the query result schema.
+ddl = spark.sparkContext._jvm.org.apache.spark.sql.types.DataType.fromJson(customSchema.json()).toDDL()
 
 kustoDf  = pyKusto.read. \
             format("com.microsoft.kusto.spark.datasource"). \
@@ -72,6 +63,8 @@ kustoDf  = pyKusto.read. \
             option("kustoAadAppSecret", kustoOptions["kustoAadAppSecret"]). \
             option("kustoAadAuthorityID", kustoOptions["kustoAadAuthorityID"]). \
             option("clientRequestPropertiesJson", crp.toString()). \
+            option("readMode", 'ForceDistributedMode'). \
+            option("customSchema", ddl). \
             load()
 
 
