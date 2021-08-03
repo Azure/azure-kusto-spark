@@ -148,7 +148,7 @@ kustoQ.start().awaitTermination(60*8)
 
 # Device authentication for databricks (Scala users can just discard any authentication parameters and get the same result)
 # Acquire a token with device authentication and pass the token to the connector, this token will expire in one hour but
-# it should be enough for reading as the call to the service is done at the start of the flow but writing should be done
+# it should be enough for reading as the call to the service is done at the start of the flow. Write commands should be done
 # in an hour.
 # Prints done inside the JVM are not shown in the notebooks, therefore the user has to print himself the device code.
 
