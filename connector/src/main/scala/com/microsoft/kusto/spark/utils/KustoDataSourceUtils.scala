@@ -119,7 +119,8 @@ object KustoDataSourceUtils {
     val alias = getClusterNameFromUrlIfNeeded(cluster.get.toLowerCase())
     val clusterUrl = getEngineUrlFromAliasIfNeeded(cluster.get.toLowerCase())
     val table = parameters.get(KustoSinkOptions.KUSTO_TABLE)
-
+    val requestId: String = parameters.getOrElse(KustoSinkOptions.KUSTO_REQUEST_ID, UUID.randomUUID().toString)
+    val clientRequestProperties = getClientRequestProperties(parameters, requestId)
     // Parse KustoAuthentication
     val applicationId = parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_APP_ID, "")
     val applicationKey = parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_APP_SECRET, "")
@@ -193,12 +194,15 @@ object KustoDataSourceUtils {
       }
     }
 
-    SourceParameters(authentication, KustoCoordinates(clusterUrl, alias, database.get, table), keyVaultAuthentication)
+    SourceParameters(authentication, KustoCoordinates(clusterUrl, alias, database.get, table),
+      keyVaultAuthentication, requestId, clientRequestProperties)
   }
 
   case class SinkParameters(writeOptions: WriteOptions, sourceParametersResults: SourceParameters)
 
-  case class SourceParameters(authenticationParameters: KustoAuthentication, kustoCoordinates: KustoCoordinates, keyVaultAuth: Option[KeyVaultAuthentication])
+  case class SourceParameters(authenticationParameters: KustoAuthentication, kustoCoordinates: KustoCoordinates,
+                              keyVaultAuth: Option[KeyVaultAuthentication], requestId:String,
+                              clientRequestProperties: ClientRequestProperties)
 
   def parseSinkParameters(parameters: Map[String, String], mode: SaveMode = SaveMode.Append): SinkParameters = {
     if (mode != SaveMode.Append) {
@@ -236,9 +240,10 @@ object KustoDataSourceUtils {
       .DefaultWaitingIntervalLongRunning).toInt, TimeUnit.SECONDS)
     val autoCleanupTime = new FiniteDuration(parameters.getOrElse(KustoSinkOptions.KUSTO_STAGING_RESOURCE_AUTO_CLEANUP_TIMEOUT, KCONST
       .DefaultCleaningInterval).toInt, TimeUnit.SECONDS)
-    val requestId = parameters.getOrElse(KustoSinkOptions.KUSTO_REQUEST_ID, UUID.randomUUID().toString)
 
     val ingestionPropertiesAsJson = parameters.get(KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON)
+
+    val sourceParameters = parseSourceParameters(parameters)
 
     val writeOptions = WriteOptions(
       tableCreation,
@@ -248,14 +253,12 @@ object KustoDataSourceUtils {
       timeout,
       ingestionPropertiesAsJson,
       batchLimit,
-      requestId,
+      sourceParameters.requestId,
       autoCleanupTime,
       minimalExtentsCountForSplitMergePerNode,
       maxRetriesOnMoveExtents,
       adjustSchema
     )
-
-    val sourceParameters = parseSourceParameters(parameters)
 
     if (sourceParameters.kustoCoordinates.table.isEmpty) {
       throw new InvalidParameterException("KUSTO_TABLE parameter is missing. Must provide a destination table name")
@@ -263,20 +266,23 @@ object KustoDataSourceUtils {
 
     logInfo("parseSinkParameters", s"Parsed write options for sink: {'timeout': ${writeOptions.timeout}, 'async': ${writeOptions.isAsync}, " +
       s"'tableCreationMode': ${writeOptions.tableCreateOptions}, 'writeLimit': ${writeOptions.writeResultLimit}, 'batchLimit': ${writeOptions.batchLimit}" +
-      s", 'timeout': ${writeOptions.timeout}, 'timezone': ${writeOptions.timeZone}, 'ingestionProperties': $ingestionPropertiesAsJson, requestId: $requestId}")
+      s", 'timeout': ${writeOptions.timeout}, 'timezone': ${writeOptions.timeZone}, " +
+      s"'ingestionProperties': $ingestionPropertiesAsJson, requestId: ${sourceParameters.requestId}}")
 
     SinkParameters(writeOptions, sourceParameters)
   }
 
-  def getClientRequestProperties(parameters: Map[String, String]): ClientRequestProperties = {
+  def getClientRequestProperties(parameters: Map[String, String], requestId: String): ClientRequestProperties = {
     val crpOption = parameters.get(KustoSourceOptions.KUSTO_CLIENT_REQUEST_PROPERTIES_JSON)
 
-    if (crpOption.isDefined) {
-      val crp = ClientRequestProperties.fromString(crpOption.get)
-      crp
+    val crp = if (crpOption.isDefined) {
+      ClientRequestProperties.fromString(crpOption.get)
     } else {
       new ClientRequestProperties
     }
+
+    crp.setClientRequestId(requestId)
+    crp
   }
 
   private[kusto] def reportExceptionAndThrow(

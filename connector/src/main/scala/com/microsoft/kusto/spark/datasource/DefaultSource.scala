@@ -1,7 +1,6 @@
 package com.microsoft.kusto.spark.datasource
 
 import java.security.InvalidParameterException
-import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 import com.microsoft.azure.kusto.data.ClientRequestProperties
@@ -10,6 +9,7 @@ import com.microsoft.kusto.spark.common.{KustoCoordinates, KustoDebugOptions}
 import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, KustoWriter}
 import com.microsoft.kusto.spark.datasource.ReadMode.ReadMode
 import com.microsoft.kusto.spark.utils.{KeyVaultUtils, KustoQueryUtils, KustoConstants => KCONST, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.KustoDataSourceUtils.SourceParameters
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister, RelationProvider}
 import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode}
 
@@ -21,13 +21,20 @@ class DefaultSource extends CreatableRelationProvider
   var kustoCoordinates: KustoCoordinates = _
   var keyVaultAuthentication: Option[KeyVaultAuthentication] = None
   var clientRequestProperties: Option[ClientRequestProperties] = None
+  var requestId: Option[String] = None
   val myName: String = this.getClass.getSimpleName
+
+  def initCommonParams(sourceParams: SourceParameters): Unit ={
+    keyVaultAuthentication = sourceParams.keyVaultAuth
+    kustoCoordinates = sourceParams.kustoCoordinates
+    authenticationParameters = Some(sourceParams.authenticationParameters)
+    requestId = Some(sourceParams.requestId)
+    clientRequestProperties = Some(sourceParams.clientRequestProperties)
+  }
 
   override def createRelation(sqlContext: SQLContext, mode: SaveMode, parameters: Map[String, String], data: DataFrame): BaseRelation = {
     val sinkParameters = KDSU.parseSinkParameters(parameters, mode)
-    keyVaultAuthentication = sinkParameters.sourceParametersResults.keyVaultAuth
-    kustoCoordinates = sinkParameters.sourceParametersResults.kustoCoordinates
-    authenticationParameters = Some(sinkParameters.sourceParametersResults.authenticationParameters)
+    initCommonParams(sinkParameters.sourceParametersResults)
 
     if (keyVaultAuthentication.isDefined) {
       val paramsFromKeyVault = KeyVaultUtils.getAadAppParametersFromKeyVault(keyVaultAuthentication.get)
@@ -39,7 +46,8 @@ class DefaultSource extends CreatableRelationProvider
       data,
       kustoCoordinates,
       authenticationParameters.get,
-      sinkParameters.writeOptions)
+      sinkParameters.writeOptions,
+      clientRequestProperties.get)
 
     val limit = if (sinkParameters.writeOptions.writeResultLimit.equalsIgnoreCase(KustoSinkOptions.NONE_RESULT_LIMIT)) None else {
       try {
@@ -82,15 +90,10 @@ class DefaultSource extends CreatableRelationProvider
       if (storageSecret.isDefined) storageSecretIsAccountKey = false
     }
 
-    val requestIdOption = parameters.get(KustoSinkOptions.KUSTO_REQUEST_ID)
     if (authenticationParameters.isEmpty) {
       // Parse parameters if haven't got parsed before
       val sourceParameters = KDSU.parseSourceParameters(parameters)
-      authenticationParameters = Some(sourceParameters.authenticationParameters)
-      kustoCoordinates = sourceParameters.kustoCoordinates
-      keyVaultAuthentication = sourceParameters.keyVaultAuth
-      clientRequestProperties = Some(KDSU.getClientRequestProperties(parameters))
-      if (requestIdOption.isDefined) clientRequestProperties.get.setClientRequestId(requestIdOption.get)
+      initCommonParams(sourceParameters)
     }
     val (kustoAuthentication, storageParameters): (Option[KustoAuthentication], Option[KustoStorageParameters]) =
       if (keyVaultAuthentication.isDefined) {
@@ -120,7 +123,6 @@ class DefaultSource extends CreatableRelationProvider
     } else {
       None
     }
-    val requestId = requestIdOption.getOrElse(UUID.randomUUID().toString)
 
     KDSU.logInfo(myName, s"Finished serializing parameters for reading: {requestId: $requestId, timeout: $timeout, readMode: ${readMode.getOrElse("Default")}, clientRequestProperties: $clientRequestProperties")
 
@@ -139,7 +141,7 @@ class DefaultSource extends CreatableRelationProvider
       parameters.get(KustoSourceOptions.KUSTO_CUSTOM_DATAFRAME_COLUMN_TYPES),
       storageParameters,
       clientRequestProperties,
-      requestId
+      requestId.get
     )(sqlContext.sparkSession)
   }
 

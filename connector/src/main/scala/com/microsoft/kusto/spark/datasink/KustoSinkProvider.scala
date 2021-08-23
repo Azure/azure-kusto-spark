@@ -23,7 +23,8 @@ class KustoSinkProvider extends StreamSinkProvider with DataSourceRegister {
         val paramsFromKeyVault = KeyVaultUtils.getAadAppParametersFromKeyVault(sinkParameters.sourceParametersResults.keyVaultAuth.get)
         KustoDataSourceUtils.mergeKeyVaultAndOptionsAuthentication(paramsFromKeyVault, Some(sinkParameters.sourceParametersResults.authenticationParameters))
       } else sinkParameters.sourceParametersResults.authenticationParameters,
-      sinkParameters.writeOptions
+      sinkParameters.writeOptions,
+      sinkParameters.sourceParametersResults.clientRequestProperties
     )
   }
 }
