@@ -125,7 +125,7 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
   }
 
   def findErrorInResult(res: KustoResultSetTable): (Boolean, Object) = {
-    var error:Object = null
+    var error: Object = null
     var failed = false
     if (KDSU.getLoggingLevel == Level.DEBUG) {
       var i = 0
@@ -154,8 +154,8 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
     (failed, error)
   }
 
-  def moveExtentsWithRetries(batchSize: Int, totalAmount: Int, database: String, tmpTableName: String, targetTable: String, crp: ClientRequestProperties,
-                             writeOptions: WriteOptions): Unit = {
+  def moveExtentsWithRetries(batchSize: Int, totalAmount: Int, database: String, tmpTableName: String, targetTable: String,
+                             crp: ClientRequestProperties, writeOptions: WriteOptions): Unit = {
     var extentsProcessed = 0
     var retry = 0
     var curBatchSize = batchSize
@@ -179,7 +179,6 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
           }
         }
       } catch {
-        case e:RetriesExhaustedException => throw e
         case ex:KustoDataException =>
           if (ex.getCause.isInstanceOf[SocketTimeoutException] || !ex.isPermanent) {
             error = ExceptionUtils.getStackTrace(ex)
@@ -192,7 +191,9 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
 
       // When some node fails the move - it will put "failed" as the target extent id
       if (res.isDefined && error == null) {
-        error = findErrorInResult(res.get)
+        val errorInResult = findErrorInResult(res.get)
+        failed = errorInResult._1
+        error = errorInResult._2
       }
 
       if (failed) {
