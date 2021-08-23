@@ -49,7 +49,12 @@ trait KustoOptions {
   // polling on the ingestion results. Default 2 days
   val KUSTO_TIMEOUT_LIMIT: String = newOption("timeoutLimit")
 
-  // An id of the source used for tracing of the write operation
+
+  // A json representation of the ClientRequestProperties object used for reading from Kusto
+  var KUSTO_CLIENT_REQUEST_PROPERTIES_JSON: String = newOption("clientRequestPropertiesJson")
+
+  // An id of the source used for tracing of the write operation. Will override the clientRequestPropertiesJson
+  // request id if provided
   val KUSTO_REQUEST_ID: String = newOption("requestId")
 }
 

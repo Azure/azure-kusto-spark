@@ -104,7 +104,7 @@
  </check>
  <check class="org.scalastyle.scalariform.MethodLengthChecker" level="warning" enabled="true">
   <parameters>
-   <parameter name="maxLength"><![CDATA[50]]></parameter>
+   <parameter name="maxLength"><![CDATA[70]]></parameter>
   </parameters>
  </check>
  <check class="org.scalastyle.scalariform.MethodNamesChecker" level="warning" enabled="true">

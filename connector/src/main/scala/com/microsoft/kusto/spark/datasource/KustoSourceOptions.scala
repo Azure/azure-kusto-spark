@@ -9,9 +9,6 @@ object KustoSourceOptions extends KustoOptions {
   //TODO - impl retries?
   val KUSTO_QUERY_RETRY_TIMES: String = newOption("kustoQueryRetryTimes")
 
-  // A json representation of the ClientRequestProperties object used for reading from Kusto
-  var KUSTO_CLIENT_REQUEST_PROPERTIES_JSON: String = newOption("clientRequestPropertiesJson")
-
   // Blob Storage access parameters for source connector when working in 'distributed' mode (read)
   // These parameters will not be needed once we move to automatic blob provisioning
 
