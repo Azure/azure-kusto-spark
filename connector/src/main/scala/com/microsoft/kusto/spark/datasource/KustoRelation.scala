@@ -134,7 +134,7 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
 
   private def getPartitioningColumn: String = {
     if (partitioningColumn.isDefined) {
-      val requestedColumn = partitioningColumn.get.toLowerCase(Locale.ROOT)
+      val requestedColumn = partitioningColumn.get
       if (!schema.contains(requestedColumn)) {
         throw new InvalidParameterException(
           s"Cannot partition by column '$requestedColumn' since it is not part of the query schema: ${KDSU.NewLine}${schema.mkString(", ")}")
