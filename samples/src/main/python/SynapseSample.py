@@ -11,6 +11,10 @@ sc._jvm.com.microsoft.kusto.spark.utils.KustoDataSourceUtils.setLoggingLevel("al
 
 # Read data from Azure Data Explorer table(s)
 # In this example the Kusto Spark connector will determine the optimal path to get data: API for small data sets, Export/Distributed mode for large datasets.
+# if you want to use the Service Principal redentials from the Link Service, add the following option.
+#  .option("authType","LS")  
+# Default is native,  it will use the auth token of the logged-in user or the context that is running the job.
+
 
 kustoDf  = spark.read \
             .format("com.microsoft.kusto.spark.synapse.datasource") \
