@@ -15,6 +15,7 @@ import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.KustoWriter.DelayPeriodBetweenCalls
 import com.microsoft.kusto.spark.datasink.{PartitionResult, SinkTableCreationMode, SparkIngestionProperties, WriteOptions}
 import com.microsoft.kusto.spark.datasource.KustoStorageParameters
+import com.microsoft.kusto.spark.exceptions.{FailedOperationException, RetriesExhaustedException}
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.KustoConstants.{IngestSkippedTrace, MaxSleepOnMoveExtentsMillis}
 import com.microsoft.kusto.spark.utils.KustoDataSourceUtils.extractSchemaFromResultTable
@@ -30,7 +31,6 @@ import shaded.parquet.org.codehaus.jackson.map.ObjectMapper
 
 import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{Await, Future, TimeoutException}
 
 class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuilder, val ingestKcsb: ConnectionStringBuilder) {
@@ -165,12 +165,15 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
       var error: Object = null
       var res: Option[KustoResultSetTable] = None
       var failed = false
-
       // Execute move batch and keep any transient error for handling
       try {
-        res = Some(engineClient.execute(database, generateTableMoveExtentsCommand(tmpTableName, targetTable,
-          curBatchSize), crp).getPrimaryResults)
-
+        val operation = engineClient.execute(database, generateTableMoveExtentsAsyncCommand(tmpTableName,
+          targetTable, curBatchSize), crp).getPrimaryResults
+        val operationResult = KDSU.verifyAsyncCommandCompletion(engineClient, database, operation, samplePeriod =
+          KustoConstants
+          .DefaultPeriodicSamplePeriod, writeOptions.timeout, s"move extents to destination table '$targetTable' ")
+        res = Some(engineClient.execute(database, generateShowOperationDetails(operationResult.get.getString(0)), crp)
+          .getPrimaryResults)
         if (res.get.count() == 0) {
           failed = handleNoResults(totalAmount, extentsProcessed, database, tmpTableName, crp)
           if (!failed) {
@@ -179,11 +182,22 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
           }
         }
       } catch {
+        case ex: FailedOperationException =>
+          if (ex.getResult.isDefined) {
+            val failedResult: KustoResultSetTable = ex.getResult.get
+            if (!failedResult.getBoolean("ShouldRetry")) {
+              throw ex
+            }
+
+            error = failedResult.getString("Status")
+            failed = true
+          } else {
+            throw ex
+          }
         case ex:KustoDataException =>
           if (ex.getCause.isInstanceOf[SocketTimeoutException] || !ex.isPermanent) {
             error = ExceptionUtils.getStackTrace(ex)
             failed = true
-            retry += 1
           } else {
             throw ex
           }
