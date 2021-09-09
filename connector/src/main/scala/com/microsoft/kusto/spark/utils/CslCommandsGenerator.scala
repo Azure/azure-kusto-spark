@@ -67,8 +67,7 @@ private[kusto] object CslCommandsGenerator {
   = {
     s""".move async extents to table $destinationTableName <|
        .show table $sourceTableName extents with(extentsShowFilteringRuntimePolicy='{"MaximumResultsCount":$batchSize}');
-        $$command_results
-       |  distinct ExtentId"""
+       """
   }
 
   def generateShowOperationDetails(operataionId: String): String = {
