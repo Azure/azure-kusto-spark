@@ -241,7 +241,7 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
   }
 
   def moveExtents(database: String, tmpTableName: String, targetTable: String, crp: ClientRequestProperties,
-                  cluster: String, writeOptions: WriteOptions): Unit = {
+                  writeOptions: WriteOptions): Unit = {
         val extentsCountQuery = engineClient.execute(database, generateExtentsCountCommand(tmpTableName), crp).getPrimaryResults
     extentsCountQuery.next()
     val extentsCount = extentsCountQuery.getInt(0)
@@ -327,8 +327,7 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
             kustoAdminClient.execute(coordinates.database, generateTableAlterMergePolicyCommand(tmpTableName,
               allowMerge = false,
               allowRebuild = false), crp)
-            moveExtents(coordinates.database, tmpTableName, coordinates.table.get, crp, coordinates.clusterAlias,
-              writeOptions)
+            moveExtents(coordinates.database, tmpTableName, coordinates.table.get, crp, writeOptions)
 
             KDSU.logInfo(myName, s"write to Kusto table '${coordinates.table.get}' finished successfully " +
               s"requestId: ${writeOptions.requestId} $batchIdIfExists")
