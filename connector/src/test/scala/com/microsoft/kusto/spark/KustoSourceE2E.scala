@@ -3,7 +3,7 @@ package com.microsoft.kusto.spark
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 
-import com.microsoft.azure.kusto.data.ClientFactory
+import com.microsoft.azure.kusto.data.{ClientFactory, ClientRequestProperties}
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode}
 import com.microsoft.kusto.spark.datasource.{KustoSourceOptions, ReadMode}
@@ -104,7 +104,8 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
     val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://$cluster.kusto.windows.net", appId, appKey, authority)
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
     kustoAdminClient.execute(database, generateTempTableCreateCommand(table, columnsTypesAndNames = "ColA:string, ColB:int"))
-
+    val crp = new ClientRequestProperties
+    crp.setTimeoutInMilliSec(2000)
     dfOrig.write
       .format("com.microsoft.kusto.spark.datasource")
       .option(KustoSinkOptions.KUSTO_CLUSTER, cluster)
@@ -114,6 +115,7 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
       .option(KustoSinkOptions.KUSTO_AAD_APP_SECRET, appKey)
       .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, authority)
       .option(KustoSinkOptions.KUSTO_REQUEST_ID, "04ec0408-3cc3_.asd")
+      .option(KustoSinkOptions.KUSTO_CLIENT_REQUEST_PROPERTIES_JSON, crp.toString)
       .mode(SaveMode.Append)
       .save()
 

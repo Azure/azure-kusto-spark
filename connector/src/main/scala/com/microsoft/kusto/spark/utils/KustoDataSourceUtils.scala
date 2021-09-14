@@ -15,13 +15,13 @@ import com.microsoft.kusto.spark.common.{KustoCoordinates, KustoDebugOptions}
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
 import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SchemaAdjustmentMode, SinkTableCreationMode, WriteOptions}
 import com.microsoft.kusto.spark.datasource.{KustoResponseDeserializer, KustoSchema, KustoSourceOptions, KustoStorageParameters}
+import com.microsoft.kusto.spark.exceptions.{FailedOperationException, TimeoutAwaitingPendingOperationException}
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-
 import com.microsoft.kusto.spark.utils.KustoConstants.{DefaultBatchingLimit, DefaultExtentsCountForSplitMergePerNode, DefaultMaxRetriesOnMoveExtents}
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -401,9 +401,9 @@ object KustoDataSourceUtils {
   def verifyAsyncCommandCompletion(client: Client,
                                    database: String,
                                    commandResult: KustoResultSetTable,
-                                   directory: String,
                                    samplePeriod: FiniteDuration = KCONST.DefaultPeriodicSamplePeriod,
-                                   timeOut: FiniteDuration): Unit = {
+                                   timeOut: FiniteDuration,
+                                   doingWhat: String): Option[KustoResultSetTable] = {
     commandResult.next()
     val operationId = commandResult.getString(0)
     val operationsShowCommand = CslCommandsGenerator.generateOperationsShowCommand(operationId)
@@ -420,11 +420,9 @@ object KustoDataSourceUtils {
       }
       catch {
         case e: DataServiceException => {
-          val error = new JSONObject(e.getCause.getMessage).getJSONObject("error")
-          val isPermanent = error.getBoolean("@permanent")
-          if (isPermanent) {
-            val message = s"Couldn't monitor the progress of the export command from the service, you may track it using " +
-              s"the command '$operationsShowCommand' and read from the blob directory: ('$directory'), once it completes."
+          if (e.isPermanent) {
+            val message = s"Couldn't monitor the progress of the $doingWhat operation from the service, you may track" +
+              s" it using the command '$operationsShowCommand'."
             logError("verifyAsyncCommandCompletion", message)
             throw new Exception(message, e)
           }
@@ -455,15 +453,18 @@ object KustoDataSourceUtils {
     }
 
     if (lastResponse.isEmpty || lastResponse.get.getString(stateCol) != "Completed") {
-      throw new RuntimeException(
+      throw new FailedOperationException(
         s"Failed to execute Kusto operation with OperationId '$operationId', State: '${lastResponse.get.getString(stateCol)}'," +
-          s" Status: '${lastResponse.get.getString(statusCol)}'"
+          s" Status: '${lastResponse.get.getString(statusCol)}'",
+        lastResponse
       )
     }
 
     if (!success) {
-      throw new RuntimeException(s"Timed out while waiting for operation with OperationId '$operationId'")
+      throw new TimeoutAwaitingPendingOperationException(s"Timed out while waiting for operation with OperationId '$operationId'")
     }
+
+    lastResponse
   }
 
   private[kusto] def parseSas(url: String): KustoStorageParameters = {

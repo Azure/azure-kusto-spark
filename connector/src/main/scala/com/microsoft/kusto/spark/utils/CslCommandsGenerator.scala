@@ -63,11 +63,22 @@ private[kusto] object CslCommandsGenerator {
        |  distinct ExtentId"""
   }
 
+  def generateTableMoveExtentsAsyncCommand(sourceTableName: String, destinationTableName: String, batchSize:Int): String
+  = {
+    s""".move async extents to table $destinationTableName <|
+       .show table $sourceTableName extents with(extentsShowFilteringRuntimePolicy='{"MaximumResultsCount":$batchSize}');
+       """
+  }
+
+  def generateShowOperationDetails(operataionId: String): String = {
+    s".show operation $operataionId details"
+  }
+
   def generateNodesCountCommand(): String = {
     ".show cluster | count"
   }
 
-  def generateExtentsCountCommand(table: String) = {
+  def generateExtentsCountCommand(table: String): String = {
     s".show table $table extents | count"
   }
 
