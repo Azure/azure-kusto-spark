@@ -244,6 +244,7 @@ private[kusto] class KustoReader(client: Client, request: KustoReadRequest, stor
     val commandResult: KustoResultSetTable = client.execute(request.kustoCoordinates.database,
       exportCommand,
       request.clientRequestProperties.orNull).getPrimaryResults
-    KDSU.verifyAsyncCommandCompletion(client, request.kustoCoordinates.database, commandResult, directory,timeOut = request.timeout)
+    KDSU.verifyAsyncCommandCompletion(client, request.kustoCoordinates.database, commandResult, timeOut = request
+      .timeout, doingWhat = s"export data to  blob directory: ('$directory') preparing it for reading.")
   }
 }

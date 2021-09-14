@@ -5,7 +5,7 @@ import java.sql.{Date, Timestamp}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 
-private[kusto] object KustoFilter {
+object KustoFilter {
   // Augment the original query to include column pruning and filtering
   def pruneAndFilter(kustoSchema: KustoSchema, originalQuery: String, filtering: KustoFiltering): String = {
     originalQuery + KustoFilter.buildFiltersClause(kustoSchema.sparkSchema, filtering.filters) + KustoFilter.buildColumnsClause(filtering.columns, kustoSchema.toStringCastedColumns)
