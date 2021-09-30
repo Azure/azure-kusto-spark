@@ -52,7 +52,8 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
                                sourceSchema: StructType,
                                targetSchema: Iterable[JSONObject],
                                writeOptions: WriteOptions,
-                               crp: ClientRequestProperties): Unit = {
+                               crp: ClientRequestProperties,
+                               configureRetentionPolicy: Boolean): Unit = {
 
     var tmpTableSchema: String = ""
     val database = tableCoordinates.database
@@ -80,9 +81,11 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
     // Create a temporary table with the kusto or dataframe parsed schema with retention and delete set to after the
     // write operation times out. Engine recommended keeping the retention although we use auto delete.
     engineClient.execute(database, generateTempTableCreateCommand(tmpTableName, tmpTableSchema), crp)
-    engineClient.execute(database, generateTableAlterRetentionPolicy(tmpTableName,
-      DurationFormatUtils.formatDuration(writeOptions.autoCleanupTime.toMillis, durationFormat, true),
-      recoverable = false), crp)
+    if (configureRetentionPolicy) {
+      engineClient.execute(database, generateTableAlterRetentionPolicy(tmpTableName,
+        DurationFormatUtils.formatDuration(writeOptions.autoCleanupTime.toMillis, durationFormat, true),
+        recoverable = false), crp)
+    }
     val instant = Instant.now.plusSeconds(writeOptions.autoCleanupTime.toSeconds)
     engineClient.execute(database, generateTableAlterAutoDeletePolicy(tmpTableName, instant), crp)
   }
