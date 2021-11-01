@@ -22,11 +22,8 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
                                         query: String,
                                         readOptions: KustoReadOptions,
                                         timeout: FiniteDuration,
-                                        numPartitions: Int,
-                                        partitioningColumn: Option[String],
-                                        partitioningMode: Option[String],
                                         customSchema: Option[String] = None,
-                                        storageParameters: Option[KustoStorageParameters],
+                                        storageParameters: Option[TransientStorageParameters],
                                         clientRequestProperties: Option[ClientRequestProperties],
                                         requestId: String)
                                        (@transient val sparkSession: SparkSession)
@@ -98,12 +95,15 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
         if(exception.isDefined){
             KDSU.logError("KustoRelation",s"Failed with lean mode, falling back to distributed mode, requestId: $requestId. Exception : ${exception.get.getMessage}")
         }
+
+        readOptions.partitionOptions.column = Some(getPartitioningColumn)
+        readOptions.partitionOptions.mode = Some(getPartitioningMode)
+
         res = Some(KustoReader.distributedBuildScan(
           kustoClient,
           KustoReadRequest(sparkSession, cachedSchema, kustoCoordinates, query, authentication, timeout, clientRequestProperties, requestId),
-          if (storageParameters.isDefined) Seq(storageParameters.get) else
+          if (storageParameters.isDefined) storageParameters.get else
             KustoClientCache.getClient(kustoCoordinates.clusterAlias, kustoCoordinates.clusterUrl, authentication).getTempBlobsForExport,
-          KustoPartitionParameters(numPartitions, getPartitioningColumn, getPartitioningMode),
           readOptions,
           KustoFiltering(requiredColumns, filters))
 
@@ -133,8 +133,8 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
   }
 
   private def getPartitioningColumn: String = {
-    if (partitioningColumn.isDefined) {
-      val requestedColumn = partitioningColumn.get.toLowerCase(Locale.ROOT)
+    if (readOptions.partitionOptions.column.isDefined) {
+      val requestedColumn = readOptions.partitionOptions.column.get.toLowerCase(Locale.ROOT)
       if (!schema.contains(requestedColumn)) {
         throw new InvalidParameterException(
           s"Cannot partition by column '$requestedColumn' since it is not part of the query schema: ${KDSU.NewLine}${schema.mkString(", ")}")
@@ -144,8 +144,8 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
   }
 
   private def getPartitioningMode: String = {
-    if (partitioningMode.isDefined) {
-      val mode = partitioningMode.get.toLowerCase(Locale.ROOT)
+    if (readOptions.partitionOptions.mode.isDefined) {
+      val mode = readOptions.partitionOptions.mode.get.toLowerCase(Locale.ROOT)
       if (!KustoDebugOptions.supportedPartitioningModes.contains(mode)) {
         throw new InvalidParameterException(
           s"Specified partitioning mode '$mode' : ${KDSU.NewLine}${KustoDebugOptions.supportedPartitioningModes.mkString(", ")}")
@@ -159,6 +159,8 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
     case that: KustoRelation => kustoCoordinates == that.kustoCoordinates && query == that.query && authentication == that.authentication
     case _ => false
   }
+
+  override def hashCode(): Int = kustoCoordinates.hashCode() ^ query.hashCode ^ authentication.hashCode()
 
   override def insert(data: DataFrame, overwrite: Boolean): Unit = {
     KustoWriter.write(None, data, kustoCoordinates, authentication, writeOptions =

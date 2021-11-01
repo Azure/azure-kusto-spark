@@ -2,11 +2,10 @@ package com.microsoft.kusto.spark
 
 import java.security.InvalidParameterException
 import java.util.UUID
-
 import com.microsoft.azure.kusto.data.ClientFactory
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.kusto.spark.datasink.KustoSinkOptions
-import com.microsoft.kusto.spark.datasource.{KustoResponseDeserializer, KustoSourceOptions, KustoStorageParameters}
+import com.microsoft.kusto.spark.datasource.{KustoResponseDeserializer, KustoSourceOptions, TransientStorageCredentials, TransientStorageParameters}
 import com.microsoft.kusto.spark.utils.{CslCommandsGenerator, KustoBlobStorageUtils, KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import com.microsoft.kusto.spark.sql.extension.SparkExtension._
 import org.apache.spark.SparkContext
@@ -105,8 +104,8 @@ class KustoBlobAccessE2E extends FlatSpec with BeforeAndAfterAll {
     var secret = ""
 
     if (blobSas != null) {
-      val storageParams = KDSU.parseSas(blobSas)
-      secret = storageParams.secret
+      val storageParams = new datasource.TransientStorageCredentials(blobSas)
+      secret = storageParams.sasKey.get
     }
     else {
       secret = if (blobSas != null) blobSas else blobKey
@@ -123,7 +122,7 @@ class KustoBlobAccessE2E extends FlatSpec with BeforeAndAfterAll {
       myTable,
       directory,
       partitionId,
-      Seq(KustoStorageParameters(storageAccount, secret, container, useKeyNotSas)),
+      new TransientStorageParameters(Array(new TransientStorageCredentials(storageAccount, secret, container))),
       Some(partitionPredicate),
       None
     )

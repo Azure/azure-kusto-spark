@@ -22,7 +22,9 @@ object KustoSourceOptions extends KustoOptions {
   // Use either this or storage account key to access the storage account
   val KUSTO_BLOB_STORAGE_SAS_URL: String = newOption("blobStorageSasUrl")
 
-  // Blob domain endpoint suffix - default: core.windows.net
+  val KUSTO_TRANSIENT_STORAGE: String = newOption("transientStorage")
+
+  // Blob domain endpoint suffix - default: core.windows.net - needed for non public clouds
   val KUSTO_BLOB_STORAGE_ENDPOINT_SUFFIX: String = newOption("blobStorageEndpointSuffix")
   // By default an estimation of the rows count is first being made, if the count is lower than 5000 records a simple
   // query is made, else - if storage params were provided they are used for 'distributed' reading and if not - the connector

@@ -4,9 +4,8 @@ import java.net.SocketTimeoutException
 import java.time.Instant
 import java.util.StringJoiner
 import java.util.concurrent.TimeUnit
-
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
-import com.microsoft.azure.kusto.data.exceptions.KustoDataException
+import com.microsoft.azure.kusto.data.exceptions.KustoDataExceptionBase
 import com.microsoft.azure.kusto.data.{Client, ClientFactory, ClientRequestProperties, KustoResultSetTable}
 import com.microsoft.azure.kusto.ingest.result.{IngestionStatus, OperationStatus}
 import com.microsoft.azure.kusto.ingest.{IngestClient, IngestClientFactory}
@@ -14,7 +13,7 @@ import com.microsoft.azure.storage.StorageException
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.KustoWriter.DelayPeriodBetweenCalls
 import com.microsoft.kusto.spark.datasink.{PartitionResult, SinkTableCreationMode, SparkIngestionProperties, WriteOptions}
-import com.microsoft.kusto.spark.datasource.KustoStorageParameters
+import com.microsoft.kusto.spark.datasource.{TransientStorageCredentials, TransientStorageParameters}
 import com.microsoft.kusto.spark.exceptions.{FailedOperationException, RetriesExhaustedException}
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.KustoConstants.{IngestSkippedTrace, MaxSleepOnMoveExtentsMillis}
@@ -39,10 +38,12 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
   // Reading process does not require ingest client to start working
   lazy val dmClient: Client = ClientFactory.createClient(ingestKcsb)
   lazy val ingestClient: IngestClient = IngestClientFactory.createClient(ingestKcsb)
-  private val exportProviderEntryCreator = (c: ContainerAndSas) => KDSU.parseSas(c.containerUrl + c.sas)
+  private val exportProviderEntryCreator = (c: ContainerAndSas) => new TransientStorageCredentials(c.containerUrl + c.sas)
   private val ingestProviderEntryCreator = (c: ContainerAndSas) => c
-  private lazy val ingestContainersContainerProvider = new ContainerProvider(dmClient, clusterAlias, generateCreateTmpStorageCommand(), ingestProviderEntryCreator)
-  private lazy val exportContainersContainerProvider = new ContainerProvider(dmClient, clusterAlias, generateGetExportContainersCommand(), exportProviderEntryCreator)
+  private lazy val ingestContainersContainerProvider = new ContainerProvider[ContainerAndSas](dmClient, clusterAlias,
+    generateCreateTmpStorageCommand(), ingestProviderEntryCreator)
+  private lazy val exportContainersContainerProvider = new ContainerProvider(dmClient, clusterAlias,
+    generateGetExportContainersCommand(), exportProviderEntryCreator)
 
   private val myName = this.getClass.getSimpleName
   private val durationFormat = "dd:HH:mm:ss"
@@ -94,8 +95,14 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
     ingestContainersContainerProvider.getContainer
   }
 
-  def getTempBlobsForExport: Seq[KustoStorageParameters] = {
-    exportContainersContainerProvider.getAllContainers
+  def getTempBlobsForExport: TransientStorageParameters = {
+    val storage = exportContainersContainerProvider.getAllContainers
+    val endpointSuffix = storage.head.domainSuffix
+    if(endpointSuffix.isDefined){
+      new TransientStorageParameters(storage.toArray, endpointSuffix.get)
+    }else{
+      new TransientStorageParameters(storage.toArray)
+    }
   }
 
   def handleRetryFail(curBatchSize: Int, retry: Int, currentSleepTime: Int, targetTable: String, error: Object): (Int, Int)
@@ -197,7 +204,7 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
           } else {
             throw ex
           }
-        case ex:KustoDataException =>
+        case ex:KustoDataExceptionBase =>
           if (ex.getCause.isInstanceOf[SocketTimeoutException] || !ex.isPermanent) {
             error = ExceptionUtils.getStackTrace(ex)
             failed = true

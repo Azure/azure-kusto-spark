@@ -2,11 +2,10 @@ package com.microsoft.kusto.spark
 
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
-
 import com.microsoft.azure.kusto.data.{ClientFactory, ClientRequestProperties}
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode}
-import com.microsoft.kusto.spark.datasource.{KustoSourceOptions, ReadMode}
+import com.microsoft.kusto.spark.datasource.{KustoSourceOptions, ReadMode, TransientStorageCredentials, TransientStorageParameters}
 import com.microsoft.kusto.spark.sql.extension.SparkExtension._
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils => KDSU}
@@ -85,10 +84,13 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
     //    val blobKey: String = System.getProperty("blobKey")
     val blobSas: String = System.getProperty("blobSas")
 
+    val storage = new TransientStorageParameters(Array(new TransientStorageCredentials(blobSas)))
+
     val conf: Map[String, String] = Map(
-      KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
-      KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey,
-      KustoSourceOptions.KUSTO_BLOB_STORAGE_SAS_URL -> blobSas
+
+      KustoSourceOptions.KUSTO_BLOB_STORAGE_SAS_URL -> blobSas,
+        KustoSourceOptions.KUSTO_TRANSIENT_STORAGE -> storage.toString,
+      KustoSourceOptions.KUSTO_USER_PROMPT -> true.toString
       //      KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME -> storageAccount,
       //      KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_KEY -> blobKey,
       //      KustoSourceOptions.KUSTO_BLOB_CONTAINER -> container

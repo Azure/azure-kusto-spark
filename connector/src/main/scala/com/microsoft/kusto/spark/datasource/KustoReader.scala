@@ -16,21 +16,12 @@ import org.joda.time.{DateTime, DateTimeZone}
 import java.net.URI
 import java.security.InvalidParameterException
 import java.util.UUID
-
 import scala.collection.concurrent
 import scala.concurrent.duration.FiniteDuration
 
 private[kusto] case class KustoPartition(predicate: Option[String], idx: Int) extends Partition {
   override def index: Int = idx
 }
-
-private[kusto] case class KustoPartitionParameters(num: Int, column: String, mode: String)
-
-private[kusto] case class KustoStorageParameters(account: String,
-                                                 secret: String,
-                                                 container: String,
-                                                 secretIsAccountKey: Boolean,
-                                                 endpointSuffix: String = KDSU.DefaultDomainPostfix)
 
 private[kusto] case class KustoFiltering(columns: Array[String] = Array.empty, filters: Array[Filter] = Array.empty)
 
@@ -46,8 +37,11 @@ private[kusto] case class KustoReadRequest(sparkSession: SparkSession,
 private[kusto] case class KustoReadOptions(readMode: Option[ReadMode] = None,
                                            shouldCompressOnExport: Boolean = true,
                                            exportSplitLimitMb: Long = 1024,
+                                           partitionOptions: PartitionOptions,
                                            distributedReadModeTransientCacheEnabled: Boolean = false,
                                            queryFilterPushDown: Option[Boolean])
+
+private[kusto] case class PartitionOptions(amount: Int, var column: Option[String], var mode: Option[String])
 
 private[kusto] case class DistributedReadModeTransientCacheKey(query: String,
                                                                kustoCoordinates: KustoCoordinates,
@@ -73,8 +67,7 @@ private[kusto] object KustoReader {
 
   private[kusto] def distributedBuildScan(kustoClient: Client,
                                           request: KustoReadRequest,
-                                          storage: Seq[KustoStorageParameters],
-                                          partitionInfo: KustoPartitionParameters,
+                                          storage: TransientStorageParameters,
                                           options: KustoReadOptions,
                                           filtering: KustoFiltering): RDD[Row] = {
     var paths: Seq[String] = Seq()
@@ -88,12 +81,12 @@ private[kusto] object KustoReader {
       } else {
         KDSU.logInfo(myName, "distributedReadModeTransientCache: miss, exporting to cache paths")
         val filter = determineFilterPushDown(options.queryFilterPushDown, false, filtering)
-        paths = exportToStorage(kustoClient, request, storage, partitionInfo, options, filter)
+        paths = exportToStorage(kustoClient, request, storage, options, filter)
         distributedReadModeTransientCache(key) = paths
       }
     } else{
       val filter = determineFilterPushDown(options.queryFilterPushDown, true, filtering)
-      paths = exportToStorage(kustoClient, request, storage, partitionInfo, options, filter)
+      paths = exportToStorage(kustoClient, request, storage, options, filter)
     }
 
     def determineFilterPushDown(queryFilterPushDown: Option[Boolean], queryFilterPushDownDefault: Boolean, inputFilter: KustoFiltering): KustoFiltering = {
@@ -130,16 +123,15 @@ private[kusto] object KustoReader {
 
   private def exportToStorage(kustoClient: Client,
                               request: KustoReadRequest,
-                              storage: Seq[KustoStorageParameters],
-                              partitionInfo: KustoPartitionParameters,
+                              storage: TransientStorageParameters,
                               options: KustoReadOptions,
                               filtering: KustoFiltering) = {
 
     KDSU.logInfo(myName, s"Starting exporting data from Kusto to blob storage. requestId: ${request.requestId}")
 
     setupBlobAccess(request, storage)
-    val partitions = calculatePartitions(partitionInfo)
-    val reader = new KustoReader(kustoClient, request, storage)
+    val partitions = calculatePartitions(options.partitionOptions)
+    val reader = new KustoReader(kustoClient)
     val directory = s"${request.kustoCoordinates.database}/dir${UUID.randomUUID()}/".replaceAll("[^0-9a-zA-Z/]","_")
 
     for (partition <- partitions) {
@@ -152,23 +144,25 @@ private[kusto] object KustoReader {
         filtering)
     }
 
-    val directoryExists = (params: KustoStorageParameters) => {
-      val container = if (params.secretIsAccountKey) {
-        new CloudBlobContainer(new URI(s"https://${params.account}.blob.${params.endpointSuffix}/${params.container}"), new StorageCredentialsAccountAndKey(params.account, params.secret))
+    val directoryExists = (params: TransientStorageCredentials) => {
+      val container = if (params.isSas) {
+        new CloudBlobContainer(new URI(s"https://${params.storageAccountName}.blob.${storage.endpointSuffix}/${params.blobContainer}${params.sasKey}"))
       } else {
-        new CloudBlobContainer(new URI(s"https://${params.account}.blob.${params.endpointSuffix}/${params.container}${params.secret}"))
+        new CloudBlobContainer(new URI(s"https://${params.storageAccountName}.blob.${storage.endpointSuffix}/${params.blobContainer}"),
+          new StorageCredentialsAccountAndKey(params.storageAccountName.get, params.storageAccountKey.get))
       }
       container.getDirectoryReference(directory).listBlobsSegmented().getLength > 0
     }
-    val paths = storage.filter(directoryExists).map(params => s"wasbs://${params.container}@${params.account}.blob.${params.endpointSuffix}/$directory")
+    val paths = storage.storageCredentials.filter(directoryExists).map(params => s"wasbs://${params.blobContainer}@${params.storageAccountName}.blob.${storage.endpointSuffix}/$directory")
     KDSU.logInfo(myName, s"Finished exporting from Kusto to ${paths.mkString(",")}" +
       s", on requestId: ${request.requestId}, will start parquet reading now")
     paths
   }
 
-  private[kusto] def deleteTransactionBlobsSafe(storage: KustoStorageParameters, directory: String): Unit = {
+  private[kusto] def deleteTransactionBlobsSafe(storage: TransientStorageCredentials, directory: String): Unit = {
     try {
-      KustoBlobStorageUtils.deleteFromBlob(storage.account, directory, storage.container, storage.secret, !storage.secretIsAccountKey)
+      KustoBlobStorageUtils.deleteFromBlob(storage.storageAccountName.get, directory, storage.blobContainer.get,
+        if (storage.isSas) storage.sasKey.get else storage.storageAccountKey.get , !storage.isSas)
     }
     catch {
       case ex: Exception =>
@@ -176,18 +170,20 @@ private[kusto] object KustoReader {
     }
   }
 
-  private[kusto] def setupBlobAccess(request: KustoReadRequest, storageParameters: Seq[KustoStorageParameters]): Unit = {
+  private[kusto] def setupBlobAccess(request: KustoReadRequest, storageParameters: TransientStorageParameters): Unit = {
     val config = request.sparkSession.sparkContext.hadoopConfiguration
     val now = new DateTime(DateTimeZone.UTC)
-    for(storage <- storageParameters) {
-      if (storage.secretIsAccountKey) {
-        if (!KustoAzureFsSetupCache.updateAndGetPrevStorageAccountAccess(storage.account, storage.secret, now)) {
-          config.set(s"fs.azure.account.key.${storage.account}.blob.${storage.endpointSuffix}", s"${storage.secret}")
+    for(storage <- storageParameters.storageCredentials) {
+      if (!storage.isSas) {
+        if (!KustoAzureFsSetupCache.updateAndGetPrevStorageAccountAccess(storage.storageAccountName.get
+          , storage.storageAccountKey.get, now)) {
+          config.set(s"fs.azure.account.key.${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}", s"${storage.storageAccountKey}")
         }
       }
       else {
-        if (!KustoAzureFsSetupCache.updateAndGetPrevSas(storage.container, storage.account, storage.secret, now)) {
-          config.set(s"fs.azure.sas.${storage.container}.${storage.account}.blob.${storage.endpointSuffix}", s"${storage.secret}")
+        if (!KustoAzureFsSetupCache.updateAndGetPrevSas(storage.blobContainer.get,
+          storage.storageAccountName.get, storage.sasKey.get, now)) {
+          config.set(s"fs.azure.sas.${storage.blobContainer.get}.${storage.storageAccountName.get}.blob.${storageParameters.endpointSuffix}", s"${storage.sasKey}")
         }
       }
 
@@ -197,34 +193,34 @@ private[kusto] object KustoReader {
     }
   }
 
-  private def calculatePartitions(partitionInfo: KustoPartitionParameters): Array[Partition] = {
-    partitionInfo.mode match {
+  private def calculatePartitions(partitionInfo: PartitionOptions): Array[Partition] = {
+    partitionInfo.mode.get match {
       case "hash" => calculateHashPartitions(partitionInfo)
       case _ => throw new InvalidParameterException(s"Partitioning mode '${partitionInfo.mode}' is not valid")
     }
   }
 
-  private def calculateHashPartitions(partitionInfo: KustoPartitionParameters): Array[Partition] = {
+  private def calculateHashPartitions(partitionInfo: PartitionOptions): Array[Partition] = {
     // Single partition
-    if (partitionInfo.num <= 1) return Array[Partition](KustoPartition(None, 0))
+    if (partitionInfo.amount <= 1) return Array[Partition](KustoPartition(None, 0))
 
-    val partitions = new Array[Partition](partitionInfo.num)
-    for (partitionId <- 0 until partitionInfo.num) {
-      val partitionPredicate = s" hash(${partitionInfo.column}, ${partitionInfo.num}) == $partitionId"
+    val partitions = new Array[Partition](partitionInfo.amount)
+    for (partitionId <- 0 until partitionInfo.amount) {
+      val partitionPredicate = s" hash(${partitionInfo.column}, ${partitionInfo.amount}) == $partitionId"
       partitions(partitionId) = KustoPartition(Some(partitionPredicate), partitionId)
     }
     partitions
   }
 }
 
-private[kusto] class KustoReader(client: Client, request: KustoReadRequest, storage: Seq[KustoStorageParameters]) {
+private[kusto] class KustoReader(client: Client) {
   private val myName = this.getClass.getSimpleName
 
   // Export a single partition from Kusto to transient Blob storage.
   // Returns the directory path for these blobs
   private[kusto] def exportPartitionToBlob(partition: KustoPartition,
                                            request: KustoReadRequest,
-                                           storage: Seq[KustoStorageParameters],
+                                           storage: TransientStorageParameters,
                                            directory: String,
                                            options: KustoReadOptions,
                                            filtering: KustoFiltering): Unit = {
