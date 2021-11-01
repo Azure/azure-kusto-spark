@@ -105,7 +105,7 @@ class KustoBlobAccessE2E extends FlatSpec with BeforeAndAfterAll {
 
     if (blobSas != null) {
       val storageParams = new datasource.TransientStorageCredentials(blobSas)
-      secret = storageParams.sasKey.get
+      secret = storageParams.sasKey
     }
     else {
       secret = if (blobSas != null) blobSas else blobKey

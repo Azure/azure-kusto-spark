@@ -98,8 +98,8 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
   def getTempBlobsForExport: TransientStorageParameters = {
     val storage = exportContainersContainerProvider.getAllContainers
     val endpointSuffix = storage.head.domainSuffix
-    if(endpointSuffix.isDefined){
-      new TransientStorageParameters(storage.toArray, endpointSuffix.get)
+    if(StringUtils.isNoneBlank(endpointSuffix)){
+      new TransientStorageParameters(storage.toArray, endpointSuffix)
     }else{
       new TransientStorageParameters(storage.toArray)
     }

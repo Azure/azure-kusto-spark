@@ -1,14 +1,10 @@
 package com.microsoft.kusto.spark.datasource
 
-import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import com.microsoft.kusto.spark.utils.KustoDataSourceUtils
 import org.apache.commons.lang3.StringUtils
-import org.apache.htrace.fasterxml.jackson.databind.annotation.JsonDeserialize
-import org.codehaus.jackson.JsonParser
 import org.codehaus.jackson.annotate.JsonAutoDetect.Visibility
 import org.codehaus.jackson.annotate.JsonMethod
-import org.codehaus.jackson.map.{DeserializationContext, JsonDeserializer, ObjectMapper}
-import py4j.StringUtil
+import org.codehaus.jackson.map.ObjectMapper
 
 import java.security.InvalidParameterException
 import scala.util.matching.Regex
@@ -50,12 +46,12 @@ case class TransientStorageCredentials() {
     parseSas(sas)
   }
 
-  def isSas: Boolean = {
-    sasUrl != null;
+  def sasDefined(): Boolean = {
+    sasUrl != null
   }
 
   def validate(): Unit = {
-    if (isSas) {
+    if (sasDefined()) {
       if (sasUrl.isEmpty) {
         throw new InvalidParameterException("sasUrl is null or empty")
       }
@@ -74,12 +70,11 @@ case class TransientStorageCredentials() {
 
   private[kusto] def parseSas(url: String): Unit = {
     url match {
-      case TransientStorageCredentials.SasPattern(storageAccountName, cloud, container, sasKey) => {
+      case TransientStorageCredentials.SasPattern(storageAccountName, cloud, container, sasKey) =>
         this.storageAccountName = storageAccountName
         this.blobContainer = container
         this.sasKey = sasKey
         domainSuffix = cloud
-      }
       case _ => throw new InvalidParameterException(
         "SAS url couldn't be parsed. Should be https://<storage-account>.blob.<domainEndpointSuffix>/<container>?<SAS-Token>"
       )

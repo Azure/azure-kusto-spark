@@ -24,10 +24,10 @@ object KustoBlobStorageUtils {
     val storageParams = new TransientStorageCredentials(sasKeyFullUrl)
     val storageConnectionString =
       "DefaultEndpointsProtocol=https;" +
-      s"AccountName=${storageParams.storageAccountName.get};" +
-      s"SharedAccessSignature=${storageParams.sasKey.get}"
+      s"AccountName=${storageParams.storageAccountName};" +
+      s"SharedAccessSignature=${storageParams.sasKey}"
 
-    performBlobDelete(directory, storageParams.blobContainer.get, storageConnectionString)
+    performBlobDelete(directory, storageParams.blobContainer, storageConnectionString)
   }
 
   private[kusto] def performBlobDelete(directory: String, container: String, storageConnectionString: String): Unit = {

@@ -541,8 +541,11 @@ object KustoDataSourceUtils {
 
       val keyVaultCredential = KeyVaultUtils.getStorageParamsFromKeyVault(keyVaultAuthentication)
       try {
+        val domainSuffix = if ( StringUtils.isNotBlank(keyVaultCredential.domainSuffix))
+          keyVaultCredential.domainSuffix
+          else KustoDataSourceUtils.DefaultDomainPostfix
           Some(new TransientStorageParameters(Array(keyVaultCredential),
-            keyVaultCredential.domainSuffix.getOrElse(KustoDataSourceUtils.DefaultDomainPostfix)))
+            domainSuffix))
       } catch {
         case ex: Exception =>
         if (transientStorageParameters.isDefined) {

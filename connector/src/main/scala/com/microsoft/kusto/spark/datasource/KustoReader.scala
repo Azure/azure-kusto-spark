@@ -145,11 +145,11 @@ private[kusto] object KustoReader {
     }
 
     val directoryExists = (params: TransientStorageCredentials) => {
-      val container = if (params.isSas) {
+      val container = if (params.sasDefined) {
         new CloudBlobContainer(new URI(s"https://${params.storageAccountName}.blob.${storage.endpointSuffix}/${params.blobContainer}${params.sasKey}"))
       } else {
         new CloudBlobContainer(new URI(s"https://${params.storageAccountName}.blob.${storage.endpointSuffix}/${params.blobContainer}"),
-          new StorageCredentialsAccountAndKey(params.storageAccountName.get, params.storageAccountKey.get))
+          new StorageCredentialsAccountAndKey(params.storageAccountName, params.storageAccountKey))
       }
       container.getDirectoryReference(directory).listBlobsSegmented().getLength > 0
     }
@@ -161,8 +161,8 @@ private[kusto] object KustoReader {
 
   private[kusto] def deleteTransactionBlobsSafe(storage: TransientStorageCredentials, directory: String): Unit = {
     try {
-      KustoBlobStorageUtils.deleteFromBlob(storage.storageAccountName.get, directory, storage.blobContainer.get,
-        if (storage.isSas) storage.sasKey.get else storage.storageAccountKey.get , !storage.isSas)
+      KustoBlobStorageUtils.deleteFromBlob(storage.storageAccountName, directory, storage.blobContainer,
+        if (storage.sasDefined) storage.sasKey else storage.storageAccountKey , !storage.sasDefined)
     }
     catch {
       case ex: Exception =>
@@ -174,16 +174,16 @@ private[kusto] object KustoReader {
     val config = request.sparkSession.sparkContext.hadoopConfiguration
     val now = new DateTime(DateTimeZone.UTC)
     for(storage <- storageParameters.storageCredentials) {
-      if (!storage.isSas) {
-        if (!KustoAzureFsSetupCache.updateAndGetPrevStorageAccountAccess(storage.storageAccountName.get
-          , storage.storageAccountKey.get, now)) {
+      if (!storage.sasDefined) {
+        if (!KustoAzureFsSetupCache.updateAndGetPrevStorageAccountAccess(storage.storageAccountName
+          , storage.storageAccountKey, now)) {
           config.set(s"fs.azure.account.key.${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}", s"${storage.storageAccountKey}")
         }
       }
       else {
-        if (!KustoAzureFsSetupCache.updateAndGetPrevSas(storage.blobContainer.get,
-          storage.storageAccountName.get, storage.sasKey.get, now)) {
-          config.set(s"fs.azure.sas.${storage.blobContainer.get}.${storage.storageAccountName.get}.blob.${storageParameters.endpointSuffix}", s"${storage.sasKey}")
+        if (!KustoAzureFsSetupCache.updateAndGetPrevSas(storage.blobContainer,
+          storage.storageAccountName, storage.sasKey, now)) {
+          config.set(s"fs.azure.sas.${storage.blobContainer}.${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}", s"${storage.sasKey}")
         }
       }
 

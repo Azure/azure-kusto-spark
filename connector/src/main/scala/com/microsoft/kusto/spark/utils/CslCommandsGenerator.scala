@@ -100,9 +100,9 @@ private[kusto] object CslCommandsGenerator {
                                  isAsync: Boolean = true,
                                  isCompressed: Boolean = false): String = {
     val getFullUrlFromParams = (storage: TransientStorageCredentials) => {
-      val secretString = if (!storage.isSas) s""";" h@"${storage.storageAccountKey.get}"""" else if
-      (storage.sasKey.get(0) == '?') s"""" h@"${storage.sasKey.get}"""" else s"""?" h@"${storage.sasKey.get}""""
-      val blobUri = s"https://${storage.storageAccountName.get}.blob.${storageParameters.endpointSuffix}"
+      val secretString = if (!storage.sasDefined) s""";" h@"${storage.storageAccountKey}"""" else if
+      (storage.sasKey(0) == '?') s"""" h@"${storage.sasKey}"""" else s"""?" h@"${storage.sasKey}""""
+      val blobUri = s"https://${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}"
       s"$blobUri/${storage.blobContainer}$secretString"
     }
 

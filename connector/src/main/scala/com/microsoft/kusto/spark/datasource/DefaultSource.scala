@@ -2,13 +2,13 @@ package com.microsoft.kusto.spark.datasource
 
 import java.security.InvalidParameterException
 import java.util.concurrent.TimeUnit
-
 import com.microsoft.azure.kusto.data.ClientRequestProperties
 import com.microsoft.kusto.spark.authentication.{KeyVaultAuthentication, KustoAuthentication}
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, KustoWriter}
 import com.microsoft.kusto.spark.utils.{KeyVaultUtils, KustoQueryUtils, KustoConstants => KCONST, KustoDataSourceUtils => KDSU}
 import com.microsoft.kusto.spark.utils.KustoDataSourceUtils.SourceParameters
+import org.apache.commons.lang3.StringUtils
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister, RelationProvider}
 import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode}
 
@@ -97,12 +97,12 @@ class DefaultSource extends CreatableRelationProvider
         transientStorageParams.get.storageCredentials.
           foreach(st => {
             st.validate()
-            if (st.domainSuffix.isDefined){
-              transientStorageParams.endpointSuffix = st.domainSuffix.get
+            if (StringUtils.isNoneBlank(st.domainSuffix)){
+              transientStorageParams.get.endpointSuffix = st.domainSuffix
             }
           })
         // Params passed from options
-        (authenticationParameters, Some(storageParameters))
+        (authenticationParameters, transientStorageParams)
       }
       else {
         (authenticationParameters, None)
