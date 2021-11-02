@@ -5,7 +5,7 @@ import java.time.Instant
 import java.util.StringJoiner
 import java.util.concurrent.TimeUnit
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
-import com.microsoft.azure.kusto.data.exceptions.KustoDataExceptionBase
+import com.microsoft.azure.kusto.data.exceptions.KustoDataException
 import com.microsoft.azure.kusto.data.{Client, ClientFactory, ClientRequestProperties, KustoResultSetTable}
 import com.microsoft.azure.kusto.ingest.result.{IngestionStatus, OperationStatus}
 import com.microsoft.azure.kusto.ingest.{IngestClient, IngestClientFactory}
@@ -204,7 +204,7 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
           } else {
             throw ex
           }
-        case ex:KustoDataExceptionBase =>
+        case ex:KustoDataException =>
           if (ex.getCause.isInstanceOf[SocketTimeoutException] || !ex.isPermanent) {
             error = ExceptionUtils.getStackTrace(ex)
             failed = true

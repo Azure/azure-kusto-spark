@@ -5,8 +5,9 @@
 /***************************************************************************************/
 
 import java.util.concurrent.atomic.AtomicInteger
+
 import com.microsoft.kusto.spark.datasink.KustoSinkOptions
-import com.microsoft.kusto.spark.datasource.KustoSourceOptions
+import com.microsoft.kusto.spark.datasource.{KustoSourceOptions, TransientStorageCredentials, TransientStorageParameters}
 import com.microsoft.kusto.spark.sql.extension.SparkExtension.DataFrameReaderExtension
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import org.apache.spark.sql.{SaveMode, SparkSession}
@@ -146,14 +147,13 @@ object KustoConnectorDemo {
     // when using SAS
     // spark.conf.set(s"fs.azure.sas.$container.$storageAccountName.blob.core.windows.net", s"$storageSas")
 
+    val st = new TransientStorageParameters(Array(new TransientStorageCredentials(storageAccountName,
+      storageAccountKey, container)))
     // SET UP CONFIGURATION FOR PROVIDING STORAGE YOURSELF
     val conf3: Map[String, String] = Map(
       KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
       KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey,
-      KustoSourceOptions.KUSTO_BLOB_CONTAINER -> container,
-      //KustoOptions.KUSTO_BLOB_STORAGE_SAS_URL -> storageSas,
-      KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME -> storageAccountName,
-      KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_KEY -> storageAccountKey
+      KustoSourceOptions.KUSTO_TRANSIENT_STORAGE -> st.toString
     )
 
     // READING LARGE DATA SET(FULL TABLE, UNFILTERED)

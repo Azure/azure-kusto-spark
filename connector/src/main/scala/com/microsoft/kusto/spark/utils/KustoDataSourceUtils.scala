@@ -38,11 +38,11 @@ object KustoDataSourceUtils {
   def getReadParameters(parameters: Map[String, String], sqlContext: SQLContext): KustoReadOptions = {
     val requestedPartitions = parameters.get(KustoDebugOptions.KUSTO_NUM_PARTITIONS)
     val partitioningMode = parameters.get(KustoDebugOptions.KUSTO_READ_PARTITION_MODE)
+    val numPartitions = setNumPartitions(sqlContext, requestedPartitions, partitioningMode)
     val shouldCompressOnExport = parameters.getOrElse(KustoDebugOptions.KUSTO_DBG_BLOB_COMPRESS_ON_EXPORT, "true").trim.toBoolean
     // Set default export split limit as 1GB, maximal allowed
     val exportSplitLimitMb = parameters.getOrElse(KustoDebugOptions.KUSTO_DBG_BLOB_FILE_SIZE_LIMIT_MB, "1024").trim.toInt
 
-    val numPartitions = setNumPartitions(sqlContext, requestedPartitions, partitioningMode)
     val readModeOption = parameters.get(KustoSourceOptions.KUSTO_READ_MODE)
     val readMode: Option[ReadMode]  = if (readModeOption.isDefined){
       Some(ReadMode.withName(readModeOption.get))

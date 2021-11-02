@@ -2,10 +2,12 @@ package com.microsoft.kusto.spark.datasource
 
 import java.security.InvalidParameterException
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 
 import com.microsoft.azure.kusto.data.ClientRequestProperties
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.{KustoCoordinates, KustoDebugOptions}
+import com.microsoft.kusto.spark.datasink.{KustoWriter, WriteOptions}
 import com.microsoft.kusto.spark.utils.{KustoClientCache, KustoConstants, KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.sources._
@@ -13,9 +15,6 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, Row, SQLContext, SparkSession}
 
 import scala.concurrent.duration._
-import java.util.concurrent.TimeUnit
-
-import com.microsoft.kusto.spark.datasink.{KustoWriter, WriteOptions}
 
 private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
                                         authentication: KustoAuthentication,
@@ -27,7 +26,7 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
                                         clientRequestProperties: Option[ClientRequestProperties],
                                         requestId: String)
                                        (@transient val sparkSession: SparkSession)
-  extends BaseRelation with TableScan with PrunedFilteredScan with Serializable with InsertableRelation  {
+  extends BaseRelation with PrunedFilteredScan with Serializable with InsertableRelation  {
 
   private val normalizedQuery = KustoQueryUtils.normalizeQuery(query)
   var cachedSchema: KustoSchema = _
@@ -43,10 +42,6 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
       else getSchema
     }
     cachedSchema.sparkSchema
-  }
-
-  override def buildScan(): RDD[Row] = {
-    buildScan(Array.empty, Array.empty)
   }
 
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
@@ -134,8 +129,8 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
 
   private def getPartitioningColumn: String = {
     if (readOptions.partitionOptions.column.isDefined) {
-      val requestedColumn = readOptions.partitionOptions.column.get.toLowerCase(Locale.ROOT)
-      if (!schema.contains(requestedColumn)) {
+      val requestedColumn = readOptions.partitionOptions.column.get
+      if (!schema.fields.exists(p => p.name equals requestedColumn)) {
         throw new InvalidParameterException(
           s"Cannot partition by column '$requestedColumn' since it is not part of the query schema: ${KDSU.NewLine}${schema.mkString(", ")}")
       }
