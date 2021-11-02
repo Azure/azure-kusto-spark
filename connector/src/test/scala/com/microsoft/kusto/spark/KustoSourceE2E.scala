@@ -60,20 +60,20 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
   val expectedNumberOfRows: Int = 100
   val rows: immutable.IndexedSeq[(String, Int)] = (1 to expectedNumberOfRows).map(v => (newRow(), v))
   val dfOrig: DataFrame = rows.toDF("name", "value")
-//
-//  "KustoSource" should "execute a read query on Kusto cluster in single mode" taggedAs KustoE2E in {
-//    val table: String = System.getProperty(KustoSinkOptions.KUSTO_TABLE)
-//    val query: String = System.getProperty(KustoSourceOptions.KUSTO_QUERY, s"$table | where (toint(ColB) % 1000 == 0) | distinct ColA ")
-//
-//    val conf: Map[String, String] = Map(
-//      KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceSingleMode.toString,
-//      KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
-//      KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey
-//    )
-//
-//    val df = spark.read.kusto(cluster, database, query, conf)
-//    df.show()
-//  }
+
+  "KustoSource" should "execute a read query on Kusto cluster in single mode" taggedAs KustoE2E in {
+    val table: String = System.getProperty(KustoSinkOptions.KUSTO_TABLE)
+    val query: String = System.getProperty(KustoSourceOptions.KUSTO_QUERY, s"$table | where (toint(ColB) % 1000 == 0) | distinct ColA ")
+
+    val conf: Map[String, String] = Map(
+      KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceSingleMode.toString,
+      KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
+      KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey
+    )
+
+    val df = spark.read.kusto(cluster, database, query, conf)
+    df.show()
+  }
 
   "KustoSource" should "execute a read query on Kusto cluster in distributed mode" taggedAs KustoE2E in {
     val table: String = System.getProperty(KustoSinkOptions.KUSTO_TABLE)
@@ -82,13 +82,11 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
     //    val container: String = System.getProperty("container")
     //    val blobKey: String = System.getProperty("blobKey")
     val blobSas: String = System.getProperty("blobSas")
-    ;
 
     val storage = new TransientStorageParameters(Array(new TransientStorageCredentials(blobSas)))
 
     val conf: Map[String, String] = Map(
 
-      KustoSourceOptions.KUSTO_BLOB_STORAGE_SAS_URL -> blobSas,
         KustoSourceOptions.KUSTO_TRANSIENT_STORAGE -> storage.toString,
       KustoSourceOptions.KUSTO_USER_PROMPT -> true.toString
       //      KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME -> storageAccount,
