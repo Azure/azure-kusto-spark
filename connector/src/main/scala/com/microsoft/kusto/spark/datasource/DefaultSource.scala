@@ -2,14 +2,13 @@ package com.microsoft.kusto.spark.datasource
 
 import java.security.InvalidParameterException
 import java.util.concurrent.TimeUnit
-
 import com.microsoft.azure.kusto.data.ClientRequestProperties
 import com.microsoft.kusto.spark.authentication.{KeyVaultAuthentication, KustoAuthentication}
-import com.microsoft.kusto.spark.common.{KustoCoordinates, KustoDebugOptions}
+import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, KustoWriter}
-import com.microsoft.kusto.spark.datasource.ReadMode.ReadMode
 import com.microsoft.kusto.spark.utils.{KeyVaultUtils, KustoQueryUtils, KustoConstants => KCONST, KustoDataSourceUtils => KDSU}
 import com.microsoft.kusto.spark.utils.KustoDataSourceUtils.SourceParameters
+import org.apache.commons.lang3.StringUtils
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister, RelationProvider}
 import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode}
 
@@ -69,92 +68,61 @@ class DefaultSource extends CreatableRelationProvider
     }
   }
 
-  private[kusto] def blobStorageAttributesProvided(parameters: Map[String, String]) = {
-    parameters.get(KustoSourceOptions.KUSTO_BLOB_STORAGE_SAS_URL).isDefined || (parameters.get(KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME).isDefined &&
-      parameters.get(KustoSourceOptions.KUSTO_BLOB_CONTAINER).isDefined && parameters.get(KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_KEY).isDefined)
-  }
-
   override def createRelation(sqlContext: SQLContext, parameters: Map[String, String]): BaseRelation = {
-    val requestedPartitions = parameters.get(KustoDebugOptions.KUSTO_NUM_PARTITIONS)
-    val partitioningMode = parameters.get(KustoDebugOptions.KUSTO_READ_PARTITION_MODE)
-    val shouldCompressOnExport = parameters.getOrElse(KustoDebugOptions.KUSTO_DBG_BLOB_COMPRESS_ON_EXPORT, "true").trim.toBoolean
-    // Set default export split limit as 1GB, maximal allowed
-    val exportSplitLimitMb = parameters.getOrElse(KustoDebugOptions.KUSTO_DBG_BLOB_FILE_SIZE_LIMIT_MB, "1024").trim.toInt
-
-    val numPartitions = setNumPartitions(sqlContext, requestedPartitions, partitioningMode)
-    var storageSecretIsAccountKey = true
-    var storageSecret = parameters.get(KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_KEY)
-
-    if (storageSecret.isEmpty) {
-      storageSecret = parameters.get(KustoSourceOptions.KUSTO_BLOB_STORAGE_SAS_URL)
-      if (storageSecret.isDefined) storageSecretIsAccountKey = false
-    }
-
+    val readOptions = KDSU.getReadParameters(parameters, sqlContext)
     if (authenticationParameters.isEmpty) {
       // Parse parameters if haven't got parsed before
       val sourceParameters = KDSU.parseSourceParameters(parameters)
       initCommonParams(sourceParameters)
     }
-    val (kustoAuthentication, storageParameters): (Option[KustoAuthentication], Option[KustoStorageParameters]) =
+
+    val storageOption = parameters.get(KustoSourceOptions.KUSTO_TRANSIENT_STORAGE)
+    val transientStorageParams: Option[TransientStorageParameters] =
+      if (storageOption.isDefined) {
+        Some(TransientStorageParameters.fromString(storageOption.get))
+      } else {
+        None
+      }
+    val (kustoAuthentication, mergedStorageParameters): (Option[KustoAuthentication], Option[TransientStorageParameters]) = {
       if (keyVaultAuthentication.isDefined) {
         // Get params from keyVault
-        authenticationParameters = Some(KDSU.mergeKeyVaultAndOptionsAuthentication(KeyVaultUtils.getAadAppParametersFromKeyVault(keyVaultAuthentication.get), authenticationParameters))
+        authenticationParameters = Some(KDSU.mergeKeyVaultAndOptionsAuthentication(KeyVaultUtils.
+          getAadAppParametersFromKeyVault(keyVaultAuthentication.get), authenticationParameters))
 
         (authenticationParameters, KDSU.mergeKeyVaultAndOptionsStorageParams(
-          parameters.get(KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME),
-          parameters.get(KustoSourceOptions.KUSTO_BLOB_CONTAINER),
-          storageSecret,
-          storageSecretIsAccountKey,
+          transientStorageParams,
           keyVaultAuthentication.get))
-      } else {
+      } else if(transientStorageParams.isDefined) {
+        // If any of the storage parameters defined a SAS we will take endpoint suffix from there
+        transientStorageParams.get.storageCredentials.
+          foreach(st => {
+            st.validate()
+            if (StringUtils.isNoneBlank(st.domainSuffix)){
+              transientStorageParams.get.endpointSuffix = st.domainSuffix
+            }
+          })
         // Params passed from options
-        (authenticationParameters, KDSU.getAndValidateTransientStorageParametersIfExist(
-          parameters.get(KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME),
-          parameters.get(KustoSourceOptions.KUSTO_BLOB_CONTAINER),
-          storageSecret,
-          storageSecretIsAccountKey,
-          parameters.get(KustoSourceOptions.KUSTO_BLOB_STORAGE_ENDPOINT_SUFFIX)))
+        (authenticationParameters, transientStorageParams)
       }
-
-    val timeout = new FiniteDuration(parameters.getOrElse(KustoSourceOptions.KUSTO_TIMEOUT_LIMIT, KCONST.DefaultWaitingIntervalLongRunning).toLong, TimeUnit.SECONDS)
-    val readModeOption = parameters.get(KustoSourceOptions.KUSTO_READ_MODE)
-    val readMode: Option[ReadMode]  = if (readModeOption.isDefined){
-      Some(ReadMode.withName(readModeOption.get))
-    } else {
-      None
+      else {
+        (authenticationParameters, None)
+      }
     }
 
-    KDSU.logInfo(myName, s"Finished serializing parameters for reading: {requestId: $requestId, timeout: $timeout, readMode: ${readMode.getOrElse("Default")}, clientRequestProperties: $clientRequestProperties")
+    val timeout = new FiniteDuration(parameters.getOrElse(KustoSourceOptions.KUSTO_TIMEOUT_LIMIT, KCONST.DefaultWaitingIntervalLongRunning).toLong, TimeUnit.SECONDS)
 
-    val distributedReadModeTransientCacheEnabled = parameters.getOrElse(KustoSourceOptions.KUSTO_DISTRIBUTED_READ_MODE_TRANSIENT_CACHE, "false").trim.toBoolean
-    val queryFilterPushDown = parameters.get(KustoSourceOptions.KUSTO_QUERY_FILTER_PUSH_DOWN).map(s=> s.trim.toBoolean)
-
+    KDSU.logInfo(myName, s"Finished serializing parameters for reading: {requestId: $requestId, timeout: $timeout, readMode: ${readOptions.readMode.getOrElse("Default")}, clientRequestProperties: $clientRequestProperties")
     KustoRelation(
       kustoCoordinates,
       kustoAuthentication.get,
       parameters.getOrElse(KustoSourceOptions.KUSTO_QUERY, ""),
-      KustoReadOptions(readMode, shouldCompressOnExport, exportSplitLimitMb, distributedReadModeTransientCacheEnabled, queryFilterPushDown),
+      readOptions,
       timeout,
-      numPartitions,
-      parameters.get(KustoDebugOptions.KUSTO_PARTITION_COLUMN),
-      partitioningMode,
       parameters.get(KustoSourceOptions.KUSTO_CUSTOM_DATAFRAME_COLUMN_TYPES),
-      storageParameters,
+      mergedStorageParameters,
       clientRequestProperties,
       requestId.get
     )(sqlContext.sparkSession)
-  }
-
-  private def setNumPartitions(sqlContext: SQLContext, requestedNumPartitions: Option[String], partitioningMode: Option[String]): Int = {
-    if (requestedNumPartitions.isDefined) requestedNumPartitions.get.toInt else {
-      partitioningMode match {
-        case Some("hash") => sqlContext.getConf("spark.sql.shuffle.partitions", "10").toInt
-        // In "auto" mode we don't explicitly partition the data:
-        // The data is exported and split to multiple files if required by Kusto 'export' command
-        // The data is then read from the base directory for parquet files and partitioned by the parquet data source
-        case _ => 1
-      }
-    }
   }
 
   override def shortName(): String = "kusto"

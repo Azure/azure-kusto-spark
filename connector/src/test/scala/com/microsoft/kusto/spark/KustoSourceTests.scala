@@ -1,6 +1,6 @@
 package com.microsoft.kusto.spark
 
-import com.microsoft.kusto.spark.datasource.KustoSourceOptions
+import com.microsoft.kusto.spark.datasource.{KustoSourceOptions, TransientStorageCredentials}
 import com.microsoft.kusto.spark.utils.KustoClientCache.AliasAndAuth
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import org.apache.spark.SparkContext
@@ -70,12 +70,12 @@ class KustoSourceTests extends FlatSpec with MockFactory with Matchers with Befo
 
   "KustoDataSource" should "parse sas" in {
     val sas = "https://storage.blob.core.customDom/upload/?<secret>"
-    val params = KDSU.parseSas(sas)
-    assert(params.endpointSuffix.equals("core.customDom"))
-    assert(params.account.equals("storage"))
-    assert(params.secret.equals("?<secret>"))
-    assert(params.container.equals("upload/"))
-    assert(params.secretIsAccountKey.equals(false))
+    val params = new TransientStorageCredentials(sas)
+    assert(params.domainSuffix.equals("core.customDom"))
+    assert(params.storageAccountName.equals("storage"))
+    assert(params.sasKey.equals("?<secret>"))
+    assert(params.blobContainer.equals("upload/"))
+    assert(params.sasDefined.equals(true))
   }
 
   "KustoDataSource" should "match cluster default url pattern" in {
