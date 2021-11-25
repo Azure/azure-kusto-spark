@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.microsoft.azure.kusto.ingest.ColumnMapping
 import com.microsoft.kusto.spark.datasink.{SchemaAdjustmentMode, SparkIngestionProperties}
 import com.microsoft.kusto.spark.datasink.SchemaAdjustmentMode.SchemaAdjustmentMode
+import com.microsoft.kusto.spark.exceptions.SchemaMatchException
 import org.apache.spark.sql.types.StructType
 import org.json.JSONObject
 

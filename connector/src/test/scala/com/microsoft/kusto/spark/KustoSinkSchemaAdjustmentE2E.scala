@@ -2,7 +2,7 @@ package com.microsoft.kusto.spark
 
 import com.microsoft.kusto.spark.KustoTestUtils.KustoConnectionOptions
 import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SparkIngestionProperties}
-import com.microsoft.kusto.spark.utils.SchemaMatchException
+import com.microsoft.kusto.spark.exceptions.SchemaMatchException
 import org.apache.spark.sql._
 import org.apache.spark.sql.types.StringType
 import org.junit.runner.RunWith

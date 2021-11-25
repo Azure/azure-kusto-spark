@@ -13,7 +13,7 @@ object KeyVaultUtils {
   val AppKey = "kustoAppKey"
   val AppAuthority = "kustoAppAuthority"
   val SasUrl = "blobStorageSasUrl"
-  val StorageAccountId = "blobStorageAccountName"
+  val StorageAccountName = "blobStorageAccountName"
   val StorageAccountKey = "blobStorageAccountKey"
   val Container = "blobContainer"
   var cachedClient: SecretClient = _
@@ -26,7 +26,7 @@ object KeyVaultUtils {
   }
 
   @throws[IOException]
-  def getStorageParamsFromKeyVault(keyVaultAuthentication: KeyVaultAuthentication): KustoStorageParameters = {
+  def getStorageParamsFromKeyVault(keyVaultAuthentication: KeyVaultAuthentication): TransientStorageCredentials = {
     keyVaultAuthentication match {
       case app: KeyVaultAppAuthentication =>
         val client = getClient(app.uri, app.keyVaultAppID, app.keyVaultAppKey, app.authority)
@@ -67,21 +67,20 @@ object KeyVaultUtils {
       authority = authority.get)
   }
 
-  private def getStorageParamsFromKeyVaultImpl(client: SecretClient, uri: String): KustoStorageParameters = {
+  private def getStorageParamsFromKeyVaultImpl(client: SecretClient, uri: String): TransientStorageCredentials = {
     val sasUrl = Try(client.getSecret(SasUrl))
 
-    val accountId =  Try(client.getSecret(StorageAccountId))
+    val accountName =  Try(client.getSecret(StorageAccountName))
     val accountKey = Try(client.getSecret(StorageAccountKey))
     val container = Try(client.getSecret(Container))
 
     if(sasUrl.isFailure) {
-      KustoStorageParameters(
-        account = if(accountId.isFailure) accountId.get.getValue else "",
-        secret = if (accountKey.isFailure) accountKey.get.getValue else "",
-        container = if (container.isFailure) container.get.getValue else "",
-        secretIsAccountKey = true)
+      new TransientStorageCredentials(
+        if(accountName.isFailure) accountName.get.getValue else "",
+        if (accountKey.isFailure) accountKey.get.getValue else "",
+        if (container.isFailure) container.get.getValue else "")
     } else {
-      KustoDataSourceUtils.parseSas(sasUrl.get.getValue)
+      new TransientStorageCredentials(sasUrl.get.getValue)
     }
   }
 }

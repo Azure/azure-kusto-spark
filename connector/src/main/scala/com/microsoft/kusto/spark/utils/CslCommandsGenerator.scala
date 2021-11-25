@@ -1,8 +1,7 @@
 package com.microsoft.kusto.spark.utils
 
 import java.time.Instant
-
-import com.microsoft.kusto.spark.datasource.KustoStorageParameters
+import com.microsoft.kusto.spark.datasource.{TransientStorageCredentials, TransientStorageParameters}
 
 private[kusto] object CslCommandsGenerator {
   def generateFetchTableIngestByTagsCommand(table: String): String = {
@@ -63,11 +62,22 @@ private[kusto] object CslCommandsGenerator {
        |  distinct ExtentId"""
   }
 
+  def generateTableMoveExtentsAsyncCommand(sourceTableName: String, destinationTableName: String, batchSize:Int): String
+  = {
+    s""".move async extents to table $destinationTableName <|
+       .show table $sourceTableName extents with(extentsShowFilteringRuntimePolicy='{"MaximumResultsCount":$batchSize}');
+       """
+  }
+
+  def generateShowOperationDetails(operataionId: String): String = {
+    s".show operation $operataionId details"
+  }
+
   def generateNodesCountCommand(): String = {
     ".show cluster | count"
   }
 
-  def generateExtentsCountCommand(table: String) = {
+  def generateExtentsCountCommand(table: String): String = {
     s".show table $table extents | count"
   }
 
@@ -84,16 +94,16 @@ private[kusto] object CslCommandsGenerator {
                                  query: String,
                                  directory: String,
                                  partitionId: Int,
-                                 storageParameters: Seq[KustoStorageParameters],
+                                 storageParameters: TransientStorageParameters,
                                  partitionPredicate: Option[String] = None,
                                  sizeLimit: Option[Long],
                                  isAsync: Boolean = true,
                                  isCompressed: Boolean = false): String = {
-    val getFullUrlFromParams = (storage: KustoStorageParameters) => {
-      val secret = storage.secret
-      val secretString = if (storage.secretIsAccountKey) s""";" h@"$secret"""" else if (secret(0) == '?') s"""" h@"$secret"""" else s"""?" h@"$secret""""
-      val blobUri = s"https://${storage.account}.blob.${storage.endpointSuffix}"
-      s"$blobUri/${storage.container}$secretString"
+    val getFullUrlFromParams = (storage: TransientStorageCredentials) => {
+      val secretString = if (!storage.sasDefined) s""";" h@"${storage.storageAccountKey}"""" else if
+      (storage.sasKey(0) == '?') s"""" h@"${storage.sasKey}"""" else s"""?" h@"${storage.sasKey}""""
+      val blobUri = s"https://${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}"
+      s"$blobUri/${storage.blobContainer}$secretString"
     }
 
     val async = if (isAsync) "async " else ""
@@ -101,7 +111,7 @@ private[kusto] object CslCommandsGenerator {
     val sizeLimitIfDefined = if (sizeLimit.isDefined) s"sizeLimit=${sizeLimit.get * 1024 * 1024}, " else ""
 
     var command =
-      s""".export $async${compress}to parquet ("${storageParameters.map(getFullUrlFromParams).reduce((s,s1)=>s+",\"" + s1)})""" +
+      s""".export $async${compress}to parquet ("${storageParameters.storageCredentials.map(getFullUrlFromParams).reduce((s,s1)=>s+",\"" + s1)})""" +
         s""" with (${sizeLimitIfDefined}namePrefix="${directory}part$partitionId", compressionType=snappy) <| $query"""
 
     if (partitionPredicate.nonEmpty) {
