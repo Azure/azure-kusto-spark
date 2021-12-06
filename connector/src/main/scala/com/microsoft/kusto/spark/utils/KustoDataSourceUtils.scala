@@ -7,20 +7,21 @@ import java.util
 import java.util.Properties
 import java.util.concurrent.{Callable, CountDownLatch, TimeUnit, TimeoutException}
 import java.util.{NoSuchElementException, StringJoiner, Timer, TimerTask, UUID}
-
 import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties, KustoResultSetTable}
 import com.microsoft.azure.kusto.data.exceptions.{DataClientException, DataServiceException}
 import com.microsoft.kusto.spark.authentication._
 import com.microsoft.kusto.spark.common.{KustoCoordinates, KustoDebugOptions}
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
 import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SchemaAdjustmentMode, SinkTableCreationMode, WriteOptions}
-import com.microsoft.kusto.spark.datasource.{KustoResponseDeserializer, KustoSchema, KustoSourceOptions, KustoStorageParameters}
+import com.microsoft.kusto.spark.datasource.ReadMode.ReadMode
+import com.microsoft.kusto.spark.datasource.{KustoReadOptions, KustoResponseDeserializer, KustoSchema,
+  KustoSourceOptions, PartitionOptions, ReadMode, TransientStorageCredentials, TransientStorageParameters}
 import com.microsoft.kusto.spark.exceptions.{FailedOperationException, TimeoutAwaitingPendingOperationException}
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.log4j.{Level, Logger}
-import org.apache.spark.sql.SaveMode
+import org.apache.spark.sql.{SQLContext, SaveMode}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import com.microsoft.kusto.spark.utils.KustoConstants.{DefaultBatchingLimit, DefaultExtentsCountForSplitMergePerNode, DefaultMaxRetriesOnMoveExtents}
 
@@ -33,9 +34,43 @@ import org.apache.http.client.utils.URIBuilder
 import org.json.JSONObject
 
 object KustoDataSourceUtils {
+
+  def getReadParameters(parameters: Map[String, String], sqlContext: SQLContext): KustoReadOptions = {
+    val requestedPartitions = parameters.get(KustoDebugOptions.KUSTO_NUM_PARTITIONS)
+    val partitioningMode = parameters.get(KustoDebugOptions.KUSTO_READ_PARTITION_MODE)
+    val numPartitions = setNumPartitions(sqlContext, requestedPartitions, partitioningMode)
+    val shouldCompressOnExport = parameters.getOrElse(KustoDebugOptions.KUSTO_DBG_BLOB_COMPRESS_ON_EXPORT, "true").trim.toBoolean
+    // Set default export split limit as 1GB, maximal allowed
+    val exportSplitLimitMb = parameters.getOrElse(KustoDebugOptions.KUSTO_DBG_BLOB_FILE_SIZE_LIMIT_MB, "1024").trim.toInt
+
+    val readModeOption = parameters.get(KustoSourceOptions.KUSTO_READ_MODE)
+    val readMode: Option[ReadMode]  = if (readModeOption.isDefined){
+      Some(ReadMode.withName(readModeOption.get))
+    } else {
+      None
+    }
+    val distributedReadModeTransientCacheEnabled = parameters.getOrElse(KustoSourceOptions.KUSTO_DISTRIBUTED_READ_MODE_TRANSIENT_CACHE, "false").trim.toBoolean
+    val queryFilterPushDown = parameters.get(KustoSourceOptions.KUSTO_QUERY_FILTER_PUSH_DOWN).map(s=> s.trim.toBoolean)
+    val partitionColumn = parameters.get(KustoDebugOptions.KUSTO_PARTITION_COLUMN)
+    val partitionOptions = PartitionOptions(numPartitions,partitionColumn,partitioningMode)
+    KustoReadOptions(readMode, shouldCompressOnExport, exportSplitLimitMb, partitionOptions, distributedReadModeTransientCacheEnabled, queryFilterPushDown)
+  }
+
+
+  private def setNumPartitions(sqlContext: SQLContext, requestedNumPartitions: Option[String], partitioningMode: Option[String]): Int = {
+    if (requestedNumPartitions.isDefined) requestedNumPartitions.get.toInt else {
+      partitioningMode match {
+        case Some("hash") => sqlContext.getConf("spark.sql.shuffle.partitions", "10").toInt
+        // In "auto" mode we don't explicitly partition the data:
+        // The data is exported and split to multiple files if required by Kusto 'export' command
+        // The data is then read from the base directory for parquet files and partitioned by the parquet data source
+        case _ => 1
+      }
+    }
+  }
+
   private val klog = Logger.getLogger("KustoConnector")
 
-  val SasPattern: Regex = raw"(?:https://)?([^.]+).blob.([^/]+)/([^?]+)?(.+)".r
   val DefaultMicrosoftTenant = "microsoft.com"
   val NewLine: String = sys.props("line.separator")
   val ReadMaxWaitTime: FiniteDuration = 30 seconds
@@ -467,15 +502,6 @@ object KustoDataSourceUtils {
     lastResponse
   }
 
-  private[kusto] def parseSas(url: String): KustoStorageParameters = {
-    url match {
-      case SasPattern(storageAccountId, cloud, container, sasKey) => KustoStorageParameters(storageAccountId, sasKey, container, secretIsAccountKey = false, cloud)
-      case _ => throw new InvalidParameterException(
-        "SAS url couldn't be parsed. Should be https://<storage-account>.blob.<domainEndpointSuffix>/<container>?<SAS-Token>"
-      )
-    }
-  }
-
   private[kusto] def mergeKeyVaultAndOptionsAuthentication(paramsFromKeyVault: AadApplicationAuthentication,
                                                            authenticationParameters: Option[KustoAuthentication]): KustoAuthentication = {
     if (authenticationParameters.isEmpty) {
@@ -509,76 +535,26 @@ object KustoDataSourceUtils {
     }
   }
 
-  private[kusto] def mergeKeyVaultAndOptionsStorageParams(storageAccount: Option[String],
-                                                          storageContainer: Option[String],
-                                                          storageSecret: Option[String],
-                                                          storageSecretIsAccountKey: Boolean,
-                                                          keyVaultAuthentication: KeyVaultAuthentication): Option[KustoStorageParameters] = {
-    if (!storageSecretIsAccountKey) {
-      // If SAS option defined - take sas
-      Some(KustoDataSourceUtils.parseSas(storageSecret.get))
-    } else {
-      if (storageAccount.isEmpty || storageContainer.isEmpty || storageSecret.isEmpty) {
-        val keyVaultParameters = KeyVaultUtils.getStorageParamsFromKeyVault(keyVaultAuthentication)
-        // If KeyVault contains sas take it
-        if (!keyVaultParameters.secretIsAccountKey) {
-          Some(keyVaultParameters)
+  // Try get key vault parameters - if fails use transientStorageParameters
+  private[kusto] def mergeKeyVaultAndOptionsStorageParams(transientStorageParameters: Option[TransientStorageParameters],
+                                                          keyVaultAuthentication: KeyVaultAuthentication): Option[TransientStorageParameters] = {
+
+      val keyVaultCredential = KeyVaultUtils.getStorageParamsFromKeyVault(keyVaultAuthentication)
+      try {
+        val domainSuffix = if ( StringUtils.isNotBlank(keyVaultCredential.domainSuffix))
+          keyVaultCredential.domainSuffix
+          else KustoDataSourceUtils.DefaultDomainPostfix
+          Some(new TransientStorageParameters(Array(keyVaultCredential),
+            domainSuffix))
+      } catch {
+        case ex: Exception =>
+        if (transientStorageParameters.isDefined) {
+        // If storage option defined - take it
+          transientStorageParameters
         } else {
-          if ((storageAccount.isEmpty && keyVaultParameters.account.isEmpty) ||
-            (storageContainer.isEmpty && keyVaultParameters.container.isEmpty) ||
-            (storageSecret.isEmpty && keyVaultParameters.secret.isEmpty)) {
-
-            // We don't have enough information to access blob storage
-            None
-          }
-          else {
-            // Try combine
-            val account = if (storageAccount.isEmpty) Some(keyVaultParameters.account) else storageAccount
-            val secret = if (storageSecret.isEmpty) Some(keyVaultParameters.secret) else storageSecret
-            val container = if (storageContainer.isEmpty) Some(keyVaultParameters.container) else storageContainer
-
-            getAndValidateTransientStorageParametersIfExist(account, container, secret, storageSecretIsAccountKey = true, None)
-          }
+            throw ex
         }
-      } else {
-        Some(KustoStorageParameters(storageAccount.get, storageSecret.get, storageContainer.get, storageSecretIsAccountKey))
       }
-    }
-  }
-
-  private[kusto] def getAndValidateTransientStorageParametersIfExist(storageAccount: Option[String],
-                                                                     storageContainer: Option[String],
-                                                                     storageAccountSecret: Option[String],
-                                                                     storageSecretIsAccountKey: Boolean,
-                                                                     domainPostfix: Option[String])
-  : Option[KustoStorageParameters] = {
-
-    val paramsFromSas = if (!storageSecretIsAccountKey && storageAccountSecret.isDefined) {
-      if (storageAccountSecret.get == null) {
-        throw new InvalidParameterException("storage secret from parameters is null")
-      }
-      Some(parseSas(storageAccountSecret.get))
-    } else None
-
-    if (paramsFromSas.isDefined) {
-      if (storageAccount.isDefined && !storageAccount.get.equals(paramsFromSas.get.account)) {
-        throw new InvalidParameterException("Storage account name does not match the name in storage access SAS key.")
-      }
-
-      if (storageContainer.isDefined && !storageContainer.get.equals(paramsFromSas.get.container)) {
-        throw new InvalidParameterException("Storage container name does not match the name in storage access SAS key.")
-      }
-
-      paramsFromSas
-    }
-    else if (storageAccount.isDefined && storageContainer.isDefined && storageAccountSecret.isDefined) {
-      if (storageAccount.get == null || storageAccountSecret.get == null || storageContainer.get == null) {
-        throw new InvalidParameterException("storageAccount key from parameters is null")
-      }
-      val postfix = domainPostfix.getOrElse(DefaultDomainPostfix)
-      Some(KustoStorageParameters(storageAccount.get, storageAccountSecret.get, storageContainer.get, storageSecretIsAccountKey, postfix))
-    }
-    else None
   }
 
   private[kusto] def countRows(client: Client, query: String, database: String, crp: ClientRequestProperties): Int = {

@@ -7,7 +7,7 @@ import com.microsoft.azure.kusto.data.ClientFactory
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.kusto.spark.common.KustoDebugOptions
 import com.microsoft.kusto.spark.datasink.KustoSinkOptions
-import com.microsoft.kusto.spark.datasource.{KustoSourceOptions, ReadMode}
+import com.microsoft.kusto.spark.datasource.{KustoSourceOptions, ReadMode, TransientStorageCredentials, TransientStorageParameters}
 import com.microsoft.kusto.spark.sql.extension.SparkExtension._
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils => KDSU}
@@ -74,19 +74,20 @@ class KustoPruneAndFilterE2E extends FlatSpec with BeforeAndAfterAll {
     val container: String = System.getProperty("container")
     val blobKey: String = System.getProperty("blobKey")
     val blobSas: String = System.getProperty("blobSas")
-
     val conf = if (blobSas == null) {
-      Map(KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
+      val storage = new TransientStorageParameters(Array(new TransientStorageCredentials(storageAccount,blobKey,
+        container)))
+
+        Map(KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
         KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey,
-        KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME -> storageAccount,
-        KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_KEY -> blobKey,
-        KustoSourceOptions.KUSTO_BLOB_CONTAINER -> container)
+        KustoSourceOptions.KUSTO_TRANSIENT_STORAGE -> storage.toString)
     }
     else {
-      Map(KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
+      val storage = new TransientStorageParameters(Array(new TransientStorageCredentials(blobSas)))    //          ,
+        Map(KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
         KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey,
-        KustoSourceOptions.KUSTO_BLOB_STORAGE_SAS_URL -> blobSas
-        //          , KustoDebugOptions.KUSTO_DBG_BLOB_FORCE_KEEP -> "true"
+        KustoSourceOptions.KUSTO_TRANSIENT_STORAGE -> storage.toString
+        // KustoDebugOptions.KUSTO_DBG_BLOB_FORCE_KEEP -> "true"
       )
     }
 
@@ -128,18 +129,20 @@ class KustoPruneAndFilterE2E extends FlatSpec with BeforeAndAfterAll {
       .save()
 
     val conf = if (blobSas != null) {
+      val storage = new TransientStorageParameters(Array(new TransientStorageCredentials(storageAccount,blobKey,
+        container)))
       Map(KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
         KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey,
-        KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME -> storageAccount,
-        KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_KEY -> blobKey,
-        KustoSourceOptions.KUSTO_BLOB_CONTAINER -> container,
-        KustoDebugOptions.KUSTO_DBG_BLOB_COMPRESS_ON_EXPORT -> "false") // Just to test this option
+        KustoSourceOptions.KUSTO_TRANSIENT_STORAGE -> storage.toString,
+      KustoDebugOptions.KUSTO_DBG_BLOB_COMPRESS_ON_EXPORT -> "false") // Just to test this option
     }
     else {
+      val storage = new TransientStorageParameters(Array(new TransientStorageCredentials(blobSas)))    //          ,
+
       Map(KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
         KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey,
-        KustoSourceOptions.KUSTO_BLOB_STORAGE_SAS_URL -> blobSas,
-        KustoDebugOptions.KUSTO_DBG_BLOB_COMPRESS_ON_EXPORT -> "false") // Just to test this option
+        KustoSourceOptions.KUSTO_TRANSIENT_STORAGE -> storage.toString,
+          KustoDebugOptions.KUSTO_DBG_BLOB_COMPRESS_ON_EXPORT -> "false") // Just to test this option
     }
 
     val dfResult = spark.read.kusto(cluster, database, query, conf)
@@ -199,16 +202,20 @@ class KustoPruneAndFilterE2E extends FlatSpec with BeforeAndAfterAll {
       .save()
 
     val conf = if (blobSas == null) {
+      val storage = new TransientStorageParameters(Array(new TransientStorageCredentials(storageAccount,blobKey,
+        container)))
       Map(KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
         KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey,
-        KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_NAME -> storageAccount,
-        KustoSourceOptions.KUSTO_BLOB_STORAGE_ACCOUNT_KEY -> blobKey,
-        KustoSourceOptions.KUSTO_BLOB_CONTAINER -> container)
+        KustoSourceOptions.KUSTO_TRANSIENT_STORAGE -> storage.toString)
+
     }
     else {
+      val storage = new TransientStorageParameters(Array(new TransientStorageCredentials(blobSas)))    //          ,
+
       Map(KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
         KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey,
-        KustoSourceOptions.KUSTO_BLOB_STORAGE_SAS_URL -> blobSas)
+        KustoSourceOptions.KUSTO_TRANSIENT_STORAGE -> storage.toString
+      )
     }
 
     val dfResult = spark.read.kusto(cluster, database, query, conf)
