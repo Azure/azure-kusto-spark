@@ -81,7 +81,7 @@ that is using it. Please verify the following before using Kusto connector:
     
     - csvMappingNameReference: String - a reference to a name of a csvMapping pre-created for the table  
     
-    - flushImmediately: Boolean - use with caution - flushes the data immidiatly upon ingestion without aggregation.
+    - flushImmediately: Boolean - use with caution - flushes the data immediately upon ingestion without aggregation.
 
  * **KUSTO_TIMEOUT_LIMIT**:
    'timeoutLimit' - After the dataframe is processed a polling operation begins, this integer number corresponding to the period in seconds after which the polling
@@ -117,7 +117,7 @@ that is using it. Please verify the following before using Kusto connector:
 ### Performance Considerations
 
 Write performance depends on multiple factors, such as cluster scale of both Spark and Kusto clusters.
-WIth regards to Kusto target cluster configuration, one of the factors that impacts performance and latency 
+Regarding Kusto target cluster configuration, one of the factors that impacts performance and latency 
 is [Ingestion Batching Policy](https://docs.microsoft.com/en-us/azure/kusto/concepts/batchingpolicy). Default policy 
 works well for typical scenarios, especially when writing large amounts of data as batch. For reduced latency,
 consider altering the policy to a relatively low value (minimal allowed is 10 seconds).

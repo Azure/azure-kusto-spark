@@ -22,7 +22,6 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven-source-plugin.version>3.0.1</maven-source-plugin.version>
         <azure-storage.version>8.6.5</azure-storage.version>
-        <azure-storage.version>8.6.5</azure-storage.version>
         <keyvault-secrets.version>4.1.5</keyvault-secrets.version>
         <azure-identity.version>1.2.4</azure-identity.version>
         <commons-lang3.version>3.9</commons-lang3.version>
