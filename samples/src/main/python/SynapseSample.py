@@ -16,6 +16,7 @@ kustoDf  = spark.read \
             .format("com.microsoft.kusto.spark.synapse.datasource") \
             .option("spark.synapse.linkedService", "<link service name>") \
             .option("kustoDatabase", "<Database name>") \
+           #.option("authType", "LS") \ # if this added it uses the link service credentials, default is native - that will take the logged-in user credentials or the Synapse Workspace MSI for automated excution.            
             .option("kustoQuery", "<KQL Query>") \
             .load()
 
@@ -39,6 +40,7 @@ kustoDf  = spark.read \
             .option("spark.synapse.linkedService", "<link service name>") \
             .option("kustoDatabase", "<Database name>") \
             .option("kustoQuery", "<KQL Query>") \
+           #.option("authType", "LS") \ # if this added it uses the link service credentials, default is native - that will take the logged-in user credentials or the Synapse Workspace MSI for automated excution.            
             .option("clientRequestPropertiesJson", crp.toString()) \
             .option("readMode", 'ForceDistributedMode') \
             .load()
@@ -57,6 +59,7 @@ df.write \
     .option("spark.synapse.linkedService", "<link service name>") \
     .option("kustoDatabase", "<Database name>") \
     .option("kustoTable", "<Table name>") \
+   #.option("authType", "LS") \ # if this added it uses the link service credentials, default is native - that will take the logged-in user credentials or the Synapse Workspace MSI for automated excution.            
     .mode("Append") \
     .save()
 
@@ -92,7 +95,8 @@ df.write \
     .option("spark.synapse.linkedService", "<link service name>") \
     .option("kustoDatabase", "<Database name>") \
     .option("kustoTable", "<Table name>") \
-    .option("sparkIngestionPropertiesJson", sp.toString()) \
+   #.option("authType", "LS") \ # if this added it uses the link service credentials, default is native - that will take the logged-in user credentials or the Synapse Workspace MSI for automated excution.            
+     .option("sparkIngestionPropertiesJson", sp.toString()) \
     .option("tableCreateOptions","CreateIfNotExist") \
     .mode("Append") \
     .save()
