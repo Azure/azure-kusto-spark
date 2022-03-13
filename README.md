@@ -68,7 +68,7 @@ Samples are packaged as a separate module with the following artifact
 <artifactId>connector-samples</artifactId>
 ```    
 
-Tto build the whole project comprised of the connector module and the samples module, 
+To build the whole project comprised of the connector module and the samples module, 
 use the following artifact:
 
 ```xml
@@ -129,6 +129,7 @@ Currently available client libraries for Azure Data Explorer:
 - [Python](https://github.com/azure/azure-kusto-python)
 - [.NET](https://docs.microsoft.com/azure/kusto/api/netfx/about-the-sdk)
 - [Java](https://github.com/azure/azure-kusto-java)
+- [Go](https://github.com/Azure/azure-kusto-go)
    
 For the comfort of the user, here is a [Pyspark sample](./samples/src/main/python/pyKusto.py) for the connector.
 

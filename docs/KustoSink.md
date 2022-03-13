@@ -78,9 +78,9 @@ that is using it. Please verify the following first:
     - csvMapping: String - a full json representation of a csvMapping (the connector always uploads csv files to Kusto), 
     see here [kusto docs - mappings](https://docs.microsoft.com/azure/kusto/management/mappings)
     
-    - csvMappingNameReference: String - a reference to the preexisting csvMapping for the table
+    - csvMappingNameReference: String - a reference to the name of a csvMapping pre-created for the table
     
-    - flushImmediately: Boolean - use with caution - flushes the data immidiatly upon ingestion without aggregation.
+    - flushImmediately: Boolean - use with caution - flushes the data immediately upon ingestion without aggregation.
 
  * **KUSTO_TIMEOUT_LIMIT**:
    'timeoutLimit' - After the dataframe is processed, a polling operation begins. This integer corresponds to the period in seconds after which the polling
