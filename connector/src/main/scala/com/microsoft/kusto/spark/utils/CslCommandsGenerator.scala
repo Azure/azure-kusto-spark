@@ -60,7 +60,8 @@ private[kusto] object CslCommandsGenerator {
     s""".show materialized-views | where SourceTable == '$destinationTableName' | count"""
   }
 
-  def generateTableMoveExtentsCommand(sourceTableName: String, destinationTableName: String, batchSize: Int, isDestinationTableMaterializedViewSource: Boolean = false): String = {
+  def generateTableMoveExtentsCommand(sourceTableName: String, destinationTableName: String, batchSize: Int,
+                                      isDestinationTableMaterializedViewSource: Boolean = false): String = {
     val setNewIngestionTime: String = if (isDestinationTableMaterializedViewSource) "with(SetNewIngestionTime=true)" else ""
     s""".move extents to table $destinationTableName $setNewIngestionTime <|
        .show table $sourceTableName extents with(extentsShowFilteringRuntimePolicy='{"MaximumResultsCount":$batchSize}');
@@ -68,7 +69,8 @@ private[kusto] object CslCommandsGenerator {
        |  distinct ExtentId"""
   }
 
-  def generateTableMoveExtentsAsyncCommand(sourceTableName: String, destinationTableName: String, batchSize: Int, isDestinationTableMaterializedViewSource: Boolean = false): String
+  def generateTableMoveExtentsAsyncCommand(sourceTableName: String, destinationTableName: String, batchSize: Int,
+                                           isDestinationTableMaterializedViewSource: Boolean = false): String
   = {
     val setNewIngestionTime: String = if (isDestinationTableMaterializedViewSource) "with(SetNewIngestionTime=true)" else ""
     s""".move async extents to table $destinationTableName $setNewIngestionTime <|
