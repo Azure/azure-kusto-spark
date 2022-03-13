@@ -45,12 +45,20 @@ com.microsoft.azure.kusto:kusto-spark_3.0_2.12:2.9.3
 Or clone this repository and build it locally to add it to your local maven repository,.
 The jar can also be found under the [released package](https://github.com/Azure/azure-kusto-spark/releases)
 
- ```
+ ```xml
    <dependency>
      <groupId>com.microsoft.azure.kusto</groupId>
      <artifactId>spark-kusto-connector</artifactId>
      <version>2.9.3</version>
    </dependency>
+```
+
+**In SBT**:
+
+```scala
+libraryDependencies ++= Seq(
+  "com.microsoft.azure.kusto" %% "kusto-spark_3.0" % "2.9.1"
+)
 ```
 
 **In Databricks**:
@@ -88,7 +96,7 @@ simply change the spark version in the pom file.
 
 ## Build Commands
    
-```
+```shell
 // Builds jar and runs all tests
 mvn clean package
 
