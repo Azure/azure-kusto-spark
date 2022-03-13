@@ -14,8 +14,10 @@ import com.microsoft.kusto.spark.common.{KustoCoordinates, KustoDebugOptions}
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
 import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SchemaAdjustmentMode, SinkTableCreationMode, WriteOptions}
 import com.microsoft.kusto.spark.datasource.ReadMode.ReadMode
-import com.microsoft.kusto.spark.datasource.{KustoReadOptions, KustoResponseDeserializer, KustoSchema,
-  KustoSourceOptions, PartitionOptions, ReadMode, TransientStorageCredentials, TransientStorageParameters}
+import com.microsoft.kusto.spark.datasource.{
+  KustoReadOptions, KustoResponseDeserializer, KustoSchema,
+  KustoSourceOptions, PartitionOptions, ReadMode, TransientStorageCredentials, TransientStorageParameters
+}
 import com.microsoft.kusto.spark.exceptions.{FailedOperationException, TimeoutAwaitingPendingOperationException}
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
@@ -44,15 +46,15 @@ object KustoDataSourceUtils {
     val exportSplitLimitMb = parameters.getOrElse(KustoDebugOptions.KUSTO_DBG_BLOB_FILE_SIZE_LIMIT_MB, "1024").trim.toInt
 
     val readModeOption = parameters.get(KustoSourceOptions.KUSTO_READ_MODE)
-    val readMode: Option[ReadMode]  = if (readModeOption.isDefined){
+    val readMode: Option[ReadMode] = if (readModeOption.isDefined) {
       Some(ReadMode.withName(readModeOption.get))
     } else {
       None
     }
     val distributedReadModeTransientCacheEnabled = parameters.getOrElse(KustoSourceOptions.KUSTO_DISTRIBUTED_READ_MODE_TRANSIENT_CACHE, "false").trim.toBoolean
-    val queryFilterPushDown = parameters.get(KustoSourceOptions.KUSTO_QUERY_FILTER_PUSH_DOWN).map(s=> s.trim.toBoolean)
+    val queryFilterPushDown = parameters.get(KustoSourceOptions.KUSTO_QUERY_FILTER_PUSH_DOWN).map(s => s.trim.toBoolean)
     val partitionColumn = parameters.get(KustoDebugOptions.KUSTO_PARTITION_COLUMN)
-    val partitionOptions = PartitionOptions(numPartitions,partitionColumn,partitioningMode)
+    val partitionOptions = PartitionOptions(numPartitions, partitionColumn, partitioningMode)
     KustoReadOptions(readMode, shouldCompressOnExport, exportSplitLimitMb, partitionOptions, distributedReadModeTransientCacheEnabled, queryFilterPushDown)
   }
 
@@ -90,6 +92,7 @@ object KustoDataSourceUtils {
   val AriaClustersAlias: String = "Aria proxy"
   val PlayFabClustersAlias: String = "PlayFab proxy"
   var loggingLevel: Level = Level.INFO
+
   def setLoggingLevel(level: String): Unit = {
     setLoggingLevel(Level.toLevel(level))
   }
@@ -236,7 +239,7 @@ object KustoDataSourceUtils {
   case class SinkParameters(writeOptions: WriteOptions, sourceParametersResults: SourceParameters)
 
   case class SourceParameters(authenticationParameters: KustoAuthentication, kustoCoordinates: KustoCoordinates,
-                              keyVaultAuth: Option[KeyVaultAuthentication], requestId:String,
+                              keyVaultAuth: Option[KeyVaultAuthentication], requestId: String,
                               clientRequestProperties: ClientRequestProperties)
 
   def parseSinkParameters(parameters: Map[String, String], mode: SaveMode = SaveMode.Append): SinkParameters = {
@@ -261,7 +264,7 @@ object KustoDataSourceUtils {
         .trim.toInt
       minimalExtentsCountForSplitMergePerNode = parameters.getOrElse(KustoDebugOptions
         .KUSTO_MAXIMAL_EXTENTS_COUNT_FOR_SPLIT_MERGE_PER_NODE, DefaultExtentsCountForSplitMergePerNode.toString).trim.toInt
-      maxRetriesOnMoveExtents = parameters.getOrElse(KustoDebugOptions.KUSTO_MAX_RETRIES_ON_MOVR_EXTENTS,
+      maxRetriesOnMoveExtents = parameters.getOrElse(KustoDebugOptions.KUSTO_MAX_RETRIES_ON_MOVE_EXTENTS,
         DefaultMaxRetriesOnMoveExtents.toString).trim.toInt
     } catch {
       case _: NoSuchElementException => throw new InvalidParameterException(s"No such SinkTableCreationMode option: '${tableCreationParam.get}'")
@@ -344,7 +347,7 @@ object KustoDataSourceUtils {
   private[kusto] def getClusterNameFromUrlIfNeeded(cluster: String): String = {
     if (cluster.equals(AriaClustersProxy)) {
       AriaClustersAlias
-    } else if(cluster.equals(PlayFabClustersProxy)) {
+    } else if (cluster.equals(PlayFabClustersProxy)) {
       PlayFabClustersAlias
     }
     else if (cluster.startsWith(EnginePrefix)) {
@@ -354,7 +357,7 @@ object KustoDataSourceUtils {
       }
       val host = new URI(cluster).getHost
       val startIdx = if (host.startsWith(IngestPrefix)) IngestPrefix.length else 0
-      val endIdx = if(cluster.contains(".kustodev.")) host.indexOf(".kustodev.") else host.indexOf(".kusto.")
+      val endIdx = if (cluster.contains(".kustodev.")) host.indexOf(".kustodev.") else host.indexOf(".kusto.")
       host.substring(startIdx, endIdx)
 
     } else {
@@ -539,22 +542,22 @@ object KustoDataSourceUtils {
   private[kusto] def mergeKeyVaultAndOptionsStorageParams(transientStorageParameters: Option[TransientStorageParameters],
                                                           keyVaultAuthentication: KeyVaultAuthentication): Option[TransientStorageParameters] = {
 
-      val keyVaultCredential = KeyVaultUtils.getStorageParamsFromKeyVault(keyVaultAuthentication)
-      try {
-        val domainSuffix = if ( StringUtils.isNotBlank(keyVaultCredential.domainSuffix))
-          keyVaultCredential.domainSuffix
-          else KustoDataSourceUtils.DefaultDomainPostfix
-          Some(new TransientStorageParameters(Array(keyVaultCredential),
-            domainSuffix))
-      } catch {
-        case ex: Exception =>
+    val keyVaultCredential = KeyVaultUtils.getStorageParamsFromKeyVault(keyVaultAuthentication)
+    try {
+      val domainSuffix = if (StringUtils.isNotBlank(keyVaultCredential.domainSuffix))
+        keyVaultCredential.domainSuffix
+      else KustoDataSourceUtils.DefaultDomainPostfix
+      Some(new TransientStorageParameters(Array(keyVaultCredential),
+        domainSuffix))
+    } catch {
+      case ex: Exception =>
         if (transientStorageParameters.isDefined) {
-        // If storage option defined - take it
+          // If storage option defined - take it
           transientStorageParameters
         } else {
-            throw ex
+          throw ex
         }
-      }
+    }
   }
 
   private[kusto] def countRows(client: Client, query: String, database: String, crp: ClientRequestProperties): Int = {

@@ -1,7 +1,7 @@
 #Authentication Methods
 Kusto Spark connector allows the user to authenticate with AAD using an AAD application,
  user token or device authentication. Alternatively, authentication parameters can be stored in Azure Key Vault.
-  In this case, the user must provide once application credentials in order to access the Key Vault resource.
+  In this case, the user must provide once application credentials to access the Key Vault resource.
 
 ## AAD Application Authentication
 This authentication method is fairly straightforward, and it is used in most of the examples in this documentation.
@@ -40,10 +40,10 @@ df.write
 ```
 ## Key Vault
 
-Kusto Spark connector allows authentication using Azure Key Vault. The  Key Vault must contain the 
-mandatory read/write authentication parameters. If a parameter appears in both the Key Vault and passed directly as an option, the direct option will take precedence.
-Although a combination of Key Vault and direct options is supported, for clarity, it is advised to use 
-either key vault or direct options for passing authentication parameters but not both.
+Kusto Spark Connector allows authentication using Azure Key Vault. The  Key Vault must contain the 
+mandatory read/write authentication parameters. If a parameter appears in both the Key Vault and is passed directly as an option, the direct option will take precedence.
+Although a combination of Key Vault and direct options is supported, for clarity, it is advised to 
+pass authentication parameters using just one approach, and not both.
 
 >**Note:** when working with a Databricks notebook, azure-keyvault package must be installed.
 For details, refer to [Databricks documentation](https://docs.databricks.com/user-guide/libraries.html#maven-or-spark-package). 
@@ -75,18 +75,18 @@ For details, refer to [Databricks documentation](https://docs.databricks.com/use
 This is a temporary requirement - future versions will be able to provision blob storage internally.
 
  * **blobStorageAccountName**
- Transient storage account name. Either this, or a SAS url, must be provided in order to access the storage account
+ Transient storage account name. Either this, or a SAS URL, must be provided to access the storage account
 
  * **blobStorageAccountKey**
- Storage account key. Either this, or a SAS url, must be provided in order to access the storage account
+ Storage account key. Either this, or a SAS URL, must be provided to access the storage account
 
 * **blobStorageSasUrl**
- SAS access url: a complete url of the SAS to the container. Either this, or a storage account name and key, 
- must be provided in order to access the storage account
+ SAS URL: a complete SAS URL to access the container. Either this, or a storage account name and key, 
+ must be provided to access the storage account
     
  * **blobContainer**
  Blob container name. This container will be used to store all transient artifacts created every time the corresponding RDD is materialized. 
- Once the RDD is no longer required by the caller application, the container and/or all its contents can be deleted by the caller.  
+ Once the RDD is no longer required by the caller application, the container and/or all its contents can be deleted by the caller.
 
 ### Key Vault Authentication Example
 
@@ -161,19 +161,19 @@ df.write
 ## Device Authentication
 If no authentication parameters were passed, the connector will request for user authentication by writing a token 
 to the console. This token can be used to authenticate at https://login.microsoftonline.com/common/oauth2/deviceauth 
-and will allow temporary access (about one hour). For Python use this [sample](../samples/src/main/python/pyKusto.py).
-The user needs appropriate privileges for the Kusto cluster as explained in [Kusto Sink authentication section](KustoSink.md#authentication). 
+and will allow temporary access (about one hour). For Python, use this [sample](../samples/src/main/python/pyKusto.py).
+The user needs appropriate privileges for the Kusto cluster as explained in [Kusto Sink authentication section](KustoSink.md#authentication).
 
 ### Device Authentication for PySpark
 Please refer to the [Python samples](../samples/src/main/python/pyKusto.py).
 
->**Note:** Device authentication is not recommended for production   
+>**Note:** Device authentication is not recommended for production
 
 ## Authentication via token provider callback
 
-User can provide a class to be used as a callback for providing an AAD token for authentication. 
+User can provide a class to be used as a callback for providing an AAD authentication token. 
 The class should have a constructor that accepts one argument of type CaseInsensitiveMap[String] (which will contain
-the options provided to the connector). The class should extend Callable<String> with Serializeable and is expected
+the options provided to the Connector). The class should extend Callable<String> with Serializeable and is expected
 to return an AAD token upon invoking the call method.
 The provider will be called for every request to the kusto service
 
