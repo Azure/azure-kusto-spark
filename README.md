@@ -32,14 +32,14 @@ link your application with the artifact below in order to use the Azure Data Exp
 ```
 groupId = com.microsoft.azure.kusto
 artifactId = kusto-spark_3.0_2.12
-version = 2.9.1
+version = 3.0.0
 ```
 
 **In Maven**:
 
 Look for the following coordinates: 
 ```
-com.microsoft.azure.kusto:kusto-spark_3.0_2.12:2.9.1
+com.microsoft.azure.kusto:kusto-spark_3.0_2.12:3.0.0
 ```
 
 Or clone this repository and build it locally to add it to your local maven repository, 
@@ -49,7 +49,7 @@ the jar can also be found under the [released package](https://github.com/Azure/
    <dependency>
      <groupId>com.microsoft.azure.kusto</groupId>
      <artifactId>spark-kusto-connector</artifactId>
-     <version>2.9.1</version>
+     <version>3.0.0</version>
    </dependency>
 ```
 
@@ -58,7 +58,7 @@ the jar can also be found under the [released package](https://github.com/Azure/
 Libraries -> Install New -> Maven -> copy the following coordinates:
 
 ```
-com.microsoft.azure.kusto:kusto-spark_3.0_2.12:2.9.1
+com.microsoft.azure.kusto:kusto-spark_3.0_2.12:3.0.0
 ```
 
 #### Building Samples Module
