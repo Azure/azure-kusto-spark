@@ -18,8 +18,8 @@ object KeyVaultUtils {
   val Container = "blobContainer"
   var cachedClient: SecretClient = _
 
-  private def getClient(uri: String, clientID: String, clientPassword: String, authority: String): SecretClient ={
-    if(cachedClient == null) {
+  private def getClient(uri: String, clientID: String, clientPassword: String, authority: String): SecretClient = {
+    if (cachedClient == null) {
       cachedClient = new KeyVaultADALAuthenticator(uri, clientID, clientPassword, authority).getAuthenticatedClient
     }
     cachedClient
@@ -36,7 +36,7 @@ object KeyVaultUtils {
   }
 
   @throws[IOException]
-  def getAadAppParametersFromKeyVault(keyVaultAuthentication: KeyVaultAuthentication): AadApplicationAuthentication={
+  def getAadAppParametersFromKeyVault(keyVaultAuthentication: KeyVaultAuthentication): AadApplicationAuthentication = {
     keyVaultAuthentication match {
       case app: KeyVaultAppAuthentication =>
         val client = getClient(app.uri, app.keyVaultAppID, app.keyVaultAppKey, app.authority)
@@ -45,19 +45,19 @@ object KeyVaultUtils {
     }
   }
 
-  private def getAadAppParamsFromKeyVaultImpl(client: SecretClient, uri: String): AadApplicationAuthentication ={
+  private def getAadAppParamsFromKeyVaultImpl(client: SecretClient, uri: String): AadApplicationAuthentication = {
     val id = client.getSecret(AppId)
     val key = client.getSecret(AppKey)
 
-    var authority :Option[String] = None
-    try{
+    var authority: Option[String] = None
+    try {
       authority = Some(client.getSecret(AppAuthority).getValue)
     } catch {
-      case e:Exception => {
+      case e: Exception => {
         println(e)
       }
     }
-    if(authority.isEmpty){
+    if (authority.isEmpty) {
       authority = Some("microsoft.com")
     }
 
@@ -70,13 +70,13 @@ object KeyVaultUtils {
   private def getStorageParamsFromKeyVaultImpl(client: SecretClient, uri: String): TransientStorageCredentials = {
     val sasUrl = Try(client.getSecret(SasUrl))
 
-    val accountName =  Try(client.getSecret(StorageAccountName))
+    val accountName = Try(client.getSecret(StorageAccountName))
     val accountKey = Try(client.getSecret(StorageAccountKey))
     val container = Try(client.getSecret(Container))
 
-    if(sasUrl.isFailure) {
+    if (sasUrl.isFailure) {
       new TransientStorageCredentials(
-        if(accountName.isFailure) accountName.get.getValue else "",
+        if (accountName.isFailure) accountName.get.getValue else "",
         if (accountKey.isFailure) accountKey.get.getValue else "",
         if (container.isFailure) container.get.getValue else "")
     } else {

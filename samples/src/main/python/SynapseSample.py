@@ -29,7 +29,7 @@ display(kustoDf)
 
 # Read the data from the kusto table in forced 'distributed' mode and with advanced options
 # Please refer to https://github.com/Azure/azure-kusto-spark/blob/master/connector/src/main/scala/com/microsoft/kusto/spark/datasource/KustoSourceOptions.scala
-# in order to get the string representation of the options - as pyspark does not support calling properties of scala objects.
+# to get the string representation of the options - as pyspark does not support calling properties of scala objects.
 
 crp = sc._jvm.com.microsoft.azure.kusto.data.ClientRequestProperties()
 crp.setOption("norequesttimeout",True)
@@ -87,7 +87,7 @@ sp = sc._jvm.com.microsoft.kusto.spark.datasink.SparkIngestionProperties(
 #                                        csvMapping: String,
 #                                        csvMappingNameReference: String)
 #
-# More info on Ingestion Properties: https://docs.microsoft.com/en-us/azure/data-explorer/ingestion-properties
+# More info on Ingestion Properties: https://docs.microsoft.com/azure/data-explorer/ingestion-properties
 
 
 df.write \

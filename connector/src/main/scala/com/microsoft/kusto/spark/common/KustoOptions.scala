@@ -58,7 +58,7 @@ trait KustoOptions {
   val KUSTO_REQUEST_ID: String = newOption("requestId")
 }
 
-case class KustoCoordinates(clusterUrl: String, clusterAlias:String, database: String, table: Option[String] = None)
+case class KustoCoordinates(clusterUrl: String, clusterAlias: String, database: String, table: Option[String] = None)
 
 /** ******************************************************************************* */
 /*                                    NOTE!!!                                       */
@@ -75,7 +75,7 @@ private[kusto] object KustoDebugOptions {
   }
 
   // When reading via blob storage, compresses the data upon export from Kusto to Blob
-  // This feature is experimental, in order to measure performance impact w/wo compression
+  // This feature is experimental, to measure performance impact w/wo compression
   // Default: 'true'
   val KUSTO_DBG_BLOB_COMPRESS_ON_EXPORT: String = newOption("dbgBlobCompressOnExport")
   // The size limit in MB (uncompressed) after which the export to blob command will create another file (split)
@@ -102,6 +102,6 @@ private[kusto] object KustoDebugOptions {
   val KEY_VAULT_CERTIFICATE_KEY = "keyVaultPemFileKey" // Not yet supported
 
   val KUSTO_MAXIMAL_EXTENTS_COUNT_FOR_SPLIT_MERGE_PER_NODE
-    :String =  newOption("maximalExtentsCountForSplitMergePerNode")
-  val KUSTO_MAX_RETRIES_ON_MOVR_EXTENTS: String = newOption("maxRetriesOnMoveExtents")
+  : String = newOption("maximalExtentsCountForSplitMergePerNode")
+  val KUSTO_MAX_RETRIES_ON_MOVE_EXTENTS: String = newOption("maxRetriesOnMoveExtents")
 }
