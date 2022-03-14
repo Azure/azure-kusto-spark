@@ -2,7 +2,8 @@ package com.microsoft.kusto.spark.utils
 
 import com.microsoft.azure.storage.CloudStorageAccount
 import com.microsoft.azure.storage.blob.CloudBlockBlob
-import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.datasource.TransientStorageCredentials
+
 import scala.collection.JavaConversions._
 
 object KustoBlobStorageUtils {
@@ -22,13 +23,13 @@ object KustoBlobStorageUtils {
   }
 
   def deleteFromBlob(directory: String, sasKeyFullUrl: String): Unit = {
-    val storageParams = KDSU.parseSas(sasKeyFullUrl)
+    val storageParams = new TransientStorageCredentials(sasKeyFullUrl)
     val storageConnectionString =
       "DefaultEndpointsProtocol=https;" +
-      s"AccountName=${storageParams.account};" +
-      s"SharedAccessSignature=${storageParams.secret}"
+      s"AccountName=${storageParams.storageAccountName};" +
+      s"SharedAccessSignature=${storageParams.sasKey}"
 
-    performBlobDelete(directory, storageParams.container, storageConnectionString)
+    performBlobDelete(directory, storageParams.blobContainer, storageConnectionString)
   }
 
   private[kusto] def performBlobDelete(directory: String, container: String, storageConnectionString: String): Unit = {
