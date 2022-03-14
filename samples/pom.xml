@@ -30,7 +30,7 @@
         </dependency>
         <dependency>
             <groupId>com.microsoft.azure.kusto</groupId>
-            <artifactId>kusto-spark_3.0_2.12</artifactId>
+            <artifactId>kusto-spark_${spark.version.major}_${scala.version.major}</artifactId>
             <!--suppress MavenPropertyInParent -->
             <version>${revision}</version>
         </dependency>
