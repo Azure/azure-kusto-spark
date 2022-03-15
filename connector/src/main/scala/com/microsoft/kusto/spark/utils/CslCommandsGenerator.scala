@@ -27,6 +27,14 @@ private[kusto] object CslCommandsGenerator {
     s".drop tables ($tables) ifexists"
   }
 
+  def generateShowTableIngestionBatchingPolicyCommand(tableName: String): String = {
+    s".show table ${KustoQueryUtils.normalizeTableName(tableName)} policy ingestionbatching"
+  }
+
+  def generateAlterTableIngestionBatchingPolicyCommand(tableName: String, targetTableBatchingPolicy: String): String = {
+    s""".alter table ${KustoQueryUtils.normalizeTableName(tableName)} policy ingestionbatching @"$targetTableBatchingPolicy""""
+  }
+
   // Table name must be normalized
   def generateTableCreateCommand(tableName: String, columnsTypesAndNames: String): String = {
     s".create table $tableName ($columnsTypesAndNames)"

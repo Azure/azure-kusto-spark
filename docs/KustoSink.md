@@ -116,7 +116,7 @@ that is using it. Please verify the following first:
 
 Write performance depends on multiple factors, such as scale of both Spark and Kusto clusters.
 Regarding Kusto target cluster configuration, one of the factors that impacts performance and latency 
-is [Ingestion Batching Policy](https://docs.microsoft.com/azure/kusto/concepts/batchingpolicy). The default policy 
+is [Ingestion Batching Policy](https://docs.microsoft.com/en-us/azure/data-explorer/kusto/management/batchingpolicy). The default policy 
 works well for typical scenarios, especially when writing large amounts of data as batch. For reduced latency,
 consider altering the policy to a relatively low value (minimal allowed is 10 seconds).
 **This is mostly relevant when writing to Kusto in streaming mode**.
