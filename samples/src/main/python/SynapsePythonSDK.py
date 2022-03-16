@@ -11,7 +11,7 @@ from azure.kusto.data import KustoClient, KustoConnectionStringBuilder
 # A token provider that uses the linked service authentication method provided in its creation.
 token_provider = lambda: mssparkutils.credentials.getConnectionStringOrCreds("{linked_service_name}")
 
-# A token provider that uses the user's credentials.
+# A token provider that uses the user's credentials in interactive mode via MSI.
 user_token_provider = lambda: TokenLibrary().getAccessToken("{\"audience\": \"AzureDataExplorer\", \"name\": \"\"}")
 .getToken()
 db = "db"
