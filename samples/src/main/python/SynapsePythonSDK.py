@@ -1,4 +1,4 @@
-# This sample shows how to use the Kusto Python SDK with Synapse Spark utilities for authentication as described here:
+# This sample shows how to use the Kusto Python SDK with Synapse Spark utilities for authentication, as described here:
 # https://docs.microsoft.com/azure/synapse-analytics/spark/microsoft-spark-utilities?pivots=programming-language-python#credentials-utilities.
 # One should use the SDK to run admin commands while using the connector to query (as in SynapseSample.py)
 # https://docs.microsoft.com/azure/data-explorer/kusto/api/python/kusto-python-client-library
