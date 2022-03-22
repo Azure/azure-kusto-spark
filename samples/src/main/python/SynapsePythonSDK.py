@@ -5,7 +5,7 @@
 # To upload SDK package to synapse workspace, create a wheel file (if only the Python SDK is needed - clone this repo:
 # https://github.com/Azure/azure-kusto-python) and then follow this:
 # https://docs.microsoft.com/azure/synapse-analytics/spark/apache-spark-manage-python-packages#install-wheel-files
-# In this sample the principal should have at least database monitor privileges.
+# In this sample, the principal should have at least database monitor privileges.
 from azure.kusto.data import KustoClient, KustoConnectionStringBuilder
 
 # A token provider that uses the linked service authentication method provided in its creation.
