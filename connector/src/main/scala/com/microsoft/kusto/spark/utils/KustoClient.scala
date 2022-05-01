@@ -57,7 +57,6 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
                                configureRetentionPolicy: Boolean): Unit = {
 
     var tmpTableSchema: String = ""
-    var targetTableBatchingPolicy: String = ""
     val database = tableCoordinates.database
     val table = tableCoordinates.table.get
 
@@ -78,22 +77,13 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
     } else {
       // Table exists. Parse kusto table schema and check if it matches the dataframes schema
       tmpTableSchema = extractSchemaFromResultTable(targetSchema)
-      val targetTableBatchingPolicyResults = engineClient.execute(database, generateShowTableIngestionBatchingPolicyCommand(table), crp)
-        .getPrimaryResults
-      targetTableBatchingPolicyResults.next()
-      val value = targetTableBatchingPolicyResults.getString("Policy")
-      if (value != "null") {
-        targetTableBatchingPolicy = value
-      }
     }
 
     // Create a temporary table with the kusto or dataframe parsed schema with retention and delete set to after the
     // write operation times out. Engine recommended keeping the retention although we use auto delete.
     engineClient.execute(database, generateTempTableCreateCommand(tmpTableName, tmpTableSchema), crp)
-    if (targetTableBatchingPolicy.nonEmpty) {
-      targetTableBatchingPolicy = targetTableBatchingPolicy.replace("\"", "'").filter(_ >= ' ')
-      engineClient.execute(database, generateAlterTableIngestionBatchingPolicyCommand(tmpTableName, targetTableBatchingPolicy), crp)
-    }
+    val targetTableBatchingPolicy = "{'MaximumBatchingTimeSpan':'00:00:05', 'MaximumNumberOfItems': 100, 'MaximumRawDataSizeMB': 300}"
+    engineClient.execute(database, generateAlterTableIngestionBatchingPolicyCommand(tmpTableName, targetTableBatchingPolicy), crp)
     if (configureRetentionPolicy) {
       engineClient.execute(database, generateTableAlterRetentionPolicy(tmpTableName,
         DurationFormatUtils.formatDuration(writeOptions.autoCleanupTime.toMillis, durationFormat, true),

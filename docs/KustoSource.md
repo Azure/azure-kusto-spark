@@ -111,11 +111,11 @@ artifacts in a separate directory. This directory is captured as part of read-tr
 'blobStorageAccountKey' - Storage account key. Either this, or a SAS URL, must be provided to access the storage account
 
 * **KUSTO_BLOB_STORAGE_SAS_URL**
-'KUSTO_BLOB_STORAGE_SAS_URL' - SAS URL: a complete SAS URL to access the container. Either this, or a storage account name and key, must be provided
+'sasUrl' - SAS URL: a complete SAS URL to access the container. Either this, or a storage account name and key, must be provided
   to access the storage account
   
 * **KUSTO_BLOB_CONTAINER**
-'KUSTO_BLOB_CONTAINER' - Blob container name. This container will be used to store all transient artifacts created every time the corresponding RDD is materialized. 
+'blobContainer' - Blob container name. This container will be used to store all transient artifacts created every time the corresponding RDD is materialized. 
 Once the RDD is no longer required by the caller application, the container and/or all its contents can be deleted by the caller.
 
 * **KUSTO_READ_MODE**
@@ -128,7 +128,7 @@ When 'Distributed' read mode is used and this is set to 'true', the request quer
 
 * **KUSTO_QUERY_FILTER_PUSH_DOWN**
 If set to 'true', query executed on kusto cluster will include the filters.
-  'false' by default if KUSTO_DISTRIBUTED_READ_MODE_TRANSIENT_CACHE=true
+  'false' by default if KUSTO_DISTRIBUTED_READ_MODE_TRANSIENT_CACHE=true, and
   'true' by default if KUSTO_DISTRIBUTED_READ_MODE_TRANSIENT_CACHE=false
   
   
