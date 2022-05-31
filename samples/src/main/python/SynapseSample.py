@@ -95,7 +95,7 @@ df.write \
     .option("spark.synapse.linkedService", "<link service name>") \
     .option("kustoDatabase", "<Database name>") \
     .option("kustoTable", "<Table name>") \
-   #.option("authType", "LS") \ # if this added it uses the link service credentials, default is native - that will take the logged-in user credentials or the Synapse Workspace MSI for automated excution.            
+    #.option("authType", "LS") \ # If this is added, it uses the link service credentials. Otherwise, the default is native - using the logged-in user's credentials or the Synapse Workspace managed identity for automated execution.
      .option("sparkIngestionPropertiesJson", sp.toString()) \
     .option("tableCreateOptions","CreateIfNotExist") \
     .mode("Append") \
