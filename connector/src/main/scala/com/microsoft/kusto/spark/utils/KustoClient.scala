@@ -177,8 +177,12 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
       var failed = false
       // Execute move batch and keep any transient error for handling
       try {
+        val isDestinationTableMaterializedViewSourceResult = engineClient.execute(database, generateIsTableMaterializedViewSourceCommand(targetTable), crp).getPrimaryResults
+        isDestinationTableMaterializedViewSourceResult.next()
+        val isDestinationTableMaterializedViewSource: Boolean = isDestinationTableMaterializedViewSourceResult.getLong(0) > 0
+
         val operation = engineClient.execute(database, generateTableMoveExtentsAsyncCommand(tmpTableName,
-          targetTable, curBatchSize), crp).getPrimaryResults
+          targetTable, curBatchSize, isDestinationTableMaterializedViewSource), crp).getPrimaryResults
         val operationResult = KDSU.verifyAsyncCommandCompletion(engineClient, database, operation, samplePeriod =
           KustoConstants
           .DefaultPeriodicSamplePeriod, writeOptions.timeout, s"move extents to destination table '$targetTable' ")

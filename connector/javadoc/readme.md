@@ -5,4 +5,4 @@ For Spark-Kusto integration, go to:
 https://github.com/Azure/azure-kusto-spark
 
 For Kusto documentation, go to:
-https://azure.microsoft.com/en-us/services/data-explorer/
+https://azure.microsoft.com/services/data-explorer/

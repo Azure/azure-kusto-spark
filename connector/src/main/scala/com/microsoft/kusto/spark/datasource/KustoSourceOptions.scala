@@ -20,7 +20,7 @@ object KustoSourceOptions extends KustoOptions {
   // tries to use storage from the kusto ingest service.
   // This option allows to override these connector heuristics.
   // By default if the single mode was chosen and failed - there is a fallback to 'distributed' mode
-  // See https://docs.microsoft.com/en-us/azure/kusto/concepts/querylimits#limit-on-result-set-size-result-truncation
+  // See https://docs.microsoft.com/azure/kusto/concepts/querylimits#limit-on-result-set-size-result-truncation
   // for hard limit on query size using single mode
   val KUSTO_READ_MODE: String = newOption("readMode")
   // set to 'true' to export request Query only once and cache the exported path to for reuse
@@ -35,5 +35,4 @@ object KustoSourceOptions extends KustoOptions {
 object ReadMode extends Enumeration {
   type ReadMode = Value
   val ForceSingleMode, ForceDistributedMode = Value
-
 }

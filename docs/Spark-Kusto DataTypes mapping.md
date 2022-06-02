@@ -47,5 +47,5 @@ Kusto **datetime** data type is always read in '%Y-%m-%d %H:%M:%s' format , whil
 hand spark **DateType** is of format '%Y-%m-%d' and **TimestampType** is of format '%Y-%m-%d %H:%M:%s'. This is why Kusto 'timespan' 
 type is translated into a string by the connector and **we recommend using only datetime and TimestampType**. 
 
-Kusto **decimal** type corresponds to .Net 'SqlDecimal' type, with a total size of 34 bit for precision and scale params.
+Kusto **decimal** type corresponds to .Net 'SqlDecimal' type, with a total size of 34 bits for precision and scale params.
     
