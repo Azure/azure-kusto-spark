@@ -32,36 +32,35 @@ class KustoAuthenticationTestE2E extends FlatSpec {
   val keyVaultAppKey: String = System.getProperty(KustoSinkOptions.KEY_VAULT_APP_KEY)
   val keyVaultUri: String = System.getProperty(KustoSinkOptions.KEY_VAULT_URI)
 
-//  "keyVaultAuthentication" should "use key vault for authentication and retracting kusto app auth params" taggedAs KustoE2E in {
-//    import spark.implicits._
-//    val expectedNumberOfRows = 1000
-//    val timeoutMs: Int = 8 * 60 * 1000 // 8 minutes
-//
-//    val rows: immutable.IndexedSeq[(String, Int)] = (1 to expectedNumberOfRows).map(v => (s"row-$v", v))
-//    val prefix = "keyVaultAuthentication"
-//    val table = KustoQueryUtils.simplifyName(s"${prefix}_${UUID.randomUUID()}")
-//    val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://$cluster.kusto.windows.net", appId, appKey, authority)
-//    val kustoAdminClient = ClientFactory.createClient(engineKcsb)
-//
-//    val df = rows.toDF("name", "value")
-//    val conf: Map[String, String] = Map(
-//      KustoSinkOptions.KEY_VAULT_URI -> keyVaultUri,
-//      KustoSinkOptions.KEY_VAULT_APP_ID -> (if(keyVaultAppId == null) appId else keyVaultAppId),
-//      KustoSinkOptions.KEY_VAULT_APP_KEY -> (if(keyVaultAppKey == null) appKey else keyVaultAppKey),
-//      KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS -> SinkTableCreationMode.CreateIfNotExist.toString
-//    )
-//
-//    df.write.kusto(cluster, database, table, conf)
-//
-//    val dfResult = spark.read.kusto(cluster, database, table, conf)
-//    val result = dfResult.select("name", "value").rdd.collect().sortBy(x => x.getInt(1))
-//    val orig = df.select("name", "value").rdd.collect().sortBy(x => x.getInt(1))
-//
-//    assert(result.diff(orig).isEmpty)
-//  }
+  "keyVaultAuthentication" should "use key vault for authentication and retracting kusto app auth params" taggedAs KustoE2E in {
+    import spark.implicits._
+    val expectedNumberOfRows = 1000
+    val timeoutMs: Int = 8 * 60 * 1000 // 8 minutes
 
-  // Disabled as this is user integration
-  "deviceAuthentication" should "use aad device authentication once similar to the pyspark.py sample and once as authentication option" taggedAs KustoE2E in {
+    val rows: immutable.IndexedSeq[(String, Int)] = (1 to expectedNumberOfRows).map(v => (s"row-$v", v))
+    val prefix = "keyVaultAuthentication"
+    val table = KustoQueryUtils.simplifyName(s"${prefix}_${UUID.randomUUID()}")
+    val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://$cluster.kusto.windows.net", appId, appKey, authority)
+    val kustoAdminClient = ClientFactory.createClient(engineKcsb)
+
+    val df = rows.toDF("name", "value")
+    val conf: Map[String, String] = Map(
+      KustoSinkOptions.KEY_VAULT_URI -> keyVaultUri,
+      KustoSinkOptions.KEY_VAULT_APP_ID -> (if(keyVaultAppId == null) appId else keyVaultAppId),
+      KustoSinkOptions.KEY_VAULT_APP_KEY -> (if(keyVaultAppKey == null) appKey else keyVaultAppKey),
+      KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS -> SinkTableCreationMode.CreateIfNotExist.toString
+    )
+
+    df.write.kusto(cluster, database, table, conf)
+
+    val dfResult = spark.read.kusto(cluster, database, table, conf)
+    val result = dfResult.select("name", "value").rdd.collect().sortBy(x => x.getInt(1))
+    val orig = df.select("name", "value").rdd.collect().sortBy(x => x.getInt(1))
+
+    assert(result.diff(orig).isEmpty)
+  }
+
+  "deviceAuthentication" should "use aad device authentication" taggedAs KustoE2E in {
     import spark.implicits._
     val expectedNumberOfRows = 1000
     val timeoutMs: Int = 8 * 60 * 1000 // 8 minutes
@@ -73,12 +72,11 @@ class KustoAuthenticationTestE2E extends FlatSpec {
     val deviceAuth = new com.microsoft.kusto.spark.authentication.DeviceAuthentication(
       s"https://${cluster}.kusto.windows.net",
       authority)
-    val deviceCodeMessage = deviceAuth.getDeviceCodeMessage
-//    print(deviceCodeMessage)
+
     val token = deviceAuth.acquireToken()
 
-//    val engineKcsb = ConnectionStringBuilder.createWithAadAccessTokenAuthentication(s"https://$cluster.kusto.windows.net", token)
-//    val kustoAdminClient = ClientFactory.createClient(engineKcsb)
+    val engineKcsb = ConnectionStringBuilder.createWithAadAccessTokenAuthentication(s"https://$cluster.kusto.windows.net", token)
+    val kustoAdminClient = ClientFactory.createClient(engineKcsb)
 
     val df = rows.toDF("name", "value")
     val conf: Map[String, String] = Map(
@@ -87,6 +85,6 @@ class KustoAuthenticationTestE2E extends FlatSpec {
 
     df.write.kusto(cluster, database, table, conf)
 
-//    KustoTestUtils.validateResultsAndCleanup(kustoAdminClient, table, database, expectedNumberOfRows, timeoutMs, tableCleanupPrefix = prefix)
+    KustoTestUtils.validateResultsAndCleanup(kustoAdminClient, table, database, expectedNumberOfRows, timeoutMs, tableCleanupPrefix = prefix)
   }
 }
