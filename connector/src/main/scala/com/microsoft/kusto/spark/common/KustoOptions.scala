@@ -61,8 +61,7 @@ trait KustoOptions {
 case class KustoCoordinates(clusterUrl: String,
                             clusterAlias: String,
                             database: String,
-                            table: Option[String] = None,
-                            ingestClusterUrl: Option[String]= None)
+                            table: Option[String] = None)
 
 /** ******************************************************************************* */
 /*                                    NOTE!!!                                       */
