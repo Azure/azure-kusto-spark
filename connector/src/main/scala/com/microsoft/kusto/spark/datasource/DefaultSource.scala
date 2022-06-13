@@ -72,7 +72,7 @@ class DefaultSource extends CreatableRelationProvider
     val readOptions = KDSU.getReadParameters(parameters, sqlContext)
     if (authenticationParameters.isEmpty) {
       // Parse parameters if haven't got parsed before
-      val sourceParameters = KDSU.parseSourceParameters(parameters)
+      val sourceParameters = KDSU.parseSourceParameters(parameters, true)
       initCommonParams(sourceParameters)
     }
 

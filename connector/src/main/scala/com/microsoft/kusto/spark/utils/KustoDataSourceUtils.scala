@@ -142,23 +142,7 @@ object KustoDataSourceUtils {
     KustoResponseDeserializer(client.execute(database, query, clientRequestProperties.orNull).getPrimaryResults).getSchema
   }
 
-  def parseSourceParameters(parameters: Map[String, String]): SourceParameters = {
-    // Parse KustoTableCoordinates - these are mandatory options
-    val database = parameters.get(KustoSourceOptions.KUSTO_DATABASE)
-    val cluster = parameters.get(KustoSourceOptions.KUSTO_CLUSTER)
-
-    if (database.isEmpty) {
-      throw new InvalidParameterException("KUSTO_DATABASE parameter is missing. Must provide a destination database name")
-    }
-
-    if (cluster.isEmpty) {
-      throw new InvalidParameterException("KUSTO_CLUSTER parameter is missing. Must provide a destination cluster name")
-    }
-    val alias = getClusterNameFromUrlIfNeeded(cluster.get.toLowerCase())
-    val clusterUrl = getEngineUrlFromAliasIfNeeded(cluster.get.toLowerCase())
-    val table = parameters.get(KustoSinkOptions.KUSTO_TABLE)
-    val requestId: String = parameters.getOrElse(KustoSinkOptions.KUSTO_REQUEST_ID, UUID.randomUUID().toString)
-    val clientRequestProperties = getClientRequestProperties(parameters, requestId)
+  private def parseAuthentication(parameters: Map[String, String], clusterUrl:String) = {
     // Parse KustoAuthentication
     val applicationId = parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_APP_ID, "")
     val applicationKey = parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_APP_SECRET, "")
@@ -231,8 +215,40 @@ object KustoDataSourceUtils {
         authentication = KustoAccessTokenAuthentication(accessToken)
       }
     }
+    (authentication, keyVaultAuthentication)
+  }
 
-    SourceParameters(authentication, KustoCoordinates(clusterUrl, alias, database.get, table),
+  def parseSourceParameters(parameters: Map[String, String], allowProxy: Boolean): SourceParameters = {
+    // Parse KustoTableCoordinates - these are mandatory options
+    val database = parameters.get(KustoSourceOptions.KUSTO_DATABASE)
+    val cluster = parameters.get(KustoSourceOptions.KUSTO_CLUSTER)
+
+    if (database.isEmpty) {
+      throw new InvalidParameterException("KUSTO_DATABASE parameter is missing. Must provide a destination database name")
+    }
+
+    if (cluster.isEmpty) {
+      throw new InvalidParameterException("KUSTO_CLUSTER parameter is missing. Must provide a destination cluster name")
+    }
+
+    var alias = cluster
+    var clusterUrl = cluster
+    try {
+      alias = Some(getClusterNameFromUrlIfNeeded(cluster.get.toLowerCase()))
+      clusterUrl = Some(getEngineUrlFromAliasIfNeeded(cluster.get.toLowerCase()))
+    } catch {
+      case e: Exception =>
+        if (!allowProxy) {
+          throw e
+        }
+    }
+    val table = parameters.get(KustoSinkOptions.KUSTO_TABLE)
+    val requestId: String = parameters.getOrElse(KustoSinkOptions.KUSTO_REQUEST_ID, UUID.randomUUID().toString)
+    val clientRequestProperties = getClientRequestProperties(parameters, requestId)
+
+    val (authentication,keyVaultAuthentication) = parseAuthentication(parameters, clusterUrl.get)
+
+    SourceParameters(authentication, KustoCoordinates(clusterUrl.get, alias.get, database.get, table),
       keyVaultAuthentication, requestId, clientRequestProperties)
   }
 
@@ -281,7 +297,7 @@ object KustoDataSourceUtils {
 
     val ingestionPropertiesAsJson = parameters.get(KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON)
 
-    val sourceParameters = parseSourceParameters(parameters)
+    val sourceParameters = parseSourceParameters(parameters, allowProxy = false)
 
     val writeOptions = WriteOptions(
       tableCreation,
@@ -293,8 +309,8 @@ object KustoDataSourceUtils {
       batchLimit,
       sourceParameters.requestId,
       autoCleanupTime,
-      minimalExtentsCountForSplitMergePerNode,
       maxRetriesOnMoveExtents,
+      minimalExtentsCountForSplitMergePerNode,
       adjustSchema
     )
 
@@ -330,18 +346,20 @@ object KustoDataSourceUtils {
                                               cluster: String = "",
                                               database: String = "",
                                               table: String = "",
+                                              requestId: String = "",
                                               shouldNotThrow: Boolean = false): Unit = {
     val whatFailed = if (doingWhat.isEmpty) "" else s"when $doingWhat"
     val clusterDesc = if (cluster.isEmpty) "" else s", cluster: '$cluster' "
     val databaseDesc = if (database.isEmpty) "" else s", database: '$database'"
     val tableDesc = if (table.isEmpty) "" else s", table: '$table'"
+    val requestIdDesc = if (requestId.isEmpty) "" else s", requestId: '$requestId'"
 
     if (!shouldNotThrow) {
-      logError(reporter, s"caught exception $whatFailed$clusterDesc$databaseDesc$tableDesc.${NewLine}EXCEPTION: ${ExceptionUtils.getStackTrace(exception)}")
+      logError(reporter, s"caught exception $whatFailed$clusterDesc$databaseDesc$tableDesc$requestIdDesc.${NewLine}EXCEPTION: ${ExceptionUtils.getStackTrace(exception)}")
       throw exception
     }
 
-    logWarn(reporter, s"caught exception $whatFailed$clusterDesc$databaseDesc$tableDesc, exception ignored.${NewLine}EXCEPTION: ${ExceptionUtils.getStackTrace(exception)}")
+    logWarn(reporter, s"caught exception $whatFailed$clusterDesc$databaseDesc$tableDesc$requestIdDesc, exception ignored.${NewLine}EXCEPTION: ${ExceptionUtils.getStackTrace(exception)}")
   }
 
   private[kusto] def getClusterNameFromUrlIfNeeded(cluster: String): String = {
@@ -419,6 +437,7 @@ object KustoDataSourceUtils {
           if (!stopCondition.apply(res)) {
             finalWork.apply(res)
             while (latch.getCount > 0) latch.countDown()
+            t.cancel()
           } else {
             currentWaitTime = if (currentWaitTime + currentWaitTime > maxWaitTimeBetweenCalls) maxWaitTimeBetweenCalls else currentWaitTime + currentWaitTime
             t.schedule(new ExponentialBackoffTask(), currentWaitTime)
@@ -426,6 +445,7 @@ object KustoDataSourceUtils {
         } catch {
           case exception: Exception =>
             while (latch.getCount > 0) latch.countDown()
+            t.cancel()
             throw exception
         }
       }
@@ -433,6 +453,7 @@ object KustoDataSourceUtils {
 
     val task: TimerTask = new ExponentialBackoffTask()
     t.schedule(task, delayBeforeStart)
+
     latch
   }
 
