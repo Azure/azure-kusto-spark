@@ -23,6 +23,8 @@ import org.apache.commons.lang3.StringUtils
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.commons.lang3.time.DurationFormatUtils
 import org.apache.log4j.Level
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.CollectionAccumulator
 import org.json.{JSONArray, JSONObject}
@@ -278,66 +280,89 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
                                                            partitionsResults: CollectionAccumulator[PartitionResult],
                                                            writeOptions: WriteOptions,
                                                            crp: ClientRequestProperties,
-                                                           tableExists: Boolean
+                                                           tableExists: Boolean,
+                                                           rdd: RDD[InternalRow]
                                                           ): Unit = {
     if (!shouldIngestData(coordinates, writeOptions.IngestionProperties, tableExists, crp)) {
       KDSU.logInfo(myName, s"$IngestSkippedTrace '${coordinates.table}'")
     } else {
+
       val mergeTask = Future {
         KDSU.logInfo(myName, s"Polling on ingestion results for requestId: ${writeOptions.requestId}, will move data to " +
           s"destination table when finished")
+        val resulsRdd = rdd.sparkContext.makeRDD(partitionsResults.value.asScala,1).persist()
+
+        resulsRdd.foreachPartition((results: Iterator[PartitionResult]) =>results.foreach(partitionResult=>{
+            var finalRes: Option[IngestionStatus] = None
+          finalRes = Some(partitionResult.ingestionResult.getIngestionStatusCollection.get(0))
+
+            KDSU.doWhile[Option[IngestionStatus]](
+              () => { null},1L,0,0,(r)=>true,(s)=>{},100)
+//                try {
+//                  finalRes = Some(partitionResult.ingestionResult.getIngestionStatusCollection.get(0))
+//                  finalRes
+//                } catch {
+//                  case e: StorageException =>
+//                    KDSU.logWarn(myName, s"Failed to fetch operation status transiently - will keep polling. " +
+//                      s"RequestId: ${writeOptions.requestId}. Error: ${ExceptionUtils.getStackTrace(e)}")
+//                    None
+//                  case e: Exception => KDSU.reportExceptionAndThrow(myName, e, s"Failed to fetch operation status. RequestId: ${writeOptions.requestId}"); None
+//                }
+//              },
+//              0,
+//              DelayPeriodBetweenCalls,
+//              (writeOptions.timeout.toMillis / DelayPeriodBetweenCalls + 5).toInt,
+//              res => res.isDefined && res.get.status == OperationStatus.Pending,
+//              res => finalRes = res,
+//              maxWaitTimeBetweenCalls = KDSU.WriteMaxWaitTime.toMillis.toInt)
+//              .await(writeOptions.timeout.toMillis, TimeUnit.MILLISECONDS)
+//
+            if (finalRes.isDefined) {
+              finalRes.get.status match {
+
+                case OperationStatus.Succeeded =>
+
+//                  KDSU.logInfo(myName, s"Ingestion to Kusto succeeded. " +
+//                    s"Cluster: '${coordinates.clusterAlias}', " +
+//                    s"database: '${coordinates.database}', " +
+//                    s"table: '$tmpTableName'$batchIdIfExists, partition: '${partitionResult.partitionId}'', from: '${finalRes.get.ingestionSourcePath}', Operation ${finalRes.get.operationId}")
+
+                case OperationStatus.Pending => {
+                  try{
+
+                  }
+                  catch {
+                    case e: StorageException => print(e)
+                      throw new RuntimeException
+                  }}
+              }}
+//                  throw new RuntimeException(s"Ingestion to Kusto failed on timeout failure. Cluster: '${coordinates.clusterAlias}', " +
+//                    s"database: '${coordinates.database}', table: '$tmpTableName'$batchIdIfExists, partition: '${partitionResult.partitionId}'")
+//                case OperationStatus.Succeeded =>
+//                  KDSU.logInfo(myName, s"Ingestion to Kusto succeeded. " +
+//                    s"Cluster: '${coordinates.clusterAlias}', " +
+//                    s"database: '${coordinates.database}', " +
+//                    s"table: '$tmpTableName'$batchIdIfExists, partition: '${partitionResult.partitionId}'', from: '${finalRes.get.ingestionSourcePath}', Operation ${finalRes.get.operationId}")
+//                case otherStatus =>
+//                  throw new RuntimeException(s"Ingestion to Kusto failed with status '$otherStatus'." +
+//                    s" Cluster: '${coordinates.clusterAlias}', database: '${coordinates.database}', " +
+//                    s"table: '$tmpTableName'$batchIdIfExists, partition: '${partitionResult.partitionId}'. Ingestion info: '${readIngestionResult(finalRes.get)}'")
+//              }
+//            } else {
+//              throw new RuntimeException("Failed to poll on ingestion status.")
+//            }
+          }
+        ))
 
         try {
-          partitionsResults.value.asScala.foreach {
-            partitionResult => {
-              var finalRes: Option[IngestionStatus] = None
-              KDSU.doWhile[Option[IngestionStatus]](
-                () => {
-                  try {
-                    finalRes = Some(partitionResult.ingestionResult.getIngestionStatusCollection.get(0))
-                    finalRes
-                  } catch {
-                    case e: StorageException =>
-                      KDSU.logWarn(myName, s"Failed to fetch operation status transiently - will keep polling. " +
-                        s"RequestId: ${writeOptions.requestId}. Error: ${ExceptionUtils.getStackTrace(e)}")
-                      None
-                    case e: Exception => KDSU.reportExceptionAndThrow(myName, e, s"Failed to fetch operation status. RequestId: ${writeOptions.requestId}"); None
-                  }
-                },
-                0,
-                DelayPeriodBetweenCalls,
-                (writeOptions.timeout.toMillis / DelayPeriodBetweenCalls + 5).toInt,
-                res => res.isDefined && res.get.status == OperationStatus.Pending,
-                res => finalRes = res,
-                maxWaitTimeBetweenCalls = KDSU.WriteMaxWaitTime.toMillis.toInt)
-                .await(writeOptions.timeout.toMillis, TimeUnit.MILLISECONDS)
-
-              if (finalRes.isDefined) {
-                finalRes.get.status match {
-                  case OperationStatus.Pending =>
-                    throw new RuntimeException(s"Ingestion to Kusto failed on timeout failure. Cluster: '${coordinates.clusterAlias}', " +
-                      s"database: '${coordinates.database}', table: '$tmpTableName'$batchIdIfExists, partition: '${partitionResult.partitionId}'")
-                  case OperationStatus.Succeeded =>
-                    KDSU.logInfo(myName, s"Ingestion to Kusto succeeded. " +
-                      s"Cluster: '${coordinates.clusterAlias}', " +
-                      s"database: '${coordinates.database}', " +
-                      s"table: '$tmpTableName'$batchIdIfExists, partition: '${partitionResult.partitionId}'', from: '${finalRes.get.ingestionSourcePath}', Operation ${finalRes.get.operationId}")
-                  case otherStatus =>
-                    throw new RuntimeException(s"Ingestion to Kusto failed with status '$otherStatus'." +
-                      s" Cluster: '${coordinates.clusterAlias}', database: '${coordinates.database}', " +
-                      s"table: '$tmpTableName'$batchIdIfExists, partition: '${partitionResult.partitionId}'. Ingestion info: '${readIngestionResult(finalRes.get)}'")
-                }
-              } else {
-                throw new RuntimeException("Failed to poll on ingestion status.")
-              }
-            }
-          }
 
           if (partitionsResults.value.size > 0) {
             // Move data to real table
             // Protect tmp table from merge/rebuild and move data to the table requested by customer. This operation is atomic.
             // We are using the ingestIfNotExists Tags here too (on top of the check at the start of the flow) so that if
             // several flows started together only one of them would ingest
+            KDSU.logInfo(myName, s"Final ingestion step: Moving extents from '$tmpTableName, requestId: ${writeOptions.requestId}," +
+              s"$batchIdIfExists")
             kustoAdminClient.execute(coordinates.database, generateTableAlterMergePolicyCommand(tmpTableName,
               allowMerge = false,
               allowRebuild = false), crp)
