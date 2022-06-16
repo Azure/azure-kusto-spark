@@ -8,6 +8,10 @@ import scala.concurrent.duration.FiniteDuration
 object KustoSinkOptions extends KustoOptions{
   val KUSTO_TABLE: String = newOption("kustoTable")
 
+  // If set to false true -> polling will not block on worker node and will be executed on a driver pool thread
+  // this is recommended for production.
+  val KUSTO_POLLING_IN_DRIVER: String = newOption("pollingInDriver")
+
   val KUSTO_CUSTOM_DATAFRAME_COLUMN_TYPES: String = newOption("customSchema")
 
   // If set to 'FailIfNotExist', the operation will fail if the table is not found

@@ -105,7 +105,7 @@ object KustoWriter {
         asyncWork.onSuccess {
           case _ => kustoClient.finalizeIngestionWhenWorkersSucceeded(
             tableCoordinates, batchIdIfExists, kustoClient.engineClient, tmpTableName, partitionsResults,
-            writeOptions, crp, tableExists, rdd)
+            writeOptions, crp, tableExists, rdd.sparkContext, authentication)
         }
         asyncWork.onFailure {
           case exception: Exception =>
@@ -125,7 +125,7 @@ object KustoWriter {
         }
         kustoClient.finalizeIngestionWhenWorkersSucceeded(
           tableCoordinates, batchIdIfExists, kustoClient.engineClient, tmpTableName, partitionsResults, writeOptions,
-          crp, tableExists, rdd)
+          crp, tableExists, rdd.sparkContext, authentication)
       }
     }
   }
