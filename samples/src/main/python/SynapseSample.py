@@ -112,7 +112,6 @@ dfStream = spark \
   .csv([filename]) \
 
 spark.conf.set("spark.sql.streaming.checkpointLocation", "/localWriteCheckpointFolder")
-spark.conf.set("spark.sql.codegen.wholeStage", "false")
 
 kustoQ = dfStream \
     .writeStream \
