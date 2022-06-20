@@ -59,6 +59,11 @@ that is using it. Please verify the following first:
  **Authentication Parameters** can be found here - [AAD Application Authentication](Authentication.md). 
  
  **Optional Parameters:** 
+* **POLLING_ON_DRIVER_**:
+'pollingOnDriver' - Change to false for production. If set to true this will create a new job for the final two ingestion
+  steps done after processing the data, so that the write operation doesn't seem to 'hang' on the Spark UI. Set this to false
+  so that the worker node doesn't waste a core waiting on this.
+
  * **KUSTO_TABLE_CREATE_OPTIONS**: 
  'tableCreateOptions' - If set to 'FailIfNotExist' (default), the operation will fail if the table is not found 
  in the requested cluster and database.  

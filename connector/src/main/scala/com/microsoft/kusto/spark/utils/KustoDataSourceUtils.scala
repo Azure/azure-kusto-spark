@@ -252,12 +252,14 @@ object KustoDataSourceUtils {
     var tableCreationParam: Option[String] = None
     var isAsync: Boolean = false
     var isAsyncParam: String = ""
+    var pollingOnDriver: Boolean = false
     var batchLimit: Int = 0
     var minimalExtentsCountForSplitMergePerNode: Int = 0
     var maxRetriesOnMoveExtents: Int = 0
     try {
       isAsyncParam = parameters.getOrElse(KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC, "false")
       isAsync = parameters.getOrElse(KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC, "false").trim.toBoolean
+      pollingOnDriver = parameters.getOrElse(KustoSinkOptions.KUSTO_POLLING_ON_DRIVER, "true").trim.toBoolean
       tableCreationParam = parameters.get(KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS)
       tableCreation = if (tableCreationParam.isEmpty) SinkTableCreationMode.FailIfNotExist else SinkTableCreationMode.withName(tableCreationParam.get)
       batchLimit = parameters.getOrElse(KustoSinkOptions.KUSTO_CLIENT_BATCHING_LIMIT, DefaultBatchingLimit.toString)
@@ -284,6 +286,7 @@ object KustoDataSourceUtils {
     val sourceParameters = parseSourceParameters(parameters)
 
     val writeOptions = WriteOptions(
+      pollingOnDriver,
       tableCreation,
       isAsync,
       parameters.getOrElse(KustoSinkOptions.KUSTO_WRITE_RESULT_LIMIT, "1"),
@@ -387,20 +390,17 @@ object KustoDataSourceUtils {
    * A function to run sequentially async work on TimerTask using a Timer.
    * The function passed is scheduled sequentially by the timer, until last calculated returned value by func does not
    * satisfy the condition of doWhile or a given number of times has passed.
-   * After either this condition was satisfied or the 'numberOfTimesToRun' has passed (This can be avoided by setting
-   * numberOfTimesToRun to a value less than 0), the finalWork function is called over the last returned value by func.
+   * After this condition was satisfied, the finalWork function is called over the last returned value by func.
    * Returns a CountDownLatch object used to count down iterations and await on it synchronously if needed
    *
    * @param func             - the function to run
    * @param delayBeforeStart - delay before first job
    * @param delayBeforeEach  - delay between jobs
-   * @param timesToRun       - stop jobs after numberOfTimesToRun.
-   *                         set negative value to run infinitely
    * @param stopCondition    - stop jobs if condition holds for the func.apply output
    * @param finalWork        - do final work with the last func.apply output
    */
-  def doWhile[A](func: () => A, delayBeforeStart: Long, delayBeforeEach: Int, timesToRun: Int, stopCondition: A => Boolean, finalWork: A => Unit, maxWaitTimeBetweenCalls: Int): CountDownLatch = {
-    val latch = new CountDownLatch(if (timesToRun > 0) timesToRun else 1)
+  def doWhile[A](func: () => A, delayBeforeStart: Long, delayBeforeEach: Int, stopCondition: A => Boolean, finalWork: A => Unit, maxWaitTimeBetweenCalls: Int): CountDownLatch = {
+    val latch = new CountDownLatch(1)
     val t = new Timer()
     var currentWaitTime = delayBeforeEach
 
@@ -408,13 +408,6 @@ object KustoDataSourceUtils {
       def run(): Unit = {
         try {
           val res = func.apply()
-          if (timesToRun > 0) {
-            latch.countDown()
-          }
-
-          if (latch.getCount == 0) {
-            throw new TimeoutException(s"runSequentially: timed out based on maximal allowed repetitions ($timesToRun), aborting")
-          }
 
           if (!stopCondition.apply(res)) {
             finalWork.apply(res)
@@ -448,7 +441,6 @@ object KustoDataSourceUtils {
     val sampleInMillis = samplePeriod.toMillis.toInt
     val timeoutInMillis = timeOut.toMillis
     val delayPeriodBetweenCalls = if (sampleInMillis < 1) 1 else sampleInMillis
-    val timesToRun = if (timeOut < FiniteDuration.apply(0, SECONDS)) -1 else (timeoutInMillis / delayPeriodBetweenCalls + 5).toInt
 
     val stateCol = "State"
     val statusCol = "Status"
@@ -473,7 +465,7 @@ object KustoDataSourceUtils {
     var lastResponse: Option[KustoResultSetTable] = None
     val task = doWhile[Option[KustoResultSetTable]](
       func = statusCheck,
-      delayBeforeStart = 0, delayBeforeEach = delayPeriodBetweenCalls, timesToRun = timesToRun,
+      delayBeforeStart = 0, delayBeforeEach = delayPeriodBetweenCalls,
       stopCondition = (result: Option[KustoResultSetTable]) =>
         result.isEmpty || (result.get.next() && result.get.getString(stateCol) == "InProgress"),
       finalWork = (result: Option[KustoResultSetTable]) => {
@@ -587,5 +579,4 @@ object KustoDataSourceUtils {
 
     count
   }
-
 }

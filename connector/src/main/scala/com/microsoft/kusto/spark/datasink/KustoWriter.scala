@@ -63,6 +63,7 @@ object KustoWriter {
     KustoIngestionUtils.adjustSchema(writeOptions.adjustSchema, data.schema, targetSchema, stagingTableIngestionProperties)
 
     val rebuiltOptions = WriteOptions(
+      writeOptions.pollingOnDriver,
       writeOptions.tableCreateOptions,
       writeOptions.isAsync,
       writeOptions.writeResultLimit,
@@ -93,9 +94,15 @@ object KustoWriter {
       KDSU.logInfo(myName, s"Successfully created temporary table $tmpTableName, will be deleted after completing the operation")
 
       kustoClient.setMappingOnStagingTableIfNeeded(stagingTableIngestionProperties, tableCoordinates.database, tmpTableName, table, crp)
-      if (stagingTableIngestionProperties.flushImmediately) {
-        KDSU.logWarn(myName, "It's not recommended to set flushImmediately to true")
+//    TODO remove until batching policy problem is good
+
+//      if (stagingTableIngestionProperties.flushImmediately) {
+//        KDSU.logWarn(myName, "It's not recommended to set flushImmediately to true on production")
+//      }
+      if (writeOptions.pollingOnDriver) {
+        KDSU.logWarn(myName, "IMPORTANT: It's very recommended to set pollingOnDriver to false on production!")
       }
+
       val rdd = data.queryExecution.toRdd
       val partitionsResults = rdd.sparkContext.collectionAccumulator[PartitionResult]
       if (writeOptions.isAsync) {
