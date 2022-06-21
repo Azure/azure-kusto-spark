@@ -57,7 +57,7 @@ The jar can also be found under the [released package](https://github.com/Azure/
 
 ```scala
 libraryDependencies ++= Seq(
-  "com.microsoft.azure.kusto" %% "kusto-spark_3.0" % "2.9.1"
+  "com.microsoft.azure.kusto" %% "kusto-spark_3.0" % "3.0.0"
 )
 ```
 

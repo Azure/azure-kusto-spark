@@ -68,7 +68,14 @@ class KustoAuthenticationTestE2E extends FlatSpec {
     val rows: immutable.IndexedSeq[(String, Int)] = (1 to expectedNumberOfRows).map(v => (s"row-$v", v))
     val prefix = "deviceAuthentication"
     val table = KustoQueryUtils.simplifyName(s"${prefix}_${UUID.randomUUID()}")
-    val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://$cluster.kusto.windows.net", appId, appKey, authority)
+
+    val deviceAuth = new com.microsoft.kusto.spark.authentication.DeviceAuthentication(
+      s"https://${cluster}.kusto.windows.net",
+      authority)
+
+    val token = deviceAuth.acquireToken()
+
+    val engineKcsb = ConnectionStringBuilder.createWithAadAccessTokenAuthentication(s"https://$cluster.kusto.windows.net", token)
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
 
     val df = rows.toDF("name", "value")

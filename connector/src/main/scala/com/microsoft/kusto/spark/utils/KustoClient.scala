@@ -5,7 +5,7 @@ import java.time.Instant
 import java.util.StringJoiner
 import java.util.concurrent.TimeUnit
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
-import com.microsoft.azure.kusto.data.exceptions.KustoDataException
+import com.microsoft.azure.kusto.data.exceptions.KustoDataExceptionBase
 import com.microsoft.azure.kusto.data.{Client, ClientFactory, ClientRequestProperties, KustoResultSetTable}
 import com.microsoft.azure.kusto.ingest.result.{IngestionStatus, OperationStatus}
 import com.microsoft.azure.kusto.ingest.{IngestClient, IngestClientFactory}
@@ -164,6 +164,20 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
     (failed, error)
   }
 
+  def shouldUseMaterializedViewFlag(database: String, targetTable: String, crp: ClientRequestProperties): Boolean ={
+    val isDestinationTableMaterializedViewSourceResult =
+      engineClient.execute(database, generateIsTableMaterializedViewSourceCommand(targetTable), crp).getPrimaryResults
+    isDestinationTableMaterializedViewSourceResult.next()
+    val isDestinationTableMaterializedViewSource: Boolean = isDestinationTableMaterializedViewSourceResult.getLong(0) > 0
+    if (isDestinationTableMaterializedViewSource){
+      val res = engineClient.execute(database, generateIsTableEngineV3(targetTable), crp)
+      res.next()
+      res.getPrimaryResults.getBoolean(0)
+    } else {
+      false
+    }
+  }
+
   def moveExtentsWithRetries(batchSize: Int, totalAmount: Int, database: String, tmpTableName: String, targetTable: String,
                              crp: ClientRequestProperties, writeOptions: WriteOptions): Unit = {
     var extentsProcessed = 0
@@ -171,18 +185,15 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
     var curBatchSize = batchSize
     var delayPeriodBetweenCalls = DelayPeriodBetweenCalls
     var consecutiveSuccesses = 0
+    val useMaterializedViewFlag = shouldUseMaterializedViewFlag(database, targetTable, crp)
     while (extentsProcessed < totalAmount) {
       var error: Object = null
       var res: Option[KustoResultSetTable] = None
       var failed = false
       // Execute move batch and keep any transient error for handling
       try {
-        val isDestinationTableMaterializedViewSourceResult = engineClient.execute(database, generateIsTableMaterializedViewSourceCommand(targetTable), crp).getPrimaryResults
-        isDestinationTableMaterializedViewSourceResult.next()
-        val isDestinationTableMaterializedViewSource: Boolean = isDestinationTableMaterializedViewSourceResult.getLong(0) > 0
-
         val operation = engineClient.execute(database, generateTableMoveExtentsAsyncCommand(tmpTableName,
-          targetTable, curBatchSize, isDestinationTableMaterializedViewSource), crp).getPrimaryResults
+          targetTable, curBatchSize, useMaterializedViewFlag), crp).getPrimaryResults
         val operationResult = KDSU.verifyAsyncCommandCompletion(engineClient, database, operation, samplePeriod =
           KustoConstants
           .DefaultPeriodicSamplePeriod, writeOptions.timeout, s"move extents to destination table '$targetTable' ")
@@ -208,7 +219,7 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
           } else {
             throw ex
           }
-        case ex:KustoDataException =>
+        case ex:KustoDataExceptionBase =>
           if (ex.getCause.isInstanceOf[SocketTimeoutException] || !ex.isPermanent) {
             error = ExceptionUtils.getStackTrace(ex)
             failed = true
@@ -256,7 +267,7 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
 
   def moveExtents(database: String, tmpTableName: String, targetTable: String, crp: ClientRequestProperties,
                   writeOptions: WriteOptions): Unit = {
-        val extentsCountQuery = engineClient.execute(database, generateExtentsCountCommand(tmpTableName), crp).getPrimaryResults
+    val extentsCountQuery = engineClient.execute(database, generateExtentsCountCommand(tmpTableName), crp).getPrimaryResults
     extentsCountQuery.next()
     val extentsCount = extentsCountQuery.getInt(0)
     if (extentsCount > writeOptions.minimalExtentsCountForSplitMerge) {
@@ -354,7 +365,11 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
             KDSU.reportExceptionAndThrow(
               myName,
               ex,
-              "Trying to poll on pending ingestions", coordinates.clusterUrl, coordinates.database, coordinates.table.getOrElse("Unspecified table name")
+              "Trying to poll on pending ingestions",
+              coordinates.clusterUrl,
+              coordinates.database,
+              coordinates.table.getOrElse("Unspecified table name"),
+              writeOptions.requestId
             )
         } finally {
           cleanupIngestionByProducts(coordinates.database, kustoAdminClient, tmpTableName, crp)

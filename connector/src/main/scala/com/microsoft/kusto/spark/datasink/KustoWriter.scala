@@ -8,7 +8,7 @@ import java.util
 import java.util.zip.GZIPOutputStream
 import java.util.{TimeZone, UUID}
 import com.microsoft.azure.kusto.data.ClientRequestProperties
-import com.microsoft.azure.kusto.ingest.IngestionProperties.DATA_FORMAT
+import com.microsoft.azure.kusto.ingest.IngestionProperties.DataFormat
 import com.microsoft.azure.kusto.ingest.result.IngestionResult
 import com.microsoft.azure.kusto.ingest.source.BlobSourceInfo
 import com.microsoft.azure.kusto.ingest.{IngestClient, IngestionProperties}
@@ -146,9 +146,9 @@ object KustoWriter {
     import parameters._
 
     val ingestionProperties = getIngestionProperties(writeOptions, parameters.coordinates.database, parameters.tmpTableName)
-    ingestionProperties.setDataFormat(DATA_FORMAT.csv.name)
-    ingestionProperties.setReportMethod(IngestionProperties.IngestionReportMethod.Table)
-    ingestionProperties.setReportLevel(IngestionProperties.IngestionReportLevel.FailuresAndSuccesses)
+    ingestionProperties.setDataFormat(DataFormat.CSV.name)
+    ingestionProperties.setReportMethod(IngestionProperties.IngestionReportMethod.TABLE)
+    ingestionProperties.setReportLevel(IngestionProperties.IngestionReportLevel.FAILURES_AND_SUCCESSES)
 
     val tasks = ingestRows(rows, parameters, ingestClient, ingestionProperties, partitionsResults)
 
