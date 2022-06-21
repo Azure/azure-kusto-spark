@@ -1,5 +1,7 @@
 package com.microsoft.kusto.spark.datasink
 
+import com.microsoft.azure.kusto.ingest.IngestionMapping.IngestionMappingKind
+
 import java.util
 import com.microsoft.azure.kusto.ingest.{IngestionMapping, IngestionProperties}
 import org.codehaus.jackson.annotate.JsonAutoDetect.Visibility
@@ -55,11 +57,12 @@ class SparkIngestionProperties(var flushImmediately: Boolean = false,
     }
 
     if (this.csvMapping != null) {
-      additionalProperties.put("csvMapping", this.csvMapping)
+      additionalProperties.put("ingestionMapping", this.csvMapping)
+      additionalProperties.put("ingestionMappingType", IngestionMappingKind.CSV.getKustoValue)
     }
 
     if (this.csvMappingNameReference != null) {
-      ingestionProperties.setIngestionMapping(new IngestionMapping(this.csvMappingNameReference, IngestionMapping.IngestionMappingKind.Csv))
+      ingestionProperties.setIngestionMapping(new IngestionMapping(this.csvMappingNameReference, IngestionMapping.IngestionMappingKind.CSV))
     }
 
     ingestionProperties.setAdditionalProperties(additionalProperties)
