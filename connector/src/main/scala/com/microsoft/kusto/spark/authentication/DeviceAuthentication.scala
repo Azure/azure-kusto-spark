@@ -5,9 +5,7 @@ import java.util.function.Consumer
 import com.microsoft.aad.msal4j.{DeviceCode, DeviceCodeFlowParameters, IAuthenticationResult}
 import com.microsoft.azure.kusto.data.auth
 
-import scala.concurrent.TimeoutException
-
-class DeviceAuthentication (val cluster: String, val authority:String) extends auth.DeviceAuthTokenProvider(cluster, authority) {
+class DeviceAuthentication (val cluster: String, val authority:String) extends auth.DeviceAuthTokenProvider(cluster, authority, null) {
   var currentDeviceCode: Option[DeviceCode] = None
   var expiresAt: Option[Long] = None
   val NewDeviceCodeFetchTimeout = 60L * 1000L
