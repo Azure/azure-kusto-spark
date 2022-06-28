@@ -19,7 +19,7 @@ class DeviceAuthentication (val cluster: String, val authority:String) extends a
   def acquireNewAccessTokenAsync(): CompletableFuture[IAuthenticationResult] = {
     val deviceCodeConsumer: Consumer[DeviceCode] = toJavaConsumer((deviceCode:DeviceCode) => {
       this.currentDeviceCode = Some(deviceCode)
-      this.expiresAt = Some(System.currentTimeMillis + (deviceCode.expiresIn() * 1000)))
+      this.expiresAt = Some(System.currentTimeMillis + (deviceCode.expiresIn() * 1000))
       println(deviceCode.message())
       return null
     })
