@@ -45,7 +45,7 @@ kustoDf  = pyKusto.read. \
 
 # Read the data from the kusto table in forced 'distributed' mode and with advanced options
 # Please refer to https://github.com/Azure/azure-kusto-spark/blob/master/connector/src/main/scala/com/microsoft/kusto/spark/datasource/KustoSourceOptions.scala
-# in order to get the string representation of the options - as pyspark does not support calling properties of scala objects.
+# to get the string representation of the options - as pyspark does not support calling properties of scala objects.
 # ClientRequestProperties are used in every command executed on the service (schema inference, export command or query. in older versions it is used just the for the export command)
 
 crp = sc._jvm.com.microsoft.azure.kusto.data.ClientRequestProperties()
@@ -155,7 +155,7 @@ kustoQ.start().awaitTermination(60*8)
 
 deviceAuth = sc._jvm.com.microsoft.kusto.spark.authentication.DeviceAuthentication(
                "https://{clusterAlias}.kusto.windows.net".format(clusterAlias=kustoOptions["kustoCluster"]),
-               "common")
+               kustoOptions["kustoAadAuthorityID"])
 deviceCodeMessage = deviceAuth.getDeviceCodeMessage()
 print(deviceCodeMessage)
 token = deviceAuth.acquireToken()

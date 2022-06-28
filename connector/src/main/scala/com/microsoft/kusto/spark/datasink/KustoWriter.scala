@@ -8,7 +8,7 @@ import java.util
 import java.util.zip.GZIPOutputStream
 import java.util.{TimeZone, UUID}
 import com.microsoft.azure.kusto.data.ClientRequestProperties
-import com.microsoft.azure.kusto.ingest.IngestionProperties.DATA_FORMAT
+import com.microsoft.azure.kusto.ingest.IngestionProperties.DataFormat
 import com.microsoft.azure.kusto.ingest.result.IngestionResult
 import com.microsoft.azure.kusto.ingest.source.BlobSourceInfo
 import com.microsoft.azure.kusto.ingest.{IngestClient, IngestionProperties}
@@ -62,9 +62,12 @@ object KustoWriter {
     val targetSchema = schemaShowCommandResult.getData.asScala.map(c => c.get(0).asInstanceOf[JSONObject]).toArray
     KustoIngestionUtils.adjustSchema(writeOptions.adjustSchema, data.schema, targetSchema, stagingTableIngestionProperties)
 
-    val rebuiltOptions = WriteOptions(writeOptions.tableCreateOptions, writeOptions.isAsync,
+    val rebuiltOptions = WriteOptions(
+      writeOptions.tableCreateOptions,
+      writeOptions.isAsync,
       writeOptions.writeResultLimit,
-      writeOptions.timeZone, writeOptions.timeout,
+      writeOptions.timeZone,
+      writeOptions.timeout,
       Some(stagingTableIngestionProperties.toString()),
       writeOptions.batchLimit,
       writeOptions.requestId,
@@ -91,7 +94,7 @@ object KustoWriter {
 
       kustoClient.setMappingOnStagingTableIfNeeded(stagingTableIngestionProperties, tableCoordinates.database, tmpTableName, table, crp)
       if (stagingTableIngestionProperties.flushImmediately) {
-        KDSU.logWarn(myName, "Its not recommended to set flushImmediately to true")
+        KDSU.logWarn(myName, "It's not recommended to set flushImmediately to true")
       }
       val rdd = data.queryExecution.toRdd
       val partitionsResults = rdd.sparkContext.collectionAccumulator[PartitionResult]
@@ -102,7 +105,7 @@ object KustoWriter {
         asyncWork.onSuccess {
           case _ => kustoClient.finalizeIngestionWhenWorkersSucceeded(
             tableCoordinates, batchIdIfExists, kustoClient.engineClient, tmpTableName, partitionsResults,
-            writeOptions,  crp, tableExists)
+            writeOptions, crp, tableExists)
         }
         asyncWork.onFailure {
           case exception: Exception =>
@@ -143,9 +146,9 @@ object KustoWriter {
     import parameters._
 
     val ingestionProperties = getIngestionProperties(writeOptions, parameters.coordinates.database, parameters.tmpTableName)
-    ingestionProperties.setDataFormat(DATA_FORMAT.csv.name)
-    ingestionProperties.setReportMethod(IngestionProperties.IngestionReportMethod.Table)
-    ingestionProperties.setReportLevel(IngestionProperties.IngestionReportLevel.FailuresAndSuccesses)
+    ingestionProperties.setDataFormat(DataFormat.CSV.name)
+    ingestionProperties.setReportMethod(IngestionProperties.IngestionReportMethod.TABLE)
+    ingestionProperties.setReportLevel(IngestionProperties.IngestionReportLevel.FAILURES_AND_SUCCESSES)
 
     val tasks = ingestRows(rows, parameters, ingestClient, ingestionProperties, partitionsResults)
 

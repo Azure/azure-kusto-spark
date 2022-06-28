@@ -14,11 +14,12 @@ private[kusto] object CslCommandsGenerator {
   }
 
   def generateFindCurrentTempTablesCommand(tempTablePrefixes: Array[String]): String = {
-    val whereClause = tempTablePrefixes.zipWithIndex.foldLeft[String](""){(res: String,cur:(String,Int))=>{
-      val (c,i) = cur
-      val state= s"${if(i==0) "" else "or"} TableName startswith '$c'"
-      res+state
-    } }
+    val whereClause = tempTablePrefixes.zipWithIndex.foldLeft[String]("") { (res: String, cur: (String, Int)) => {
+      val (c, i) = cur
+      val state = s"${if (i == 0) "" else "or"} TableName startswith '$c'"
+      res + state
+    }
+    }
     s""".show tables with (IncludeHiddenTables=true) |where $whereClause | project TableName """
   }
 
@@ -55,16 +56,28 @@ private[kusto] object CslCommandsGenerator {
     s".show export containers"
   }
 
-  def generateTableMoveExtentsCommand(sourceTableName: String, destinationTableName: String, batchSize:Int): String = {
-    s""".move extents to table $destinationTableName <|
+  def generateIsTableMaterializedViewSourceCommand(destinationTableName: String): String = {
+    s""".show materialized-views | where SourceTable == '$destinationTableName' | count"""
+  }
+
+  def generateIsTableEngineV3(tableName: String): String = {
+    s""".show table ${tableName} details | project todynamic(ShardingPolicy).UseShardEngine"""
+  }
+
+  def generateTableMoveExtentsCommand(sourceTableName: String, destinationTableName: String, batchSize: Int,
+                                      isDestinationTableMaterializedViewSource: Boolean = false): String = {
+    val setNewIngestionTime: String = if (isDestinationTableMaterializedViewSource) "with(SetNewIngestionTime=true)" else ""
+    s""".move extents to table $destinationTableName $setNewIngestionTime <|
        .show table $sourceTableName extents with(extentsShowFilteringRuntimePolicy='{"MaximumResultsCount":$batchSize}');
         $$command_results
        |  distinct ExtentId"""
   }
 
-  def generateTableMoveExtentsAsyncCommand(sourceTableName: String, destinationTableName: String, batchSize:Int): String
+  def generateTableMoveExtentsAsyncCommand(sourceTableName: String, destinationTableName: String, batchSize: Int,
+                                           isDestinationTableMaterializedViewSource: Boolean = false): String
   = {
-    s""".move async extents to table $destinationTableName <|
+    val setNewIngestionTime: String = if (isDestinationTableMaterializedViewSource) "with(SetNewIngestionTime=true)" else ""
+    s""".move async extents to table $destinationTableName $setNewIngestionTime <|
        .show table $sourceTableName extents with(extentsShowFilteringRuntimePolicy='{"MaximumResultsCount":$batchSize}');
        """
   }
@@ -111,7 +124,7 @@ private[kusto] object CslCommandsGenerator {
     val sizeLimitIfDefined = if (sizeLimit.isDefined) s"sizeLimit=${sizeLimit.get * 1024 * 1024}, " else ""
 
     var command =
-      s""".export $async${compress}to parquet ("${storageParameters.storageCredentials.map(getFullUrlFromParams).reduce((s,s1)=>s+",\"" + s1)})""" +
+      s""".export $async${compress}to parquet ("${storageParameters.storageCredentials.map(getFullUrlFromParams).reduce((s, s1) => s + ",\"" + s1)})""" +
         s""" with (${sizeLimitIfDefined}namePrefix="${directory}part$partitionId", compressionType=snappy) <| $query"""
 
     if (partitionPredicate.nonEmpty) {
@@ -144,7 +157,7 @@ private[kusto] object CslCommandsGenerator {
     s""".show table ${KustoQueryUtils.normalizeTableName(tableName)} ingestion ${kind.toLowerCase()} mappings"""
   }
 
-  def generateCreateTableMappingCommand(tableName: String, kind: String, name:String, mappingAsJson: String): String = {
+  def generateCreateTableMappingCommand(tableName: String, kind: String, name: String, mappingAsJson: String): String = {
     s""".create table ${KustoQueryUtils.normalizeTableName(tableName)} ingestion ${kind.toLowerCase} mapping "$name" @"$mappingAsJson""""
   }
 }

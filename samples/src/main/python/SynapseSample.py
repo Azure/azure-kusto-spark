@@ -20,6 +20,7 @@ kustoDf  = spark.read \
             .format("com.microsoft.kusto.spark.synapse.datasource") \
             .option("spark.synapse.linkedService", "<link service name>") \
             .option("kustoDatabase", "<Database name>") \
+            #.option("authType", "LS") \ # If this is added, it uses the link service credentials. Otherwise, the default is native - using the logged-in user's credentials or the Synapse Workspace managed identity for automated execution.
             .option("kustoQuery", "<KQL Query>") \
             .load()
 
@@ -32,7 +33,7 @@ display(kustoDf)
 
 # Read the data from the kusto table in forced 'distributed' mode and with advanced options
 # Please refer to https://github.com/Azure/azure-kusto-spark/blob/master/connector/src/main/scala/com/microsoft/kusto/spark/datasource/KustoSourceOptions.scala
-# in order to get the string representation of the options - as pyspark does not support calling properties of scala objects.
+# to get the string representation of the options - as pyspark does not support calling properties of scala objects.
 
 crp = sc._jvm.com.microsoft.azure.kusto.data.ClientRequestProperties()
 crp.setOption("norequesttimeout",True)
@@ -43,6 +44,7 @@ kustoDf  = spark.read \
             .option("spark.synapse.linkedService", "<link service name>") \
             .option("kustoDatabase", "<Database name>") \
             .option("kustoQuery", "<KQL Query>") \
+            #.option("authType", "LS") \ # If this is added, it uses the link service credentials. Otherwise, the default is native - using the logged-in user's credentials or the Synapse Workspace managed identity for automated execution.
             .option("clientRequestPropertiesJson", crp.toString()) \
             .option("readMode", 'ForceDistributedMode') \
             .load()
@@ -61,6 +63,7 @@ df.write \
     .option("spark.synapse.linkedService", "<link service name>") \
     .option("kustoDatabase", "<Database name>") \
     .option("kustoTable", "<Table name>") \
+    #.option("authType", "LS") \ # If this is added, it uses the link service credentials. Otherwise, the default is native - using the logged-in user's credentials or the Synapse Workspace managed identity for automated execution.
     .mode("Append") \
     .save()
 
@@ -88,7 +91,7 @@ sp = sc._jvm.com.microsoft.kusto.spark.datasink.SparkIngestionProperties(
 #                                        csvMapping: String,
 #                                        csvMappingNameReference: String)
 #
-# More info on Ingestion Properties: https://docs.microsoft.com/en-us/azure/data-explorer/ingestion-properties
+# More info on Ingestion Properties: https://docs.microsoft.com/azure/data-explorer/ingestion-properties
 
 
 df.write \
@@ -96,7 +99,8 @@ df.write \
     .option("spark.synapse.linkedService", "<link service name>") \
     .option("kustoDatabase", "<Database name>") \
     .option("kustoTable", "<Table name>") \
-    .option("sparkIngestionPropertiesJson", sp.toString()) \
+    #.option("authType", "LS") \ # If this is added, it uses the link service credentials. Otherwise, the default is native - using the logged-in user's credentials or the Synapse Workspace managed identity for automated execution.
+     .option("sparkIngestionPropertiesJson", sp.toString()) \
     .option("tableCreateOptions","CreateIfNotExist") \
     .mode("Append") \
     .save()

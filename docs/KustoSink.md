@@ -1,22 +1,21 @@
 # Kusto Sink Connector
 
-Kusto sink connector allows writing data from Spark to a table 
+Kusto Sink Connector allows writing data from a Spark DataFrame to a table 
 in the specified Kusto cluster and database.
->**Note:** You cannot write using the connector into into the source table of a materialized view.
 
 ## Authentication
 
-Kusto connector uses **Azure Active Directory (AAD)** to authenticate the client application 
-that is using it. Please verify the following before using Kusto connector:
+The connector uses **Azure Active Directory (AAD)** to authenticate the client application 
+that is using it. Please verify the following first:
  * Client application is registered in AAD
  * Client application has 'user' privileges or above on the target database
  * When writing to an existing table, client application has 'admin' privileges on the target table
  
- For details on Kusto principal roles, please refer to [Role-based Authorization](https://docs.microsoft.com/en-us/azure/kusto/management/access-control/role-based-authorization) 
- section in [Kusto Documentation](https://docs.microsoft.com/en-us/azure/kusto/).
+ For details on Kusto principal roles, please refer to [Role-based Authorization](https://docs.microsoft.com/azure/kusto/management/access-control/role-based-authorization) 
+ section in [Kusto Documentation](https://docs.microsoft.com/azure/kusto/).
  
- For managing security roles, please refer to [Security Roles Management](https://docs.microsoft.com/en-us/azure/kusto/management/security-roles) 
- section in [Kusto Documentation](https://docs.microsoft.com/en-us/azure/kusto/).
+ For managing security roles, please refer to [Security Roles Management](https://docs.microsoft.com/azure/kusto/management/security-roles) 
+ section in [Kusto Documentation](https://docs.microsoft.com/azure/kusto/).
  
  ## Batch Sink: 'write' command
  
@@ -38,7 +37,7 @@ that is using it. Please verify the following before using Kusto connector:
  
  ### Supported Options
  
- All the options that can be use in the Kusto sink are under the object KustoSinkOptions.
+ All the options that can be used in the Kusto Sink can be found in KustoSinkOptions.
  
 **Mandatory Parameters:** 
  
@@ -72,20 +71,20 @@ that is using it. Please verify the following before using Kusto connector:
     Properties:
         
     - dropByTags, ingestByTags, additionalTags, ingestIfNotExists: util.ArrayList[String] - 
-    Tags list to add to the extents. Read [kusto docs - extents](https://docs.microsoft.com/en-us/azure/kusto/management/extents-overview#ingest-by-extent-tags)
+    Tags list to add to the extents. Read [kusto docs - extents](https://docs.microsoft.com/azure/kusto/management/extents-overview#ingest-by-extent-tags)
     
     - creationTime: DateTime - sets the extents creationTime value to this date
     
-    - csvMapping: String - a full json representation of a csvMapping (the connector always upload csv files to Kusto), 
-    see here [kusto docs - mappings](https://docs.microsoft.com/en-us/azure/kusto/management/mappings)
+    - csvMapping: String - a full json representation of a csvMapping (the connector always uploads csv files to Kusto), 
+    see here [kusto docs - mappings](https://docs.microsoft.com/azure/kusto/management/mappings)
     
-    - csvMappingNameReference: String - a reference to a name of a csvMapping pre-created for the table  
+    - csvMappingNameReference: String - a reference to the name of a csvMapping pre-created for the table
     
-    - flushImmediately: Boolean - use with caution - flushes the data immidiatly upon ingestion without aggregation.
+    - flushImmediately: Boolean - use with caution - flushes the data immediately upon ingestion without aggregation.
 
  * **KUSTO_TIMEOUT_LIMIT**:
-   'timeoutLimit' - After the dataframe is processed a polling operation begins, this integer number corresponding to the period in seconds after which the polling
-   process will timeout eventually deleting the staging resources and fail the command. This is an upper limit that may coexist with addition timeout limits as configured on Spark or Kusto clusters.  
+   'timeoutLimit' - After the dataframe is processed, a polling operation begins. This integer corresponds to the period in seconds after which the polling
+   process will timeout, eventually deleting the staging resources and fail the command. This is an upper limit that may coexist with addition timeout limits as configured on Spark or Kusto clusters.  
    Default: '172000' (2 days)
 
  * **KUSTO_STAGING_RESOURCE_AUTO_CLEANUP_TIMEOUT**:
@@ -94,21 +93,20 @@ that is using it. Please verify the following before using Kusto connector:
    Default: '172000' (7 days)
 
  * **KUSTO_ADJUST_SCHEMA**:
-    'adjustSchema' If set to 'NoAdjustment' (default) it does nothing.
+    'adjustSchema' If set to 'NoAdjustment' (default), it does nothing.
      If set to 'GenerateDynamicCsvMapping', dynamically generates csv mapping based on DataFrame schema and target Kusto
       table column names. If some Kusto table fields are missing in the DataFrame,
       they will be ingested as empty. If some DataFrame fields are missing in target table, it fails.
      If SparkIngestionProperties.csvMappingNameReference exists, it fails.
-     If set to 'FailIfNotMatch' - fails if schemas don't agree on names and order. 
+     If set to 'FailIfNotMatch' - fails if schemas don't agree on names and order.
 
  * **KUSTO_CLIENT_BATCHING_LIMIT**:
     'clientBatchingLimit' - A limit indicating the size in MB of the aggregated data before ingested to Kusto. Note that 
-    this is done for each partition. The ingestion Kusto also aggregates data, default suggested by Kusto is 1GB but here
-    we suggest to cut it at 100MB to adjust it to spark pulling of data.
+    this is done for each partition. The Kusto ingestion endpoint also aggregates data with a default of 1GB, but here
+    we suggest a maximum of 100MB to adjust it to Spark pulling of data.
     
  * **KUSTO_REQUEST_ID**:
-    'requestId' - A unique identifier UUID for this ingestion command. Will be used as part of the staging table name as well
-    , should be unique.
+    'requestId' - A unique identifier UUID for this ingestion command. Will be used as part of the staging table name as well.
     
  >**Note:**
  For both synchronous and asynchronous operation, 'write' is an atomic transaction, i.e. 
@@ -116,13 +114,13 @@ that is using it. Please verify the following before using Kusto connector:
  
 ### Performance Considerations
 
-Write performance depends on multiple factors, such as cluster scale of both Spark and Kusto clusters.
-WIth regards to Kusto target cluster configuration, one of the factors that impacts performance and latency 
-is [Ingestion Batching Policy](https://docs.microsoft.com/en-us/azure/kusto/concepts/batchingpolicy). Default policy 
+Write performance depends on multiple factors, such as scale of both Spark and Kusto clusters.
+Regarding Kusto target cluster configuration, one of the factors that impacts performance and latency 
+is [Ingestion Batching Policy](https://docs.microsoft.com/azure/kusto/concepts/batchingpolicy). The default policy 
 works well for typical scenarios, especially when writing large amounts of data as batch. For reduced latency,
 consider altering the policy to a relatively low value (minimal allowed is 10 seconds).
 **This is mostly relevant when writing to Kusto in streaming mode**.
-For more details and command reference, please see [Ingestion Batching Policy command reference](https://docs.microsoft.com/en-us/azure/kusto/management/batching-policy).
+For more details and command reference, please see [Ingestion Batching Policy command reference](https://docs.microsoft.com/azure/kusto/management/batching-policy).
  
 ### Examples
 
@@ -172,7 +170,7 @@ df.write
 
  ## Streaming Sink: 'writeStream' command
  
- Kusto sink connector was adapted to support writing from a streaming source to a Kusto table.
+ Kusto Sink Connector was adapted to support writing from a streaming source to a Kusto table.
  
  ### Command Syntax
   ```scala
@@ -212,7 +210,7 @@ df.write
  kustoQ.start().awaitTermination(TimeUnit.MINUTES.toMillis(8))      
  ```
  
-  For more reference code examples please see: 
+  For more reference code examples, please see: 
   
    [SimpleKustoDataSink](../samples/src/main/scala/SimpleKustoDataSink.scala)
    
