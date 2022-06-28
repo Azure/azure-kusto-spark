@@ -155,7 +155,7 @@ kustoQ.start().awaitTermination(60*8)
 
 deviceAuth = sc._jvm.com.microsoft.kusto.spark.authentication.DeviceAuthentication(
                "https://{clusterAlias}.kusto.windows.net".format(clusterAlias=kustoOptions["kustoCluster"]),
-               "common")
+               kustoOptions["kustoAadAuthorityID"])
 deviceCodeMessage = deviceAuth.getDeviceCodeMessage()
 print(deviceCodeMessage)
 token = deviceAuth.acquireToken()
