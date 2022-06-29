@@ -94,8 +94,8 @@ object KustoWriter {
       KDSU.logInfo(myName, s"Successfully created temporary table $tmpTableName, will be deleted after completing the operation")
 
       kustoClient.setMappingOnStagingTableIfNeeded(stagingTableIngestionProperties, tableCoordinates.database, tmpTableName, table, crp)
-//    TODO remove until batching policy problem is good
 
+//    TODO remove until batching policy problem is good
 //      if (stagingTableIngestionProperties.flushImmediately) {
 //        KDSU.logWarn(myName, "It's not recommended to set flushImmediately to true on production")
 //      }

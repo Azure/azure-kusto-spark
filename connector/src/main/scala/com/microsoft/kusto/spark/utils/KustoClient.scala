@@ -339,7 +339,7 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
                 throw new RuntimeException(s"Ingestion to Kusto failed with status '$otherStatus'." +
                   s" Cluster: '${coordinates.clusterAlias}', database: '${coordinates.database}', " +
                   s"table: '$tmpTableName'$batchIdIfExists, partition: '${partitionResult.partitionId}'." +
-                  "")//s" Ingestion info: '${readIngestionResult(finalRes.get)}'")
+                  s" Ingestion info: '${readIngestionResult(finalRes.get)}'")
             }
           } else {
             throw new RuntimeException("Failed to poll on ingestion status.")
