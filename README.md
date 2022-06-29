@@ -137,7 +137,7 @@ Currently available client libraries for Azure Data Explorer:
 - [Python](https://github.com/azure/azure-kusto-python)
 - [.NET](https://docs.microsoft.com/azure/kusto/api/netfx/about-the-sdk)
 - [Java](https://github.com/azure/azure-kusto-java)
-- [Go](https://github.com/Azure/azure-kusto-go)
+- [Go](https://github.com/azure/azure-kusto-go)
    
 For the comfort of the user, here is a [Pyspark sample](./samples/src/main/python/pyKusto.py) for the connector.
 
