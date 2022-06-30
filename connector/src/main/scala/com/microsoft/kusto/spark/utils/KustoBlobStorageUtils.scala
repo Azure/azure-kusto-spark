@@ -4,7 +4,8 @@ import com.microsoft.azure.storage.CloudStorageAccount
 import com.microsoft.azure.storage.blob.CloudBlockBlob
 import com.microsoft.kusto.spark.datasource.TransientStorageCredentials
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
+
 
 object KustoBlobStorageUtils {
   def deleteFromBlob(account: String, directory: String, container: String, secret: String, keyIsSas: Boolean = false): Unit = {
@@ -39,10 +40,9 @@ object KustoBlobStorageUtils {
     val blobContainer = blobClient.getContainerReference(container)
     val blobsWithPrefix = blobContainer.listBlobs(directory)
 
-    // foreach and not forEach as in scala 12
-    blobsWithPrefix.foreach(blob => {
+    for (blob <- blobsWithPrefix.asScala) {
       val cloudBlob = blobContainer.getBlockBlobReference(new CloudBlockBlob(blob.getUri).getName)
       cloudBlob.deleteIfExists()
-    })
+    }
   }
 }
