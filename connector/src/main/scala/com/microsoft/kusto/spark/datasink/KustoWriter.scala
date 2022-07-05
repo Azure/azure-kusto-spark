@@ -15,6 +15,7 @@ import com.microsoft.azure.kusto.ingest.{IngestClient, IngestionProperties}
 import com.microsoft.azure.storage.blob.{BlobRequestOptions, CloudBlockBlob}
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
+import com.microsoft.kusto.spark.exceptions.TimeoutAwaitingPendingOperationException
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator.generateTableGetSchemaAsRowsCommand
 import com.microsoft.kusto.spark.utils.KustoConstants.IngestSkippedTrace
 import com.microsoft.kusto.spark.utils.{KustoClient, KustoClientCache, KustoIngestionUtils, KustoQueryUtils, KustoConstants => KCONST, KustoDataSourceUtils => KDSU}
@@ -155,9 +156,11 @@ object KustoWriter {
     KDSU.logInfo(myName, s"Ingesting from blob - partition: ${TaskContext.getPartitionId()} requestId: '${writeOptions.requestId}' $batchIdForTracing")
 
     tasks.asScala.foreach(t => try {
+      // TODO once queue options are open from SDK set new default
       Await.result(t, KCONST.DefaultIngestionTaskTime)
+      // ALTHOUGH WE SAW THAT THE DM DIDNT EVEN GET THE MESSAGE EVENTUALLY
     } catch {
-      case _: TimeoutException => KDSU.logWarn(myName, s"Timed out trying to ingest requestId: '${writeOptions.requestId}', no need to fail as the ingest might succeed")
+      case _: TimeoutException => throw new TimeoutAwaitingPendingOperationException(s"Timed out trying to ingest requestId: '${writeOptions.requestId}'")
     })
   }
 
@@ -224,7 +227,7 @@ object KustoWriter {
                                 ingestionProperties: IngestionProperties,
                                 partitionsResults: CollectionAccumulator[PartitionResult]): util.ArrayList[Future[Unit]]
   = {
-    def ingest(blob: CloudBlockBlob, size: Long, sas: String, flushImmediately: Boolean = false): Future[Unit] = {
+    def ingest(blob: CloudBlockBlob, size: Long, sas: String, flushImmediately: Boolean = false, requestId: String): Future[Unit] = {
       val partitionId = TaskContext.getPartitionId
       Future {
         var props = ingestionProperties
@@ -237,7 +240,9 @@ object KustoWriter {
         val blobPath = blobUri + sas
         val blobSourceInfo = new BlobSourceInfo(blobPath, size)
 
-        partitionsResults.add(PartitionResult(ingestClient.ingestFromBlob(blobSourceInfo, props), partitionId))
+        val pr = PartitionResult(ingestClient.ingestFromBlob(blobSourceInfo, props), partitionId)
+        KDSU.logInfo(myName, s"Queued blob for ingestion in partition ${TaskContext.getPartitionId} for requestId: '$requestId}")
+        partitionsResults.add(pr)
       }
     }
 
@@ -265,7 +270,7 @@ object KustoWriter {
           KDSU.logInfo(myName, s"Sealing blob in partition ${TaskContext.getPartitionId} for requestId: '${writeOptions.requestId}', " +
             s"blob number ${ingestionTasks.size}, with size $count")
           finalizeBlobWrite(blobWriter)
-          val task = ingest(blobWriter.blob, blobWriter.csvWriter.getCounter, blobWriter.sas, flushImmediately = true)
+          val task = ingest(blobWriter.blob, blobWriter.csvWriter.getCounter, blobWriter.sas, flushImmediately = true, writeOptions.requestId)
           ingestionTasks.add(task)
           createBlobWriter(coordinates, tmpTableName, kustoClient)
         }
@@ -274,7 +279,7 @@ object KustoWriter {
     KDSU.logInfo(myName, s"finished serializing rows in partition ${TaskContext.getPartitionId} for requestId: '${writeOptions.requestId}' ")
     finalizeBlobWrite(lastBlobWriter)
     if (lastBlobWriter.csvWriter.getCounter > 0) {
-      ingestionTasks.add(ingest(lastBlobWriter.blob, lastBlobWriter.csvWriter.getCounter, lastBlobWriter.sas))
+      ingestionTasks.add(ingest(lastBlobWriter.blob, lastBlobWriter.csvWriter.getCounter, lastBlobWriter.sas, flushImmediately = false, writeOptions.requestId))
     }
 
     ingestionTasks
