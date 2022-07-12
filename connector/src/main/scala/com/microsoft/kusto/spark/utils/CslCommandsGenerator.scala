@@ -72,6 +72,10 @@ private[kusto] object CslCommandsGenerator {
     s""".show materialized-views | where SourceTable == '$destinationTableName' | count"""
   }
 
+  def generateIsTableEngineV3(tableName: String): String = {
+    s""".show table ${tableName} details | project todynamic(ShardingPolicy).UseShardEngine"""
+  }
+
   def generateTableMoveExtentsCommand(sourceTableName: String, destinationTableName: String, batchSize: Int,
                                       isDestinationTableMaterializedViewSource: Boolean = false): String = {
     val setNewIngestionTime: String = if (isDestinationTableMaterializedViewSource) "with(SetNewIngestionTime=true)" else ""
