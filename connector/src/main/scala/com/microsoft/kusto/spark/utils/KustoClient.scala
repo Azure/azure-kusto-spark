@@ -84,6 +84,7 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
     engineClient.execute(database, generateTempTableCreateCommand(tmpTableName, tmpTableSchema), crp)
     val targetTableBatchingPolicy = "{'MaximumBatchingTimeSpan':'00:00:05', 'MaximumNumberOfItems': 100, 'MaximumRawDataSizeMB': 300}"
     engineClient.execute(database, generateAlterTableIngestionBatchingPolicyCommand(tmpTableName, targetTableBatchingPolicy), crp)
+    dmClient.execute(database, generateRefreshBatchingPolicyCommand(database, tmpTableName), crp)
     if (configureRetentionPolicy) {
       engineClient.execute(database, generateTableAlterRetentionPolicy(tmpTableName,
         DurationFormatUtils.formatDuration(writeOptions.autoCleanupTime.toMillis, durationFormat, true),

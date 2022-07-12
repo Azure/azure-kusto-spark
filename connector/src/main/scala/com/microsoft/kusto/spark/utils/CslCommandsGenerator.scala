@@ -35,6 +35,10 @@ private[kusto] object CslCommandsGenerator {
     s""".alter table ${KustoQueryUtils.normalizeTableName(tableName)} policy ingestionbatching @"$targetTableBatchingPolicy""""
   }
 
+  def generateRefreshBatchingPolicyCommand(databaseName:String, tableName: String): String = {
+    s""".refresh batching policy cache database '$databaseName' table '$tableName'"""
+  }
+
   // Table name must be normalized
   def generateTableCreateCommand(tableName: String, columnsTypesAndNames: String): String = {
     s".create table $tableName ($columnsTypesAndNames)"
