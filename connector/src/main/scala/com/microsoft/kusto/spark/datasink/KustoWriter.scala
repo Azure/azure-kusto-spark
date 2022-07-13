@@ -248,13 +248,10 @@ object KustoWriter {
         val blobSourceInfo = new BlobSourceInfo(blobPath, size)
 
         val res: IngestionResult = try {
-          Thread.sleep(20000)
-          throw new IngestionClientException("")
           KDSU.logInfo(myName, s"Queued blob for ingestion in partition ${TaskContext.getPartitionId} for requestId: '$requestId}")
           ingestClient.ingestFromBlob(blobSourceInfo, props)
         } catch {
           case _: IngestionClientException =>
-            Thread.sleep(20000)
             ingestClient.ingestFromBlob(blobSourceInfo, props)
         }
         partitionsResults.add(PartitionResult(res,partitionId))
