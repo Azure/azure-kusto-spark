@@ -9,10 +9,13 @@ import java.util.zip.GZIPOutputStream
 import java.util.{TimeZone, UUID}
 import com.microsoft.azure.kusto.data.ClientRequestProperties
 import com.microsoft.azure.kusto.ingest.IngestionProperties.DataFormat
+import com.microsoft.azure.kusto.ingest.exceptions.IngestionClientException
 import com.microsoft.azure.kusto.ingest.result.IngestionResult
 import com.microsoft.azure.kusto.ingest.source.BlobSourceInfo
 import com.microsoft.azure.kusto.ingest.{IngestClient, IngestionProperties}
+import com.microsoft.azure.storage.RetryNoRetry
 import com.microsoft.azure.storage.blob.{BlobRequestOptions, CloudBlockBlob}
+import com.microsoft.azure.storage.queue.QueueRequestOptions
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.exceptions.TimeoutAwaitingPendingOperationException
@@ -26,6 +29,7 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.CollectionAccumulator
 import org.json.JSONObject
 
+import java.util.concurrent.TimeUnit
 import scala.collection.Iterator
 import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -156,8 +160,7 @@ object KustoWriter {
     KDSU.logInfo(myName, s"Ingesting from blob - partition: ${TaskContext.getPartitionId()} requestId: '${writeOptions.requestId}' $batchIdForTracing")
 
     tasks.asScala.foreach(t => try {
-      // TODO once queue options are open from SDK set new default
-      Await.result(t, KCONST.DefaultIngestionTaskTime)
+      Await.result(t, KCONST.DefaultMaximumIngestionTime)
       // ALTHOUGH WE SAW THAT THE DM DIDNT EVEN GET THE MESSAGE EVENTUALLY
     } catch {
       case _: TimeoutException => throw new TimeoutAwaitingPendingOperationException(s"Timed out trying to ingest requestId: '${writeOptions.requestId}'")
@@ -195,7 +198,11 @@ object KustoWriter {
     val partitionId = TaskContext.getPartitionId
     KDSU.logInfo(myName, s"Ingesting partition: '$partitionId' in requestId: '${writeOptions.requestId}'$batchIdForTracing")
     val ingestClient = KustoClientCache.getClient(coordinates.clusterAlias, coordinates.clusterUrl, authentication).ingestClient
-
+    val queueRequestOptions = new QueueRequestOptions
+    queueRequestOptions.setMaximumExecutionTimeInMs(KCONST.DefaultExecutionQueueing)
+    queueRequestOptions.setTimeoutIntervalInMs(KCONST.DefaultTimeoutQueueing)
+    queueRequestOptions.setRetryPolicyFactory(new RetryNoRetry)
+    ingestClient.setQueueRequestOptions(queueRequestOptions)
     // We force blocking here, since the driver can only complete the ingestion process
     // once all partitions are ingested into the temporary table
     ingestRowsIntoKusto(rows, ingestClient, partitionsResults, batchIdForTracing)
@@ -240,9 +247,17 @@ object KustoWriter {
         val blobPath = blobUri + sas
         val blobSourceInfo = new BlobSourceInfo(blobPath, size)
 
-        val pr = PartitionResult(ingestClient.ingestFromBlob(blobSourceInfo, props), partitionId)
-        KDSU.logInfo(myName, s"Queued blob for ingestion in partition ${TaskContext.getPartitionId} for requestId: '$requestId}")
-        partitionsResults.add(pr)
+        val res: IngestionResult = try {
+          Thread.sleep(20000)
+          throw new IngestionClientException("")
+          KDSU.logInfo(myName, s"Queued blob for ingestion in partition ${TaskContext.getPartitionId} for requestId: '$requestId}")
+          ingestClient.ingestFromBlob(blobSourceInfo, props)
+        } catch {
+          case _: IngestionClientException =>
+            Thread.sleep(20000)
+            ingestClient.ingestFromBlob(blobSourceInfo, props)
+        }
+        partitionsResults.add(PartitionResult(res,partitionId))
       }
     }
 
