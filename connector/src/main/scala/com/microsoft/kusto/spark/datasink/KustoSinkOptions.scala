@@ -48,6 +48,10 @@ object KustoSinkOptions extends KustoOptions{
   // An integer number corresponding to the period in seconds after which the staging resources used for the writing
   // are cleaned if they weren't cleaned at the end of the run
   val KUSTO_STAGING_RESOURCE_AUTO_CLEANUP_TIMEOUT: String = newOption("stagingResourcesAutoCleanupTimeout")
+
+  // Queuing mode does not gurantee transactional write but instead favors performance, in this scenario no temporary
+  // table is created and there is no polling on ingestion result
+  val KUSTO_QUEUING_NODE: String = newOption("queuingMode")
 }
 
 
@@ -73,5 +77,6 @@ case class WriteOptions(pollingOnDriver:Boolean = true,
                         autoCleanupTime: FiniteDuration,
                         maxRetriesOnMoveExtents: Int = 10,
                         minimalExtentsCountForSplitMerge: Int = 400,
-                        adjustSchema: SchemaAdjustmentMode.SchemaAdjustmentMode = SchemaAdjustmentMode.NoAdjustment)
+                        adjustSchema: SchemaAdjustmentMode.SchemaAdjustmentMode = SchemaAdjustmentMode.NoAdjustment,
+                        isQueuingMode: Boolean = false)
 

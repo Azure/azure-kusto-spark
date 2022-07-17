@@ -267,14 +267,15 @@ object KustoDataSourceUtils {
     var tableCreation: SinkTableCreationMode = SinkTableCreationMode.FailIfNotExist
     var tableCreationParam: Option[String] = None
     var isAsync: Boolean = false
+    var isQueuingMode: Boolean = false
     var isAsyncParam: String = ""
     var pollingOnDriver: Boolean = false
     var batchLimit: Int = 0
     var minimalExtentsCountForSplitMergePerNode: Int = 0
     var maxRetriesOnMoveExtents: Int = 0
     try {
-      isAsyncParam = parameters.getOrElse(KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC, "false")
       isAsync = parameters.getOrElse(KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC, "false").trim.toBoolean
+      isQueuingMode = parameters.getOrElse(KustoSinkOptions.KUSTO_QUEUING_NODE, "false").trim.toBoolean
       pollingOnDriver = parameters.getOrElse(KustoSinkOptions.KUSTO_POLLING_ON_DRIVER, "true").trim.toBoolean
       tableCreationParam = parameters.get(KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS)
       tableCreation = if (tableCreationParam.isEmpty) SinkTableCreationMode.FailIfNotExist else SinkTableCreationMode.withName(tableCreationParam.get)
@@ -286,7 +287,6 @@ object KustoDataSourceUtils {
         DefaultMaxRetriesOnMoveExtents.toString).trim.toInt
     } catch {
       case _: NoSuchElementException => throw new InvalidParameterException(s"No such SinkTableCreationMode option: '${tableCreationParam.get}'")
-      case _: java.lang.IllegalArgumentException => throw new InvalidParameterException(s"KUSTO_WRITE_ENABLE_ASYNC is expecting either 'true' or 'false', got: '$isAsyncParam'")
     }
 
     val adjustSchemaParam = parameters.get(KustoSinkOptions.KUSTO_ADJUST_SCHEMA)
@@ -314,7 +314,8 @@ object KustoDataSourceUtils {
       autoCleanupTime,
       maxRetriesOnMoveExtents,
       minimalExtentsCountForSplitMergePerNode,
-      adjustSchema
+      adjustSchema,
+      isQueuingMode
     )
 
     if (sourceParameters.kustoCoordinates.table.isEmpty) {

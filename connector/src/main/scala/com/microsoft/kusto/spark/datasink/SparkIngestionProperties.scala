@@ -71,8 +71,9 @@ class SparkIngestionProperties(var flushImmediately: Boolean = false,
 }
 
 object SparkIngestionProperties {
-  def cloneIngestionProperties(ingestionProperties: IngestionProperties): IngestionProperties = {
-    val cloned = new IngestionProperties(ingestionProperties.getDatabaseName, ingestionProperties.getTableName)
+  def cloneIngestionProperties(ingestionProperties: IngestionProperties, destinationTable: Option[String] = None): IngestionProperties = {
+    val cloned = new IngestionProperties(ingestionProperties.getDatabaseName,
+      if(destinationTable.isDefined) destinationTable.get else ingestionProperties.getTableName)
     cloned.setReportLevel(ingestionProperties.getReportLevel)
     cloned.setReportMethod(ingestionProperties.getReportMethod)
     cloned.setAdditionalTags(ingestionProperties.getAdditionalTags)

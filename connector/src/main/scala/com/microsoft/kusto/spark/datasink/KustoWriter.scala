@@ -105,21 +105,23 @@ object KustoWriter {
 
       val rdd = data.queryExecution.toRdd
       val partitionsResults = rdd.sparkContext.collectionAccumulator[PartitionResult]
-      if (writeOptions.isAsync) {
+      if (writeOptions.isAsync || writeOptions.isQueuingMode) {
         val asyncWork = rdd.foreachPartitionAsync { rows => ingestRowsIntoTempTbl(rows, batchIdIfExists, partitionsResults) }
         KDSU.logInfo(myName, s"asynchronous write to Kusto table '$table' in progress")
         // This part runs back on the driver
-        asyncWork.onSuccess {
-          case _ => kustoClient.finalizeIngestionWhenWorkersSucceeded(
-            tableCoordinates, batchIdIfExists, kustoClient.engineClient, tmpTableName, partitionsResults,
-            writeOptions, crp, tableExists, rdd.sparkContext, authentication)
-        }
-        asyncWork.onFailure {
-          case exception: Exception =>
-            kustoClient.cleanupIngestionByProducts(
-              tableCoordinates.database, kustoClient.engineClient, tmpTableName, crp)
-            KDSU.reportExceptionAndThrow(myName, exception, "writing data", tableCoordinates.clusterUrl, tableCoordinates.database, table, shouldNotThrow = true)
-            KDSU.logError(myName, "The exception is not visible in the driver since we're in async mode")
+        if (!writeOptions.isQueuingMode) {
+          asyncWork.onSuccess {
+            case _ => kustoClient.finalizeIngestionWhenWorkersSucceeded(
+              tableCoordinates, batchIdIfExists, kustoClient.engineClient, tmpTableName, partitionsResults,
+              writeOptions, crp, tableExists, rdd.sparkContext, authentication)
+          }
+          asyncWork.onFailure {
+            case exception: Exception =>
+              kustoClient.cleanupIngestionByProducts(
+                tableCoordinates.database, kustoClient.engineClient, tmpTableName, crp)
+              KDSU.reportExceptionAndThrow(myName, exception, "writing data", tableCoordinates.clusterUrl, tableCoordinates.database, table, shouldNotThrow = true)
+              KDSU.logError(myName, "The exception is not visible in the driver since we're in async mode")
+          }
         }
       } else {
         try
@@ -157,7 +159,7 @@ object KustoWriter {
     ingestionProperties.setReportMethod(IngestionProperties.IngestionReportMethod.TABLE)
     ingestionProperties.setReportLevel(IngestionProperties.IngestionReportLevel.FAILURES_AND_SUCCESSES)
 
-    val tasks = ingestRows(rows, parameters, ingestClient, ingestionProperties, partitionsResults)
+    val tasks = ingestRows(rows, parameters, ingestClient, ingestionProperties, partitionsResults, parameters.coordinates.table.get)
 
     KDSU.logInfo(myName, s"Ingesting from blob - partition: ${TaskContext.getPartitionId()} requestId: '${writeOptions.requestId}' $batchIdForTracing")
 
@@ -229,22 +231,23 @@ object KustoWriter {
                                 parameters: KustoWriteResource,
                                 ingestClient: IngestClient,
                                 ingestionProperties: IngestionProperties,
-                                partitionsResults: CollectionAccumulator[PartitionResult]): util.ArrayList[Future[Unit]]
+                                partitionsResults: CollectionAccumulator[PartitionResult],
+                                destinationTable: String): util.ArrayList[Future[Unit]]
   = {
-    def ingest(blob: CloudBlockBlob, size: Long, sas: String, flushImmediately: Boolean = false): Future[Unit] = {
+    def ingest(blob: CloudBlockBlob, size: Long, sas: String, flushImmediately: Boolean = false, queuing: Boolean): Future[Unit] = {
       val partitionId = TaskContext.getPartitionId
       Future {
         var props = ingestionProperties
         if (!ingestionProperties.getFlushImmediately && flushImmediately) {
           // Need to copy the ingestionProperties so that only this one will be flushed immediately
-          props = SparkIngestionProperties.cloneIngestionProperties(ingestionProperties)
+          props = SparkIngestionProperties.cloneIngestionProperties(ingestionProperties, if(queuing) Some(destinationTable) else None)
           props.setFlushImmediately(true)
         }
         val blobUri = blob.getStorageUri.getPrimaryUri.toString
         val blobPath = blobUri + sas
         val blobSourceInfo = new BlobSourceInfo(blobPath, size)
-
-        partitionsResults.add(PartitionResult(ingestClient.ingestFromBlob(blobSourceInfo, props), partitionId))
+        val res = ingestClient.ingestFromBlob(blobSourceInfo, props)
+        if(queuing) partitionsResults.add(PartitionResult(res, partitionId))
       }
     }
 
@@ -272,7 +275,7 @@ object KustoWriter {
           KDSU.logInfo(myName, s"Sealing blob in partition ${TaskContext.getPartitionId} for requestId: '${writeOptions.requestId}', " +
             s"blob number ${ingestionTasks.size}, with size $count")
           finalizeBlobWrite(blobWriter)
-          val task = ingest(blobWriter.blob, blobWriter.csvWriter.getCounter, blobWriter.sas, flushImmediately = true)
+          val task = ingest(blobWriter.blob, blobWriter.csvWriter.getCounter, blobWriter.sas, flushImmediately = true, writeOptions.isQueuingMode)
           ingestionTasks.add(task)
           createBlobWriter(coordinates, tmpTableName, kustoClient)
         }
@@ -281,7 +284,7 @@ object KustoWriter {
     KDSU.logInfo(myName, s"finished serializing rows in partition ${TaskContext.getPartitionId} for requestId: '${writeOptions.requestId}' ")
     finalizeBlobWrite(lastBlobWriter)
     if (lastBlobWriter.csvWriter.getCounter > 0) {
-      ingestionTasks.add(ingest(lastBlobWriter.blob, lastBlobWriter.csvWriter.getCounter, lastBlobWriter.sas))
+      ingestionTasks.add(ingest(lastBlobWriter.blob, lastBlobWriter.csvWriter.getCounter, lastBlobWriter.sas, queuing = writeOptions.isQueuingMode))
     }
 
     ingestionTasks
