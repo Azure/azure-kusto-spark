@@ -36,7 +36,7 @@ private[kusto] object CslCommandsGenerator {
   }
 
   def generateRefreshBatchingPolicyCommand(databaseName:String, tableName: String): String = {
-    s""".refresh batching policy cache database '$databaseName' table '$tableName'"""
+    s""".refresh database '$databaseName' table '$tableName' cache policy ingestionbatching"""
   }
 
   // Table name must be normalized
