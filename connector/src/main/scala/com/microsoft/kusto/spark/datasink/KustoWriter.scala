@@ -1,15 +1,8 @@
 package com.microsoft.kusto.spark.datasink
 
-import java.io._
-import java.net.URI
-import java.nio.charset.StandardCharsets
-import java.security.InvalidParameterException
-import java.util
-import java.util.zip.GZIPOutputStream
-import java.util.{TimeZone, UUID}
 import com.microsoft.azure.kusto.data.ClientRequestProperties
 import com.microsoft.azure.kusto.ingest.IngestionProperties.DataFormat
-import com.microsoft.azure.kusto.ingest.exceptions.IngestionClientException
+import com.microsoft.azure.kusto.ingest.exceptions.IngestionServiceException
 import com.microsoft.azure.kusto.ingest.result.IngestionResult
 import com.microsoft.azure.kusto.ingest.source.BlobSourceInfo
 import com.microsoft.azure.kusto.ingest.{IngestClient, IngestionProperties}
@@ -29,7 +22,13 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.CollectionAccumulator
 import org.json.JSONObject
 
-import java.util.concurrent.TimeUnit
+import java.io._
+import java.net.URI
+import java.nio.charset.StandardCharsets
+import java.security.InvalidParameterException
+import java.util
+import java.util.zip.GZIPOutputStream
+import java.util.{TimeZone, UUID}
 import scala.collection.Iterator
 import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -251,7 +250,8 @@ object KustoWriter {
           KDSU.logInfo(myName, s"Queued blob for ingestion in partition ${TaskContext.getPartitionId} for requestId: '$requestId}")
           ingestClient.ingestFromBlob(blobSourceInfo, props)
         } catch {
-          case _: IngestionClientException =>
+          // Catch only IngestionServiceException cause it can be due to transient storage issue
+          case _: IngestionServiceException =>
             ingestClient.ingestFromBlob(blobSourceInfo, props)
         }
         partitionsResults.add(PartitionResult(res,partitionId))
