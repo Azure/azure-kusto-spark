@@ -1,35 +1,35 @@
 package com.microsoft.kusto.spark.utils
 
+import com.microsoft.azure.kusto.data.exceptions.{DataClientException, DataServiceException}
+import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties, KustoResultSetTable}
+import com.microsoft.kusto.spark.authentication._
+import com.microsoft.kusto.spark.common.{KustoCoordinates, KustoDebugOptions}
+import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
+import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SchemaAdjustmentMode, SinkTableCreationMode, WriteOptions}
+import com.microsoft.kusto.spark.datasource.ReadMode.ReadMode
+import com.microsoft.kusto.spark.datasource._
+import com.microsoft.kusto.spark.exceptions.{FailedOperationException, TimeoutAwaitingPendingOperationException}
+import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
+import com.microsoft.kusto.spark.utils.KustoConstants.{DefaultBatchingLimit, DefaultExtentsCountForSplitMergePerNode, DefaultMaxRetriesOnMoveExtents}
+import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
+import org.apache.commons.lang3.StringUtils
+import org.apache.commons.lang3.exception.ExceptionUtils
+import org.apache.http.client.utils.URIBuilder
+import org.apache.log4j.{Level, Logger}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.{SQLContext, SaveMode}
+import org.json.JSONObject
+
 import java.io.InputStream
 import java.net.URI
 import java.security.InvalidParameterException
 import java.util
-import java.util.Properties
-import java.util.concurrent.{Callable, CountDownLatch, TimeUnit, TimeoutException}
-import java.util.{NoSuchElementException, StringJoiner, Timer, TimerTask, UUID}
-import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties, KustoResultSetTable}
-import com.microsoft.azure.kusto.data.exceptions.{DataClientException, DataServiceException}
-import com.microsoft.kusto.spark.authentication._
-import com.microsoft.kusto.spark.common.{KustoCoordinates, KustoDebugOptions}
-import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
-import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SchemaAdjustmentMode, SinkTableCreationMode, WriteMode, WriteOptions}
-import com.microsoft.kusto.spark.datasource.ReadMode.ReadMode
-import com.microsoft.kusto.spark.datasource.{KustoReadOptions, KustoResponseDeserializer, KustoSchema, KustoSourceOptions, PartitionOptions, ReadMode, TransientStorageCredentials, TransientStorageParameters}
-import com.microsoft.kusto.spark.exceptions.{FailedOperationException, TimeoutAwaitingPendingOperationException}
-import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
-import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
-import org.apache.commons.lang3.exception.ExceptionUtils
-import org.apache.log4j.{Level, Logger}
-import org.apache.spark.sql.{SQLContext, SaveMode}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import com.microsoft.kusto.spark.utils.KustoConstants.{DefaultBatchingLimit, DefaultExtentsCountForSplitMergePerNode, DefaultMaxRetriesOnMoveExtents}
-
+import java.util.concurrent.{Callable, CountDownLatch, TimeUnit}
+import java.util.{NoSuchElementException, Properties, StringJoiner, Timer, TimerTask, UUID}
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
-import org.apache.commons.lang3.StringUtils
-import org.apache.http.client.utils.URIBuilder
-import org.json.JSONObject
+import scala.concurrent.{Await, Future}
+import com.microsoft.kusto.spark.datasource.{KustoReadOptions, KustoResponseDeserializer, KustoSchema, KustoSourceOptions, PartitionOptions, ReadMode, TransientStorageCredentials, TransientStorageParameters}
 
 object KustoDataSourceUtils {
 
@@ -265,7 +265,7 @@ object KustoDataSourceUtils {
     var isAsync: Boolean = false
     var isTransactionalMode: Boolean = false
     var writeModeParam: Option[String] = None
-    var pollingOnDriver: Boolean = false
+    var pollingOnDriver: Boolean = true
     var batchLimit: Int = 0
     var minimalExtentsCountForSplitMergePerNode: Int = 0
     var maxRetriesOnMoveExtents: Int = 0
@@ -328,10 +328,12 @@ object KustoDataSourceUtils {
       throw new InvalidParameterException("KUSTO_TABLE parameter is missing. Must provide a destination table name")
     }
 
-    logInfo("parseSinkParameters", s"Parsed write options for sink: {'timeout': ${writeOptions.timeout}, 'async': ${writeOptions.isAsync}, " +
+    logInfo("parseSinkParameters", s"Parsed write options for sink: {'timeout': '${writeOptions.timeout}, 'async': ${writeOptions.isAsync}, " +
       s"'tableCreationMode': ${writeOptions.tableCreateOptions}, 'writeLimit': ${writeOptions.writeResultLimit}, 'batchLimit': ${writeOptions.batchLimit}" +
       s", 'timeout': ${writeOptions.timeout}, 'timezone': ${writeOptions.timeZone}, " +
-      s"'ingestionProperties': $ingestionPropertiesAsJson, requestId: ${sourceParameters.requestId}}")
+      s"'ingestionProperties': $ingestionPropertiesAsJson, 'requestId': '${sourceParameters.requestId}', 'pollingOnDriver': ${writeOptions.pollingOnDriver}," +
+      s"'maxRetriesOnMoveExtents':$maxRetriesOnMoveExtents, 'minimalExtentsCountForSplitMergePerNode':$minimalExtentsCountForSplitMergePerNode, " +
+      s"'adjustSchema': $adjustSchema, 'autoCleanupTime': $autoCleanupTime}")
 
     SinkParameters(writeOptions, sourceParameters)
   }

@@ -298,7 +298,7 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
                                                            sparkContext: SparkContext,
                                                            authentication: KustoAuthentication
                                                           ): Unit = {
-    if (!shouldIngestData(coordinates, writeOptions.IngestionProperties, tableExists, crp)) {
+    if (!shouldIngestData(coordinates, writeOptions.ingestionProperties, tableExists, crp)) {
       KDSU.logInfo(myName, s"$IngestSkippedTrace '${coordinates.table}'")
     } else {
       val loggerName = myName
@@ -342,7 +342,9 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
                 throw new RuntimeException(s"Ingestion to Kusto failed with status '$otherStatus'." +
                   s" Cluster: '${coordinates.clusterAlias}', database: '${coordinates.database}', " +
                   s"table: '$tmpTableName'$batchIdIfExists, partition: '${partitionResult.partitionId}'." +
-                  s" Ingestion info: '${readIngestionResult(finalRes.get)}'")
+                  s" Ingestion info: '${new ObjectMapper()
+                    .writerWithDefaultPrettyPrinter
+                    .writeValueAsString(finalRes.get)}'")
             }
           } else {
             throw new RuntimeException("Failed to poll on ingestion status.")
@@ -350,15 +352,15 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
         }
         try {
           if (writeOptions.pollingOnDriver) {
-            KDSU.logWarn(myName, "IMPORTANT: It's very recommended to set pollingOnDriver to false on production!")
+            partitionsResults.value.asScala.foreach(pollOnResult)
+          } else {
+            KDSU.logWarn(myName, "IMPORTANT: It's highly recommended to set pollingOnDriver to true on production!\tRead here why https://github.com/Azure/azure-kusto-spark/blob/master/docs/KustoSink.md#supported-options")
             // Specifiying numSlices = 1 so that only one task is created
-            val resulsRdd = sparkContext.parallelize(partitionsResults.value.asScala, numSlices = 1)
-            resulsRdd.sparkContext.setJobDescription("Polling on ingestion results")
-            resulsRdd.foreachPartition((results: Iterator[PartitionResult]) => results.foreach(
+            val resultsRdd = sparkContext.parallelize(partitionsResults.value.asScala, numSlices = 1)
+            resultsRdd.sparkContext.setJobDescription("Polling on ingestion results")
+            resultsRdd.foreachPartition((results: Iterator[PartitionResult]) => results.foreach(
               pollOnResult
             ))
-          } else {
-            partitionsResults.value.asScala.foreach(pollOnResult)
           }
 
           if (partitionsResults.value.size > 0) {
@@ -373,15 +375,15 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
             // Protect tmp table from merge/rebuild and move data to the table requested by customer. This operation is atomic.
             // We are using the ingestIfNotExists Tags here too (on top of the check at the start of the flow) so that if
             // several flows started together only one of them would ingest
-          KDSU.logInfo(myName, s"Final ingestion step: Moving extents from '$tmpTableName, requestId: ${writeOptions.requestId}," +
+            KDSU.logInfo(myName, s"Final ingestion step: Moving extents from '$tmpTableName, requestId: ${writeOptions.requestId}," +
             s"$batchIdIfExists")
             if (writeOptions.pollingOnDriver) {
+              moveOperation(0)
+            } else {
               // Specifiying numSlices = 1 so that only one task is created
               val moveExtentsRdd =  sparkContext.parallelize(Seq(1), numSlices = 1)
               moveExtentsRdd.sparkContext.setJobDescription("Moving extents to target table")
               moveExtentsRdd.foreach(moveOperation)
-            } else {
-              moveOperation(0)
             }
 
           KDSU.logInfo(myName, s"write to Kusto table '${coordinates.table.get}' finished successfully " +
@@ -486,12 +488,6 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
     }
 
     shouldIngest
-  }
-
-  private def readIngestionResult(statusRecord: IngestionStatus): String = {
-    new ObjectMapper()
-      .writerWithDefaultPrettyPrinter
-      .writeValueAsString(statusRecord)
   }
 }
 

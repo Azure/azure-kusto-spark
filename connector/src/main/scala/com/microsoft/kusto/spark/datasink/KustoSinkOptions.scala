@@ -7,7 +7,7 @@ import scala.concurrent.duration.FiniteDuration
 
 object KustoSinkOptions extends KustoOptions{
   // IMPORTANT: If set to false -> polling will not block on worker node and will be executed on a driver pool thread
-  // 'false' is recommended for production.
+  // 'true' is recommended for production.
   val KUSTO_POLLING_ON_DRIVER: String = newOption("pollingOnDriver")
 
   val KUSTO_TABLE: String = newOption("kustoTable")
@@ -79,7 +79,7 @@ case class WriteOptions(pollingOnDriver:Boolean = true,
                         writeResultLimit: String = KustoSinkOptions.NONE_RESULT_LIMIT,
                         timeZone: String = "UTC",
                         timeout: FiniteDuration,
-                        IngestionProperties: Option[String] = None,
+                        ingestionProperties: Option[String] = None,
                         batchLimit: Int = 100,
                         requestId: String = UUID.randomUUID().toString,
                         autoCleanupTime: FiniteDuration,
