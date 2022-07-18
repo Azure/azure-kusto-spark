@@ -347,15 +347,15 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
         }
         try {
           if (writeOptions.pollingOnDriver) {
-            KDSU.logWarn(myName, "IMPORTANT: It's very recommended to set pollingOnDriver to false on production!")
+            partitionsResults.value.asScala.foreach(pollOnResult)
+          } else {
+            KDSU.logWarn(myName, "IMPORTANT: It's very recommended to set pollingOnDriver to true on production!")
             // Specifiying numSlices = 1 so that only one task is created
             val resulsRdd = sparkContext.parallelize(partitionsResults.value.asScala, numSlices = 1)
             resulsRdd.sparkContext.setJobDescription("Polling on ingestion results")
             resulsRdd.foreachPartition((results: Iterator[PartitionResult]) => results.foreach(
               pollOnResult
             ))
-          } else {
-            partitionsResults.value.asScala.foreach(pollOnResult)
           }
 
           if (partitionsResults.value.size > 0) {
@@ -370,15 +370,15 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
             // Protect tmp table from merge/rebuild and move data to the table requested by customer. This operation is atomic.
             // We are using the ingestIfNotExists Tags here too (on top of the check at the start of the flow) so that if
             // several flows started together only one of them would ingest
-          KDSU.logInfo(myName, s"Final ingestion step: Moving extents from '$tmpTableName, requestId: ${writeOptions.requestId}," +
+            KDSU.logInfo(myName, s"Final ingestion step: Moving extents from '$tmpTableName, requestId: ${writeOptions.requestId}," +
             s"$batchIdIfExists")
             if (writeOptions.pollingOnDriver) {
+              moveOperation(0)
+            } else {
               // Specifiying numSlices = 1 so that only one task is created
               val moveExtentsRdd =  sparkContext.parallelize(Seq(1), numSlices = 1)
               moveExtentsRdd.sparkContext.setJobDescription("Moving extents to target table")
               moveExtentsRdd.foreach(moveOperation)
-            } else {
-              moveOperation(0)
             }
 
           KDSU.logInfo(myName, s"write to Kusto table '${coordinates.table.get}' finished successfully " +

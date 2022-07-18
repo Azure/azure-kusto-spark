@@ -7,7 +7,7 @@ import scala.concurrent.duration.FiniteDuration
 
 object KustoSinkOptions extends KustoOptions{
   // IMPORTANT: If set to false -> polling will not block on worker node and will be executed on a driver pool thread
-  // 'false' is recommended for production.
+  // 'true' is recommended for production.
   val KUSTO_POLLING_ON_DRIVER: String = newOption("pollingOnDriver")
 
   val KUSTO_TABLE: String = newOption("kustoTable")

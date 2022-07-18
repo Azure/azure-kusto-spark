@@ -99,8 +99,8 @@ object KustoWriter {
 //      if (stagingTableIngestionProperties.flushImmediately) {
 //        KDSU.logWarn(myName, "It's not recommended to set flushImmediately to true on production")
 //      }
-      if (writeOptions.pollingOnDriver) {
-        KDSU.logWarn(myName, "IMPORTANT: It's highly recommended to set pollingOnDriver to false on production!\tRead here why https://github.com/Azure/azure-kusto-spark/blob/master/docs/KustoSink.md#supported-options")
+      if (!writeOptions.pollingOnDriver) {
+        KDSU.logWarn(myName, "IMPORTANT: It's highly recommended to set pollingOnDriver to true on production!\tRead here why https://github.com/Azure/azure-kusto-spark/blob/master/docs/KustoSink.md#supported-options")
       }
 
       val rdd = data.queryExecution.toRdd

@@ -268,7 +268,7 @@ object KustoDataSourceUtils {
     var tableCreationParam: Option[String] = None
     var isAsync: Boolean = false
     var isAsyncParam: String = ""
-    var pollingOnDriver: Boolean = false
+    var pollingOnDriver: Boolean = true
     var batchLimit: Int = 0
     var minimalExtentsCountForSplitMergePerNode: Int = 0
     var maxRetriesOnMoveExtents: Int = 0
