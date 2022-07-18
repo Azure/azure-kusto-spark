@@ -81,7 +81,7 @@ object KustoWriter {
       rebuiltOptions, tmpTableName)
 
     val tableExists = schemaShowCommandResult.count() > 0
-    val shouldIngest = kustoClient.shouldIngestData(tableCoordinates, writeOptions.IngestionProperties, tableExists,
+    val shouldIngest = kustoClient.shouldIngestData(tableCoordinates, writeOptions.ingestionProperties, tableExists,
       crp)
 
     if (!shouldIngest) {
@@ -169,8 +169,8 @@ object KustoWriter {
   }
 
   private def getIngestionProperties(writeOptions: WriteOptions, database: String, tableName: String): IngestionProperties = {
-    if (writeOptions.IngestionProperties.isDefined) {
-      val ingestionProperties = SparkIngestionProperties.fromString(writeOptions.IngestionProperties.get)
+    if (writeOptions.ingestionProperties.isDefined) {
+      val ingestionProperties = SparkIngestionProperties.fromString(writeOptions.ingestionProperties.get)
         .toIngestionProperties(database, tableName)
 
       ingestionProperties
@@ -180,8 +180,8 @@ object KustoWriter {
   }
 
   private def getSparkIngestionProperties(writeOptions: WriteOptions): SparkIngestionProperties = {
-    val ingestionProperties = if (writeOptions.IngestionProperties.isDefined)
-      SparkIngestionProperties.fromString(writeOptions.IngestionProperties.get)
+    val ingestionProperties = if (writeOptions.ingestionProperties.isDefined)
+      SparkIngestionProperties.fromString(writeOptions.ingestionProperties.get)
     else
       new SparkIngestionProperties()
     ingestionProperties.ingestIfNotExists = new util.ArrayList()

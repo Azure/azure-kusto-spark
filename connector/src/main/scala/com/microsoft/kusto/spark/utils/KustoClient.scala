@@ -295,7 +295,7 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
                                                            sparkContext: SparkContext,
                                                            authentication: KustoAuthentication
                                                           ): Unit = {
-    if (!shouldIngestData(coordinates, writeOptions.IngestionProperties, tableExists, crp)) {
+    if (!shouldIngestData(coordinates, writeOptions.ingestionProperties, tableExists, crp)) {
       KDSU.logInfo(myName, s"$IngestSkippedTrace '${coordinates.table}'")
     } else {
       val loggerName = myName
