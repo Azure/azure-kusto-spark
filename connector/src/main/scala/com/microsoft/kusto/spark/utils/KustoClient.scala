@@ -12,7 +12,7 @@ import com.microsoft.azure.kusto.ingest.{IngestClient, IngestClientFactory}
 import com.microsoft.azure.storage.StorageException
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
-import com.microsoft.kusto.spark.datasink.KustoWriter.DelayPeriodBetweenCalls
+import com.microsoft.kusto.spark.datasink.KustoWriter.{DelayPeriodBetweenCalls, myName}
 import com.microsoft.kusto.spark.datasink.{PartitionResult, SinkTableCreationMode, SparkIngestionProperties, WriteOptions}
 import com.microsoft.kusto.spark.datasource.{TransientStorageCredentials, TransientStorageParameters}
 import com.microsoft.kusto.spark.exceptions.{FailedOperationException, RetriesExhaustedException}
@@ -93,6 +93,8 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
       }
       val instant = Instant.now.plusSeconds(writeOptions.autoCleanupTime.toSeconds)
       engineClient.execute(database, generateTableAlterAutoDeletePolicy(tmpTableName, instant), crp)
+      KDSU.logInfo(myName, s"Successfully created temporary table $tmpTableName, will be deleted after completing the operation")
+
     }
   }
 

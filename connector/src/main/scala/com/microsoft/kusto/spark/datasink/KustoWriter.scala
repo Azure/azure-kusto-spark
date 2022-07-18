@@ -88,7 +88,6 @@ object KustoWriter {
       // Only if all executors succeeded the table will be appended to the original destination table.
       kustoClient.initializeTablesBySchema(tableCoordinates, tmpTableName, data.schema, targetSchema, writeOptions,
         crp, stagingTableIngestionProperties.creationTime == null, writeOptions.isTransactionalMode)
-      KDSU.logInfo(myName, s"Successfully created temporary table $tmpTableName, will be deleted after completing the operation")
 
       kustoClient.setMappingOnStagingTableIfNeeded(stagingTableIngestionProperties, tableCoordinates.database, tmpTableName, table, crp)
 
@@ -103,7 +102,7 @@ object KustoWriter {
         val asyncWork = rdd.foreachPartitionAsync { rows => ingestRowsIntoTempTbl(rows, batchIdIfExists, partitionsResults) }
         KDSU.logInfo(myName, s"asynchronous write to Kusto table '$table' in progress")
         // This part runs back on the driver
-        if (!writeOptions.isTransactionalMode) {
+        if (writeOptions.isTransactionalMode) {
           asyncWork.onSuccess {
             case _ => kustoClient.finalizeIngestionWhenWorkersSucceeded(
               tableCoordinates, batchIdIfExists, kustoClient.engineClient, tmpTableName, partitionsResults,
@@ -121,14 +120,17 @@ object KustoWriter {
         try
           rdd.foreachPartition { rows => ingestRowsIntoTempTbl(rows, batchIdIfExists, partitionsResults) }
         catch {
-          case exception: Exception =>
+          case exception: Exception => if (writeOptions.isTransactionalMode) {
             kustoClient.cleanupIngestionByProducts(
               tableCoordinates.database, kustoClient.engineClient, tmpTableName, crp)
             throw exception
+          }
         }
-        kustoClient.finalizeIngestionWhenWorkersSucceeded(
-          tableCoordinates, batchIdIfExists, kustoClient.engineClient, tmpTableName, partitionsResults, writeOptions,
-          crp, tableExists, rdd.sparkContext, authentication)
+        if (writeOptions.isTransactionalMode) {
+          kustoClient.finalizeIngestionWhenWorkersSucceeded(
+            tableCoordinates, batchIdIfExists, kustoClient.engineClient, tmpTableName, partitionsResults, writeOptions,
+            crp, tableExists, rdd.sparkContext, authentication)
+        }
       }
     }
   }
@@ -150,7 +152,7 @@ object KustoWriter {
 
     val ingestionProperties = getIngestionProperties(writeOptions,
       parameters.coordinates.database,
-      if (writeOptions.isTransactionalMode) parameters.coordinates.table.get else parameters.tmpTableName)
+      if (writeOptions.isTransactionalMode) parameters.tmpTableName else parameters.coordinates.table.get)
     ingestionProperties.setDataFormat(DataFormat.CSV.name)
     ingestionProperties.setReportMethod(IngestionProperties.IngestionReportMethod.TABLE)
     ingestionProperties.setReportLevel(IngestionProperties.IngestionReportLevel.FAILURES_AND_SUCCESSES)
