@@ -339,7 +339,9 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
                 throw new RuntimeException(s"Ingestion to Kusto failed with status '$otherStatus'." +
                   s" Cluster: '${coordinates.clusterAlias}', database: '${coordinates.database}', " +
                   s"table: '$tmpTableName'$batchIdIfExists, partition: '${partitionResult.partitionId}'." +
-                  s" Ingestion info: '${readIngestionResult(finalRes.get)}'")
+                  s" Ingestion info: '${new ObjectMapper()
+                    .writerWithDefaultPrettyPrinter
+                    .writeValueAsString(finalRes.get)}'")
             }
           } else {
             throw new RuntimeException("Failed to poll on ingestion status.")
@@ -349,11 +351,11 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
           if (writeOptions.pollingOnDriver) {
             partitionsResults.value.asScala.foreach(pollOnResult)
           } else {
-            KDSU.logWarn(myName, "IMPORTANT: It's very recommended to set pollingOnDriver to true on production!")
+            KDSU.logWarn(myName, "IMPORTANT: It's highly recommended to set pollingOnDriver to true on production!\tRead here why https://github.com/Azure/azure-kusto-spark/blob/master/docs/KustoSink.md#supported-options")
             // Specifiying numSlices = 1 so that only one task is created
-            val resulsRdd = sparkContext.parallelize(partitionsResults.value.asScala, numSlices = 1)
-            resulsRdd.sparkContext.setJobDescription("Polling on ingestion results")
-            resulsRdd.foreachPartition((results: Iterator[PartitionResult]) => results.foreach(
+            val resultsRdd = sparkContext.parallelize(partitionsResults.value.asScala, numSlices = 1)
+            resultsRdd.sparkContext.setJobDescription("Polling on ingestion results")
+            resultsRdd.foreachPartition((results: Iterator[PartitionResult]) => results.foreach(
               pollOnResult
             ))
           }
@@ -483,12 +485,6 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
     }
 
     shouldIngest
-  }
-
-  private def readIngestionResult(statusRecord: IngestionStatus): String = {
-    new ObjectMapper()
-      .writerWithDefaultPrettyPrinter
-      .writeValueAsString(statusRecord)
   }
 }
 
