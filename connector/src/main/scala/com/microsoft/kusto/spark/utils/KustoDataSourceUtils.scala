@@ -270,21 +270,27 @@ object KustoDataSourceUtils {
     var minimalExtentsCountForSplitMergePerNode: Int = 0
     var maxRetriesOnMoveExtents: Int = 0
     try {
-      isAsync = parameters.getOrElse(KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC, "false").trim.toBoolean
-      pollingOnDriver = parameters.getOrElse(KustoSinkOptions.KUSTO_POLLING_ON_DRIVER, "true").trim.toBoolean
-      writeModeParam = parameters.get(KustoSinkOptions.KUSTO_TRANSACTIONAL_NODE)
-      isTransactionalMode = if (writeModeParam.isEmpty) true else WriteMode.withName(writeModeParam.get) == WriteMode.Transactional
       tableCreationParam = parameters.get(KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS)
       tableCreation = if (tableCreationParam.isEmpty) SinkTableCreationMode.FailIfNotExist else SinkTableCreationMode.withName(tableCreationParam.get)
-      batchLimit = parameters.getOrElse(KustoSinkOptions.KUSTO_CLIENT_BATCHING_LIMIT, DefaultBatchingLimit.toString)
-        .trim.toInt
-      minimalExtentsCountForSplitMergePerNode = parameters.getOrElse(KustoDebugOptions
-        .KUSTO_MAXIMAL_EXTENTS_COUNT_FOR_SPLIT_MERGE_PER_NODE, DefaultExtentsCountForSplitMergePerNode.toString).trim.toInt
-      maxRetriesOnMoveExtents = parameters.getOrElse(KustoDebugOptions.KUSTO_MAX_RETRIES_ON_MOVE_EXTENTS,
-        DefaultMaxRetriesOnMoveExtents.toString).trim.toInt
     } catch {
       case _: NoSuchElementException => throw new InvalidParameterException(s"No such SinkTableCreationMode option: '${tableCreationParam.get}'")
     }
+    try {
+      writeModeParam = parameters.get(KustoSinkOptions.KUSTO_TRANSACTIONAL_NODE)
+      isTransactionalMode = if (writeModeParam.isEmpty) true else WriteMode.withName(writeModeParam.get) == WriteMode.Transactional
+    } catch {
+      case _: NoSuchElementException => throw new InvalidParameterException(s"No such WriteMode option: '${writeModeParam.get}'")
+    }
+
+    isAsync = parameters.getOrElse(KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC, "false").trim.toBoolean
+    pollingOnDriver = parameters.getOrElse(KustoSinkOptions.KUSTO_POLLING_ON_DRIVER, "true").trim.toBoolean
+
+    batchLimit = parameters.getOrElse(KustoSinkOptions.KUSTO_CLIENT_BATCHING_LIMIT, DefaultBatchingLimit.toString)
+      .trim.toInt
+    minimalExtentsCountForSplitMergePerNode = parameters.getOrElse(KustoDebugOptions
+      .KUSTO_MAXIMAL_EXTENTS_COUNT_FOR_SPLIT_MERGE_PER_NODE, DefaultExtentsCountForSplitMergePerNode.toString).trim.toInt
+    maxRetriesOnMoveExtents = parameters.getOrElse(KustoDebugOptions.KUSTO_MAX_RETRIES_ON_MOVE_EXTENTS,
+      DefaultMaxRetriesOnMoveExtents.toString).trim.toInt
 
     val adjustSchemaParam = parameters.get(KustoSinkOptions.KUSTO_ADJUST_SCHEMA)
     val adjustSchema = if (adjustSchemaParam.isEmpty) SchemaAdjustmentMode.NoAdjustment else SchemaAdjustmentMode.withName(adjustSchemaParam.get)
