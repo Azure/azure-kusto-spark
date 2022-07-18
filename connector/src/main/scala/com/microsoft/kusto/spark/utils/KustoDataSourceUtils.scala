@@ -12,12 +12,9 @@ import com.microsoft.azure.kusto.data.exceptions.{DataClientException, DataServi
 import com.microsoft.kusto.spark.authentication._
 import com.microsoft.kusto.spark.common.{KustoCoordinates, KustoDebugOptions}
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
-import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SchemaAdjustmentMode, SinkTableCreationMode, WriteOptions}
+import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SchemaAdjustmentMode, SinkTableCreationMode, WriteMode, WriteOptions}
 import com.microsoft.kusto.spark.datasource.ReadMode.ReadMode
-import com.microsoft.kusto.spark.datasource.{
-  KustoReadOptions, KustoResponseDeserializer, KustoSchema,
-  KustoSourceOptions, PartitionOptions, ReadMode, TransientStorageCredentials, TransientStorageParameters
-}
+import com.microsoft.kusto.spark.datasource.{KustoReadOptions, KustoResponseDeserializer, KustoSchema, KustoSourceOptions, PartitionOptions, ReadMode, TransientStorageCredentials, TransientStorageParameters}
 import com.microsoft.kusto.spark.exceptions.{FailedOperationException, TimeoutAwaitingPendingOperationException}
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
@@ -30,7 +27,6 @@ import com.microsoft.kusto.spark.utils.KustoConstants.{DefaultBatchingLimit, Def
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
-import scala.util.matching.Regex
 import org.apache.commons.lang3.StringUtils
 import org.apache.http.client.utils.URIBuilder
 import org.json.JSONObject
@@ -267,16 +263,17 @@ object KustoDataSourceUtils {
     var tableCreation: SinkTableCreationMode = SinkTableCreationMode.FailIfNotExist
     var tableCreationParam: Option[String] = None
     var isAsync: Boolean = false
-    var isQueuingMode: Boolean = false
-    var isAsyncParam: String = ""
+    var isTransactionalMode: Boolean = false
+    var writeModeParam: Option[String] = None
     var pollingOnDriver: Boolean = false
     var batchLimit: Int = 0
     var minimalExtentsCountForSplitMergePerNode: Int = 0
     var maxRetriesOnMoveExtents: Int = 0
     try {
       isAsync = parameters.getOrElse(KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC, "false").trim.toBoolean
-      isQueuingMode = parameters.getOrElse(KustoSinkOptions.KUSTO_QUEUING_NODE, "false").trim.toBoolean
       pollingOnDriver = parameters.getOrElse(KustoSinkOptions.KUSTO_POLLING_ON_DRIVER, "true").trim.toBoolean
+      writeModeParam = parameters.get(KustoSinkOptions.KUSTO_TRANSACTIONAL_NODE)
+      isTransactionalMode = if (writeModeParam.isEmpty) true else WriteMode.withName(writeModeParam.get) == WriteMode.Transactional
       tableCreationParam = parameters.get(KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS)
       tableCreation = if (tableCreationParam.isEmpty) SinkTableCreationMode.FailIfNotExist else SinkTableCreationMode.withName(tableCreationParam.get)
       batchLimit = parameters.getOrElse(KustoSinkOptions.KUSTO_CLIENT_BATCHING_LIMIT, DefaultBatchingLimit.toString)
@@ -300,6 +297,9 @@ object KustoDataSourceUtils {
     val ingestionPropertiesAsJson = parameters.get(KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON)
 
     val sourceParameters = parseSourceParameters(parameters, allowProxy = false)
+    if (sourceParameters.kustoCoordinates.table.isEmpty) {
+      throw new InvalidParameterException("Table name not specified")
+    }
 
     val writeOptions = WriteOptions(
       pollingOnDriver,
@@ -315,7 +315,7 @@ object KustoDataSourceUtils {
       maxRetriesOnMoveExtents,
       minimalExtentsCountForSplitMergePerNode,
       adjustSchema,
-      isQueuingMode
+      isTransactionalMode
     )
 
     if (sourceParameters.kustoCoordinates.table.isEmpty) {

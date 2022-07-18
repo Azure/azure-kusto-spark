@@ -49,9 +49,12 @@ object KustoSinkOptions extends KustoOptions{
   // are cleaned if they weren't cleaned at the end of the run
   val KUSTO_STAGING_RESOURCE_AUTO_CLEANUP_TIMEOUT: String = newOption("stagingResourcesAutoCleanupTimeout")
 
-  // Queuing mode does not gurantee transactional write but instead favors performance, in this scenario no temporary
-  // table is created and there is no polling on ingestion result
-  val KUSTO_QUEUING_NODE: String = newOption("queuingMode")
+  // If set to 'Transactional' - guarantees write operation to either completely succeed or fail together
+  // but includes additional steps - it creates a temporary and after processing the data it polls on ingestion result
+  // after which it will move the data to the destination table (the last part is a metadata operation only)
+  // If set to 'Queued' the write operation finishes after data is processed by the workers, the data may not be completely
+  // available up until the service finishes loading it and failures on the service side will not propagate to Spark.
+  val KUSTO_TRANSACTIONAL_NODE: String = newOption("writeMode")
 }
 
 
@@ -63,6 +66,11 @@ object SinkTableCreationMode extends Enumeration {
 object SchemaAdjustmentMode extends Enumeration {
   type SchemaAdjustmentMode = Value
   val NoAdjustment, FailIfNotMatch, GenerateDynamicCsvMapping = Value
+}
+
+object WriteMode extends Enumeration {
+  type WriteMode = Value
+  val Transactional, Queued = Value
 }
 
 case class WriteOptions(pollingOnDriver:Boolean = true,
@@ -78,5 +86,5 @@ case class WriteOptions(pollingOnDriver:Boolean = true,
                         maxRetriesOnMoveExtents: Int = 10,
                         minimalExtentsCountForSplitMerge: Int = 400,
                         adjustSchema: SchemaAdjustmentMode.SchemaAdjustmentMode = SchemaAdjustmentMode.NoAdjustment,
-                        isQueuingMode: Boolean = false)
+                        isTransactionalMode: Boolean = false)
 

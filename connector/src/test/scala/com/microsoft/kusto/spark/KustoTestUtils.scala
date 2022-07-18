@@ -9,7 +9,7 @@ import com.microsoft.kusto.spark.datasource.KustoSourceOptions
 import com.microsoft.kusto.spark.sql.extension.SparkExtension.DataFrameReaderExtension
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils => KDSU}
-import org.apache.spark.sql.{Column, DataFrame, SaveMode, SparkSession, functions}
+import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession, functions}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.TimeoutException
