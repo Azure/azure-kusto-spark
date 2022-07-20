@@ -30,7 +30,7 @@ trait KustoOptions {
 
   val KUSTO_ACCESS_TOKEN: String = newOption("accessToken")
 
-  // Use only for local runs where one can open the browser
+  // Use only for local runs where one can open the browser - set to true to enable
   val KUSTO_USER_PROMPT: String = newOption("userPrompt")
   // AAD application pfx certificate path
   val KUSTO_AAD_APP_CERTIFICATE_PATH: String = newOption("kutoAadAppCertPath")

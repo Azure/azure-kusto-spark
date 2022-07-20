@@ -41,8 +41,8 @@ object KustoClientCache {
         )
       case userPrompt: KustoUserPromptAuthentication => (
         // TODO authoirty
-        ConnectionStringBuilder.createWithUserPrompt(clusterAndAuth.engineUri, userPrompt.authority),
-        ConnectionStringBuilder.createWithUserPrompt(clusterAndAuth.ingestUri, userPrompt.authority)
+        ConnectionStringBuilder.createWithUserPrompt(clusterAndAuth.engineUri, userPrompt.authority, null),
+        ConnectionStringBuilder.createWithUserPrompt(clusterAndAuth.ingestUri, userPrompt.authority, null)
       )
       case userToken: KustoAccessTokenAuthentication => (
         ConnectionStringBuilder.createWithAadAccessTokenAuthentication(clusterAndAuth.engineUri, userToken.token),
