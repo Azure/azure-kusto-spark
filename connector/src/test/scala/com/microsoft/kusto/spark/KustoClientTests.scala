@@ -15,7 +15,8 @@ import scala.collection.JavaConverters._
 
 @RunWith(classOf[JUnitRunner])
 class KustoClientTests extends FlatSpec  with Matchers{
-  class KustoClientStub (override  val clusterAlias: String, override  val engineKcsb: ConnectionStringBuilder, override val ingestKcsb: ConnectionStringBuilder, var tagsToReturn: util.ArrayList[String]) extends KustoClient(clusterAlias, engineKcsb, ingestKcsb){
+  class KustoClientStub (override  val clusterAlias: String, override  val engineKcsb: ConnectionStringBuilder, override val ingestKcsb: ConnectionStringBuilder, var tagsToReturn: util.ArrayList[String])
+    extends KustoClient(engineKcsb, ingestKcsb, clusterAlias){
     override def fetchTableExtentsTags(database: String, table: String, crp: ClientRequestProperties)
     : KustoResultSetTable = {
       val response =

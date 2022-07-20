@@ -6,10 +6,10 @@ import com.microsoft.kusto.spark.common.KustoOptions
 import scala.concurrent.duration.FiniteDuration
 
 object KustoSinkOptions extends KustoOptions{
+  /** Required options */
   val KUSTO_TABLE: String = newOption("kustoTable")
 
-  val KUSTO_CUSTOM_DATAFRAME_COLUMN_TYPES: String = newOption("customSchema")
-
+  /** Optional options */
   // If set to 'FailIfNotExist', the operation will fail if the table is not found
   // in the requested cluster and database.
   // If set to 'CreateIfNotExist' and the table is not found in the requested cluster and database,

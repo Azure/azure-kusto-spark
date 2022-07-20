@@ -32,7 +32,7 @@ import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.{Await, Future, TimeoutException}
 
-class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuilder, val ingestKcsb: ConnectionStringBuilder) {
+class KustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcsb: ConnectionStringBuilder, val clusterAlias: String) {
   lazy val engineClient: Client = ClientFactory.createClient(engineKcsb)
 
   // Reading process does not require ingest client to start working

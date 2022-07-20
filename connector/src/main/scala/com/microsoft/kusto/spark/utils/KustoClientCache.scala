@@ -10,70 +10,67 @@ import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
 import org.apache.http.client.utils.URIBuilder
 
 object KustoClientCache {
-  var clientCache = new ConcurrentHashMap[AliasAndAuth, KustoClient]
+  var clientCache = new ConcurrentHashMap[ClusterAndAuth, KustoClient]
 
-  def getClient(clusterAlias: String, clusterUrl: String, authentication: KustoAuthentication): KustoClient = {
-    val clusterAndAuth = AliasAndAuth(clusterAlias, clusterUrl, authentication)
+  def getClient(clusterUrl: String, authentication: KustoAuthentication, ingestionUrl: Option[String], clusterAlias: String): KustoClient = {
+    val clusterAndAuth = ClusterAndAuth(clusterUrl, authentication, ingestionUrl, clusterAlias)
     clientCache.computeIfAbsent(clusterAndAuth, adderSupplier)
   }
 
-  val adderSupplier: function.Function[AliasAndAuth, KustoClient] = new java.util.function.Function[AliasAndAuth, KustoClient]() {
-    override def apply(aa: AliasAndAuth): KustoClient = createClient(aa)
+  val adderSupplier: function.Function[ClusterAndAuth, KustoClient] = new java.util.function.Function[ClusterAndAuth, KustoClient]() {
+    override def apply(aa: ClusterAndAuth): KustoClient = createClient(aa)
   }
 
-  private def createClient(aliasAndAuth: AliasAndAuth): KustoClient = {
-    val (engineKcsb, ingestKcsb) = aliasAndAuth.authentication match {
-      case null => throw new MatchError("Can't create ConnectionStringBuilder with null authentication params")
+  private def createClient(clusterAndAuth: ClusterAndAuth): KustoClient = {
+    val (engineKcsb, ingestKcsb) = clusterAndAuth.authentication match {
       case app: AadApplicationAuthentication => (
-        ConnectionStringBuilder.createWithAadApplicationCredentials(aliasAndAuth.engineUri, app.ID, app.password, app.authority),
-        ConnectionStringBuilder.createWithAadApplicationCredentials(aliasAndAuth.ingestUri, app.ID, app.password, app.authority)
+        ConnectionStringBuilder.createWithAadApplicationCredentials(clusterAndAuth.engineUri, app.ID, app.password, app.authority),
+        ConnectionStringBuilder.createWithAadApplicationCredentials(clusterAndAuth.ingestUri, app.ID, app.password, app.authority)
       )
       case app: AadApplicationCertificateAuthentication =>
         val keyCert = CertUtils.readPfx(app.certFilePath, app.certPassword)
         (
-          ConnectionStringBuilder.createWithAadApplicationCertificate(aliasAndAuth.engineUri, app.appId, keyCert.cert, keyCert.key, app.authority),
-          ConnectionStringBuilder.createWithAadApplicationCertificate(aliasAndAuth.ingestUri, app.appId, keyCert.cert, keyCert.key, app.authority)
+          ConnectionStringBuilder.createWithAadApplicationCertificate(clusterAndAuth.engineUri, app.appId, keyCert.cert, keyCert.key, app.authority),
+          ConnectionStringBuilder.createWithAadApplicationCertificate(clusterAndAuth.ingestUri, app.appId, keyCert.cert, keyCert.key, app.authority)
         )
       case keyVaultParams: KeyVaultAuthentication =>
         val app = KeyVaultUtils.getAadAppParametersFromKeyVault(keyVaultParams)
         (
-          ConnectionStringBuilder.createWithAadApplicationCredentials(aliasAndAuth.engineUri, app.ID, app.password, app.authority),
-          ConnectionStringBuilder.createWithAadApplicationCredentials(aliasAndAuth.ingestUri, app.ID, app.password, app.authority)
+          ConnectionStringBuilder.createWithAadApplicationCredentials(clusterAndAuth.engineUri, app.ID, app.password, app.authority),
+          ConnectionStringBuilder.createWithAadApplicationCredentials(clusterAndAuth.ingestUri, app.ID, app.password, app.authority)
         )
       case userPrompt: KustoUserPromptAuthentication => (
         // TODO authoirty
-        ConnectionStringBuilder.createWithUserPrompt(aliasAndAuth.engineUri, userPrompt.authority),
-        ConnectionStringBuilder.createWithUserPrompt(aliasAndAuth.ingestUri, userPrompt.authority)
+        ConnectionStringBuilder.createWithUserPrompt(clusterAndAuth.engineUri, userPrompt.authority),
+        ConnectionStringBuilder.createWithUserPrompt(clusterAndAuth.ingestUri, userPrompt.authority)
       )
       case userToken: KustoAccessTokenAuthentication => (
-        ConnectionStringBuilder.createWithAadAccessTokenAuthentication(aliasAndAuth.engineUri, userToken.token),
-        ConnectionStringBuilder.createWithAadAccessTokenAuthentication(aliasAndAuth.ingestUri, userToken.token)
+        ConnectionStringBuilder.createWithAadAccessTokenAuthentication(clusterAndAuth.engineUri, userToken.token),
+        ConnectionStringBuilder.createWithAadAccessTokenAuthentication(clusterAndAuth.ingestUri, userToken.token)
       )
       case tokenProvider: KustoTokenProviderAuthentication => (
-        ConnectionStringBuilder.createWithAadTokenProviderAuthentication(aliasAndAuth.engineUri, tokenProvider.tokenProviderCallback),
-        ConnectionStringBuilder.createWithAadTokenProviderAuthentication(aliasAndAuth.ingestUri, tokenProvider.tokenProviderCallback)
+        ConnectionStringBuilder.createWithAadTokenProviderAuthentication(clusterAndAuth.engineUri, tokenProvider.tokenProviderCallback),
+        ConnectionStringBuilder.createWithAadTokenProviderAuthentication(clusterAndAuth.ingestUri, tokenProvider.tokenProviderCallback)
       )
     }
 
     engineKcsb.setClientVersionForTracing(KCONST.ClientName)
     ingestKcsb.setClientVersionForTracing(KCONST.ClientName)
 
-    new KustoClient(aliasAndAuth.clusterAlias, engineKcsb, ingestKcsb)
+    new KustoClient(engineKcsb, ingestKcsb, clusterAndAuth.clusterAlias)
   }
 
-  private[kusto] case class AliasAndAuth(clusterAlias: String, engineUrl: String, authentication: KustoAuthentication) {
+  private[kusto] case class ClusterAndAuth(engineUrl: String, authentication: KustoAuthentication, ingestionUri: Option[String], clusterAlias:String) {
     val engineUri: String = engineUrl
-    val ingestUri: String = new URIBuilder().setScheme("https")
+    val ingestUri: String = ingestionUri.getOrElse(new URIBuilder().setScheme("https")
       .setHost(KustoDataSourceUtils.IngestPrefix + new URI(engineUrl).getHost)
-      .toString
+      .toString)
 
     override def equals(that: Any): Boolean = that match {
-      case aa: AliasAndAuth => clusterAlias == aa.clusterAlias && authentication == aa.authentication
+      case aa: ClusterAndAuth => engineUrl == aa.engineUrl && authentication == aa.authentication && ingestUri == aa.ingestUri
       case _ => false
     }
 
-    override def hashCode(): Int = clusterAlias.hashCode + authentication.hashCode
+    override def hashCode(): Int = engineUri.hashCode + authentication.hashCode + ingestUri.hashCode
   }
 }
-
-

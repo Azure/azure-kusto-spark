@@ -248,7 +248,8 @@ object KustoDataSourceUtils {
 
     val (authentication,keyVaultAuthentication) = parseAuthentication(parameters, clusterUrl.get)
 
-    SourceParameters(authentication, KustoCoordinates(clusterUrl.get, alias.get, database.get, table),
+    val ingestionUri = parameters.get(KustoSinkOptions.KUSTO_INGESTION_URI)
+    SourceParameters(authentication, KustoCoordinates(clusterUrl.get, alias.get, database.get, table, ingestionUri),
       keyVaultAuthentication, requestId, clientRequestProperties)
   }
 

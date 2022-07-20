@@ -45,7 +45,7 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
   }
 
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
-    val kustoClient = KustoClientCache.getClient(kustoCoordinates.clusterAlias, kustoCoordinates.clusterUrl, authentication).engineClient
+    val kustoClient = KustoClientCache.getClient(kustoCoordinates.clusterUrl, authentication, kustoCoordinates.ingestionUrl, kustoCoordinates.clusterAlias).engineClient
     var timedOutCounting = false
     val forceSingleMode = readOptions.readMode.isDefined && readOptions.readMode.get == ReadMode.ForceSingleMode
     var useSingleMode = forceSingleMode
@@ -98,7 +98,7 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
           kustoClient,
           KustoReadRequest(sparkSession, cachedSchema, kustoCoordinates, query, authentication, timeout, clientRequestProperties, requestId),
           if (storageParameters.isDefined) storageParameters.get else
-            KustoClientCache.getClient(kustoCoordinates.clusterAlias, kustoCoordinates.clusterUrl, authentication).getTempBlobsForExport,
+            KustoClientCache.getClient(kustoCoordinates.clusterUrl, authentication, kustoCoordinates.ingestionUrl, kustoCoordinates.clusterAlias).getTempBlobsForExport,
           readOptions,
           KustoFiltering(requiredColumns, filters))
 
@@ -124,7 +124,10 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
       throw new RuntimeException("Spark connector cannot run Kusto commands. Please provide a valid query")
     }
 
-    KDSU.getSchema(kustoCoordinates.database, getSchemaQuery, KustoClientCache.getClient(kustoCoordinates.clusterAlias, kustoCoordinates.clusterUrl, authentication).engineClient, clientRequestProperties)
+    KDSU.getSchema(kustoCoordinates.database,
+      getSchemaQuery,
+      KustoClientCache.getClient(
+        kustoCoordinates.clusterUrl, authentication, kustoCoordinates.ingestionUrl, kustoCoordinates.clusterAlias).engineClient, clientRequestProperties)
   }
 
   private def getPartitioningColumn: String = {

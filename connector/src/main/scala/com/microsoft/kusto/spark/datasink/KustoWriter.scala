@@ -44,7 +44,7 @@ object KustoWriter {
                            writeOptions: WriteOptions,
                            crp: ClientRequestProperties): Unit = {
     val batchIdIfExists = batchId.map(b => s",batch: ${b.toString}").getOrElse("")
-    val kustoClient = KustoClientCache.getClient(tableCoordinates.clusterAlias, tableCoordinates.clusterUrl, authentication)
+    val kustoClient = KustoClientCache.getClient(tableCoordinates.clusterUrl, authentication, tableCoordinates.ingestionUrl, tableCoordinates.clusterAlias)
 
     if (tableCoordinates.table.isEmpty) {
       KDSU.reportExceptionAndThrow(myName, new InvalidParameterException("Table name not specified"), "writing data",
@@ -191,7 +191,7 @@ object KustoWriter {
     import parameters._
     val partitionId = TaskContext.getPartitionId
     KDSU.logInfo(myName, s"Ingesting partition: '$partitionId' in requestId: '${writeOptions.requestId}'$batchIdForTracing")
-    val ingestClient = KustoClientCache.getClient(coordinates.clusterAlias, coordinates.clusterUrl, authentication).ingestClient
+    val ingestClient = KustoClientCache.getClient(coordinates.clusterUrl, authentication, coordinates.ingestionUrl, coordinates.clusterAlias).ingestClient
 
     // We force blocking here, since the driver can only complete the ingestion process
     // once all partitions are ingested into the temporary table
@@ -243,7 +243,7 @@ object KustoWriter {
 
     import parameters._
 
-    val kustoClient = KustoClientCache.getClient(coordinates.clusterAlias, coordinates.clusterUrl, authentication)
+    val kustoClient = KustoClientCache.getClient(coordinates.clusterUrl, authentication, coordinates.ingestionUrl, coordinates.clusterAlias)
     val maxBlobSize = writeOptions.batchLimit * KCONST.OneMegaByte
 
     // This blobWriter will be used later to write the rows to blob storage from which it will be ingested to Kusto
