@@ -86,7 +86,7 @@ object KustoConnectorDemo {
 
     import org.apache.spark.sql.streaming.Trigger
 
-    // Set up a checkpoint and disable codeGen
+    // Set up a checkpoint
     spark.conf.set("spark.sql.streaming.checkpointLocation", "/FileStore/temp/checkpoint")
 
     // Write to a Kusto table from streaming source
