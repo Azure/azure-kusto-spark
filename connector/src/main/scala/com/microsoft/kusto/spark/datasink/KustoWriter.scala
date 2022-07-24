@@ -153,10 +153,13 @@ object KustoWriter {
     val ingestionProperties = getIngestionProperties(writeOptions,
       parameters.coordinates.database,
       if (writeOptions.isTransactionalMode) parameters.tmpTableName else parameters.coordinates.table.get)
-    ingestionProperties.setDataFormat(DataFormat.CSV.name)
-    ingestionProperties.setReportMethod(IngestionProperties.IngestionReportMethod.TABLE)
-    ingestionProperties.setReportLevel(IngestionProperties.IngestionReportLevel.FAILURES_AND_SUCCESSES)
 
+    if (writeOptions.isTransactionalMode) {
+      ingestionProperties.setReportMethod(IngestionProperties.IngestionReportMethod.TABLE)
+      ingestionProperties.setReportLevel(IngestionProperties.IngestionReportLevel.FAILURES_AND_SUCCESSES)
+    }
+
+    ingestionProperties.setDataFormat(DataFormat.CSV.name)
     val tasks = ingestRows(rows, parameters, ingestClient, ingestionProperties, partitionsResults)
 
     KDSU.logInfo(myName, s"Ingesting from blob - partition: ${TaskContext.getPartitionId()} requestId: '${writeOptions.requestId}' $batchIdForTracing")
