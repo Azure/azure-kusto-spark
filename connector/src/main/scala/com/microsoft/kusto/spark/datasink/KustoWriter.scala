@@ -70,6 +70,7 @@ object KustoWriter {
     KustoIngestionUtils.adjustSchema(writeOptions.adjustSchema, data.schema, targetSchema, stagingTableIngestionProperties)
 
     val rebuiltOptions = WriteOptions(
+      writeOptions.pollingOnDriver,
       writeOptions.tableCreateOptions,
       writeOptions.isAsync,
       writeOptions.writeResultLimit,
@@ -87,7 +88,7 @@ object KustoWriter {
       rebuiltOptions, tmpTableName)
 
     val tableExists = schemaShowCommandResult.count() > 0
-    val shouldIngest = kustoClient.shouldIngestData(tableCoordinates, writeOptions.IngestionProperties, tableExists,
+    val shouldIngest = kustoClient.shouldIngestData(tableCoordinates, writeOptions.ingestionProperties, tableExists,
       crp)
 
     if (!shouldIngest) {
@@ -100,9 +101,12 @@ object KustoWriter {
       KDSU.logInfo(myName, s"Successfully created temporary table $tmpTableName, will be deleted after completing the operation")
 
       kustoClient.setMappingOnStagingTableIfNeeded(stagingTableIngestionProperties, tableCoordinates.database, tmpTableName, table, crp)
-      if (stagingTableIngestionProperties.flushImmediately) {
-        KDSU.logWarn(myName, "It's not recommended to set flushImmediately to true")
-      }
+
+//    TODO remove until batching policy problem is good
+//      if (stagingTableIngestionProperties.flushImmediately) {
+//        KDSU.logWarn(myName, "It's not recommended to set flushImmediately to true on production")
+//      }
+
       val rdd = data.queryExecution.toRdd
       val partitionsResults = rdd.sparkContext.collectionAccumulator[PartitionResult]
       if (writeOptions.isAsync) {
@@ -112,7 +116,7 @@ object KustoWriter {
         asyncWork.onSuccess {
           case _ => kustoClient.finalizeIngestionWhenWorkersSucceeded(
             tableCoordinates, batchIdIfExists, kustoClient.engineClient, tmpTableName, partitionsResults,
-            writeOptions, crp, tableExists)
+            writeOptions, crp, tableExists, rdd.sparkContext, authentication)
         }
         asyncWork.onFailure {
           case exception: Exception =>
@@ -132,7 +136,7 @@ object KustoWriter {
         }
         kustoClient.finalizeIngestionWhenWorkersSucceeded(
           tableCoordinates, batchIdIfExists, kustoClient.engineClient, tmpTableName, partitionsResults, writeOptions,
-          crp, tableExists)
+          crp, tableExists, rdd.sparkContext, authentication)
       }
     }
   }
@@ -170,8 +174,8 @@ object KustoWriter {
   }
 
   private def getIngestionProperties(writeOptions: WriteOptions, database: String, tableName: String): IngestionProperties = {
-    if (writeOptions.IngestionProperties.isDefined) {
-      val ingestionProperties = SparkIngestionProperties.fromString(writeOptions.IngestionProperties.get)
+    if (writeOptions.ingestionProperties.isDefined) {
+      val ingestionProperties = SparkIngestionProperties.fromString(writeOptions.ingestionProperties.get)
         .toIngestionProperties(database, tableName)
 
       ingestionProperties
@@ -181,8 +185,8 @@ object KustoWriter {
   }
 
   private def getSparkIngestionProperties(writeOptions: WriteOptions): SparkIngestionProperties = {
-    val ingestionProperties = if (writeOptions.IngestionProperties.isDefined)
-      SparkIngestionProperties.fromString(writeOptions.IngestionProperties.get)
+    val ingestionProperties = if (writeOptions.ingestionProperties.isDefined)
+      SparkIngestionProperties.fromString(writeOptions.ingestionProperties.get)
     else
       new SparkIngestionProperties()
     ingestionProperties.ingestIfNotExists = new util.ArrayList()
