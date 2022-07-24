@@ -53,6 +53,11 @@ display(kustoDf)
 #######################
 
 # Write data to an Azure Data Explorer table
+from pyspark.sql import Row
+x = []
+x.append(Row("1", "One"))
+x.append(Row("2", "Tow"))
+df = spark.createDataFrame(spark.sparkContext.parallelize(x))
 
 df.write \
     .format("com.microsoft.kusto.spark.synapse.datasource") \
@@ -116,7 +121,6 @@ dfStream = spark \
   .csv([filename]) \
 
 spark.conf.set("spark.sql.streaming.checkpointLocation", "/localWriteCheckpointFolder")
-spark.conf.set("spark.sql.codegen.wholeStage", "false")
 
 kustoQ = dfStream \
     .writeStream \
