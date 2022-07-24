@@ -13,7 +13,7 @@ import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.exceptions.TimeoutAwaitingPendingOperationException
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator.generateTableGetSchemaAsRowsCommand
-import com.microsoft.kusto.spark.utils.KustoConstants.IngestSkippedTrace
+import com.microsoft.kusto.spark.utils.KustoConstants.{IngestSkippedTrace, MAX_INGEST_RETRY_ATTEMPTS}
 import com.microsoft.kusto.spark.utils.{KustoClient, KustoClientCache, KustoIngestionUtils, KustoQueryUtils, KustoConstants => KCONST, KustoDataSourceUtils => KDSU}
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.DataFrame
@@ -21,6 +21,8 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.CollectionAccumulator
 import org.json.JSONObject
+import io.github.resilience4j.retry.{Retry, RetryConfig}
+import io.vavr.CheckedFunction0
 
 import java.io._
 import java.net.URI
@@ -40,6 +42,7 @@ object KustoWriter {
   val TempIngestionTablePrefix = "sparkTempTable_"
   val DelayPeriodBetweenCalls: Int = KCONST.DefaultPeriodicSamplePeriod.toMillis.toInt
   val GzipBufferSize: Int = 1000 * KCONST.DefaultBufferSize
+  private val retryConfig = RetryConfig.custom.maxAttempts(MAX_INGEST_RETRY_ATTEMPTS).retryExceptions(classOf[IngestionServiceException]).build
 
   private[kusto] def write(batchId: Option[Long],
                            data: DataFrame,
@@ -56,7 +59,7 @@ object KustoWriter {
     }
 
     val table = tableCoordinates.table.get
-    val tmpTableName: String = KustoQueryUtils.simplifyName(TempIngestionTablePrefix +
+    val tmpTableName = KustoQueryUtils.simplifyName(TempIngestionTablePrefix +
       data.sparkSession.sparkContext.appName +
       "_" + table + batchId.map(b => s"_${b.toString}").getOrElse("") + "_" + writeOptions.requestId)
 
@@ -156,11 +159,11 @@ object KustoWriter {
 
     val tasks = ingestRows(rows, parameters, ingestClient, ingestionProperties, partitionsResults)
 
-    KDSU.logInfo(myName, s"Ingesting from blob - partition: ${TaskContext.getPartitionId()} requestId: '${writeOptions.requestId}' $batchIdForTracing")
+    KDSU.logDebug(myName, s"Ingesting from ${if(tasks.size() == 1) "blob" else tasks.size() +
+      " blobs"} - partition: ${TaskContext.getPartitionId()} requestId: '${writeOptions.requestId}' $batchIdForTracing")
 
     tasks.asScala.foreach(t => try {
       Await.result(t, KCONST.DefaultMaximumIngestionTime)
-      // ALTHOUGH WE SAW THAT THE DM DIDNT EVEN GET THE MESSAGE EVENTUALLY
     } catch {
       case _: TimeoutException => throw new TimeoutAwaitingPendingOperationException(s"Timed out trying to ingest requestId: '${writeOptions.requestId}'")
     })
@@ -246,15 +249,13 @@ object KustoWriter {
         val blobPath = blobUri + sas
         val blobSourceInfo = new BlobSourceInfo(blobPath, size)
 
-        val res: IngestionResult = try {
-          KDSU.logInfo(myName, s"Queued blob for ingestion in partition ${TaskContext.getPartitionId} for requestId: '$requestId}")
+        val retry = Retry.of("Ingest to Kusto", this.retryConfig)
+        val retryExecute: CheckedFunction0[IngestionResult] = Retry.decorateCheckedSupplier(retry, () => {
+          KDSU.logInfo(myName, s"Queued blob for ingestion in partition $partitionId for requestId: '$requestId}")
+          if(partitionId==1) throw new IngestionServiceException("po")
           ingestClient.ingestFromBlob(blobSourceInfo, props)
-        } catch {
-          // Catch only IngestionServiceException cause it can be due to transient storage issue
-          case _: IngestionServiceException =>
-            ingestClient.ingestFromBlob(blobSourceInfo, props)
-        }
-        partitionsResults.add(PartitionResult(res,partitionId))
+        })
+        partitionsResults.add(PartitionResult(retryExecute.apply,partitionId))
       }
     }
 
