@@ -252,7 +252,6 @@ object KustoWriter {
         val retry = Retry.of("Ingest to Kusto", this.retryConfig)
         val retryExecute: CheckedFunction0[IngestionResult] = Retry.decorateCheckedSupplier(retry, () => {
           KDSU.logInfo(myName, s"Queued blob for ingestion in partition $partitionId for requestId: '$requestId}")
-          if(partitionId==1) throw new IngestionServiceException("po")
           ingestClient.ingestFromBlob(blobSourceInfo, props)
         })
         partitionsResults.add(PartitionResult(retryExecute.apply,partitionId))
