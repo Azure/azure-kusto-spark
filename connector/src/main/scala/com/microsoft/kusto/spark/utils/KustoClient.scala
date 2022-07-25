@@ -8,7 +8,7 @@ import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.exceptions.KustoDataExceptionBase
 import com.microsoft.azure.kusto.data.{Client, ClientFactory, ClientRequestProperties, KustoResultSetTable}
 import com.microsoft.azure.kusto.ingest.result.{IngestionStatus, OperationStatus}
-import com.microsoft.azure.kusto.ingest.{IngestClient, IngestClientFactory}
+import com.microsoft.azure.kusto.ingest.{IngestClient, IngestClientFactory, QueuedIngestClient}
 import com.microsoft.azure.storage.StorageException
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
@@ -39,7 +39,7 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
 
   // Reading process does not require ingest client to start working
   lazy val dmClient: Client = ClientFactory.createClient(ingestKcsb)
-  lazy val ingestClient: IngestClient = IngestClientFactory.createClient(ingestKcsb)
+  lazy val ingestClient: QueuedIngestClient = IngestClientFactory.createClient(ingestKcsb)
   private val exportProviderEntryCreator = (c: ContainerAndSas) => new TransientStorageCredentials(c.containerUrl + c.sas)
   private val ingestProviderEntryCreator = (c: ContainerAndSas) => c
   private lazy val ingestContainersContainerProvider = new ContainerProvider[ContainerAndSas](dmClient, clusterAlias,
@@ -88,6 +88,7 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
       engineClient.execute(database, generateTableAlterRetentionPolicy(tmpTableName,
         DurationFormatUtils.formatDuration(writeOptions.autoCleanupTime.toMillis, durationFormat, true),
         recoverable = false), crp)
+
     }
     val instant = Instant.now.plusSeconds(writeOptions.autoCleanupTime.toSeconds)
     engineClient.execute(database, generateTableAlterAutoDeletePolicy(tmpTableName, instant), crp)
