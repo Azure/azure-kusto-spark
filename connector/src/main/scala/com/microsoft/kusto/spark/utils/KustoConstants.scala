@@ -1,5 +1,6 @@
 package com.microsoft.kusto.spark.utils
 
+import java.util.concurrent.TimeUnit
 import scala.concurrent.duration._
 
 object KustoConstants {
@@ -7,7 +8,6 @@ object KustoConstants {
   val DefaultWaitingIntervalLongRunning: String = (2 days).toSeconds.toString
   val DefaultCleaningInterval: String = (7 days).toSeconds.toString
   val DefaultPeriodicSamplePeriod: FiniteDuration = 1 seconds
-  val DefaultIngestionTaskTime: FiniteDuration = 20 seconds
   val NoTimeout: String = (-1 seconds).toSeconds.toString
   val ClientName: String = KustoDataSourceUtils.clientName
   val DefaultBufferSize: Int = 16 * 1024
@@ -25,4 +25,9 @@ object KustoConstants {
   val DefaultBatchingLimit: Int = 100
   val DefaultExtentsCountForSplitMergePerNode: Int = 400
   val DefaultMaxRetriesOnMoveExtents: Int = 10
+  val DefaultExecutionQueueing: Int = TimeUnit.SECONDS.toMillis(15).toInt
+  val DefaultTimeoutQueueing: Int = TimeUnit.SECONDS.toMillis(5).toInt
+  val MAX_INGEST_RETRY_ATTEMPTS = 2
+  val DefaultMaximumIngestionTime: FiniteDuration = FiniteDuration.apply(
+    MAX_INGEST_RETRY_ATTEMPTS * (DefaultExecutionQueueing + DefaultTimeoutQueueing) + 2000,"millis")
 }
