@@ -42,6 +42,12 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
   val cluster: String = System.getProperty(KustoSinkOptions.KUSTO_CLUSTER)
   val database: String = System.getProperty(KustoSinkOptions.KUSTO_DATABASE)
   val table: String = System.getProperty(KustoSinkOptions.KUSTO_TABLE)
+  if (appId == null) {
+    var appIds = System.getenv(KustoSinkOptions.KUSTO_AAD_APP_ID)
+    if (appIds == null) {
+      println("e2e: KustoSinkOptions.KUSTO_AAD_APP_ID null")
+    }
+  }
   if (appKey == null) {
     var secretPath = System.getProperty("SecretPath")
     if (secretPath == null) secretPath = System.getenv("SecretPath")
