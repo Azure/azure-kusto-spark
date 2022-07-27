@@ -16,6 +16,7 @@ import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
 import org.scalatest.{BeforeAndAfterAll, FlatSpec}
 
+import java.nio.file.{Files, Paths}
 import scala.collection.immutable
 
 @RunWith(classOf[JUnitRunner])
@@ -28,14 +29,22 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
 
   private var sc: SparkContext = _
   private var sqlContext: SQLContext = _
-
-  val appId: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_APP_ID)
-  val appKey: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_APP_SECRET)
+  println("e2e: System.getProperties")
+  println(System.getProperties)
+  KDSU.logError("e2es", System.getProperties.toString)
+  var appId: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_APP_ID)
+  var appKey: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_APP_SECRET)
   val authority: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com")
   val cluster: String = System.getProperty(KustoSinkOptions.KUSTO_CLUSTER)
   val database: String = System.getProperty(KustoSinkOptions.KUSTO_DATABASE)
   val table: String = System.getProperty(KustoSinkOptions.KUSTO_TABLE)
-  private val loggingLevel: Option[String] = Option(System.getProperty("logLevel"))
+  if (appKey == null) {
+    val secretPath = System.getProperty("SecretPath")
+    if (secretPath == null) throw new IllegalArgumentException("SecretPath is not set")
+    appKey = Files.readAllLines(Paths.get(secretPath)).get(0)
+  }
+
+  private val loggingLevel = Option(System.getProperty("logLevel"))
   if (loggingLevel.isDefined) KDSU.setLoggingLevel(loggingLevel.get)
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -69,8 +78,9 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
   val rows: immutable.IndexedSeq[(String, Int)] = (1 to expectedNumberOfRows).map(v => (newRow(), v))
   val dfOrig: DataFrame = rows.toDF("name", "value")
 
-  "KustoConnector" should "write to a kusto table and read it back in default mode" taggedAs KustoE2E in {
+  "KustoConnector" should "write to a kusto table and read it back in default mode"  in {
     // Create a new table.
+    KDSU.logInfo("e2e","running KustoConnector");
     val crp = new ClientRequestProperties
     crp.setTimeoutInMilliSec(2000)
     dfOrig.write
