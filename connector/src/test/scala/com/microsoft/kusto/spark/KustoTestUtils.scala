@@ -1,7 +1,5 @@
 package com.microsoft.kusto.spark
 
-import java.security.InvalidParameterException
-import java.util.UUID
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.{Client, ClientFactory}
 import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SparkIngestionProperties}
@@ -9,12 +7,15 @@ import com.microsoft.kusto.spark.datasource.KustoSourceOptions
 import com.microsoft.kusto.spark.sql.extension.SparkExtension.DataFrameReaderExtension
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils => KDSU}
-import org.apache.spark.sql.{Column, DataFrame, SaveMode, SparkSession, functions}
+import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
 
+import java.nio.file.{Files, Paths}
+import java.security.InvalidParameterException
+import java.util.UUID
 import scala.collection.JavaConverters._
 import scala.concurrent.TimeoutException
 
-private [kusto] object KustoTestUtils {
+private[kusto] object KustoTestUtils {
   private val myName = this.getClass.getSimpleName
   private val loggingLevel: Option[String] = Option(System.getProperty("logLevel"))
   if (loggingLevel.isDefined) KDSU.setLoggingLevel(loggingLevel.get)
@@ -81,12 +82,12 @@ private [kusto] object KustoTestUtils {
 
     val table = KustoQueryUtils.simplifyName(s"${prefix}_${UUID.randomUUID()}")
     val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(
-      s"https://${kustoConnectionOptions.Cluster}.kusto.windows.net",
-      kustoConnectionOptions.AppId,
-      kustoConnectionOptions.AppKey,
-      kustoConnectionOptions.Authority)
+      s"https://${kustoConnectionOptions.cluster}.kusto.windows.net",
+      kustoConnectionOptions.appId,
+      kustoConnectionOptions.appKey,
+      kustoConnectionOptions.authority)
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
-    kustoAdminClient.execute(kustoConnectionOptions.Database, generateTempTableCreateCommand(table, targetSchema))
+    kustoAdminClient.execute(kustoConnectionOptions.database, generateTempTableCreateCommand(table, targetSchema))
 
     table
   }
@@ -101,12 +102,12 @@ private [kusto] object KustoTestUtils {
     df.write
       .format("com.microsoft.kusto.spark.datasource")
       .partitionBy("value")
-      .option(KustoSinkOptions.KUSTO_CLUSTER, kustoConnectionOptions.Cluster)
-      .option(KustoSinkOptions.KUSTO_DATABASE, kustoConnectionOptions.Database)
+      .option(KustoSinkOptions.KUSTO_CLUSTER, kustoConnectionOptions.cluster)
+      .option(KustoSinkOptions.KUSTO_DATABASE, kustoConnectionOptions.database)
       .option(KustoSinkOptions.KUSTO_TABLE, table)
-      .option(KustoSinkOptions.KUSTO_AAD_APP_ID, kustoConnectionOptions.AppId)
-      .option(KustoSinkOptions.KUSTO_AAD_APP_SECRET, kustoConnectionOptions.AppKey)
-      .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, kustoConnectionOptions.Authority)
+      .option(KustoSinkOptions.KUSTO_AAD_APP_ID, kustoConnectionOptions.appId)
+      .option(KustoSinkOptions.KUSTO_AAD_APP_SECRET, kustoConnectionOptions.appKey)
+      .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, kustoConnectionOptions.authority)
       .option(KustoSinkOptions.KUSTO_ADJUST_SCHEMA, schemaAdjustmentMode)
       .option(KustoSinkOptions.KUSTO_TIMEOUT_LIMIT, (8 * 60).toString)
       .option(KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON, sparkIngestionProperties.toString)
@@ -122,13 +123,13 @@ private [kusto] object KustoTestUtils {
       throw new InvalidParameterException("Tables cleanup prefix must be set")
 
     val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(
-      s"https://${kustoConnectionOptions.Cluster}.kusto.windows.net",
-      kustoConnectionOptions.AppId,
-      kustoConnectionOptions.AppKey,
-      kustoConnectionOptions.Authority)
+      s"https://${kustoConnectionOptions.cluster}.kusto.windows.net",
+      kustoConnectionOptions.appId,
+      kustoConnectionOptions.appKey,
+      kustoConnectionOptions.authority)
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
 
-    tryDropAllTablesByPrefix(kustoAdminClient, kustoConnectionOptions.Database, tablePrefix)
+    tryDropAllTablesByPrefix(kustoAdminClient, kustoConnectionOptions.database, tablePrefix)
 
   }
 
@@ -138,18 +139,46 @@ private [kusto] object KustoTestUtils {
                           spark: SparkSession) : Boolean = {
 
     val conf = Map[String, String](
-      KustoSourceOptions.KUSTO_AAD_APP_ID -> kustoConnectionOptions.AppId,
-      KustoSourceOptions.KUSTO_AAD_APP_SECRET -> kustoConnectionOptions.AppKey,
-      KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID -> kustoConnectionOptions.Authority
+      KustoSourceOptions.KUSTO_AAD_APP_ID -> kustoConnectionOptions.appId,
+      KustoSourceOptions.KUSTO_AAD_APP_SECRET -> kustoConnectionOptions.appKey,
+      KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID -> kustoConnectionOptions.authority
     )
 
     val tableRows = spark.read
-      .kusto(s"https://${kustoConnectionOptions.Cluster}.kusto.windows.net",
-      kustoConnectionOptions.Database, tableName, conf)
+      .kusto(s"https://${kustoConnectionOptions.cluster}.kusto.windows.net",
+      kustoConnectionOptions.database, tableName, conf)
 
     tableRows.count() == tableRows.intersectAll(expectedRows).count()
 
   }
 
-  case class KustoConnectionOptions(Cluster: String, Database: String, AppId: String, AppKey: String, Authority: String)
+  private def getSystemVariable(key:String) = {
+    var value = System.getenv(key)
+    if (value == null) {
+      value = System.getProperty(key)
+    }
+    value
+  }
+
+  def getSystemTestOptions: KustoConnectionOptions = {
+    var appId: String = KustoTestUtils.getSystemVariable(KustoSinkOptions.KUSTO_AAD_APP_ID)
+    var appKey: String = KustoTestUtils.getSystemVariable(KustoSinkOptions.KUSTO_AAD_APP_SECRET)
+    var authority: String = KustoTestUtils.getSystemVariable(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID)
+    if (authority == null) authority = "microsoft.com"
+    val cluster: String = KustoTestUtils.getSystemVariable(KustoSinkOptions.KUSTO_CLUSTER)
+    val database: String = KustoTestUtils.getSystemVariable(KustoSinkOptions.KUSTO_DATABASE)
+    var table: String = KustoTestUtils.getSystemVariable(KustoSinkOptions.KUSTO_TABLE)
+    if (table == null) {
+      table = "SparkTestTable"
+    }
+    if (appKey == null) {
+      val secretPath = System.getenv("SecretPath")
+      if (secretPath == null) throw new IllegalArgumentException("SecretPath is not set")
+      appKey = Files.readAllLines(Paths.get(secretPath)).get(0)
+    }
+
+    KustoConnectionOptions(cluster, database, appId, appKey, authority)
+  }
+
+  case class KustoConnectionOptions(cluster: String, database: String, appId: String, appKey: String, authority: String)
 }

@@ -2,8 +2,9 @@ package com.microsoft.kusto.spark
 
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
-import com.microsoft.azure.kusto.data.{ClientFactory, ClientRequestProperties}
+import com.microsoft.azure.kusto.data.{Client, ClientFactory, ClientRequestProperties}
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
+import com.microsoft.kusto.spark.KustoTestUtils.KustoConnectionOptions
 import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode}
 import com.microsoft.kusto.spark.datasource.{KustoSourceOptions, ReadMode, TransientStorageCredentials, TransientStorageParameters}
 import com.microsoft.kusto.spark.sql.extension.SparkExtension._
@@ -31,31 +32,24 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
   private var sqlContext: SQLContext = _
   KDSU.logError("System.getProperties", System.getProperties.toString)
   KDSU.logError("System.getenv", System.getenv().toString)
-  var appId: String = System.getenv(KustoSinkOptions.KUSTO_AAD_APP_ID)
-  var appKey: String = System.getenv(KustoSinkOptions.KUSTO_AAD_APP_SECRET)
-  var authority: String = System.getenv(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID)
-  if (authority == null) authority = "microsoft.com"
-  val cluster: String = System.getenv(KustoSinkOptions.KUSTO_CLUSTER)
-  val database: String = System.getenv(KustoSinkOptions.KUSTO_DATABASE)
-  val table: String = System.getenv(KustoSinkOptions.KUSTO_TABLE)
-  if (appKey == null) {
-    val secretPath = System.getenv("SecretPath")
-    if (secretPath == null) throw new IllegalArgumentException("SecretPath is not set")
-    appKey = Files.readAllLines(Paths.get(secretPath)).get(0)
-  }
+  val kustoConnectionOptions: KustoConnectionOptions = KustoTestUtils.getSystemTestOptions
+  val table = KustoQueryUtils.simplifyName(s"KustoSparkReadWriteTest_${UUID.randomUUID()}")
 
   private val loggingLevel = Option(System.getProperty("logLevel"))
+  var kustoAdminClient: Option[Client] = None
   if (loggingLevel.isDefined) KDSU.setLoggingLevel(loggingLevel.get)
   override def beforeAll(): Unit = {
     super.beforeAll()
 
     sc = spark.sparkContext
     sqlContext = spark.sqlContext
-    val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://$cluster.kusto.windows.net", appId, appKey, authority)
-    val kustoAdminClient = ClientFactory.createClient(engineKcsb)
+    val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(
+      s"https://${kustoConnectionOptions.cluster}.kusto.windows.net",
+      kustoConnectionOptions.appId, kustoConnectionOptions.appKey, kustoConnectionOptions.authority)
+    kustoAdminClient = Some(ClientFactory.createClient(engineKcsb))
     try {
-      kustoAdminClient.execute(database, generateAlterIngestionBatchingPolicyCommand(database, "@'{\"MaximumBatchingTimeSpan\":\"00:00:10\", \"MaximumNumberOfItems\": 500, \"MaximumRawDataSizeMB\": 1024}'","database"))
-
+      kustoAdminClient.get.execute(kustoConnectionOptions.database, generateAlterIngestionBatchingPolicyCommand(
+        kustoConnectionOptions.database, "@'{\"MaximumBatchingTimeSpan\":\"00:00:10\", \"MaximumNumberOfItems\": 500, \"MaximumRawDataSizeMB\": 1024}'","database"))
     } catch {
       case _:Exception => // ignore
     }
@@ -85,12 +79,12 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
     crp.setTimeoutInMilliSec(2000)
     dfOrig.write
       .format("com.microsoft.kusto.spark.datasource")
-      .option(KustoSinkOptions.KUSTO_CLUSTER, cluster)
-      .option(KustoSinkOptions.KUSTO_DATABASE, database)
+      .option(KustoSinkOptions.KUSTO_CLUSTER, kustoConnectionOptions.cluster)
+      .option(KustoSinkOptions.KUSTO_DATABASE, kustoConnectionOptions.database)
       .option(KustoSinkOptions.KUSTO_TABLE, table)
-      .option(KustoSinkOptions.KUSTO_AAD_APP_ID, appId)
-      .option(KustoSinkOptions.KUSTO_AAD_APP_SECRET, appKey)
-      .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, authority)
+      .option(KustoSinkOptions.KUSTO_AAD_APP_ID, kustoConnectionOptions.appId)
+      .option(KustoSinkOptions.KUSTO_AAD_APP_SECRET, kustoConnectionOptions.appKey)
+      .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, kustoConnectionOptions.authority)
       .option(KustoSinkOptions.KUSTO_REQUEST_ID, "04ec0408-3cc3_.asd")
       .option(KustoSinkOptions.KUSTO_CLIENT_REQUEST_PROPERTIES_JSON, crp.toString)
       .option(KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS, SinkTableCreationMode.CreateIfNotExist.toString)
@@ -98,11 +92,11 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
       .save()
 
     val conf: Map[String, String] = Map(
-      KustoSinkOptions.KUSTO_AAD_APP_ID -> appId,
-      KustoSinkOptions.KUSTO_AAD_APP_SECRET -> appKey
+      KustoSinkOptions.KUSTO_AAD_APP_ID -> kustoConnectionOptions.appId,
+      KustoSinkOptions.KUSTO_AAD_APP_SECRET -> kustoConnectionOptions.appKey
     )
 
-    val dfResult = spark.read.kusto(cluster, database, table, conf)
+    val dfResult = spark.read.kusto(kustoConnectionOptions.cluster, kustoConnectionOptions.database, table, conf)
 
     val orig = dfOrig.select("name", "value").rdd.map(x => (x.getString(0), x.getInt(1))).collect().sortBy(_._2)
     val result = dfResult.select("name", "value").rdd.map(x => (x.getString(0), x.getInt(1))).collect().sortBy(_._2)
@@ -111,21 +105,20 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
   }
 
   "KustoSource" should "execute a read query on Kusto cluster in single mode" taggedAs KustoE2E in {
-    val table: String = System.getProperty(KustoSinkOptions.KUSTO_TABLE)
     val query: String = System.getProperty(KustoSourceOptions.KUSTO_QUERY, table)
 
     val conf: Map[String, String] = Map(
       KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceSingleMode.toString,
-      KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
-      KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey
+      KustoSourceOptions.KUSTO_AAD_APP_ID -> kustoConnectionOptions.appId,
+      KustoSourceOptions.KUSTO_AAD_APP_SECRET -> kustoConnectionOptions.appKey
     )
 
-    val df = spark.read.kusto(cluster, database, query, conf)
+    val df = spark.read.kusto(kustoConnectionOptions.cluster, kustoConnectionOptions.database, query, conf)
     df.show()
+    val dfres = df.collect()
   }
 
   "KustoSource" should "execute a read query on Kusto cluster in distributed mode" taggedAs KustoE2E in {
-    val table: String = System.getProperty(KustoSinkOptions.KUSTO_TABLE)
     val query: String = System.getProperty(KustoSourceOptions.KUSTO_QUERY, table)
     //    val blobSas: String = System.getProperty("blobSas")
     //  TODO - get sas from DM and set it yourself
@@ -134,42 +127,39 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
     val conf: Map[String, String] = Map(
       //        KustoSourceOptions.KUSTO_TRANSIENT_STORAGE -> storage.toString,
       KustoSourceOptions.KUSTO_USER_PROMPT -> true.toString,
-      KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
-      KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey
+      KustoSourceOptions.KUSTO_AAD_APP_ID -> kustoConnectionOptions.appId,
+      KustoSourceOptions.KUSTO_AAD_APP_SECRET -> kustoConnectionOptions.appKey
     )
 
-    spark.read.kusto(cluster, database, query, conf).show(20)
+    spark.read.kusto(kustoConnectionOptions.cluster, kustoConnectionOptions.database, query, conf).show(20)
   }
 
   "KustoSource" should "read distributed, transient cache change the filter but execute once" taggedAs KustoE2E in {
     import spark.implicits._
     val table = KustoQueryUtils.simplifyName(s"KustoSparkReadWriteTest_${UUID.randomUUID()}")
-    val engineKcsb: ConnectionStringBuilder = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://$cluster" +
-      s".kusto.windows.net", appId, appKey, authority)
-    val kustoAdminClient = ClientFactory.createClient(engineKcsb)
 
     val conf: Map[String, String] = Map(
       KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceDistributedMode.toString,
       KustoSourceOptions.KUSTO_DISTRIBUTED_READ_MODE_TRANSIENT_CACHE -> true.toString,
-      KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
-      KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey,
-      KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID -> authority
+      KustoSourceOptions.KUSTO_AAD_APP_ID -> kustoConnectionOptions.appId,
+      KustoSourceOptions.KUSTO_AAD_APP_SECRET -> kustoConnectionOptions.appKey,
+      KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID -> kustoConnectionOptions.authority
     )
 
     // write
     dfOrig.write
       .format("com.microsoft.kusto.spark.datasource")
-      .option(KustoSinkOptions.KUSTO_CLUSTER, cluster)
-      .option(KustoSinkOptions.KUSTO_DATABASE, database)
+      .option(KustoSinkOptions.KUSTO_CLUSTER, kustoConnectionOptions.cluster)
+      .option(KustoSinkOptions.KUSTO_DATABASE, kustoConnectionOptions.database)
       .option(KustoSinkOptions.KUSTO_TABLE, table)
-      .option(KustoSinkOptions.KUSTO_AAD_APP_ID, appId)
-      .option(KustoSinkOptions.KUSTO_AAD_APP_SECRET, appKey)
-      .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, authority)
+      .option(KustoSinkOptions.KUSTO_AAD_APP_ID, kustoConnectionOptions.appId)
+      .option(KustoSinkOptions.KUSTO_AAD_APP_SECRET, kustoConnectionOptions.appKey)
+      .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, kustoConnectionOptions.authority)
       .option(KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS, SinkTableCreationMode.CreateIfNotExist.toString)
       .mode(SaveMode.Append)
       .save()
 
-    val df = spark.read.kusto(cluster, database, table, conf)
+    val df = spark.read.kusto(kustoConnectionOptions.cluster, kustoConnectionOptions.database, table, conf)
 
     val time = new DateTime()
     assert(df.count() == expectedNumberOfRows)
@@ -180,7 +170,7 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
 
     // Should take up to another 10 seconds for .show commands to come up
     Thread.sleep(5000 * 60)
-    val res3 = kustoAdminClient.execute(
+    val res3 = kustoAdminClient.get.execute(
       s""".show commands | where StartedOn > datetime(${time.toString()})  | where
                                         CommandType ==
       "DataExportToFile" | where Text has "$table"""")
