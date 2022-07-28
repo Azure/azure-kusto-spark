@@ -7,7 +7,6 @@ import com.microsoft.kusto.spark.common.{KustoCoordinates, KustoDebugOptions}
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
 import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SchemaAdjustmentMode, SinkTableCreationMode, WriteMode, WriteOptions}
 import com.microsoft.kusto.spark.datasource.ReadMode.ReadMode
-import com.microsoft.kusto.spark.datasource._
 import com.microsoft.kusto.spark.exceptions.{FailedOperationException, TimeoutAwaitingPendingOperationException}
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.KustoConstants.{DefaultBatchingLimit, DefaultExtentsCountForSplitMergePerNode, DefaultMaxRetriesOnMoveExtents}
@@ -328,12 +327,18 @@ object KustoDataSourceUtils {
       throw new InvalidParameterException("KUSTO_TABLE parameter is missing. Must provide a destination table name")
     }
 
+    val tempTableLog = if (writeOptions.userTempTableName.isDefined) {
+      s", userTempTableName: ${userTempTableName.get}"
+    } else {
+      ""
+    }
+
     logInfo("parseSinkParameters", s"Parsed write options for sink: {'timeout': '${writeOptions.timeout}, 'async': ${writeOptions.isAsync}, " +
       s"'tableCreationMode': ${writeOptions.tableCreateOptions}, 'writeLimit': ${writeOptions.writeResultLimit}, 'batchLimit': ${writeOptions.batchLimit}" +
       s", 'timeout': ${writeOptions.timeout}, 'timezone': ${writeOptions.timeZone}, " +
       s"'ingestionProperties': $ingestionPropertiesAsJson, 'requestId': '${sourceParameters.requestId}', 'pollingOnDriver': ${writeOptions.pollingOnDriver}," +
       s"'maxRetriesOnMoveExtents':$maxRetriesOnMoveExtents, 'minimalExtentsCountForSplitMergePerNode':$minimalExtentsCountForSplitMergePerNode, " +
-      s"'adjustSchema': $adjustSchema, 'autoCleanupTime': $autoCleanupTime}")
+      s"'adjustSchema': $adjustSchema, 'autoCleanupTime': $autoCleanupTime${tempTableLog}")
 
     SinkParameters(writeOptions, sourceParameters)
   }

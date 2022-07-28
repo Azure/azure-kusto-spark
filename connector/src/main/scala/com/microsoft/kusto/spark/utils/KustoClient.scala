@@ -4,12 +4,14 @@ import java.net.SocketTimeoutException
 import java.time.Instant
 import java.util.StringJoiner
 import java.util.concurrent.TimeUnit
+
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.exceptions.KustoDataExceptionBase
 import com.microsoft.azure.kusto.data.{Client, ClientFactory, ClientRequestProperties, KustoResultSetTable}
 import com.microsoft.azure.kusto.ingest.result.{IngestionStatus, OperationStatus}
-import com.microsoft.azure.kusto.ingest.{IngestClient, IngestClientFactory, QueuedIngestClient}
+import com.microsoft.azure.kusto.ingest.{ IngestClientFactory, QueuedIngestClient}
 import com.microsoft.azure.storage.StorageException
+import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.KustoWriter.DelayPeriodBetweenCalls
 import com.microsoft.kusto.spark.datasink.{PartitionResult, SinkTableCreationMode, SparkIngestionProperties, WriteOptions}
