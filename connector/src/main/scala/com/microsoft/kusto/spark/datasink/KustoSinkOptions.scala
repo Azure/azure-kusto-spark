@@ -96,5 +96,5 @@ case class WriteOptions(pollingOnDriver:Boolean = true,
                         minimalExtentsCountForSplitMerge: Int = 400,
                         adjustSchema: SchemaAdjustmentMode.SchemaAdjustmentMode = SchemaAdjustmentMode.NoAdjustment,
                         isTransactionalMode: Boolean = false,
-                        tempTableName: Option[String] = None)
+                        userTempTableName: Option[String] = None)
 

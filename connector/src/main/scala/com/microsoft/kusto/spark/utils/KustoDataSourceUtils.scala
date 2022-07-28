@@ -282,8 +282,8 @@ object KustoDataSourceUtils {
       case _: NoSuchElementException => throw new InvalidParameterException(s"No such WriteMode option: '${writeModeParam.get}'")
     }
 
-    val tempTableName = parameters.get(KustoSinkOptions.KUSTO_TEMP_TABLE_NAME)
-    if (tempTableName.isDefined && tableCreation == SinkTableCreationMode.CreateIfNotExist || !isTransactionalMode) {
+    val userTempTableName = parameters.get(KustoSinkOptions.KUSTO_TEMP_TABLE_NAME)
+    if (userTempTableName.isDefined && tableCreation == SinkTableCreationMode.CreateIfNotExist || !isTransactionalMode) {
       throw new InvalidParameterException("tempTableName can't be used with CreateIfNotExist or Queued write mode.")
     }
     isAsync = parameters.getOrElse(KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC, "false").trim.toBoolean
@@ -307,9 +307,6 @@ object KustoDataSourceUtils {
     val ingestionPropertiesAsJson = parameters.get(KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON)
 
     val sourceParameters = parseSourceParameters(parameters, allowProxy = false)
-    if (sourceParameters.kustoCoordinates.table.isEmpty) {
-      throw new InvalidParameterException("Table name not specified")
-    }
 
     val writeOptions = WriteOptions(
       pollingOnDriver,
@@ -326,7 +323,7 @@ object KustoDataSourceUtils {
       minimalExtentsCountForSplitMergePerNode,
       adjustSchema,
       isTransactionalMode,
-      tempTableName
+      userTempTableName
     )
 
     if (sourceParameters.kustoCoordinates.table.isEmpty) {

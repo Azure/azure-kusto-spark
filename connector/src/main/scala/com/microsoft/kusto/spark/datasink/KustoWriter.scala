@@ -47,7 +47,7 @@ object KustoWriter {
     val kustoClient = KustoClientCache.getClient(tableCoordinates.clusterAlias, tableCoordinates.clusterUrl, authentication)
 
     val table = tableCoordinates.table.get
-    val tmpTableName: String = if (writeOptions.tempTableName.isDefined) writeOptions.tempTableName.get else
+    val tmpTableName: String = if (writeOptions.userTempTableName.isDefined) writeOptions.userTempTableName.get else
       KustoQueryUtils.simplifyName(TempIngestionTablePrefix +
         data.sparkSession.sparkContext.appName +
         "_" + table + batchId.map(b => s"_${b.toString}").getOrElse("") + "_" + writeOptions.requestId)
@@ -86,7 +86,7 @@ object KustoWriter {
     if (!shouldIngest) {
       KDSU.logInfo(myName, s"$IngestSkippedTrace '$table'")
     } else {
-      if (writeOptions.tempTableName.isDefined) {
+      if (writeOptions.userTempTableName.isDefined) {
         if (kustoClient.engineClient.execute(tableCoordinates.database,
           generateTableGetSchemaAsRowsCommand(tableCoordinates.table.get), crp).getPrimaryResults.count() <= 0 ||
           !tableExists) {
@@ -121,9 +121,12 @@ object KustoWriter {
           }
           asyncWork.onFailure {
             case exception: Exception =>
-              kustoClient.cleanupIngestionByProducts(
-                tableCoordinates.database, kustoClient.engineClient, tmpTableName, crp)
-              KDSU.reportExceptionAndThrow(myName, exception, "writing data", tableCoordinates.clusterUrl, tableCoordinates.database, table, shouldNotThrow = true)
+              if (writeOptions.userTempTableName.isEmpty) {
+                kustoClient.cleanupIngestionByProducts(
+                  tableCoordinates.database, kustoClient.engineClient, tmpTableName, crp)
+              }
+              KDSU.reportExceptionAndThrow(myName, exception, "writing data", tableCoordinates.clusterUrl,
+                tableCoordinates.database, table, shouldNotThrow = true)
               KDSU.logError(myName, "The exception is not visible in the driver since we're in async mode")
           }
         }
@@ -137,7 +140,7 @@ object KustoWriter {
             throw exception
           }
         }
-        if (writeOptions.isTransactionalMode) {
+        if (writeOptions.isTransactionalMode && writeOptions.userTempTableName.isEmpty) {
           kustoClient.finalizeIngestionWhenWorkersSucceeded(
             tableCoordinates, batchIdIfExists, kustoClient.engineClient, tmpTableName, partitionsResults, writeOptions,
             crp, tableExists, rdd.sparkContext, authentication)
