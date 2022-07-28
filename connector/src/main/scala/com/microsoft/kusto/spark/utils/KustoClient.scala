@@ -8,11 +8,10 @@ import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.exceptions.KustoDataExceptionBase
 import com.microsoft.azure.kusto.data.{Client, ClientFactory, ClientRequestProperties, KustoResultSetTable}
 import com.microsoft.azure.kusto.ingest.result.{IngestionStatus, OperationStatus}
-import com.microsoft.azure.kusto.ingest.{IngestClient, IngestClientFactory}
+import com.microsoft.azure.kusto.ingest.{IngestClient, IngestClientFactory, QueuedIngestClient}
 import com.microsoft.azure.storage.StorageException
-import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
-import com.microsoft.kusto.spark.datasink.KustoWriter.{DelayPeriodBetweenCalls, myName}
+import com.microsoft.kusto.spark.datasink.KustoWriter.DelayPeriodBetweenCalls
 import com.microsoft.kusto.spark.datasink.{PartitionResult, SinkTableCreationMode, SparkIngestionProperties, WriteOptions}
 import com.microsoft.kusto.spark.datasource.{TransientStorageCredentials, TransientStorageParameters}
 import com.microsoft.kusto.spark.exceptions.{FailedOperationException, RetriesExhaustedException}
@@ -39,7 +38,7 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
 
   // Reading process does not require ingest client to start working
   lazy val dmClient: Client = ClientFactory.createClient(ingestKcsb)
-  lazy val ingestClient: IngestClient = IngestClientFactory.createClient(ingestKcsb)
+  lazy val ingestClient: QueuedIngestClient = IngestClientFactory.createClient(ingestKcsb)
   private val exportProviderEntryCreator = (c: ContainerAndSas) => new TransientStorageCredentials(c.containerUrl + c.sas)
   private val ingestProviderEntryCreator = (c: ContainerAndSas) => c
   private lazy val ingestContainersContainerProvider = new ContainerProvider[ContainerAndSas](dmClient, clusterAlias,
@@ -177,9 +176,9 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
     isDestinationTableMaterializedViewSourceResult.next()
     val isDestinationTableMaterializedViewSource: Boolean = isDestinationTableMaterializedViewSourceResult.getLong(0) > 0
     if (isDestinationTableMaterializedViewSource){
-      val res = engineClient.execute(database, generateIsTableEngineV3(targetTable), crp)
+      val res = engineClient.execute(database, generateIsTableEngineV3(targetTable), crp).getPrimaryResults
       res.next()
-      res.getPrimaryResults.getBoolean(0)
+      res.getBoolean(0)
     } else {
       false
     }

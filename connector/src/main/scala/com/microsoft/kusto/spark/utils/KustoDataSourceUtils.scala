@@ -265,7 +265,6 @@ object KustoDataSourceUtils {
     var isAsync: Boolean = false
     var isTransactionalMode: Boolean = false
     var writeModeParam: Option[String] = None
-    var pollingOnDriver: Boolean = true
     var batchLimit: Int = 0
     var minimalExtentsCountForSplitMergePerNode: Int = 0
     var maxRetriesOnMoveExtents: Int = 0
@@ -281,13 +280,12 @@ object KustoDataSourceUtils {
     } catch {
       case _: NoSuchElementException => throw new InvalidParameterException(s"No such WriteMode option: '${writeModeParam.get}'")
     }
-
     val userTempTableName = parameters.get(KustoSinkOptions.KUSTO_TEMP_TABLE_NAME)
     if (userTempTableName.isDefined && tableCreation == SinkTableCreationMode.CreateIfNotExist || !isTransactionalMode) {
       throw new InvalidParameterException("tempTableName can't be used with CreateIfNotExist or Queued write mode.")
     }
     isAsync = parameters.getOrElse(KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC, "false").trim.toBoolean
-    pollingOnDriver = parameters.getOrElse(KustoSinkOptions.KUSTO_POLLING_ON_DRIVER, "true").trim.toBoolean
+    val pollingOnDriver = parameters.getOrElse(KustoSinkOptions.KUSTO_POLLING_ON_DRIVER, "true").trim.toBoolean
 
     batchLimit = parameters.getOrElse(KustoSinkOptions.KUSTO_CLIENT_BATCHING_LIMIT, DefaultBatchingLimit.toString)
       .trim.toInt
