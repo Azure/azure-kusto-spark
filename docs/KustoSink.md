@@ -59,8 +59,8 @@ that is using it. Please verify the following first:
  **Authentication Parameters** can be found here - [AAD Application Authentication](Authentication.md). 
  
  **Optional Parameters:** 
-* **POLLING_ON_DRIVER**:
-'pollingOnDriver' - If set to false Kusto Spark will create a new job for the final two ingestion steps done after processing the data, so that the write operation doesn't seem to 'hang' on the Spark UI. 
+* **KUSTO_POLLING_ON_DRIVER**:
+'pollingOnDriver' - If set to false (default) Kusto Spark will create a new job for the final two ingestion steps done after processing the data, so that the write operation doesn't seem to 'hang' on the Spark UI. 
 It's recommended to set this flag to true in production scenarios, so that the worker node doesn't occupy a core while completing the final ingestion steps.
 
  * **KUSTO_TABLE_CREATE_OPTIONS**: 

@@ -180,9 +180,9 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
     isDestinationTableMaterializedViewSourceResult.next()
     val isDestinationTableMaterializedViewSource: Boolean = isDestinationTableMaterializedViewSourceResult.getLong(0) > 0
     if (isDestinationTableMaterializedViewSource){
-      val res = engineClient.execute(database, generateIsTableEngineV3(targetTable), crp)
+      val res = engineClient.execute(database, generateIsTableEngineV3(targetTable), crp).getPrimaryResults
       res.next()
-      res.getPrimaryResults.getBoolean(0)
+      res.getBoolean(0)
     } else {
       false
     }
