@@ -54,7 +54,16 @@ object KustoSinkOptions extends KustoOptions{
   // after which it will move the data to the destination table (the last part is a metadata operation only)
   // If set to 'Queued' the write operation finishes after data is processed by the workers, the data may not be completely
   // available up until the service finishes loading it and failures on the service side will not propagate to Spark.
-  val KUSTO_TRANSACTIONAL_NODE: String = newOption("writeMode")
+  val KUSTO_WRITE_MODE: String = newOption("writeMode")
+
+  // Provided temporary table name that will be used for this write operation to achieve transactional write and move
+  // data to destination table on success. Table is expected to be existed and unique per run (as we delete the table
+  // at the end of the process and therefore should be per write operation). In case of success - the table will be
+  // deleted, in case of failure its up to the user to delete. It is most recommended to alter the table auto-delete
+  // policy so as to not get stuck with 'ghost' tables -
+  // https://docs.microsoft.com/azure/data-explorer/kusto/management/auto-delete-policy
+  // Use this option if you want to persist partial write results (as the failure could be of a single partition)
+  val KUSTO_TEMP_TABLE_NAME: String = newOption("tempTableName")
 }
 
 
@@ -86,5 +95,6 @@ case class WriteOptions(pollingOnDriver:Boolean = true,
                         maxRetriesOnMoveExtents: Int = 10,
                         minimalExtentsCountForSplitMerge: Int = 400,
                         adjustSchema: SchemaAdjustmentMode.SchemaAdjustmentMode = SchemaAdjustmentMode.NoAdjustment,
-                        isTransactionalMode: Boolean = false)
+                        isTransactionalMode: Boolean = false,
+                        tempTableName: Option[String] = None)
 

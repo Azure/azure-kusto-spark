@@ -47,13 +47,15 @@ object KustoWriter {
     val kustoClient = KustoClientCache.getClient(tableCoordinates.clusterAlias, tableCoordinates.clusterUrl, authentication)
 
     val table = tableCoordinates.table.get
-    val tmpTableName: String = KustoQueryUtils.simplifyName(TempIngestionTablePrefix +
-      data.sparkSession.sparkContext.appName +
-      "_" + table + batchId.map(b => s"_${b.toString}").getOrElse("") + "_" + writeOptions.requestId)
+    val tmpTableName: String = if (writeOptions.tempTableName.isDefined) writeOptions.tempTableName.get else
+      KustoQueryUtils.simplifyName(TempIngestionTablePrefix +
+        data.sparkSession.sparkContext.appName +
+        "_" + table + batchId.map(b => s"_${b.toString}").getOrElse("") + "_" + writeOptions.requestId)
 
     val stagingTableIngestionProperties = getSparkIngestionProperties(writeOptions)
     val schemaShowCommandResult = kustoClient.engineClient.execute(tableCoordinates.database,
       generateTableGetSchemaAsRowsCommand(tableCoordinates.table.get), crp).getPrimaryResults
+
     val targetSchema = schemaShowCommandResult.getData.asScala.map(c => c.get(0).asInstanceOf[JSONObject]).toArray
     KustoIngestionUtils.adjustSchema(writeOptions.adjustSchema, data.schema, targetSchema, stagingTableIngestionProperties)
 
@@ -84,10 +86,19 @@ object KustoWriter {
     if (!shouldIngest) {
       KDSU.logInfo(myName, s"$IngestSkippedTrace '$table'")
     } else {
-      // KustoWriter will create a temporary table ingesting the data to it.
-      // Only if all executors succeeded the table will be appended to the original destination table.
-      kustoClient.initializeTablesBySchema(tableCoordinates, tmpTableName, data.schema, targetSchema, writeOptions,
-        crp, stagingTableIngestionProperties.creationTime == null, writeOptions.isTransactionalMode)
+      if (writeOptions.tempTableName.isDefined) {
+        if (kustoClient.engineClient.execute(tableCoordinates.database,
+          generateTableGetSchemaAsRowsCommand(tableCoordinates.table.get), crp).getPrimaryResults.count() <= 0 ||
+          !tableExists) {
+          throw new InvalidParameterException("Temp table name provided but the table does not exist. Either drop this " +
+            "option or create the table beforehand.")
+        }
+      } else {
+        // KustoWriter will create a temporary table ingesting the data to it.
+        // Only if all executors succeeded the table will be appended to the original destination table.
+        kustoClient.initializeTablesBySchema(tableCoordinates, tmpTableName, data.schema, targetSchema, writeOptions,
+          crp, stagingTableIngestionProperties.creationTime == null, writeOptions.isTransactionalMode)
+      }
 
       kustoClient.setMappingOnStagingTableIfNeeded(stagingTableIngestionProperties, tableCoordinates.database, tmpTableName, table, crp)
 
@@ -159,16 +170,20 @@ object KustoWriter {
       ingestionProperties.setReportLevel(IngestionProperties.IngestionReportLevel.FAILURES_AND_SUCCESSES)
     }
 
-    ingestionProperties.setDataFormat(DataFormat.CSV.name)
-    val tasks = ingestRows(rows, parameters, ingestClient, ingestionProperties, partitionsResults)
+    try {
+      ingestionProperties.setDataFormat(DataFormat.CSV.name)
+      val tasks = ingestRows(rows, parameters, ingestClient, ingestionProperties, partitionsResults)
 
-    KDSU.logInfo(myName, s"Ingesting from blob - partition: ${TaskContext.getPartitionId()} requestId: '${writeOptions.requestId}' $batchIdForTracing")
+      KDSU.logInfo(myName, s"Ingesting from blob - partition: ${TaskContext.getPartitionId()} requestId: '${writeOptions.requestId}' $batchIdForTracing")
 
-    tasks.asScala.foreach(t => try {
-      Await.result(t, KCONST.DefaultIngestionTaskTime)
+      tasks.asScala.foreach(t => try {
+        Await.result(t, KCONST.DefaultIngestionTaskTime)
+      } catch {
+        case _: TimeoutException => KDSU.logWarn(myName, s"Timed out trying to ingest requestId: '${writeOptions.requestId}', no need to fail as the ingest might succeed")
+      })
     } catch {
-      case _: TimeoutException => KDSU.logWarn(myName, s"Timed out trying to ingest requestId: '${writeOptions.requestId}', no need to fail as the ingest might succeed")
-    })
+      case e: Exception => if(writeOptions.isTransactionalMode) throw e
+    }
   }
 
   private def getIngestionProperties(writeOptions: WriteOptions, database: String, tableName: String): IngestionProperties = {

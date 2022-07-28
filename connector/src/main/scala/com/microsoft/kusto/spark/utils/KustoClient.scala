@@ -91,10 +91,10 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
           DurationFormatUtils.formatDuration(writeOptions.autoCleanupTime.toMillis, durationFormat, true),
           recoverable = false), crp)
       }
+
       val instant = Instant.now.plusSeconds(writeOptions.autoCleanupTime.toSeconds)
       engineClient.execute(database, generateTableAlterAutoDeletePolicy(tmpTableName, instant), crp)
       KDSU.logInfo(myName, s"Successfully created temporary table $tmpTableName, will be deleted after completing the operation")
-
     }
   }
 

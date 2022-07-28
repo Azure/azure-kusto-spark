@@ -276,12 +276,16 @@ object KustoDataSourceUtils {
       case _: NoSuchElementException => throw new InvalidParameterException(s"No such SinkTableCreationMode option: '${tableCreationParam.get}'")
     }
     try {
-      writeModeParam = parameters.get(KustoSinkOptions.KUSTO_TRANSACTIONAL_NODE)
+      writeModeParam = parameters.get(KustoSinkOptions.KUSTO_WRITE_MODE)
       isTransactionalMode = if (writeModeParam.isEmpty) true else WriteMode.withName(writeModeParam.get) == WriteMode.Transactional
     } catch {
       case _: NoSuchElementException => throw new InvalidParameterException(s"No such WriteMode option: '${writeModeParam.get}'")
     }
 
+    val tempTableName = parameters.get(KustoSinkOptions.KUSTO_TEMP_TABLE_NAME)
+    if (tempTableName.isDefined && tableCreation == SinkTableCreationMode.CreateIfNotExist || !isTransactionalMode) {
+      throw new InvalidParameterException("tempTableName can't be used with CreateIfNotExist or Queued write mode.")
+    }
     isAsync = parameters.getOrElse(KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC, "false").trim.toBoolean
     pollingOnDriver = parameters.getOrElse(KustoSinkOptions.KUSTO_POLLING_ON_DRIVER, "true").trim.toBoolean
 
@@ -321,7 +325,8 @@ object KustoDataSourceUtils {
       maxRetriesOnMoveExtents,
       minimalExtentsCountForSplitMergePerNode,
       adjustSchema,
-      isTransactionalMode
+      isTransactionalMode,
+      tempTableName
     )
 
     if (sourceParameters.kustoCoordinates.table.isEmpty) {
@@ -479,7 +484,7 @@ object KustoDataSourceUtils {
         Some(client.execute(database, operationsShowCommand).getPrimaryResults)
       }
       catch {
-        case e: DataServiceException => {
+        case e: DataServiceException =>
           if (e.isPermanent) {
             val message = s"Couldn't monitor the progress of the $doingWhat operation from the service, you may track" +
               s" it using the command '$operationsShowCommand'."
@@ -488,7 +493,6 @@ object KustoDataSourceUtils {
           }
           logWarn("verifyAsyncCommandCompletion", "Failed transiently to retrieve export status, trying again in a few seconds")
           None
-        }
         case _: DataClientException => None
       }
     }
