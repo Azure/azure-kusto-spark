@@ -363,7 +363,8 @@ class KustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcsb: Conne
 
           if (partitionsResults.value.size > 0) {
             val moveOperation = (_: Int) => {
-              val client = KustoClientCache.getClient(coordinates.clusterAlias, coordinates.clusterUrl, authentication)
+              val client = KustoClientCache.getClient(coordinates.clusterUrl, authentication, coordinates.ingestionUrl,
+                coordinates.clusterAlias)
               client.engineClient.execute(coordinates.database, generateTableAlterMergePolicyCommand(tmpTableName,
                 allowMerge = false,
                 allowRebuild = false), crp)
