@@ -49,7 +49,8 @@ trait KustoOptions {
   val KUSTO_TOKEN_PROVIDER_CALLBACK_CLASSPATH: String = newOption("tokenProviderCallbackClasspath")
 
   /** Optional parameters */
-  // Kusto ingestion cluster URL for reading data - provide this if ingestion URL cannot be deduced from adding
+  // it merge origin/aKusto ingestion cluster URL for reading data - provide this if ingestion URL cannot be deduced
+  // from adding
   // "ingest-" prefix to the KUSTO_CLUSTER provided. i.e when using proxies.
   val KUSTO_INGESTION_URI: String = newOption("kustoIngestionUri")
 

@@ -10,6 +10,10 @@ object KustoSinkOptions extends KustoOptions{
   val KUSTO_TABLE: String = newOption("kustoTable")
 
   /** Optional options */
+  // IMPORTANT: If set to false -> polling will not block on worker node and will be executed on a driver pool thread
+  // 'true' is recommended for production.
+  val KUSTO_POLLING_ON_DRIVER: String = newOption("pollingOnDriver")
+
   // If set to 'FailIfNotExist', the operation will fail if the table is not found
   // in the requested cluster and database.
   // If set to 'CreateIfNotExist' and the table is not found in the requested cluster and database,
@@ -57,12 +61,13 @@ object SchemaAdjustmentMode extends Enumeration {
   val NoAdjustment, FailIfNotMatch, GenerateDynamicCsvMapping = Value
 }
 
-case class WriteOptions(tableCreateOptions: SinkTableCreationMode.SinkTableCreationMode = SinkTableCreationMode.FailIfNotExist,
+case class WriteOptions(pollingOnDriver:Boolean = true,
+                        tableCreateOptions: SinkTableCreationMode.SinkTableCreationMode = SinkTableCreationMode.FailIfNotExist,
                         isAsync: Boolean = false,
                         writeResultLimit: String = KustoSinkOptions.NONE_RESULT_LIMIT,
                         timeZone: String = "UTC",
                         timeout: FiniteDuration,
-                        IngestionProperties: Option[String] = None,
+                        ingestionProperties: Option[String] = None,
                         batchLimit: Int = 100,
                         requestId: String = UUID.randomUUID().toString,
                         autoCleanupTime: FiniteDuration,

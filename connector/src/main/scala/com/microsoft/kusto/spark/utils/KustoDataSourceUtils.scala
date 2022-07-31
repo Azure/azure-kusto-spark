@@ -1,39 +1,34 @@
 package com.microsoft.kusto.spark.utils
 
-import java.io.InputStream
-import java.net.URI
-import java.security.InvalidParameterException
-import java.util
-import java.util.Properties
-import java.util.concurrent.{Callable, CountDownLatch, TimeUnit, TimeoutException}
-import java.util.{NoSuchElementException, StringJoiner, Timer, TimerTask, UUID}
-import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties, KustoResultSetTable}
 import com.microsoft.azure.kusto.data.exceptions.{DataClientException, DataServiceException}
+import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties, KustoResultSetTable}
 import com.microsoft.kusto.spark.authentication._
 import com.microsoft.kusto.spark.common.{KustoCoordinates, KustoDebugOptions}
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
 import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SchemaAdjustmentMode, SinkTableCreationMode, WriteOptions}
 import com.microsoft.kusto.spark.datasource.ReadMode.ReadMode
-import com.microsoft.kusto.spark.datasource.{
-  KustoReadOptions, KustoResponseDeserializer, KustoSchema,
-  KustoSourceOptions, PartitionOptions, ReadMode, TransientStorageCredentials, TransientStorageParameters
-}
+import com.microsoft.kusto.spark.datasource._
 import com.microsoft.kusto.spark.exceptions.{FailedOperationException, TimeoutAwaitingPendingOperationException}
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
-import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
-import org.apache.commons.lang3.exception.ExceptionUtils
-import org.apache.log4j.{Level, Logger}
-import org.apache.spark.sql.{SQLContext, SaveMode}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import com.microsoft.kusto.spark.utils.KustoConstants.{DefaultBatchingLimit, DefaultExtentsCountForSplitMergePerNode, DefaultMaxRetriesOnMoveExtents}
-
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.{Await, Future}
-import scala.concurrent.duration._
-import scala.util.matching.Regex
+import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
 import org.apache.commons.lang3.StringUtils
+import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.http.client.utils.URIBuilder
+import org.apache.log4j.{Level, Logger}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.{SQLContext, SaveMode}
 import org.json.JSONObject
+
+import java.io.InputStream
+import java.net.URI
+import java.security.InvalidParameterException
+import java.util
+import java.util.concurrent.{Callable, CountDownLatch, TimeUnit}
+import java.util.{NoSuchElementException, Properties, StringJoiner, Timer, TimerTask, UUID}
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration._
+import scala.concurrent.{Await, Future}
 
 object KustoDataSourceUtils {
 
@@ -269,12 +264,14 @@ object KustoDataSourceUtils {
     var tableCreationParam: Option[String] = None
     var isAsync: Boolean = false
     var isAsyncParam: String = ""
+    var pollingOnDriver: Boolean = true
     var batchLimit: Int = 0
     var minimalExtentsCountForSplitMergePerNode: Int = 0
     var maxRetriesOnMoveExtents: Int = 0
     try {
       isAsyncParam = parameters.getOrElse(KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC, "false")
       isAsync = parameters.getOrElse(KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC, "false").trim.toBoolean
+      pollingOnDriver = parameters.getOrElse(KustoSinkOptions.KUSTO_POLLING_ON_DRIVER, "true").trim.toBoolean
       tableCreationParam = parameters.get(KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS)
       tableCreation = if (tableCreationParam.isEmpty) SinkTableCreationMode.FailIfNotExist else SinkTableCreationMode.withName(tableCreationParam.get)
       batchLimit = parameters.getOrElse(KustoSinkOptions.KUSTO_CLIENT_BATCHING_LIMIT, DefaultBatchingLimit.toString)
@@ -301,6 +298,7 @@ object KustoDataSourceUtils {
     val sourceParameters = parseSourceParameters(parameters, allowProxy = false)
 
     val writeOptions = WriteOptions(
+      pollingOnDriver,
       tableCreation,
       isAsync,
       parameters.getOrElse(KustoSinkOptions.KUSTO_WRITE_RESULT_LIMIT, "1"),
@@ -319,10 +317,12 @@ object KustoDataSourceUtils {
       throw new InvalidParameterException("KUSTO_TABLE parameter is missing. Must provide a destination table name")
     }
 
-    logInfo("parseSinkParameters", s"Parsed write options for sink: {'timeout': ${writeOptions.timeout}, 'async': ${writeOptions.isAsync}, " +
+    logInfo("parseSinkParameters", s"Parsed write options for sink: {'timeout': '${writeOptions.timeout}, 'async': ${writeOptions.isAsync}, " +
       s"'tableCreationMode': ${writeOptions.tableCreateOptions}, 'writeLimit': ${writeOptions.writeResultLimit}, 'batchLimit': ${writeOptions.batchLimit}" +
       s", 'timeout': ${writeOptions.timeout}, 'timezone': ${writeOptions.timeZone}, " +
-      s"'ingestionProperties': $ingestionPropertiesAsJson, requestId: ${sourceParameters.requestId}}")
+      s"'ingestionProperties': $ingestionPropertiesAsJson, 'requestId': '${sourceParameters.requestId}', 'pollingOnDriver': ${writeOptions.pollingOnDriver}," +
+      s"'maxRetriesOnMoveExtents':$maxRetriesOnMoveExtents, 'minimalExtentsCountForSplitMergePerNode':$minimalExtentsCountForSplitMergePerNode, " +
+      s"'adjustSchema': $adjustSchema, 'autoCleanupTime': $autoCleanupTime}")
 
     SinkParameters(writeOptions, sourceParameters)
   }
@@ -406,20 +406,17 @@ object KustoDataSourceUtils {
    * A function to run sequentially async work on TimerTask using a Timer.
    * The function passed is scheduled sequentially by the timer, until last calculated returned value by func does not
    * satisfy the condition of doWhile or a given number of times has passed.
-   * After either this condition was satisfied or the 'numberOfTimesToRun' has passed (This can be avoided by setting
-   * numberOfTimesToRun to a value less than 0), the finalWork function is called over the last returned value by func.
+   * After this condition was satisfied, the finalWork function is called over the last returned value by func.
    * Returns a CountDownLatch object used to count down iterations and await on it synchronously if needed
    *
    * @param func             - the function to run
    * @param delayBeforeStart - delay before first job
    * @param delayBeforeEach  - delay between jobs
-   * @param timesToRun       - stop jobs after numberOfTimesToRun.
-   *                         set negative value to run infinitely
    * @param stopCondition    - stop jobs if condition holds for the func.apply output
    * @param finalWork        - do final work with the last func.apply output
    */
-  def doWhile[A](func: () => A, delayBeforeStart: Long, delayBeforeEach: Int, timesToRun: Int, stopCondition: A => Boolean, finalWork: A => Unit, maxWaitTimeBetweenCalls: Int): CountDownLatch = {
-    val latch = new CountDownLatch(if (timesToRun > 0) timesToRun else 1)
+  def doWhile[A](func: () => A, delayBeforeStart: Long, delayBeforeEach: Int, stopCondition: A => Boolean, finalWork: A => Unit, maxWaitTimeBetweenCalls: Int): CountDownLatch = {
+    val latch = new CountDownLatch(1)
     val t = new Timer()
     var currentWaitTime = delayBeforeEach
 
@@ -427,13 +424,6 @@ object KustoDataSourceUtils {
       def run(): Unit = {
         try {
           val res = func.apply()
-          if (timesToRun > 0) {
-            latch.countDown()
-          }
-
-          if (latch.getCount == 0) {
-            throw new TimeoutException(s"runSequentially: timed out based on maximal allowed repetitions ($timesToRun), aborting")
-          }
 
           if (!stopCondition.apply(res)) {
             finalWork.apply(res)
@@ -470,7 +460,6 @@ object KustoDataSourceUtils {
     val sampleInMillis = samplePeriod.toMillis.toInt
     val timeoutInMillis = timeOut.toMillis
     val delayPeriodBetweenCalls = if (sampleInMillis < 1) 1 else sampleInMillis
-    val timesToRun = if (timeOut < FiniteDuration.apply(0, SECONDS)) -1 else (timeoutInMillis / delayPeriodBetweenCalls + 5).toInt
 
     val stateCol = "State"
     val statusCol = "Status"
@@ -495,7 +484,7 @@ object KustoDataSourceUtils {
     var lastResponse: Option[KustoResultSetTable] = None
     val task = doWhile[Option[KustoResultSetTable]](
       func = statusCheck,
-      delayBeforeStart = 0, delayBeforeEach = delayPeriodBetweenCalls, timesToRun = timesToRun,
+      delayBeforeStart = 0, delayBeforeEach = delayPeriodBetweenCalls,
       stopCondition = (result: Option[KustoResultSetTable]) =>
         result.isEmpty || (result.get.next() && result.get.getString(stateCol) == "InProgress"),
       finalWork = (result: Option[KustoResultSetTable]) => {
@@ -610,5 +599,4 @@ object KustoDataSourceUtils {
 
     count
   }
-
 }
