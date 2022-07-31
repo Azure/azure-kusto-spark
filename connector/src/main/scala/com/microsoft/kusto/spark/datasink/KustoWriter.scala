@@ -145,12 +145,15 @@ object KustoWriter {
           rdd.foreachPartition { rows => ingestRowsIntoTempTbl(rows, batchIdIfExists, partitionsResults) }
         catch {
           case exception: Exception => if (writeOptions.isTransactionalMode) {
-            kustoClient.cleanupIngestionByProducts(
-              tableCoordinates.database, kustoClient.engineClient, tmpTableName, crp)
+            if (writeOptions.userTempTableName.isEmpty) {
+              kustoClient.cleanupIngestionByProducts(
+                tableCoordinates.database, kustoClient.engineClient, tmpTableName, crp)
+            }
+
             throw exception
           }
         }
-        if (writeOptions.isTransactionalMode && writeOptions.userTempTableName.isEmpty) {
+        if (writeOptions.isTransactionalMode) {
           kustoClient.finalizeIngestionWhenWorkersSucceeded(
           tableCoordinates, batchIdIfExists, kustoClient.engineClient, tmpTableName, partitionsResults, writeOptions,
           crp, tableExists, rdd.sparkContext, authentication)
@@ -160,12 +163,13 @@ object KustoWriter {
   }
 
   def ingestRowsIntoTempTbl(rows: Iterator[InternalRow], batchIdForTracing: String, partitionsResults: CollectionAccumulator[PartitionResult])
-                           (implicit parameters: KustoWriteResource): Unit =
+                           (implicit parameters: KustoWriteResource): Unit = {
     if (rows.isEmpty) {
       KDSU.logWarn(myName, s"sink to Kusto table '${parameters.coordinates.table.get}' with no rows to write on partition ${TaskContext.getPartitionId} $batchIdForTracing")
     } else {
       ingestToTemporaryTableByWorkers(batchIdForTracing, rows, partitionsResults)
     }
+  }
 
   def ingestRowsIntoKusto(rows: Iterator[InternalRow],
                           ingestClient: IngestClient,
@@ -230,7 +234,8 @@ object KustoWriter {
 
     import parameters._
     val partitionId = TaskContext.getPartitionId
-    KDSU.logInfo(myName, s"Ingesting partition: '$partitionId' in requestId: '${writeOptions.requestId}'$batchIdForTracing")
+    KDSU.logInfo(myName, s"Processing partition: '$partitionId' in requestId: '${writeOptions
+      .requestId}'$batchIdForTracing")
     val ingestClient = KustoClientCache.getClient(coordinates.clusterAlias, coordinates.clusterUrl, authentication).ingestClient
     val queueRequestOptions = new QueueRequestOptions
     queueRequestOptions.setMaximumExecutionTimeInMs(KCONST.DefaultExecutionQueueing)
