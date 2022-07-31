@@ -18,7 +18,7 @@ trait KustoOptions {
   val KUSTO_DATABASE: String = newOption("kustoDatabase")
 
   /**
-   * Authentication parameters - If non provided - device code would show on console. If console is not available
+   * Authentication parameters - If not provided - device code would show on console. If console is not available
    * use DeviceAuthentication class-https://github.com/Azure/azure-kusto-spark/blob/56667c54dfd43455113a9b48725b236a8d92ccd4/samples/src/main/python/pyKusto.py#L147
    */
   // AAD application identifier of the client
@@ -49,7 +49,7 @@ trait KustoOptions {
   val KUSTO_TOKEN_PROVIDER_CALLBACK_CLASSPATH: String = newOption("tokenProviderCallbackClasspath")
 
   /** Optional parameters */
-  // Kusto ingestion uri cluster for reading data - provide this if ingestion uri cannot be deducted from adding
+  // Kusto ingestion cluster URL for reading data - provide this if ingestion URL cannot be deduced from adding
   // "ingest-" prefix to the KUSTO_CLUSTER provided. i.e when using proxies.
   val KUSTO_INGESTION_URI: String = newOption("kustoIngestionUri")
 
