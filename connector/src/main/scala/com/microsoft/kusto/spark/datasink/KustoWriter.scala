@@ -254,8 +254,8 @@ object KustoWriter {
         val blobSourceInfo = new BlobSourceInfo(blobPath, size)
 
         val retry = Retry.of("Ingest to Kusto", this.retryConfig)
-        val f:CheckedFunction0[Unit] = new CheckedFunction0[Unit]() {
-          override def apply()= {
+        val f:CheckedFunction0[IngestionResult] = new CheckedFunction0[IngestionResult]() {
+          override def apply(): IngestionResult= {
             KDSU.logInfo(myName, s"Queued blob for ingestion in partition $partitionId for requestId: '$requestId}")
             ingestClient.ingestFromBlob(blobSourceInfo, props)
           }
