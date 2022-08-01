@@ -4,6 +4,7 @@ import com.microsoft.azure.kusto.data.exceptions.{DataClientException, DataServi
 import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties, KustoResultSetTable}
 import com.microsoft.kusto.spark.authentication._
 import com.microsoft.kusto.spark.common.{KustoCoordinates, KustoDebugOptions}
+import com.microsoft.kusto.spark.datasink.KustoWriter.TempIngestionTablePrefix
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
 import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SchemaAdjustmentMode, SinkTableCreationMode, WriteMode, WriteOptions}
 import com.microsoft.kusto.spark.datasource.ReadMode.ReadMode
@@ -31,6 +32,15 @@ import scala.concurrent.{Await, Future}
 import com.microsoft.kusto.spark.datasource.{KustoReadOptions, KustoResponseDeserializer, KustoSchema, KustoSourceOptions, PartitionOptions, ReadMode, TransientStorageCredentials, TransientStorageParameters}
 
 object KustoDataSourceUtils {
+  def generateTempTableName(appName: String, destinationTableName: String, requestId:String,
+                            batchIdAsString: String, userTempTableName: Option[String]): String = {
+    if (userTempTableName.isDefined) {
+      userTempTableName.get
+    } else {
+      KustoQueryUtils.simplifyName(TempIngestionTablePrefix +
+        appName + "_" + destinationTableName + batchIdAsString + "_" + requestId)
+    }
+  }
 
   def getReadParameters(parameters: Map[String, String], sqlContext: SQLContext): KustoReadOptions = {
     val requestedPartitions = parameters.get(KustoDebugOptions.KUSTO_NUM_PARTITIONS)

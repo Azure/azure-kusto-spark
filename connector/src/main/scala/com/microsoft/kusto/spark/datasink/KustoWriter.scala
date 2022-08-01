@@ -54,10 +54,8 @@ object KustoWriter {
     val kustoClient = KustoClientCache.getClient(tableCoordinates.clusterAlias, tableCoordinates.clusterUrl, authentication)
 
     val table = tableCoordinates.table.get
-    val tmpTableName: String = if (writeOptions.userTempTableName.isDefined) writeOptions.userTempTableName.get else
-      KustoQueryUtils.simplifyName(TempIngestionTablePrefix +
-        data.sparkSession.sparkContext.appName +
-        "_" + table + batchId.map(b => s"_${b.toString}").getOrElse("") + "_" + writeOptions.requestId)
+    val tmpTableName: String = KDSU.generateTempTableName(data.sparkSession.sparkContext.appName, table,
+      writeOptions.requestId, batchIdIfExists, writeOptions.userTempTableName)
 
     val stagingTableIngestionProperties = getSparkIngestionProperties(writeOptions)
     val schemaShowCommandResult = kustoClient.engineClient.execute(tableCoordinates.database,
@@ -96,7 +94,7 @@ object KustoWriter {
     } else {
       if (writeOptions.userTempTableName.isDefined) {
         if (kustoClient.engineClient.execute(tableCoordinates.database,
-          generateTableGetSchemaAsRowsCommand(tableCoordinates.table.get), crp).getPrimaryResults.count() <= 0 ||
+          generateTableGetSchemaAsRowsCommand(writeOptions.userTempTableName.get), crp).getPrimaryResults.count() <= 0 ||
           !tableExists) {
           throw new InvalidParameterException("Temp table name provided but the table does not exist. Either drop this " +
             "option or create the table beforehand.")
