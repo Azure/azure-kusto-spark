@@ -63,7 +63,7 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
     val table = tableCoordinates.table.get
 
     if (targetSchema.isEmpty) {
-      // Table Does not exist
+      // Table does not exist
       if (writeOptions.tableCreateOptions == SinkTableCreationMode.FailIfNotExist) {
         throw new RuntimeException(s"Table '$table' doesn't exist in database '$database', cluster '${tableCoordinates.clusterAlias} and tableCreateOptions is set to FailIfNotExist.")
       } else {
@@ -84,6 +84,13 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
     // Create a temporary table with the kusto or dataframe parsed schema with retention and delete set to after the
     // write operation times out. Engine recommended keeping the retention although we use auto delete.
     engineClient.execute(database, generateTempTableCreateCommand(tmpTableName, tmpTableSchema), crp)
+    val targetTableBatchingPolicyRes = engineClient.execute(database, generateTableShowIngestionBatchingPolicyCommand(table), crp).getPrimaryResults
+    targetTableBatchingPolicyRes.next()
+    val targetTableBatchingPolicy = targetTableBatchingPolicyRes.getString(2).replace("\r\n","").replace("\"","\"\"")
+    if (targetTableBatchingPolicy != null && targetTableBatchingPolicy != "null") {
+      engineClient.execute(database, generateTableAlterIngestionBatchingPolicyCommand(tmpTableName, targetTableBatchingPolicy), crp)
+      dmClient.execute(database, generateRefreshBatchingPolicyCommand(database, tmpTableName), crp)
+    }
     if (configureRetentionPolicy) {
       engineClient.execute(database, generateTableAlterRetentionPolicy(tmpTableName,
         DurationFormatUtils.formatDuration(writeOptions.autoCleanupTime.toMillis, durationFormat, true),
