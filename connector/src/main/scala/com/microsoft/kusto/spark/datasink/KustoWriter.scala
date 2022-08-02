@@ -103,7 +103,7 @@ object KustoWriter {
         // KustoWriter will create a temporary table ingesting the data to it.
         // Only if all executors succeeded the table will be appended to the original destination table.
         kustoClient.initializeTablesBySchema(tableCoordinates, tmpTableName, data.schema, targetSchema, writeOptions,
-          crp, stagingTableIngestionProperties.creationTime == null, writeOptions.isTransactionalMode)
+          crp, stagingTableIngestionProperties.creationTime == null)
       }
 
       kustoClient.setMappingOnStagingTableIfNeeded(stagingTableIngestionProperties, tableCoordinates.database, tmpTableName, table, crp)

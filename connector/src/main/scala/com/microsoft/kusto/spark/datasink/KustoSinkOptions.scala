@@ -1,7 +1,10 @@
 package com.microsoft.kusto.spark.datasink
 
 import java.util.UUID
+import java.util.concurrent.TimeUnit
+
 import com.microsoft.kusto.spark.common.KustoOptions
+import com.microsoft.kusto.spark.utils.KustoConstants
 
 import scala.concurrent.duration.FiniteDuration
 
@@ -87,11 +90,13 @@ case class WriteOptions(pollingOnDriver:Boolean = true,
                         isAsync: Boolean = false,
                         writeResultLimit: String = KustoSinkOptions.NONE_RESULT_LIMIT,
                         timeZone: String = "UTC",
-                        timeout: FiniteDuration,
+                        timeout: FiniteDuration = new FiniteDuration(KustoConstants.DefaultWaitingIntervalLongRunning.toInt,
+                          TimeUnit.SECONDS),
                         ingestionProperties: Option[String] = None,
                         batchLimit: Int = 100,
                         requestId: String = UUID.randomUUID().toString,
-                        autoCleanupTime: FiniteDuration,
+                        autoCleanupTime: FiniteDuration = new FiniteDuration(KustoConstants.DefaultCleaningInterval.toInt,
+                          TimeUnit.SECONDS),
                         maxRetriesOnMoveExtents: Int = 10,
                         minimalExtentsCountForSplitMerge: Int = 400,
                         adjustSchema: SchemaAdjustmentMode.SchemaAdjustmentMode = SchemaAdjustmentMode.NoAdjustment,
