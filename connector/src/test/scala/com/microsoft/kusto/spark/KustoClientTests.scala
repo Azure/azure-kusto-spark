@@ -6,11 +6,13 @@ import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties, KustoOperationResult, KustoResultSetTable}
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.{SparkIngestionProperties, WriteOptions}
+import com.microsoft.kusto.spark.utils.CslCommandsGenerator.generateTempTableCreateCommand
 import com.microsoft.kusto.spark.utils.KustoClient
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.json.JSONObject
 import org.junit.runner.RunWith
-import org.mockito.Mockito.mock
+import org.mockito.Matchers.any
+import org.mockito.Mockito.{mock, times, verify}
 import org.scalatest.junit.JUnitRunner
 import org.scalatest.{FlatSpec, Matchers}
 
@@ -20,7 +22,7 @@ import scala.collection.JavaConverters._
 class KustoClientTests extends FlatSpec  with Matchers {
   val coords = KustoCoordinates("", "", "database", Some("table"))
   class KustoClientStub (override  val clusterAlias: String, override  val engineKcsb: ConnectionStringBuilder, override val ingestKcsb: ConnectionStringBuilder, var tagsToReturn: util.ArrayList[String]) extends KustoClient(clusterAlias, engineKcsb, ingestKcsb){
-    override val engineClient = mock(classOf[Client])
+    override lazy val engineClient = mock(classOf[Client])
     override def fetchTableExtentsTags(database: String, table: String, crp: ClientRequestProperties)
     : KustoResultSetTable = {
       val response =
@@ -54,11 +56,11 @@ class KustoClientTests extends FlatSpec  with Matchers {
   }
 
   "initializeTablesBySchema" should "Not create table if queued mode" in {
+    val tempTable = "temp"
     val stubbedClient = new KustoClientStub("", null, null, null)
     val struct = StructType(Array(StructField("colA", StringType, nullable = true)))
-    stubbedClient.initializeTablesBySchema(coords, "temp", struct,  Array(new JSONObject("""{"Type":"System.String",
-      "CslType":"string", "Name":"name"}""")), WriteOptions(isTransactionalMode = true), null, true)
-    stubbedClient.initializeTablesBySchema(coords, "temp", struct,  Array(new JSONObject("""{"Type":"System.String",
+    stubbedClient.initializeTablesBySchema(coords, tempTable, struct,  Array(new JSONObject("""{"Type":"System.String",
       "CslType":"string", "Name":"name"}""")), WriteOptions(isTransactionalMode = false), null, true)
+    verify(stubbedClient.engineClient, times(0)).execute(any(), any(), any())
   }
 }
