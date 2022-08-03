@@ -35,7 +35,7 @@ import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.{Await, Future, TimeoutException}
 
-class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuilder, val ingestKcsb: ConnectionStringBuilder) {
+class KustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcsb: ConnectionStringBuilder, val clusterAlias: String) {
   lazy val engineClient: Client = ClientFactory.createClient(engineKcsb)
 
   // Reading process does not require ingest client to start working
@@ -373,7 +373,8 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
 
           if (partitionsResults.value.size > 0) {
             val moveOperation = (_: Int) => {
-              val client = KustoClientCache.getClient(coordinates.clusterAlias, coordinates.clusterUrl, authentication)
+              val client = KustoClientCache.getClient(coordinates.clusterUrl, authentication, coordinates.ingestionUrl,
+                coordinates.clusterAlias)
               client.engineClient.execute(coordinates.database, generateTableAlterMergePolicyCommand(tmpTableName,
                 allowMerge = false,
                 allowRebuild = false), crp)

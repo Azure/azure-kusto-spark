@@ -253,7 +253,8 @@ object KustoDataSourceUtils {
 
     val (authentication,keyVaultAuthentication) = parseAuthentication(parameters, clusterUrl.get)
 
-    SourceParameters(authentication, KustoCoordinates(clusterUrl.get, alias.get, database.get, table),
+    val ingestionUri = parameters.get(KustoSinkOptions.KUSTO_INGESTION_URI)
+    SourceParameters(authentication, KustoCoordinates(clusterUrl.get, alias.get, database.get, table, ingestionUri),
       keyVaultAuthentication, requestId, clientRequestProperties)
   }
 
@@ -609,7 +610,8 @@ object KustoDataSourceUtils {
       res.next()
       res.getCurrentRow
     }, KustoConstants.TimeoutForCountCheck)
-    if (StringUtils.isBlank(estimationResult.get(1).toString)) {
+    val estimated = estimationResult.get(1)
+    if (estimated == null || StringUtils.isBlank(estimated.toString)) {
       // Estimation can be empty for certain cases
       Await.result(Future {
         val res = client.execute(database, generateCountQuery(query), crp).getPrimaryResults
@@ -618,7 +620,7 @@ object KustoDataSourceUtils {
       }, KustoConstants.TimeoutForCountCheck)
     } else {
       // Zero estimation count does not indicate zero results, therefore we add 1 here so that we won't return an empty RDD
-      count = estimationResult.get(1).asInstanceOf[Int] + 1
+      count = estimated.asInstanceOf[Int] + 1
     }
 
     count

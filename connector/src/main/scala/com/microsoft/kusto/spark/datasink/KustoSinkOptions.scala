@@ -9,13 +9,13 @@ import com.microsoft.kusto.spark.utils.KustoConstants
 import scala.concurrent.duration.FiniteDuration
 
 object KustoSinkOptions extends KustoOptions{
+  /** Required options */
+  val KUSTO_TABLE: String = newOption("kustoTable")
+
+  /** Optional options */
   // IMPORTANT: If set to false -> polling will not block on worker node and will be executed on a driver pool thread
   // 'true' is recommended for production.
   val KUSTO_POLLING_ON_DRIVER: String = newOption("pollingOnDriver")
-
-  val KUSTO_TABLE: String = newOption("kustoTable")
-
-  val KUSTO_CUSTOM_DATAFRAME_COLUMN_TYPES: String = newOption("customSchema")
 
   // If set to 'FailIfNotExist', the operation will fail if the table is not found
   // in the requested cluster and database.

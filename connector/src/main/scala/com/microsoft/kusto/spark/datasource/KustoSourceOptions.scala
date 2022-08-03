@@ -3,11 +3,11 @@ package com.microsoft.kusto.spark.datasource
 import com.microsoft.kusto.spark.common.KustoOptions
 
 object KustoSourceOptions extends KustoOptions {
-  val KUSTO_CUSTOM_DATAFRAME_COLUMN_TYPES: String = newOption("customSchema")
-
+  /** Required options */
   val KUSTO_QUERY: String = newOption("kustoQuery")
-  //TODO - impl retries?
-  val KUSTO_QUERY_RETRY_TIMES: String = newOption("kustoQueryRetryTimes")
+
+  /** Optional options */
+  val KUSTO_CUSTOM_DATAFRAME_COLUMN_TYPES: String = newOption("customSchema")
 
   // Blob Storage access parameters for source connector when working in 'distributed' mode (read)
   // These parameters are not be required as the service supply it by default

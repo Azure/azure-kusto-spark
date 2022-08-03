@@ -51,7 +51,7 @@ object KustoWriter {
                            writeOptions: WriteOptions,
                            crp: ClientRequestProperties): Unit = {
     val batchIdIfExists = batchId.map(b => s",batch: ${b.toString}").getOrElse("")
-    val kustoClient = KustoClientCache.getClient(tableCoordinates.clusterAlias, tableCoordinates.clusterUrl, authentication)
+    val kustoClient = KustoClientCache.getClient(tableCoordinates.clusterUrl, authentication, tableCoordinates.ingestionUrl, tableCoordinates.clusterAlias)
 
     val table = tableCoordinates.table.get
     val tmpTableName: String = KDSU.generateTempTableName(data.sparkSession.sparkContext.appName, table,
@@ -232,9 +232,9 @@ object KustoWriter {
 
     import parameters._
     val partitionId = TaskContext.getPartitionId
-    KDSU.logInfo(myName, s"Processing partition: '$partitionId' in requestId: '${writeOptions
-      .requestId}'$batchIdForTracing")
-    val ingestClient = KustoClientCache.getClient(coordinates.clusterAlias, coordinates.clusterUrl, authentication).ingestClient
+    KDSU.logInfo(myName, s"Processing partition: '$partitionId' in requestId: '${writeOptions.
+      requestId}'$batchIdForTracing")
+    val ingestClient = KustoClientCache.getClient(coordinates.clusterUrl, authentication, coordinates.ingestionUrl, coordinates.clusterAlias).ingestClient
     val queueRequestOptions = new QueueRequestOptions
     queueRequestOptions.setMaximumExecutionTimeInMs(KCONST.DefaultExecutionQueueing)
     queueRequestOptions.setTimeoutIntervalInMs(KCONST.DefaultTimeoutQueueing)
@@ -300,7 +300,7 @@ object KustoWriter {
 
     import parameters._
 
-    val kustoClient = KustoClientCache.getClient(coordinates.clusterAlias, coordinates.clusterUrl, authentication)
+    val kustoClient = KustoClientCache.getClient(coordinates.clusterUrl, authentication, coordinates.ingestionUrl, coordinates.clusterAlias)
     val maxBlobSize = writeOptions.batchLimit * KCONST.OneMegaByte
 
     // This blobWriter will be used later to write the rows to blob storage from which it will be ingested to Kusto
