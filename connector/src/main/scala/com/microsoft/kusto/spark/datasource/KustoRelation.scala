@@ -162,9 +162,7 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
 
   override def insert(data: DataFrame, overwrite: Boolean): Unit = {
     KustoWriter.write(None, data, kustoCoordinates, authentication, writeOptions =
-      WriteOptions.apply(timeout = new FiniteDuration(KustoConstants.DefaultWaitingIntervalLongRunning.toInt,
-        TimeUnit.SECONDS), autoCleanupTime = new FiniteDuration(KustoConstants.DefaultCleaningInterval.toInt,
-        TimeUnit.SECONDS)),
+      WriteOptions.apply(),
       clientRequestProperties.get)
   }
 }

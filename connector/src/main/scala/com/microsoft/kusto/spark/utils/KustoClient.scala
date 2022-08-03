@@ -4,11 +4,12 @@ import java.net.SocketTimeoutException
 import java.time.Instant
 import java.util.StringJoiner
 import java.util.concurrent.TimeUnit
+
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.exceptions.KustoDataExceptionBase
 import com.microsoft.azure.kusto.data.{Client, ClientFactory, ClientRequestProperties, KustoResultSetTable}
 import com.microsoft.azure.kusto.ingest.result.{IngestionStatus, OperationStatus}
-import com.microsoft.azure.kusto.ingest.{IngestClient, IngestClientFactory, QueuedIngestClient}
+import com.microsoft.azure.kusto.ingest.{ IngestClientFactory, QueuedIngestClient}
 import com.microsoft.azure.storage.StorageException
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
@@ -81,24 +82,26 @@ class KustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcsb: Conne
       tmpTableSchema = extractSchemaFromResultTable(targetSchema)
     }
 
-    // Create a temporary table with the kusto or dataframe parsed schema with retention and delete set to after the
-    // write operation times out. Engine recommended keeping the retention although we use auto delete.
-    engineClient.execute(database, generateTempTableCreateCommand(tmpTableName, tmpTableSchema), crp)
-    val targetTableBatchingPolicyRes = engineClient.execute(database, generateTableShowIngestionBatchingPolicyCommand(table), crp).getPrimaryResults
-    targetTableBatchingPolicyRes.next()
-    val targetTableBatchingPolicy = targetTableBatchingPolicyRes.getString(2).replace("\r\n","").replace("\"","\"\"")
-    if (targetTableBatchingPolicy != null && targetTableBatchingPolicy != "null") {
-      engineClient.execute(database, generateTableAlterIngestionBatchingPolicyCommand(tmpTableName, targetTableBatchingPolicy), crp)
-      dmClient.execute(database, generateRefreshBatchingPolicyCommand(database, tmpTableName), crp)
+    if (writeOptions.isTransactionalMode) {
+      // Create a temporary table with the kusto or dataframe parsed schema with retention and delete set to after the
+      // write operation times out. Engine recommended keeping the retention although we use auto delete.
+      engineClient.execute(database, generateTempTableCreateCommand(tmpTableName, tmpTableSchema), crp)
+      val targetTableBatchingPolicyRes = engineClient.execute(database, generateTableShowIngestionBatchingPolicyCommand(table), crp).getPrimaryResults
+      targetTableBatchingPolicyRes.next()
+      val targetTableBatchingPolicy = targetTableBatchingPolicyRes.getString(2).replace("\r\n","").replace("\"","\"\"")
+      if (targetTableBatchingPolicy != null && targetTableBatchingPolicy != "null") {
+        engineClient.execute(database, generateTableAlterIngestionBatchingPolicyCommand(tmpTableName, targetTableBatchingPolicy), crp)
+        dmClient.execute(database, generateRefreshBatchingPolicyCommand(database, tmpTableName), crp)
+      }
+      if (configureRetentionPolicy) {
+        engineClient.execute(database, generateTableAlterRetentionPolicy(tmpTableName,
+          DurationFormatUtils.formatDuration(writeOptions.autoCleanupTime.toMillis, durationFormat, true),
+          recoverable = false), crp)
+        val instant = Instant.now.plusSeconds(writeOptions.autoCleanupTime.toSeconds)
+        engineClient.execute(database, generateTableAlterAutoDeletePolicy(tmpTableName, instant), crp)
+      }
+      KDSU.logInfo(myName, s"Successfully created temporary table $tmpTableName, will be deleted after completing the operation")
     }
-    if (configureRetentionPolicy) {
-      engineClient.execute(database, generateTableAlterRetentionPolicy(tmpTableName,
-        DurationFormatUtils.formatDuration(writeOptions.autoCleanupTime.toMillis, durationFormat, true),
-        recoverable = false), crp)
-
-    }
-    val instant = Instant.now.plusSeconds(writeOptions.autoCleanupTime.toSeconds)
-    engineClient.execute(database, generateTableAlterAutoDeletePolicy(tmpTableName, instant), crp)
   }
 
   def getTempBlobForIngestion: ContainerAndSas = {

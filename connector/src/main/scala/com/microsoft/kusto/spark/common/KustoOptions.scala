@@ -63,7 +63,7 @@ trait KustoOptions {
   var KUSTO_CLIENT_REQUEST_PROPERTIES_JSON: String = newOption("clientRequestPropertiesJson")
 
   // An id of the source used for tracing of the write operation. Will override the clientRequestPropertiesJson
-  // request id if provided
+  // request id if provided. Should be Unique per run.
   val KUSTO_REQUEST_ID: String = newOption("requestId")
 }
 
