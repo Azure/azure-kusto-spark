@@ -61,7 +61,7 @@ object SchemaAdjustmentMode extends Enumeration {
   val NoAdjustment, FailIfNotMatch, GenerateDynamicCsvMapping = Value
 }
 
-case class WriteOptions(pollingOnDriver:Boolean = true,
+case class WriteOptions(pollingOnDriver: Boolean = false,
                         tableCreateOptions: SinkTableCreationMode.SinkTableCreationMode = SinkTableCreationMode.FailIfNotExist,
                         isAsync: Boolean = false,
                         writeResultLimit: String = KustoSinkOptions.NONE_RESULT_LIMIT,
