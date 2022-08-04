@@ -21,14 +21,13 @@ class DeviceAuthentication (val cluster: String, val authority:String) extends a
       this.currentDeviceCode = Some(deviceCode)
       this.expiresAt = Some(System.currentTimeMillis + (deviceCode.expiresIn() * 1000))
       println(deviceCode.message())
-      return null
     })
 
     val deviceCodeFlowParams: DeviceCodeFlowParameters = DeviceCodeFlowParameters.builder(scopes, deviceCodeConsumer).build
     clientApplication.acquireToken(deviceCodeFlowParams)
   }
 
-  implicit def toJavaConsumer[T](f:Function1[T, Void]): Consumer[T] = new Consumer[T] {
+  implicit def toJavaConsumer[T](f:Function1[T, Unit]): Consumer[T] = new Consumer[T] {
     override def accept(t: T) = f(t)
   }
 

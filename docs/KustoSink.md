@@ -59,8 +59,8 @@ that is using it. Please verify the following first:
  **Authentication Parameters** can be found here - [AAD Application Authentication](Authentication.md). 
  
  **Optional Parameters:** 
-* **POLLING_ON_DRIVER**:
-'pollingOnDriver' - If set to false Kusto Spark will create a new job for the final two ingestion steps done after processing the data, so that the write operation doesn't seem to 'hang' on the Spark UI. 
+* **KUSTO_POLLING_ON_DRIVER**:
+'pollingOnDriver' - If set to false (default) Kusto Spark will create a new job for the final two ingestion steps done after processing the data, so that the write operation doesn't seem to 'hang' on the Spark UI. 
 It's recommended to set this flag to true in production scenarios, so that the worker node doesn't occupy a core while completing the final ingestion steps.
 
  * **KUSTO_TABLE_CREATE_OPTIONS**: 
@@ -120,7 +120,7 @@ It's recommended to set this flag to true in production scenarios, so that the w
 
 Write performance depends on multiple factors, such as scale of both Spark and Kusto clusters.
 Regarding Kusto target cluster configuration, one of the factors that impacts performance and latency 
-is [Ingestion Batching Policy](https://docs.microsoft.com/azure/kusto/concepts/batchingpolicy). The default policy 
+is [Ingestion Batching Policy](https://docs.microsoft.com/azure/data-explorer/kusto/management/batchingpolicy). The default policy 
 works well for typical scenarios, especially when writing large amounts of data as batch. For reduced latency,
 consider altering the policy to a relatively low value (minimal allowed is 10 seconds).
 **This is mostly relevant when writing to Kusto in streaming mode**.
