@@ -34,6 +34,7 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
   KDSU.logError("System.getenv", System.getenv().toString)
   val kustoConnectionOptions: KustoConnectionOptions = KustoTestUtils.getSystemTestOptions
   val table = KustoQueryUtils.simplifyName(s"KustoSparkReadWriteTest_${UUID.randomUUID()}")
+//  val getP = System.getProperty("hadoop.home.dir");
 
   private val loggingLevel = Option(System.getProperty("logLevel"))
   var kustoAdminClient: Option[Client] = None
@@ -125,8 +126,8 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
     //    val storage = new TransientStorageParameters(Array(new TransientStorageCredentials(blobSas)))
 
     val conf: Map[String, String] = Map(
+      KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceDistributedMode.toString,
       //        KustoSourceOptions.KUSTO_TRANSIENT_STORAGE -> storage.toString,
-      KustoSourceOptions.KUSTO_USER_PROMPT -> true.toString,
       KustoSourceOptions.KUSTO_AAD_APP_ID -> kustoConnectionOptions.appId,
       KustoSourceOptions.KUSTO_AAD_APP_SECRET -> kustoConnectionOptions.appKey
     )
