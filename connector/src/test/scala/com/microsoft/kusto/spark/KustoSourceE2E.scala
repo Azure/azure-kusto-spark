@@ -104,7 +104,7 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
     assert(orig.deep == result.deep)
   }
 
-  "KustoSource" should "execute a read query on Kusto cluster in single mode" taggedAs KustoE2E in {
+  "KustoSource" should "execute a read query on Kusto cluster in single mode"  in {
     val query: String = System.getProperty(KustoSourceOptions.KUSTO_QUERY, table)
 
     val conf: Map[String, String] = Map(
@@ -118,7 +118,7 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
     val dfres = df.collect()
   }
 
-  "KustoSource" should "execute a read query on Kusto cluster in distributed mode" taggedAs KustoE2E in {
+  "KustoSource" should "execute a read query on Kusto cluster in distributed mode" in {
     val query: String = System.getProperty(KustoSourceOptions.KUSTO_QUERY, table)
     //    val blobSas: String = System.getProperty("blobSas")
     //  TODO - get sas from DM and set it yourself
