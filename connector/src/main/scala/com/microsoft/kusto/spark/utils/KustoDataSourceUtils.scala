@@ -351,7 +351,7 @@ object KustoDataSourceUtils {
       s", 'timeout': ${writeOptions.timeout}, 'timezone': ${writeOptions.timeZone}, " +
       s"'ingestionProperties': $ingestionPropertiesAsJson, 'requestId': '${sourceParameters.requestId}', 'pollingOnDriver': ${writeOptions.pollingOnDriver}," +
       s"'maxRetriesOnMoveExtents':$maxRetriesOnMoveExtents, 'minimalExtentsCountForSplitMergePerNode':$minimalExtentsCountForSplitMergePerNode, " +
-      s"'adjustSchema': $adjustSchema, 'autoCleanupTime': $autoCleanupTime}$tempTableLog")
+      s"'adjustSchema': $adjustSchema, 'autoCleanupTime': $autoCleanupTime$tempTableLog}")
 
     SinkParameters(writeOptions, sourceParameters)
   }
