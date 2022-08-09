@@ -45,7 +45,7 @@ that is using it. Please verify the following first:
  'kustoCluster' - Target Kusto cluster to which the data will be written.
  Use either cluster profile name for global clusters, or <profile-name.region> for regional clusters.
  For example: if the cluster URL is 'https://testcluster.eastus.kusto.windows.net', set this property 
- as 'testcluster.eastus' 
+ as 'testcluster.eastus' or the URL. 
   
  * **KUSTO_DATABASE**: 
  'kustoDatabase' - Target Kusto database to which the data will be written. The client must have 'user' and 'ingestor' 
@@ -58,7 +58,7 @@ that is using it. Please verify the following first:
  
  **Authentication Parameters** can be found here - [AAD Application Authentication](Authentication.md). 
  
- **Optional Parameters:** 
+ **Important Parameters:** 
 * **KUSTO_POLLING_ON_DRIVER**:
 'pollingOnDriver' - If set to false (default) Kusto Spark will create a new job for the final two ingestion steps done after processing the data, so that the write operation doesn't seem to 'hang' on the Spark UI. 
 It's recommended to set this flag to true in production scenarios, so that the worker node doesn't occupy a core while completing the final ingestion steps.
@@ -85,6 +85,8 @@ It's recommended to set this flag to true in production scenarios, so that the w
     - csvMappingNameReference: String - a reference to the name of a csvMapping pre-created for the table
     
     - flushImmediately: Boolean - use with caution - flushes the data immediately upon ingestion without aggregation.
+
+ **Optional Parameters:** 
 
  * **KUSTO_TIMEOUT_LIMIT**:
    'timeoutLimit' - After the dataframe is processed, a polling operation begins. This integer corresponds to the period in seconds after which the polling

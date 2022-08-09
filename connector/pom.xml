@@ -153,6 +153,10 @@
                     <artifactId>annotations</artifactId>
                     <groupId>org.jetbrains</groupId>
                 </exclusion>
+                <exclusion>
+                    <artifactId>oauth2-oidc-sdk</artifactId>
+                    <groupId>com.nimbusds</groupId>
+                </exclusion>
             </exclusions>
         </dependency>
         <!--might need 2.7.0 here for local run query-->

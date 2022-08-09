@@ -77,7 +77,7 @@ kustoDf.show()
 # Writing with advanced options
 # Please refer to https://github.com/Azure/azure-kusto-spark/blob/master/connector/src/main/scala/com/microsoft/kusto/spark/datasink/KustoSinkOptions.scala
 # to get the string representation of the options you need
-extentsCreationTime = sc._jvm.org.joda.time.DateTime.now().plusDays(1)
+extentsCreationTime = sc._jvm.org.joda.time.DateTime.now().minusDays(1)
 csvMap = "[{\"Name\":\"ColA\",\"Ordinal\":0},{\"Name\":\"ColB\",\"Ordinal\":1}]"
 # Alternatively use an existing csv mapping configured on the table and pass it as the last parameter of SparkIngestionProperties or use none
 

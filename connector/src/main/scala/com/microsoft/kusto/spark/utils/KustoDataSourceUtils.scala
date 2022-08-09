@@ -269,6 +269,7 @@ object KustoDataSourceUtils {
       throw new InvalidParameterException(s"Kusto data source supports only 'Append' mode, '$mode' directive is invalid. Please use df.write.mode(SaveMode.Append)..")
     }
 
+    // TODO get defaults from KustoWriter()
     // Parse WriteOptions
     var tableCreation: SinkTableCreationMode = SinkTableCreationMode.FailIfNotExist
     var tableCreationParam: Option[String] = None
@@ -295,7 +296,7 @@ object KustoDataSourceUtils {
       throw new InvalidParameterException("tempTableName can't be used with CreateIfNotExist or Queued write mode.")
     }
     isAsync = parameters.getOrElse(KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC, "false").trim.toBoolean
-    val pollingOnDriver = parameters.getOrElse(KustoSinkOptions.KUSTO_POLLING_ON_DRIVER, "true").trim.toBoolean
+    val pollingOnDriver = parameters.getOrElse(KustoSinkOptions.KUSTO_POLLING_ON_DRIVER, "false").trim.toBoolean
 
     batchLimit = parameters.getOrElse(KustoSinkOptions.KUSTO_CLIENT_BATCHING_LIMIT, DefaultBatchingLimit.toString)
       .trim.toInt
@@ -344,7 +345,8 @@ object KustoDataSourceUtils {
       ""
     }
 
-    logInfo("parseSinkParameters", s"Parsed write options for sink: {'timeout': '${writeOptions.timeout}, 'async': ${writeOptions.isAsync}, " +
+    logInfo("parseSinkParameters", s"Parsed write options for sink: {'table': '${sourceParameters.
+      kustoCoordinates.table}', 'timeout': '${writeOptions.timeout}, 'async': ${writeOptions.isAsync}, " +
       s"'tableCreationMode': ${writeOptions.tableCreateOptions}, 'writeLimit': ${writeOptions.writeResultLimit}, 'batchLimit': ${writeOptions.batchLimit}" +
       s", 'timeout': ${writeOptions.timeout}, 'timezone': ${writeOptions.timeZone}, " +
       s"'ingestionProperties': $ingestionPropertiesAsJson, 'requestId': '${sourceParameters.requestId}', 'pollingOnDriver': ${writeOptions.pollingOnDriver}," +
