@@ -1,18 +1,21 @@
 package com.microsoft.kusto.spark.datasink
 
 import java.util.UUID
+import java.util.concurrent.TimeUnit
+
 import com.microsoft.kusto.spark.common.KustoOptions
+import com.microsoft.kusto.spark.utils.KustoConstants
 
 import scala.concurrent.duration.FiniteDuration
 
 object KustoSinkOptions extends KustoOptions{
+  /** Required options */
+  val KUSTO_TABLE: String = newOption("kustoTable")
+
+  /** Optional options */
   // IMPORTANT: If set to false -> polling will not block on worker node and will be executed on a driver pool thread
   // 'true' is recommended for production.
   val KUSTO_POLLING_ON_DRIVER: String = newOption("pollingOnDriver")
-
-  val KUSTO_TABLE: String = newOption("kustoTable")
-
-  val KUSTO_CUSTOM_DATAFRAME_COLUMN_TYPES: String = newOption("customSchema")
 
   // If set to 'FailIfNotExist', the operation will fail if the table is not found
   // in the requested cluster and database.
@@ -48,6 +51,22 @@ object KustoSinkOptions extends KustoOptions{
   // An integer number corresponding to the period in seconds after which the staging resources used for the writing
   // are cleaned if they weren't cleaned at the end of the run
   val KUSTO_STAGING_RESOURCE_AUTO_CLEANUP_TIMEOUT: String = newOption("stagingResourcesAutoCleanupTimeout")
+
+  // If set to 'Transactional' - guarantees write operation to either completely succeed or fail together
+  // but includes additional steps - it creates a temporary table and after processing the data it polls on ingestion result
+  // after which it will move the data to the destination table (the last part is a metadata operation only)
+  // If set to 'Queued', the write operation finishes after data is processed by the workers, the data may not be completely
+  // available up until the service finishes loading it and failures on the service side will not propagate to Spark.
+  val KUSTO_WRITE_MODE: String = newOption("writeMode")
+
+  // Provide a temporary table name that will be used for this write operation to achieve transactional write and move
+  // data to destination table on success. Table is expected to exist and unique per run (as we delete the table
+  // at the end of the process and therefore should be per write operation). In case of success, the table will be
+  // deleted; in case of failure, it's up to the user to delete. It is most recommended to alter the table auto-delete
+  // policy so as to not get stuck with 'ghost' tables -
+  // https://docs.microsoft.com/azure/data-explorer/kusto/management/auto-delete-policy
+  // Use this option if you want to persist partial write results (as the failure could be of a single partition)
+  val KUSTO_TEMP_TABLE_NAME: String = newOption("tempTableName")
 }
 
 
@@ -61,17 +80,26 @@ object SchemaAdjustmentMode extends Enumeration {
   val NoAdjustment, FailIfNotMatch, GenerateDynamicCsvMapping = Value
 }
 
+object WriteMode extends Enumeration {
+  type WriteMode = Value
+  val Transactional, Queued = Value
+}
+
 case class WriteOptions(pollingOnDriver:Boolean = true,
                         tableCreateOptions: SinkTableCreationMode.SinkTableCreationMode = SinkTableCreationMode.FailIfNotExist,
                         isAsync: Boolean = false,
                         writeResultLimit: String = KustoSinkOptions.NONE_RESULT_LIMIT,
                         timeZone: String = "UTC",
-                        timeout: FiniteDuration,
+                        timeout: FiniteDuration = new FiniteDuration(KustoConstants.DefaultWaitingIntervalLongRunning.toInt,
+                          TimeUnit.SECONDS),
                         ingestionProperties: Option[String] = None,
                         batchLimit: Int = 100,
                         requestId: String = UUID.randomUUID().toString,
-                        autoCleanupTime: FiniteDuration,
+                        autoCleanupTime: FiniteDuration = new FiniteDuration(KustoConstants.DefaultCleaningInterval.toInt,
+                          TimeUnit.SECONDS),
                         maxRetriesOnMoveExtents: Int = 10,
                         minimalExtentsCountForSplitMerge: Int = 400,
-                        adjustSchema: SchemaAdjustmentMode.SchemaAdjustmentMode = SchemaAdjustmentMode.NoAdjustment)
+                        adjustSchema: SchemaAdjustmentMode.SchemaAdjustmentMode = SchemaAdjustmentMode.NoAdjustment,
+                        isTransactionalMode: Boolean = true,
+                        userTempTableName: Option[String] = None)
 

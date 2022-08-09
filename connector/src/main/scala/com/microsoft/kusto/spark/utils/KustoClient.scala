@@ -4,11 +4,12 @@ import java.net.SocketTimeoutException
 import java.time.Instant
 import java.util.StringJoiner
 import java.util.concurrent.TimeUnit
+
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.exceptions.KustoDataExceptionBase
 import com.microsoft.azure.kusto.data.{Client, ClientFactory, ClientRequestProperties, KustoResultSetTable}
 import com.microsoft.azure.kusto.ingest.result.{IngestionStatus, OperationStatus}
-import com.microsoft.azure.kusto.ingest.{IngestClient, IngestClientFactory, QueuedIngestClient}
+import com.microsoft.azure.kusto.ingest.{ IngestClientFactory, QueuedIngestClient}
 import com.microsoft.azure.storage.StorageException
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
@@ -34,7 +35,7 @@ import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.{Await, Future, TimeoutException}
 
-class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuilder, val ingestKcsb: ConnectionStringBuilder) {
+class KustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcsb: ConnectionStringBuilder, val clusterAlias: String) {
   lazy val engineClient: Client = ClientFactory.createClient(engineKcsb)
 
   // Reading process does not require ingest client to start working
@@ -63,7 +64,7 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
     val table = tableCoordinates.table.get
 
     if (targetSchema.isEmpty) {
-      // Table Does not exist
+      // Table does not exist
       if (writeOptions.tableCreateOptions == SinkTableCreationMode.FailIfNotExist) {
         throw new RuntimeException(s"Table '$table' doesn't exist in database '$database', cluster '${tableCoordinates.clusterAlias} and tableCreateOptions is set to FailIfNotExist.")
       } else {
@@ -81,17 +82,26 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
       tmpTableSchema = extractSchemaFromResultTable(targetSchema)
     }
 
-    // Create a temporary table with the kusto or dataframe parsed schema with retention and delete set to after the
-    // write operation times out. Engine recommended keeping the retention although we use auto delete.
-    engineClient.execute(database, generateTempTableCreateCommand(tmpTableName, tmpTableSchema), crp)
-    if (configureRetentionPolicy) {
-      engineClient.execute(database, generateTableAlterRetentionPolicy(tmpTableName,
-        DurationFormatUtils.formatDuration(writeOptions.autoCleanupTime.toMillis, durationFormat, true),
-        recoverable = false), crp)
-
+    if (writeOptions.isTransactionalMode) {
+      // Create a temporary table with the kusto or dataframe parsed schema with retention and delete set to after the
+      // write operation times out. Engine recommended keeping the retention although we use auto delete.
+      engineClient.execute(database, generateTempTableCreateCommand(tmpTableName, tmpTableSchema), crp)
+      val targetTableBatchingPolicyRes = engineClient.execute(database, generateTableShowIngestionBatchingPolicyCommand(table), crp).getPrimaryResults
+      targetTableBatchingPolicyRes.next()
+      val targetTableBatchingPolicy = targetTableBatchingPolicyRes.getString(2).replace("\r\n","").replace("\"","\"\"")
+      if (targetTableBatchingPolicy != null && targetTableBatchingPolicy != "null") {
+        engineClient.execute(database, generateTableAlterIngestionBatchingPolicyCommand(tmpTableName, targetTableBatchingPolicy), crp)
+        dmClient.execute(database, generateRefreshBatchingPolicyCommand(database, tmpTableName), crp)
+      }
+      if (configureRetentionPolicy) {
+        engineClient.execute(database, generateTableAlterRetentionPolicy(tmpTableName,
+          DurationFormatUtils.formatDuration(writeOptions.autoCleanupTime.toMillis, durationFormat, true),
+          recoverable = false), crp)
+        val instant = Instant.now.plusSeconds(writeOptions.autoCleanupTime.toSeconds)
+        engineClient.execute(database, generateTableAlterAutoDeletePolicy(tmpTableName, instant), crp)
+      }
+      KDSU.logInfo(myName, s"Successfully created temporary table $tmpTableName, will be deleted after completing the operation")
     }
-    val instant = Instant.now.plusSeconds(writeOptions.autoCleanupTime.toSeconds)
-    engineClient.execute(database, generateTableAlterAutoDeletePolicy(tmpTableName, instant), crp)
   }
 
   def getTempBlobForIngestion: ContainerAndSas = {
@@ -363,7 +373,8 @@ class KustoClient(val clusterAlias: String, val engineKcsb: ConnectionStringBuil
 
           if (partitionsResults.value.size > 0) {
             val moveOperation = (_: Int) => {
-              val client = KustoClientCache.getClient(coordinates.clusterAlias, coordinates.clusterUrl, authentication)
+              val client = KustoClientCache.getClient(coordinates.clusterUrl, authentication, coordinates.ingestionUrl,
+                coordinates.clusterAlias)
               client.engineClient.execute(coordinates.database, generateTableAlterMergePolicyCommand(tmpTableName,
                 allowMerge = false,
                 allowRebuild = false), crp)
