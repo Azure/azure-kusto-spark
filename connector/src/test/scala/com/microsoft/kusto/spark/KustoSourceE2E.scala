@@ -30,8 +30,6 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
 
   private var sc: SparkContext = _
   private var sqlContext: SQLContext = _
-  KDSU.logError("System.getProperties", System.getProperties.toString)
-  KDSU.logError("System.getenv", System.getenv().toString)
   val kustoConnectionOptions: KustoConnectionOptions = KustoTestUtils.getSystemTestOptions
   val table = KustoQueryUtils.simplifyName(s"KustoSparkReadWriteTest_${UUID.randomUUID()}")
 //  val getP = System.getProperty("hadoop.home.dir");
