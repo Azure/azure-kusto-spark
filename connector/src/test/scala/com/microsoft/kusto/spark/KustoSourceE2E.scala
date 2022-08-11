@@ -106,18 +106,16 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
     kustoAdminClient.execute(database, generateTempTableCreateCommand(table, columnsTypesAndNames = "ColA:string, ColB:int"))
     val crp = new ClientRequestProperties
     crp.setTimeoutInMilliSec(2000)
-    val requestId = UUID.randomUUID().toString
-    println(requestId )
     dfOrig.write
       .format("com.microsoft.kusto.spark.datasource")
       .option(KustoSinkOptions.KUSTO_CLUSTER, cluster)
       .option(KustoSinkOptions.KUSTO_DATABASE, database)
       .option(KustoSinkOptions.KUSTO_TABLE, "TestTable2")
-//      .option(KustoSinkOptions.KUSTO_TEMP_TABLE_NAME, table)
+      .option(KustoSinkOptions.KUSTO_TEMP_TABLE_NAME, table)
       .option(KustoSinkOptions.KUSTO_AAD_APP_ID, appId)
       .option(KustoSinkOptions.KUSTO_AAD_APP_SECRET, appKey)
       .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, authority)
-      .option(KustoSinkOptions.KUSTO_REQUEST_ID, requestId)
+      .option(KustoSinkOptions.KUSTO_REQUEST_ID, "04ec0408-3cc3_.asd")
       .option(KustoSinkOptions.KUSTO_CLIENT_REQUEST_PROPERTIES_JSON, crp.toString)
       .mode(SaveMode.Append)
       .save()
