@@ -330,7 +330,13 @@ class KustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcsb: Conne
             },
             0,
             DelayPeriodBetweenCalls,
-            res => res.isDefined && res.get.status == OperationStatus.Pending,
+            res => {
+              val pending = res.isDefined && res.get.status == OperationStatus.Pending
+              if (pending) {
+                println(loggerName, s"Polling on result for partition: '${partitionResult.partitionId}' in requestId: ${writeOptions.requestId}, status is - 'Pending'")
+              }
+              pending
+            },
             res => finalRes = res,
             maxWaitTimeBetweenCalls = KDSU.WriteMaxWaitTime.toMillis.toInt)
             .await(writeOptions.timeout.toMillis, TimeUnit.MILLISECONDS)
@@ -344,7 +350,7 @@ class KustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcsb: Conne
                 KDSU.logInfo(loggerName, s"Ingestion to Kusto succeeded. " +
                   s"Cluster: '${coordinates.clusterAlias}', " +
                   s"database: '${coordinates.database}', " +
-                  s"table: '$tmpTableName'$batchIdIfExists, partition: '${partitionResult.partitionId}'', from: '${finalRes.get.ingestionSourcePath}', Operation ${finalRes.get.operationId}")
+                  s"table: '$tmpTableName'$batchIdIfExists, partition: '${partitionResult.partitionId}', from: '${finalRes.get.ingestionSourcePath}', Operation ${finalRes.get.operationId}")
               case otherStatus =>
 
                 throw new RuntimeException(s"Ingestion to Kusto failed with status '$otherStatus'." +
