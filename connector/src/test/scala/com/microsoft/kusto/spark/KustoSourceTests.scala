@@ -1,7 +1,7 @@
 package com.microsoft.kusto.spark
 
 import com.microsoft.kusto.spark.datasource.{KustoSourceOptions, TransientStorageCredentials}
-import com.microsoft.kusto.spark.utils.KustoClientCache.AliasAndAuth
+import com.microsoft.kusto.spark.utils.KustoClientCache.ClusterAndAuth
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
@@ -88,7 +88,8 @@ class KustoSourceTests extends FlatSpec with MockFactory with Matchers with Befo
     assert(engine.equals(engineUrl))
     assert(KDSU.getEngineUrlFromAliasIfNeeded(engineUrl ).equals(engineUrl))
 
-    assert(ingestUrl.equals(AliasAndAuth(alias,engineUrl,null).ingestUri))
+    assert(ingestUrl.equals(ClusterAndAuth(engineUrl,null, None, alias).ingestUri))
+    assert(ingestUrl.equals(ClusterAndAuth(engineUrl,null, Some(ingestUrl), alias).ingestUri))
 
     val engine2 = KDSU.getEngineUrlFromAliasIfNeeded(ingestUrl)
     assert(engine2.equals(engineUrl))
@@ -100,7 +101,7 @@ class KustoSourceTests extends FlatSpec with MockFactory with Matchers with Befo
     val expectedAlias = "ohbitton.dev"
     val alias = KDSU.getClusterNameFromUrlIfNeeded(url)
     assert(alias.equals(expectedAlias))
-    assert(url.equals(AliasAndAuth(alias,engineUrl,null).ingestUri))
+    assert(url.equals(ClusterAndAuth(engineUrl,null, None, alias).ingestUri))
 
     val ariaEngineUrl = "https://kusto.aria.microsoft.com"
     val expectedAriaAlias = "Aria proxy"
