@@ -118,7 +118,6 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
 
     val df = spark.read.kusto(kustoConnectionOptions.cluster, kustoConnectionOptions.database, query, conf)
     df.show()
-    val dfres = df.collect()
   }
 
   "KustoSource" should "execute a read query on Kusto cluster in distributed mode" in {
@@ -137,7 +136,7 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
     spark.read.kusto(kustoConnectionOptions.cluster, kustoConnectionOptions.database, query, conf).show(20)
   }
 
-  "KustoSource" should "read distributed, transient cache change the filter but execute once" taggedAs KustoE2E in {
+  "KustoSource" should "read distributed, transient cache change the filter but execute once" in {
     import spark.implicits._
     val table = KustoQueryUtils.simplifyName(s"KustoSparkReadWriteTest_${UUID.randomUUID()}")
 
