@@ -606,7 +606,7 @@ object KustoDataSourceUtils {
   }
 
   private[kusto] def estimateRowsCount(client: Client, query: String, database: String, crp: ClientRequestProperties): Int = {
-    var count = 0
+    var count = 1
     val estimationResult: util.List[AnyRef] = Await.result(Future {
       val res = client.execute(database, generateEstimateRowsCountQuery(query), crp).getPrimaryResults
       res.next()
@@ -618,7 +618,7 @@ object KustoDataSourceUtils {
       Await.result(Future {
         val res = client.execute(database, generateCountQuery(query), crp).getPrimaryResults
         res.next()
-        res.getInt(0)
+        count = res.getInt(0)
       }, KustoConstants.TimeoutForCountCheck)
     } else {
       // Zero estimation count does not indicate zero results, therefore we add 1 here so that we won't return an empty RDD
