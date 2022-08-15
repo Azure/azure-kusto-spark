@@ -43,8 +43,7 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
 
     sc = spark.sparkContext
     sqlContext = spark.sqlContext
-    val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(
-      s"https://${kustoConnectionOptions.cluster}.kusto.windows.net",
+    val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(KDSU.getEngineUrlFromAliasIfNeeded(kustoConnectionOptions.cluster),
       kustoConnectionOptions.appId, kustoConnectionOptions.appKey, kustoConnectionOptions.authority)
     kustoAdminClient = Some(ClientFactory.createClient(engineKcsb))
     try {
@@ -106,35 +105,35 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
 
     assert(orig.deep == result.deep)
   }
-
-  "KustoSource" should "execute a read query on Kusto cluster in single mode"  in {
-    val query: String = System.getProperty(KustoSourceOptions.KUSTO_QUERY, table)
-
-    val conf: Map[String, String] = Map(
-      KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceSingleMode.toString,
-      KustoSourceOptions.KUSTO_AAD_APP_ID -> kustoConnectionOptions.appId,
-      KustoSourceOptions.KUSTO_AAD_APP_SECRET -> kustoConnectionOptions.appKey
-    )
-
-    val df = spark.read.kusto(kustoConnectionOptions.cluster, kustoConnectionOptions.database, query, conf)
-    df.show()
-  }
-
-  "KustoSource" should "execute a read query on Kusto cluster in distributed mode" in {
-    val query: String = System.getProperty(KustoSourceOptions.KUSTO_QUERY, table)
-    //    val blobSas: String = System.getProperty("blobSas")
-    //  TODO - get sas from DM and set it yourself
-    //    val storage = new TransientStorageParameters(Array(new TransientStorageCredentials(blobSas)))
-
-    val conf: Map[String, String] = Map(
-      KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceDistributedMode.toString,
-      //        KustoSourceOptions.KUSTO_TRANSIENT_STORAGE -> storage.toString,
-      KustoSourceOptions.KUSTO_AAD_APP_ID -> kustoConnectionOptions.appId,
-      KustoSourceOptions.KUSTO_AAD_APP_SECRET -> kustoConnectionOptions.appKey
-    )
-
-    spark.read.kusto(kustoConnectionOptions.cluster, kustoConnectionOptions.database, query, conf).show(20)
-  }
+//
+//  "KustoSource" should "execute a read query on Kusto cluster in single mode"  in {
+//    val query: String = System.getProperty(KustoSourceOptions.KUSTO_QUERY, table)
+//
+//    val conf: Map[String, String] = Map(
+//      KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceSingleMode.toString,
+//      KustoSourceOptions.KUSTO_AAD_APP_ID -> kustoConnectionOptions.appId,
+//      KustoSourceOptions.KUSTO_AAD_APP_SECRET -> kustoConnectionOptions.appKey
+//    )
+//
+//    val df = spark.read.kusto(kustoConnectionOptions.cluster, kustoConnectionOptions.database, query, conf)
+//    df.show()
+//  }
+//
+//  "KustoSource" should "execute a read query on Kusto cluster in distributed mode" in {
+//    val query: String = System.getProperty(KustoSourceOptions.KUSTO_QUERY, table)
+//    //    val blobSas: String = System.getProperty("blobSas")
+//    //  TODO - get sas from DM and set it yourself
+//    //    val storage = new TransientStorageParameters(Array(new TransientStorageCredentials(blobSas)))
+//
+//    val conf: Map[String, String] = Map(
+//      KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceDistributedMode.toString,
+//      //        KustoSourceOptions.KUSTO_TRANSIENT_STORAGE -> storage.toString,
+//      KustoSourceOptions.KUSTO_AAD_APP_ID -> kustoConnectionOptions.appId,
+//      KustoSourceOptions.KUSTO_AAD_APP_SECRET -> kustoConnectionOptions.appKey
+//    )
+//
+//    spark.read.kusto(kustoConnectionOptions.cluster, kustoConnectionOptions.database, query, conf).show(20)
+//  }
 
   "KustoSource" should "read distributed, transient cache change the filter but execute once" in {
     import spark.implicits._
