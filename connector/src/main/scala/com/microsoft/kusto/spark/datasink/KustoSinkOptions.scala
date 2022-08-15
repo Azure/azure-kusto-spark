@@ -85,7 +85,7 @@ object WriteMode extends Enumeration {
   val Transactional, Queued = Value
 }
 
-case class WriteOptions(pollingOnDriver:Boolean = true,
+case class WriteOptions(pollingOnDriver:Boolean = false,
                         tableCreateOptions: SinkTableCreationMode.SinkTableCreationMode = SinkTableCreationMode.FailIfNotExist,
                         isAsync: Boolean = false,
                         writeResultLimit: String = KustoSinkOptions.NONE_RESULT_LIMIT,
