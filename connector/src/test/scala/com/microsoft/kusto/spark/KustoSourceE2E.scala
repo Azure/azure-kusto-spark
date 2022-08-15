@@ -27,17 +27,16 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
     .appName("KustoSink")
     .master(f"local[$nofExecutors]")
     .getOrCreate()
-
   private var sc: SparkContext = _
   private var sqlContext: SQLContext = _
-  KDSU.logError("System.getProperties", System.getProperties.toString)
-  KDSU.logError("System.getenv", System.getenv().toString)
-  val kustoConnectionOptions: KustoConnectionOptions = KustoTestUtils.getSystemTestOptions
-  val table = KustoQueryUtils.simplifyName(s"KustoSparkReadWriteTest_${UUID.randomUUID()}")
-//  val getP = System.getProperty("hadoop.home.dir");
+
+  private val kustoConnectionOptions: KustoConnectionOptions = KustoTestUtils.getSystemTestOptions
+  private val table = KustoQueryUtils.simplifyName(s"KustoSparkReadWriteTest_${UUID.randomUUID()}")
+//  val getP = System.getProperty("hadoop.home.dir"); this could fix some exception thrown in the CICD background
+  private val myName = this.getClass.getSimpleName
 
   private val loggingLevel = Option(System.getProperty("logLevel"))
-  var kustoAdminClient: Option[Client] = None
+  private var kustoAdminClient: Option[Client] = None
   if (loggingLevel.isDefined) KDSU.setLoggingLevel(loggingLevel.get)
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -50,9 +49,12 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
     kustoAdminClient = Some(ClientFactory.createClient(engineKcsb))
     try {
       kustoAdminClient.get.execute(kustoConnectionOptions.database, generateAlterIngestionBatchingPolicyCommand(
-        kustoConnectionOptions.database, "@'{\"MaximumBatchingTimeSpan\":\"00:00:10\", \"MaximumNumberOfItems\": 500, \"MaximumRawDataSizeMB\": 1024}'","database"))
+        "database",
+        kustoConnectionOptions.database,
+        "@'{\"MaximumBatchingTimeSpan\":\"00:00:10\", \"MaximumNumberOfItems\": 500, \"MaximumRawDataSizeMB\": 1024}'"))
     } catch {
-      case _:Exception => // ignore
+      case e: Exception => // Just a nice to have - don't throw
+        KDSU.reportExceptionAndThrow(myName, e,"Updating database batching policy", shouldNotThrow = true)
     }
   }
 

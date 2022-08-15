@@ -8,10 +8,12 @@ import com.microsoft.kusto.spark.sql.extension.SparkExtension.DataFrameReaderExt
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
-
 import java.nio.file.{Files, Paths}
 import java.security.InvalidParameterException
 import java.util.UUID
+
+import org.apache.commons.lang3.StringUtils
+
 import scala.collection.JavaConverters._
 import scala.concurrent.TimeoutException
 
@@ -161,10 +163,10 @@ private[kusto] object KustoTestUtils {
   }
 
   def getSystemTestOptions: KustoConnectionOptions = {
-    var appId: String = KustoTestUtils.getSystemVariable(KustoSinkOptions.KUSTO_AAD_APP_ID)
+    val appId: String = KustoTestUtils.getSystemVariable(KustoSinkOptions.KUSTO_AAD_APP_ID)
     var appKey: String = KustoTestUtils.getSystemVariable(KustoSinkOptions.KUSTO_AAD_APP_SECRET)
     var authority: String = KustoTestUtils.getSystemVariable(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID)
-    if (authority == null) authority = "microsoft.com"
+    if (StringUtils.isBlank(authority)) authority = "microsoft.com"
     val cluster: String = KustoTestUtils.getSystemVariable(KustoSinkOptions.KUSTO_CLUSTER)
     val database: String = KustoTestUtils.getSystemVariable(KustoSinkOptions.KUSTO_DATABASE)
     var table: String = KustoTestUtils.getSystemVariable(KustoSinkOptions.KUSTO_TABLE)
@@ -172,7 +174,7 @@ private[kusto] object KustoTestUtils {
       table = "SparkTestTable"
     }
     if (appKey == null) {
-      val secretPath = System.getenv("SecretPath")
+      val secretPath = KustoTestUtils.getSystemVariable("SecretPath")
       if (secretPath == null) throw new IllegalArgumentException("SecretPath is not set")
       appKey = Files.readAllLines(Paths.get(secretPath)).get(0)
     }

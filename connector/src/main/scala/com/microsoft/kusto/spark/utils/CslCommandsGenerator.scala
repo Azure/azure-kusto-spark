@@ -39,7 +39,7 @@ private[kusto] object CslCommandsGenerator {
     s""".refresh database '$databaseName' table '$tableName' cache ingestionbatchingpolicy"""
   }
 
-  def generateAlterIngestionBatchingPolicyCommand(entityName: String, targetBatchingPolicy: String, entityType: String): String = {
+  def generateAlterIngestionBatchingPolicyCommand(entityType: String, entityName: String, targetBatchingPolicy: String): String = {
     s""".alter $entityType ${KustoQueryUtils.normalizeTableName(entityName)} policy ingestionbatching @"$targetBatchingPolicy""""
   }
 
