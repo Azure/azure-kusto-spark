@@ -83,7 +83,7 @@ object KustoDataSourceUtils {
   var ReadInitialMaxWaitTime: FiniteDuration = 4 seconds
   var ReadMaxWaitTime: FiniteDuration = 30 seconds
   var WriteInitialMaxWaitTime: FiniteDuration = 2 seconds
-  var WriteMaxWaitTime: FiniteDuration = 30 seconds
+  var WriteMaxWaitTime: FiniteDuration = 10 seconds
 
   val input: InputStream = getClass.getClassLoader.getResourceAsStream("spark.kusto.properties")
   val props = new Properties()
