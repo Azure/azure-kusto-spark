@@ -142,8 +142,7 @@ object FinalizeHelper {
       res => {
         val pending = res.isDefined && res.get.status == OperationStatus.Pending
         if (pending) {
-          KDSU.logDebug(loggerName, s"Polling on result for partition: '${partitionResult.partitionId}' in requestId: ${writeOptions.
-            requestId}, status is - 'Pending'")
+          KDSU.logDebug(loggerName, s"Polling on result for partition: '${partitionResult.partitionId}' in requestId: $requestId, status is-'Pending'")
         }
         pending
       },
