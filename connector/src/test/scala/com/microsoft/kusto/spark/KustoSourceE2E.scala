@@ -2,6 +2,7 @@ package com.microsoft.kusto.spark
 
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
+
 import com.microsoft.azure.kusto.data.{ClientFactory, ClientRequestProperties}
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode}
@@ -9,6 +10,7 @@ import com.microsoft.kusto.spark.datasource.{KustoSourceOptions, ReadMode, Trans
 import com.microsoft.kusto.spark.sql.extension.SparkExtension._
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils => KDSU}
+import org.apache.log4j.Level
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode, SparkSession}
 import org.joda.time.DateTime
@@ -99,7 +101,7 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
 
   "KustoConnector" should "write to a kusto table and read it back in default mode" taggedAs KustoE2E in {
     val table = KustoQueryUtils.simplifyName(s"KustoSparkReadWriteTest_${UUID.randomUUID()}")
-
+    KDSU.setLoggingLevel(Level.DEBUG)
     // Create a new table.
     val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://$cluster.kusto.windows.net", appId, appKey, authority)
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)

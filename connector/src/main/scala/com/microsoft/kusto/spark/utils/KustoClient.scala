@@ -333,12 +333,14 @@ class KustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcsb: Conne
             res => {
               val pending = res.isDefined && res.get.status == OperationStatus.Pending
               if (pending) {
-                println(loggerName, s"Polling on result for partition: '${partitionResult.partitionId}' in requestId: ${writeOptions.requestId}, status is - 'Pending'")
+                KDSU.logDebug(loggerName, s"Polling on result for partition: '${partitionResult.partitionId}' in requestId: ${writeOptions.
+                  requestId}, status is - 'Pending'")
               }
               pending
             },
             res => finalRes = res,
-            maxWaitTimeBetweenCalls = KDSU.WriteMaxWaitTime.toMillis.toInt)
+            maxWaitTimeBetweenCallsMillis = KDSU.WriteInitialMaxWaitTime.toMillis.toInt ,
+            maxWaitTimeAfterMinute = KDSU.WriteMaxWaitTime.toMillis.toInt)
             .await(writeOptions.timeout.toMillis, TimeUnit.MILLISECONDS)
 
           if (finalRes.isDefined) {

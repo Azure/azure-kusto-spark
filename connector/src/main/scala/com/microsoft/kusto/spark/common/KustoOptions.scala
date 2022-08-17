@@ -3,6 +3,7 @@ package com.microsoft.kusto.spark.common
 import java.util.Locale
 
 trait KustoOptions {
+  // TODO validate for each option given by user that it exists in the set
   private val kustoOptionNames = collection.mutable.Set[String]()
   protected def newOption(name: String): String = {
     kustoOptionNames += name.toLowerCase(Locale.ROOT)
