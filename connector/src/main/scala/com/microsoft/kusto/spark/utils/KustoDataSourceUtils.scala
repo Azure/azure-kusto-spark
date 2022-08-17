@@ -80,8 +80,10 @@ object KustoDataSourceUtils {
 
   val DefaultMicrosoftTenant = "microsoft.com"
   val NewLine: String = sys.props("line.separator")
-  val ReadMaxWaitTime: FiniteDuration = 30 seconds
-  val WriteMaxWaitTime: FiniteDuration = 5 seconds
+  var ReadInitialMaxWaitTime: FiniteDuration = 4 seconds
+  var ReadMaxWaitTime: FiniteDuration = 30 seconds
+  var WriteInitialMaxWaitTime: FiniteDuration = 2 seconds
+  var WriteMaxWaitTime: FiniteDuration = 10 seconds
 
   val input: InputStream = getClass.getClassLoader.getResourceAsStream("spark.kusto.properties")
   val props = new Properties()
@@ -444,10 +446,18 @@ object KustoDataSourceUtils {
    * @param stopCondition    - stop jobs if condition holds for the func.apply output
    * @param finalWork        - do final work with the last func.apply output
    */
-  def doWhile[A](func: () => A, delayBeforeStart: Long, delayBeforeEach: Int, stopCondition: A => Boolean, finalWork: A => Unit, maxWaitTimeBetweenCalls: Int): CountDownLatch = {
+  def doWhile[A](func: () => A,
+                 delayBeforeStart: Long,
+                 delayBeforeEach: Int,
+                 stopCondition: A => Boolean,
+                 finalWork: A => Unit,
+                 maxWaitTimeBetweenCallsMillis: Int,
+                 maxWaitTimeAfterMinute: Int): CountDownLatch = {
     val latch = new CountDownLatch(1)
     val t = new Timer()
     var currentWaitTime = delayBeforeEach
+    var waitedTime = 0
+    var maxWaitTime = maxWaitTimeBetweenCallsMillis
 
     class ExponentialBackoffTask extends TimerTask {
       def run(): Unit = {
@@ -459,7 +469,11 @@ object KustoDataSourceUtils {
             while (latch.getCount > 0) latch.countDown()
             t.cancel()
           } else {
-            currentWaitTime = if (currentWaitTime + currentWaitTime > maxWaitTimeBetweenCalls) maxWaitTimeBetweenCalls else currentWaitTime + currentWaitTime
+            waitedTime += currentWaitTime
+            if (waitedTime > TimeUnit.MINUTES.toMillis(1)) {
+              maxWaitTime = maxWaitTimeAfterMinute
+            }
+            currentWaitTime = if (currentWaitTime + currentWaitTime > maxWaitTime) maxWaitTime else currentWaitTime + currentWaitTime
             t.schedule(new ExponentialBackoffTask(), currentWaitTime)
           }
         } catch {
@@ -517,7 +531,9 @@ object KustoDataSourceUtils {
         result.isEmpty || (result.get.next() && result.get.getString(stateCol) == "InProgress"),
       finalWork = (result: Option[KustoResultSetTable]) => {
         lastResponse = result
-      }, maxWaitTimeBetweenCalls = ReadMaxWaitTime.toMillis.toInt)
+      }, maxWaitTimeBetweenCallsMillis = ReadInitialMaxWaitTime.toMillis.toInt,
+      ReadMaxWaitTime.toMillis.toInt
+    )
 
     var success = true
     if (timeOut < FiniteDuration.apply(0, SECONDS)) {
