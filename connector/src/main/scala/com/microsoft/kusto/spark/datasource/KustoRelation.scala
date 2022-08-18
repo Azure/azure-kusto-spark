@@ -88,7 +88,7 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
 
       if (!useSingleMode || exception.isDefined) {
         if(exception.isDefined){
-            KDSU.logError("KustoRelation",s"Failed with lean mode, falling back to distributed mode, requestId: $requestId. Exception : ${exception.get.getMessage}")
+            KDSU.logError("KustoRelation",s"Failed with Single mode, falling back to Distributed mode, requestId: $requestId. Exception : ${exception.get.getMessage}")
         }
 
         readOptions.partitionOptions.column = Some(getPartitioningColumn)
