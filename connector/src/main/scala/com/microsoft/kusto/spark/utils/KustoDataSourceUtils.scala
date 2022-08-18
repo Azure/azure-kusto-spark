@@ -443,13 +443,13 @@ object KustoDataSourceUtils {
    * @param func             - the function to run
    * @param delayBeforeStart - delay before first job
    * @param delayBeforeEach  - delay between jobs
-   * @param stopCondition    - stop jobs if condition holds for the func.apply output
+   * @param doWhileCondition - go one while the condition holds for the func.apply output
    * @param finalWork        - do final work with the last func.apply output
    */
   def doWhile[A](func: () => A,
                  delayBeforeStart: Long,
                  delayBeforeEach: Int,
-                 stopCondition: A => Boolean,
+                 doWhileCondition: A => Boolean,
                  finalWork: A => Unit,
                  maxWaitTimeBetweenCallsMillis: Int,
                  maxWaitTimeAfterMinute: Int): CountDownLatch = {
@@ -464,7 +464,7 @@ object KustoDataSourceUtils {
         try {
           val res = func.apply()
 
-          if (!stopCondition.apply(res)) {
+          if (!doWhileCondition.apply(res)) {
             finalWork.apply(res)
             while (latch.getCount > 0) latch.countDown()
             t.cancel()
@@ -496,7 +496,9 @@ object KustoDataSourceUtils {
                                    commandResult: KustoResultSetTable,
                                    samplePeriod: FiniteDuration = KCONST.DefaultPeriodicSamplePeriod,
                                    timeOut: FiniteDuration,
-                                   doingWhat: String): Option[KustoResultSetTable] = {
+                                   doingWhat: String,
+                                   loggerName: String,
+                                   requestId: String): Option[KustoResultSetTable] = {
     commandResult.next()
     val operationId = commandResult.getString(0)
     val operationsShowCommand = CslCommandsGenerator.generateOperationsShowCommand(operationId)
@@ -513,7 +515,7 @@ object KustoDataSourceUtils {
       catch {
         case e: DataServiceException =>
           if (e.isPermanent) {
-            val message = s"Couldn't monitor the progress of the $doingWhat operation from the service, you may track" +
+            val message = s"Couldn't monitor the progress of the $doingWhat on requestId: $requestId operation from the service, you may track" +
               s" it using the command '$operationsShowCommand'."
             logError("verifyAsyncCommandCompletion", message)
             throw new Exception(message, e)
@@ -527,8 +529,14 @@ object KustoDataSourceUtils {
     val task = doWhile[Option[KustoResultSetTable]](
       func = statusCheck,
       delayBeforeStart = 0, delayBeforeEach = delayPeriodBetweenCalls,
-      stopCondition = (result: Option[KustoResultSetTable]) =>
-        result.isEmpty || (result.get.next() && result.get.getString(stateCol) == "InProgress"),
+      doWhileCondition = (result: Option[KustoResultSetTable]) => {
+        val inProgress = result.isEmpty || (result.get.next() && result.get.getString(stateCol) == "InProgress")
+        if (inProgress) {
+          logDebug(loggerName, s"Async operation $doingWhat on requestId $requestId, is in status 'InProgress'," +
+            "polling status again in a few seconds")
+        }
+        inProgress
+      },
       finalWork = (result: Option[KustoResultSetTable]) => {
         lastResponse = result
       }, maxWaitTimeBetweenCallsMillis = ReadInitialMaxWaitTime.toMillis.toInt,

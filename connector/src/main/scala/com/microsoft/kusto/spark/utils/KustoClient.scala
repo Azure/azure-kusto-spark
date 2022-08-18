@@ -210,7 +210,9 @@ class KustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcsb: Conne
           targetTable, curBatchSize, useMaterializedViewFlag), crp).getPrimaryResults
         val operationResult = KDSU.verifyAsyncCommandCompletion(engineClient, database, operation, samplePeriod =
           KustoConstants
-          .DefaultPeriodicSamplePeriod, writeOptions.timeout, s"move extents to destination table '$targetTable' ")
+          .DefaultPeriodicSamplePeriod, writeOptions.timeout, s"move extents to destination table '$targetTable' ",
+          myName,
+          writeOptions.requestId)
         res = Some(engineClient.execute(database, generateShowOperationDetails(operationResult.get.getString(0)), crp)
           .getPrimaryResults)
         if (res.get.count() == 0) {

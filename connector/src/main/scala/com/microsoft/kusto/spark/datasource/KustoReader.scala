@@ -240,7 +240,12 @@ private[kusto] class KustoReader(client: Client) {
     val commandResult: KustoResultSetTable = client.execute(request.kustoCoordinates.database,
       exportCommand,
       request.clientRequestProperties.orNull).getPrimaryResults
-    KDSU.verifyAsyncCommandCompletion(client, request.kustoCoordinates.database, commandResult, timeOut = request
-      .timeout, doingWhat = s"export data to  blob directory: ('$directory') preparing it for reading.")
+    KDSU.verifyAsyncCommandCompletion(client,
+      request.kustoCoordinates.database,
+      commandResult,
+      timeOut = request.timeout,
+      doingWhat = s"export data to  blob directory: ('$directory') preparing it for reading.",
+      loggerName = myName,
+      requestId = request.requestId)
   }
 }
