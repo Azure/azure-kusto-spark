@@ -55,7 +55,7 @@ private[kusto] object KustoReader {
                                      request: KustoReadRequest,
                                      filtering: KustoFiltering): RDD[Row] = {
 
-    KDSU.logInfo(myName, s"Executing query. requestId: ${request.requestId}")
+    KDSU.logInfo(myName, s"Executing query in Single mode. requestId: ${request.requestId}")
     val filteredQuery = KustoFilter.pruneAndFilter(KustoSchema(request.schema.sparkSchema, Set()), request.query, filtering)
     val kustoResult: KustoResultSetTable = kustoClient.execute(request.kustoCoordinates.database,
       filteredQuery,
@@ -127,7 +127,7 @@ private[kusto] object KustoReader {
                               options: KustoReadOptions,
                               filtering: KustoFiltering) = {
 
-    KDSU.logInfo(myName, s"Starting exporting data from Kusto to blob storage. requestId: ${request.requestId}")
+    KDSU.logInfo(myName, s"Starting exporting data from Kusto to blob storage in Distributed mode. requestId: ${request.requestId}")
 
     setupBlobAccess(request, storage)
     val partitions = calculatePartitions(options.partitionOptions)

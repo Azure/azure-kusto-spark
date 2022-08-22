@@ -46,12 +46,12 @@ case class TransientStorageCredentials() {
     parseSas(sas)
   }
 
-  def sasDefined(): Boolean = {
+  def sasDefined: Boolean = {
     sasUrl != null
   }
 
   def validate(): Unit = {
-    if (sasDefined()) {
+    if (sasDefined) {
       if (sasUrl.isEmpty) {
         throw new InvalidParameterException("sasUrl is null or empty")
       }
