@@ -6,12 +6,15 @@ import com.microsoft.kusto.spark.authentication._
 import com.microsoft.kusto.spark.common.{KustoCoordinates, KustoDebugOptions}
 import com.microsoft.kusto.spark.datasink.KustoWriter.TempIngestionTablePrefix
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
-import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SchemaAdjustmentMode, SinkTableCreationMode, WriteMode, WriteOptions}
+import com.microsoft.kusto.spark.datasink._
 import com.microsoft.kusto.spark.datasource.ReadMode.ReadMode
+import com.microsoft.kusto.spark.datasource._
 import com.microsoft.kusto.spark.exceptions.{FailedOperationException, TimeoutAwaitingPendingOperationException}
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.KustoConstants.{DefaultBatchingLimit, DefaultExtentsCountForSplitMergePerNode, DefaultMaxRetriesOnMoveExtents}
 import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
+import io.github.resilience4j.retry.{Retry, RetryConfig}
+import io.vavr.CheckedFunction0
 import org.apache.commons.lang3.StringUtils
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.http.client.utils.URIBuilder
@@ -29,7 +32,6 @@ import java.util.{NoSuchElementException, Properties, StringJoiner, Timer, Timer
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
-import com.microsoft.kusto.spark.datasource.{KustoReadOptions, KustoResponseDeserializer, KustoSchema, KustoSourceOptions, PartitionOptions, ReadMode, TransientStorageCredentials, TransientStorageParameters}
 
 object KustoDataSourceUtils {
   def generateTempTableName(appName: String, destinationTableName: String, requestId:String,
@@ -145,8 +147,8 @@ object KustoDataSourceUtils {
     tableSchemaBuilder.toString
   }
 
-  private[kusto] def getSchema(database: String, query: String, client: Client, clientRequestProperties: Option[ClientRequestProperties]): KustoSchema = {
-    KustoResponseDeserializer(client.execute(database, query, clientRequestProperties.orNull).getPrimaryResults).getSchema
+  private[kusto] def getSchema(database: String, query: String, client: KustoClient, clientRequestProperties: Option[ClientRequestProperties]): KustoSchema = {
+    KustoResponseDeserializer(client.executeEngine(database, query, clientRequestProperties.orNull).getPrimaryResults).getSchema
   }
 
   private def parseAuthentication(parameters: Map[String, String], clusterUrl:String) = {
@@ -356,6 +358,15 @@ object KustoDataSourceUtils {
       s"'adjustSchema': $adjustSchema, 'autoCleanupTime': $autoCleanupTime$tempTableLog}")
 
     SinkParameters(writeOptions, sourceParameters)
+  }
+
+  def retryFunction[T](func:() => T, retryConfig: RetryConfig, retryName: String): T ={
+    val retry = Retry.of(retryName, retryConfig)
+    val f:CheckedFunction0[T] = new CheckedFunction0[T]() {
+      override def apply(): T = func()
+    }
+
+    retry.executeCheckedSupplier(f)
   }
 
   def getClientRequestProperties(parameters: Map[String, String], requestId: String): ClientRequestProperties = {
@@ -629,6 +640,7 @@ object KustoDataSourceUtils {
     res.getInt(0)
   }
 
+  // No need to retry here - if an exception is caught - fallback to distributed mode
   private[kusto] def estimateRowsCount(client: Client, query: String, database: String, crp: ClientRequestProperties): Int = {
     var count = 1
     val estimationResult: util.List[AnyRef] = Await.result(Future {

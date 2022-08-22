@@ -64,7 +64,7 @@ object FinalizeHelper {
             val moveOperation = (_: Int) => {
               val client = KustoClientCache.getClient(coordinates.clusterUrl, authentication, coordinates.ingestionUrl,
                 coordinates.clusterAlias)
-              client.engineClient.execute(coordinates.database, generateTableAlterMergePolicyCommand(tmpTableName,
+              client.executeEngine(coordinates.database, generateTableAlterMergePolicyCommand(tmpTableName,
                 allowMerge = false,
                 allowRebuild = false), crp)
               client.moveExtents(coordinates.database, tmpTableName, coordinates.table.get, crp, writeOptions)
@@ -102,7 +102,7 @@ object FinalizeHelper {
               writeOptions.requestId
             )
         } finally {
-          kustoClient.cleanupIngestionByProducts(coordinates.database, kustoClient.engineClient, tmpTableName, crp)
+          kustoClient.cleanupIngestionByProducts(coordinates.database, tmpTableName, crp)
         }
       }
 

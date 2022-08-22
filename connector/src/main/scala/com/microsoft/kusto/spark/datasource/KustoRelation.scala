@@ -55,7 +55,7 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
       try {
         count = KDSU.
           estimateRowsCount(kustoClient, query, kustoCoordinates.database, clientRequestProperties.orNull)
-      }catch {
+      } catch {
         // Assume count is high if estimation got timed out
         case e: Exception =>
           if (forceSingleMode) {
@@ -127,7 +127,7 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
     KDSU.getSchema(kustoCoordinates.database,
       getSchemaQuery,
       KustoClientCache.getClient(
-        kustoCoordinates.clusterUrl, authentication, kustoCoordinates.ingestionUrl, kustoCoordinates.clusterAlias).engineClient, clientRequestProperties)
+        kustoCoordinates.clusterUrl, authentication, kustoCoordinates.ingestionUrl, kustoCoordinates.clusterAlias), clientRequestProperties)
   }
 
   private def getPartitioningColumn: String = {
