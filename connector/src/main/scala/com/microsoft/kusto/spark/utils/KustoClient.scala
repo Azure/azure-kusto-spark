@@ -11,7 +11,7 @@ import com.microsoft.kusto.spark.datasink.{SinkTableCreationMode, SparkIngestion
 import com.microsoft.kusto.spark.datasource.{TransientStorageCredentials, TransientStorageParameters}
 import com.microsoft.kusto.spark.exceptions.{FailedOperationException, RetriesExhaustedException}
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
-import com.microsoft.kusto.spark.utils.KustoConstants.{MAX_COMMAND_RETRY_ATTEMPTS, MaxSleepOnMoveExtentsMillis}
+import com.microsoft.kusto.spark.utils.KustoConstants.{MaxCommandsRetryAttemts, MaxSleepOnMoveExtentsMillis}
 import com.microsoft.kusto.spark.utils.KustoDataSourceUtils.extractSchemaFromResultTable
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import io.github.resilience4j.core.IntervalFunction
@@ -41,16 +41,17 @@ class KustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcsb: Conne
   private lazy val exportContainersContainerProvider = new ContainerProvider(dmClient, clusterAlias,
     generateGetExportContainersCommand(), exportProviderEntryCreator)
   RetryConfig.ofDefaults()
-  private val BASE_INTERVAL = 1000L
-  private val MAX_RETRY_INTERVAL = 1000L * 10
+  private val BaseInterval = 1000L
+  private val MaxRetryInterval = 1000L * 10
 
   private def buildRetryConfig = {
     val sleepConfig = IntervalFunction.ofExponentialRandomBackoff(
-      BASE_INTERVAL, IntervalFunction.DEFAULT_MULTIPLIER, IntervalFunction.DEFAULT_RANDOMIZATION_FACTOR, MAX_RETRY_INTERVAL)
+      BaseInterval, IntervalFunction.DEFAULT_MULTIPLIER, IntervalFunction.DEFAULT_RANDOMIZATION_FACTOR, MaxRetryInterval)
     RetryConfig.custom
-      .maxAttempts(MAX_COMMAND_RETRY_ATTEMPTS)
+      .maxAttempts(MaxCommandsRetryAttemts)
       .intervalFunction(sleepConfig)
-      .retryOnException((e: Throwable) => e.isInstanceOf[IngestionServiceException] && e.asInstanceOf[KustoDataExceptionBase].isPermanent).build
+      .retryOnException((e: Throwable) =>
+        e.isInstanceOf[IngestionServiceException] && !e.asInstanceOf[KustoDataExceptionBase].isPermanent).build
   }
 
   private val retryConfig = buildRetryConfig

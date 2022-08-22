@@ -13,7 +13,7 @@ import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.exceptions.TimeoutAwaitingPendingOperationException
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator.generateTableGetSchemaAsRowsCommand
-import com.microsoft.kusto.spark.utils.KustoConstants.{IngestSkippedTrace, MAX_INGEST_RETRY_ATTEMPTS}
+import com.microsoft.kusto.spark.utils.KustoConstants.{IngestSkippedTrace, MaxIngestRetryAttempts}
 import com.microsoft.kusto.spark.utils.{KustoClient, KustoClientCache, KustoIngestionUtils, KustoQueryUtils, KustoConstants => KCONST, KustoDataSourceUtils => KDSU}
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.DataFrame
@@ -44,7 +44,7 @@ object KustoWriter {
   val TempIngestionTablePrefix = "sparkTempTable_"
   val DelayPeriodBetweenCalls: Int = KCONST.DefaultPeriodicSamplePeriod.toMillis.toInt
   val GzipBufferSize: Int = 1000 * KCONST.DefaultBufferSize
-  private val retryConfig = RetryConfig.custom.maxAttempts(MAX_INGEST_RETRY_ATTEMPTS).retryExceptions(classOf[IngestionServiceException]).build
+  private val retryConfig = RetryConfig.custom.maxAttempts(MaxIngestRetryAttempts).retryExceptions(classOf[IngestionServiceException]).build
 
   private[kusto] def write(batchId: Option[Long],
                            data: DataFrame,

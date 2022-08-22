@@ -27,8 +27,8 @@ object KustoConstants {
   val DefaultMaxRetriesOnMoveExtents: Int = 10
   val DefaultExecutionQueueing: Int = TimeUnit.SECONDS.toMillis(15).toInt
   val DefaultTimeoutQueueing: Int = TimeUnit.SECONDS.toMillis(5).toInt
-  val MAX_INGEST_RETRY_ATTEMPTS = 2
-  val MAX_COMMAND_RETRY_ATTEMPTS = 4
+  val MaxIngestRetryAttempts = 2
+  val MaxCommandsRetryAttemts = 4
   val DefaultMaximumIngestionTime: FiniteDuration = FiniteDuration.apply(
-    MAX_INGEST_RETRY_ATTEMPTS * (DefaultExecutionQueueing + DefaultTimeoutQueueing) + 2000,"millis")
+    MaxIngestRetryAttempts * (DefaultExecutionQueueing + DefaultTimeoutQueueing) + 2000,"millis")
 }
