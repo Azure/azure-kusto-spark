@@ -23,7 +23,6 @@ import org.apache.spark.util.CollectionAccumulator
 import org.json.JSONObject
 import io.github.resilience4j.retry.{Retry, RetryConfig}
 import io.vavr.CheckedFunction0
-
 import java.io._
 import java.net.URI
 import java.nio.charset.StandardCharsets
@@ -31,6 +30,9 @@ import java.security.InvalidParameterException
 import java.util
 import java.util.zip.GZIPOutputStream
 import java.util.{TimeZone, UUID}
+
+import com.microsoft.kusto.spark.datasink.FinalizeHelper.finalizeIngestionWhenWorkersSucceeded
+
 import scala.collection.Iterator
 import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -124,9 +126,9 @@ object KustoWriter {
         // This part runs back on the driver
         if (writeOptions.isTransactionalMode) {
           asyncWork.onSuccess {
-            case _ => kustoClient.finalizeIngestionWhenWorkersSucceeded(
-              tableCoordinates, batchIdIfExists, kustoClient.engineClient, tmpTableName, partitionsResults,
-              writeOptions, crp, tableExists, rdd.sparkContext, authentication)
+            case _ => finalizeIngestionWhenWorkersSucceeded(
+              tableCoordinates, batchIdIfExists, tmpTableName, partitionsResults,
+              writeOptions, crp, tableExists, rdd.sparkContext, authentication, kustoClient)
           }
           asyncWork.onFailure {
             case exception: Exception =>
@@ -152,9 +154,9 @@ object KustoWriter {
           }
         }
         if (writeOptions.isTransactionalMode) {
-          kustoClient.finalizeIngestionWhenWorkersSucceeded(
-          tableCoordinates, batchIdIfExists, kustoClient.engineClient, tmpTableName, partitionsResults, writeOptions,
-          crp, tableExists, rdd.sparkContext, authentication)
+          finalizeIngestionWhenWorkersSucceeded(
+          tableCoordinates, batchIdIfExists, tmpTableName, partitionsResults, writeOptions,
+          crp, tableExists, rdd.sparkContext, authentication, kustoClient)
         }
       }
     }

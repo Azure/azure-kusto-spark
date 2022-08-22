@@ -24,12 +24,7 @@ class KustoSinkSchemaAdjustmentE2E extends FlatSpec
   private val expectedNumberOfRows = 3
   private def newRow(index: Int): String = s"row-$index"
 
-  val appId: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_APP_ID)
-  val appKey: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_APP_SECRET)
-  val authority: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID)
-  val cluster: String = System.getProperty(KustoSinkOptions.KUSTO_CLUSTER)
-  val database: String = System.getProperty(KustoSinkOptions.KUSTO_DATABASE)
-  val kustoConnectionOptions: KustoConnectionOptions = KustoConnectionOptions(cluster, database, appId, appKey, authority)
+  val kustoConnectionOptions: KustoConnectionOptions = KustoTestUtils.getSystemTestOptions
 
 
   override def afterAll(): Unit = {
