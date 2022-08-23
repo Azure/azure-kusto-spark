@@ -11,7 +11,7 @@ import com.microsoft.kusto.spark.datasink.{SinkTableCreationMode, SparkIngestion
 import com.microsoft.kusto.spark.datasource.{TransientStorageCredentials, TransientStorageParameters}
 import com.microsoft.kusto.spark.exceptions.{FailedOperationException, RetriesExhaustedException}
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
-import com.microsoft.kusto.spark.utils.KustoConstants.{MaxCommandsRetryAttemts, MaxSleepOnMoveExtentsMillis}
+import com.microsoft.kusto.spark.utils.KustoConstants.{MaxCommandsRetryAttempts, MaxSleepOnMoveExtentsMillis}
 import com.microsoft.kusto.spark.utils.KustoDataSourceUtils.extractSchemaFromResultTable
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import io.github.resilience4j.core.IntervalFunction
@@ -36,28 +36,26 @@ class KustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcsb: Conne
   lazy val ingestClient: QueuedIngestClient = IngestClientFactory.createClient(ingestKcsb)
   private val exportProviderEntryCreator = (c: ContainerAndSas) => new TransientStorageCredentials(c.containerUrl + c.sas)
   private val ingestProviderEntryCreator = (c: ContainerAndSas) => c
-  private lazy val ingestContainersContainerProvider = new ContainerProvider[ContainerAndSas](dmClient, clusterAlias,
+  private lazy val ingestContainersContainerProvider = new ContainerProvider[ContainerAndSas](this, clusterAlias,
     generateCreateTmpStorageCommand(), ingestProviderEntryCreator)
-  private lazy val exportContainersContainerProvider = new ContainerProvider(dmClient, clusterAlias,
+  private lazy val exportContainersContainerProvider = new ContainerProvider(this, clusterAlias,
     generateGetExportContainersCommand(), exportProviderEntryCreator)
   RetryConfig.ofDefaults()
-  private val BaseInterval = 1000L
-  private val MaxRetryInterval = 1000L * 10
-
-  private def buildRetryConfig = {
-    val sleepConfig = IntervalFunction.ofExponentialRandomBackoff(
-      BaseInterval, IntervalFunction.DEFAULT_MULTIPLIER, IntervalFunction.DEFAULT_RANDOMIZATION_FACTOR, MaxRetryInterval)
-    RetryConfig.custom
-      .maxAttempts(MaxCommandsRetryAttemts)
-      .intervalFunction(sleepConfig)
-      .retryOnException((e: Throwable) =>
-        e.isInstanceOf[IngestionServiceException] && !e.asInstanceOf[KustoDataExceptionBase].isPermanent).build
-  }
 
   private val retryConfig = buildRetryConfig
 
   private val myName = this.getClass.getSimpleName
   private val durationFormat = "dd:HH:mm:ss"
+
+  private def buildRetryConfig = {
+    val sleepConfig = IntervalFunction.ofExponentialRandomBackoff(
+      KustoClient.BaseInterval, IntervalFunction.DEFAULT_MULTIPLIER, IntervalFunction.DEFAULT_RANDOMIZATION_FACTOR, KustoClient.MaxRetryInterval)
+    RetryConfig.custom
+      .maxAttempts(MaxCommandsRetryAttempts)
+      .intervalFunction(sleepConfig)
+      .retryOnException((e: Throwable) =>
+        e.isInstanceOf[IngestionServiceException] && !e.asInstanceOf[KustoDataExceptionBase].isPermanent).build
+  }
 
   def initializeTablesBySchema(tableCoordinates: KustoCoordinates,
                                tmpTableName: String,
@@ -384,5 +382,9 @@ class KustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcsb: Conne
   }
 }
 
+object KustoClient {
+  val BaseInterval = 1000L
+  val MaxRetryInterval = 1000L * 10
+}
 
 case class ContainerAndSas(containerUrl: String, sas: String)
