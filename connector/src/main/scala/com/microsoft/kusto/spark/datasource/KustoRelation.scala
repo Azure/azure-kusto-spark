@@ -2,7 +2,6 @@ package com.microsoft.kusto.spark.datasource
 
 import java.security.InvalidParameterException
 import java.util.Locale
-import java.util.concurrent.TimeUnit
 
 import com.microsoft.azure.kusto.data.ClientRequestProperties
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
@@ -54,7 +53,7 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
       var count = 0
       try {
         count = KDSU.
-          estimateRowsCount(kustoClient, query, kustoCoordinates.database, clientRequestProperties.orNull)
+          estimateRowsCount(kustoClient.engineClient, query, kustoCoordinates.database, clientRequestProperties.orNull)
       } catch {
         // Assume count is high if estimation got timed out
         case e: Exception =>
