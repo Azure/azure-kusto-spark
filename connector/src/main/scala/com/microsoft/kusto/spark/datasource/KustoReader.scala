@@ -6,7 +6,7 @@ import com.microsoft.azure.storage.blob.CloudBlobContainer
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasource.ReadMode.ReadMode
-import com.microsoft.kusto.spark.utils.{CslCommandsGenerator, KustoAzureFsSetupCache, KustoBlobStorageUtils, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.{CslCommandsGenerator, KustoAzureFsSetupCache, KustoBlobStorageUtils, ExtendedKustoClient, KustoDataSourceUtils => KDSU}
 import org.apache.spark.Partition
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.sources.Filter
@@ -51,13 +51,13 @@ private[kusto] object KustoReader {
   private val distributedReadModeTransientCache: concurrent.Map[DistributedReadModeTransientCacheKey,Seq[String]] =
     new concurrent.TrieMap()
 
-  private[kusto] def singleBuildScan(kustoClient: Client,
+  private[kusto] def singleBuildScan(kustoClient: ExtendedKustoClient,
                                      request: KustoReadRequest,
                                      filtering: KustoFiltering): RDD[Row] = {
 
     KDSU.logInfo(myName, s"Executing query in Single mode. requestId: ${request.requestId}")
     val filteredQuery = KustoFilter.pruneAndFilter(KustoSchema(request.schema.sparkSchema, Set()), request.query, filtering)
-    val kustoResult: KustoResultSetTable = kustoClient.execute(request.kustoCoordinates.database,
+    val kustoResult: KustoResultSetTable = kustoClient.executeEngine(request.kustoCoordinates.database,
       filteredQuery,
       request.clientRequestProperties.orNull).getPrimaryResults
 
@@ -65,7 +65,7 @@ private[kusto] object KustoReader {
     request.sparkSession.createDataFrame(serializer.toRows, serializer.getSchema.sparkSchema).rdd
   }
 
-  private[kusto] def distributedBuildScan(kustoClient: Client,
+  private[kusto] def distributedBuildScan(kustoClient: ExtendedKustoClient,
                                           request: KustoReadRequest,
                                           storage: TransientStorageParameters,
                                           options: KustoReadOptions,
@@ -106,7 +106,7 @@ private[kusto] object KustoReader {
         // Check whether the result is empty, causing an IO exception on reading empty parquet file
         // We don't mind generating the filtered query again - it only happens upon exception
         val filteredQuery = KustoFilter.pruneAndFilter(request.schema, request.query, filtering)
-        val count = KDSU.countRows(kustoClient, filteredQuery, request.kustoCoordinates.database, request
+        val count = KDSU.countRows(kustoClient.engineClient, filteredQuery, request.kustoCoordinates.database, request
           .clientRequestProperties.orNull)
 
         if (count == 0) {
@@ -121,7 +121,7 @@ private[kusto] object KustoReader {
     rdd
   }
 
-  private def exportToStorage(kustoClient: Client,
+  private def exportToStorage(kustoClient: ExtendedKustoClient,
                               request: KustoReadRequest,
                               storage: TransientStorageParameters,
                               options: KustoReadOptions,
@@ -213,7 +213,7 @@ private[kusto] object KustoReader {
   }
 }
 
-private[kusto] class KustoReader(client: Client) {
+private[kusto] class KustoReader(client: ExtendedKustoClient) {
   private val myName = this.getClass.getSimpleName
 
   // Export a single partition from Kusto to transient Blob storage.
@@ -237,10 +237,10 @@ private[kusto] class KustoReader(client: Client) {
       isCompressed = options.shouldCompressOnExport
     )
 
-    val commandResult: KustoResultSetTable = client.execute(request.kustoCoordinates.database,
+    val commandResult: KustoResultSetTable = client.executeEngine(request.kustoCoordinates.database,
       exportCommand,
       request.clientRequestProperties.orNull).getPrimaryResults
-    KDSU.verifyAsyncCommandCompletion(client,
+    KDSU.verifyAsyncCommandCompletion(client.engineClient,
       request.kustoCoordinates.database,
       commandResult,
       timeOut = request.timeout,
