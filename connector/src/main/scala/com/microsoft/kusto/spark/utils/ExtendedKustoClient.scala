@@ -28,7 +28,7 @@ import java.time.Instant
 import java.util.StringJoiner
 import scala.collection.JavaConverters._
 
-class KustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcsb: ConnectionStringBuilder, val clusterAlias: String) {
+class ExtendedKustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcsb: ConnectionStringBuilder, val clusterAlias: String) {
   lazy val engineClient: Client = ClientFactory.createClient(engineKcsb)
 
   // Reading process does not require ingest client to start working
@@ -49,7 +49,7 @@ class KustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcsb: Conne
 
   private def buildRetryConfig = {
     val sleepConfig = IntervalFunction.ofExponentialRandomBackoff(
-      KustoClient.BaseInterval, IntervalFunction.DEFAULT_MULTIPLIER, IntervalFunction.DEFAULT_RANDOMIZATION_FACTOR, KustoClient.MaxRetryInterval)
+      ExtendedKustoClient.BaseIntervalMs, IntervalFunction.DEFAULT_MULTIPLIER, IntervalFunction.DEFAULT_RANDOMIZATION_FACTOR, ExtendedKustoClient.MaxRetryIntervalMs)
     RetryConfig.custom
       .maxAttempts(MaxCommandsRetryAttempts)
       .intervalFunction(sleepConfig)
@@ -377,14 +377,15 @@ class KustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcsb: Conne
   }
 
   def executeDM(command: String, crp: ClientRequestProperties, retryConfig: Option[RetryConfig] = None): KustoOperationResult = {
-    KDSU.retryFunction(() => dmClient.execute("NetDefaultDB", command, crp), retryConfig.getOrElse(this.retryConfig),
+    KDSU.retryFunction(() => dmClient.execute(ExtendedKustoClient.DefaultDb, command, crp), retryConfig.getOrElse(this.retryConfig),
       "Execute DM command with retries")
   }
 }
 
-object KustoClient {
-  val BaseInterval = 1000L
-  val MaxRetryInterval = 1000L * 10
+object ExtendedKustoClient {
+  val DefaultDb: String = "NetDefaultDB"
+  val BaseIntervalMs: Long = 1000L
+  val MaxRetryIntervalMs: Long = 1000L * 10
 }
 
 case class ContainerAndSas(containerUrl: String, sas: String)

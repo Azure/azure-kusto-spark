@@ -12,7 +12,7 @@ import com.microsoft.kusto.spark.utils.CslCommandsGenerator.generateTableAlterMe
 import com.microsoft.kusto.spark.utils.KustoConstants.IngestSkippedTrace
 import org.apache.commons.lang3.exception.ExceptionUtils
 import shaded.parquet.org.codehaus.jackson.map.ObjectMapper
-import com.microsoft.kusto.spark.utils.{KustoClient, KustoClientCache, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.{ExtendedKustoClient, KustoClientCache, KustoDataSourceUtils => KDSU}
 import org.apache.spark.SparkContext
 import org.apache.spark.util.CollectionAccumulator
 
@@ -32,7 +32,7 @@ object FinalizeHelper {
                                                            tableExists: Boolean,
                                                            sparkContext: SparkContext,
                                                            authentication: KustoAuthentication,
-                                                           kustoClient: KustoClient
+                                                           kustoClient: ExtendedKustoClient
                                                           ): Unit = {
     if (!kustoClient.shouldIngestData(coordinates, writeOptions.ingestionProperties, tableExists, crp)) {
       KDSU.logInfo(myName, s"$IngestSkippedTrace '${coordinates.table}'")

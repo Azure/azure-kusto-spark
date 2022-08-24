@@ -14,7 +14,7 @@ import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.exceptions.TimeoutAwaitingPendingOperationException
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator.generateTableGetSchemaAsRowsCommand
 import com.microsoft.kusto.spark.utils.KustoConstants.{IngestSkippedTrace, MaxIngestRetryAttempts}
-import com.microsoft.kusto.spark.utils.{KustoClient, KustoClientCache, KustoIngestionUtils, KustoQueryUtils, KustoConstants => KCONST, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.{ExtendedKustoClient, KustoClientCache, KustoIngestionUtils, KustoQueryUtils, KustoConstants => KCONST, KustoDataSourceUtils => KDSU}
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.InternalRow
@@ -250,7 +250,7 @@ object KustoWriter {
 
   def createBlobWriter(tableCoordinates: KustoCoordinates,
                        tmpTableName: String,
-                       client: KustoClient): BlobWriteResource = {
+                       client: ExtendedKustoClient): BlobWriteResource = {
     val blobName = s"${KustoQueryUtils.simplifyName(tableCoordinates.database)}_${tmpTableName}_${UUID.randomUUID.toString}_spark.csv.gz"
 
     val containerAndSas = client.getTempBlobForIngestion
@@ -288,12 +288,14 @@ object KustoWriter {
         val blobPath = blobUri + sas
         val blobSourceInfo = new BlobSourceInfo(blobPath, size)
 
-        if (transactional) partitionsResults.add(
-          PartitionResult(KDSU.retryFunction(() => {
+        if (transactional) {
+          partitionsResults.add(
+            PartitionResult(KDSU.retryFunction(() => {
               KDSU.logInfo(myName, s"Queued blob for ingestion in partition $partitionId for requestId: '$requestId}")
               ingestClient.ingestFromBlob(blobSourceInfo, props)
             }, this.retryConfig, "Ingest into Kusto"),
-          partitionId))
+              partitionId))
+        }
       }
     }
 

@@ -147,7 +147,7 @@ object KustoDataSourceUtils {
     tableSchemaBuilder.toString
   }
 
-  private[kusto] def getSchema(database: String, query: String, client: KustoClient, clientRequestProperties: Option[ClientRequestProperties]): KustoSchema = {
+  private[kusto] def getSchema(database: String, query: String, client: ExtendedKustoClient, clientRequestProperties: Option[ClientRequestProperties]): KustoSchema = {
     KustoResponseDeserializer(client.executeEngine(database, query, clientRequestProperties.orNull).getPrimaryResults).getSchema
   }
 

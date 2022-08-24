@@ -6,7 +6,7 @@ import com.microsoft.azure.storage.blob.CloudBlobContainer
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasource.ReadMode.ReadMode
-import com.microsoft.kusto.spark.utils.{CslCommandsGenerator, KustoAzureFsSetupCache, KustoBlobStorageUtils, KustoClient, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.{CslCommandsGenerator, KustoAzureFsSetupCache, KustoBlobStorageUtils, ExtendedKustoClient, KustoDataSourceUtils => KDSU}
 import org.apache.spark.Partition
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.sources.Filter
@@ -51,7 +51,7 @@ private[kusto] object KustoReader {
   private val distributedReadModeTransientCache: concurrent.Map[DistributedReadModeTransientCacheKey,Seq[String]] =
     new concurrent.TrieMap()
 
-  private[kusto] def singleBuildScan(kustoClient: KustoClient,
+  private[kusto] def singleBuildScan(kustoClient: ExtendedKustoClient,
                                      request: KustoReadRequest,
                                      filtering: KustoFiltering): RDD[Row] = {
 
@@ -65,7 +65,7 @@ private[kusto] object KustoReader {
     request.sparkSession.createDataFrame(serializer.toRows, serializer.getSchema.sparkSchema).rdd
   }
 
-  private[kusto] def distributedBuildScan(kustoClient: KustoClient,
+  private[kusto] def distributedBuildScan(kustoClient: ExtendedKustoClient,
                                           request: KustoReadRequest,
                                           storage: TransientStorageParameters,
                                           options: KustoReadOptions,
@@ -121,7 +121,7 @@ private[kusto] object KustoReader {
     rdd
   }
 
-  private def exportToStorage(kustoClient: KustoClient,
+  private def exportToStorage(kustoClient: ExtendedKustoClient,
                               request: KustoReadRequest,
                               storage: TransientStorageParameters,
                               options: KustoReadOptions,
@@ -213,7 +213,7 @@ private[kusto] object KustoReader {
   }
 }
 
-private[kusto] class KustoReader(client: KustoClient) {
+private[kusto] class KustoReader(client: ExtendedKustoClient) {
   private val myName = this.getClass.getSimpleName
 
   // Export a single partition from Kusto to transient Blob storage.

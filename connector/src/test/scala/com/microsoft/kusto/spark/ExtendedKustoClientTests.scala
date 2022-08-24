@@ -4,7 +4,7 @@ import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties, KustoOperationResult, KustoResultSetTable}
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.{SparkIngestionProperties, WriteOptions}
-import com.microsoft.kusto.spark.utils.KustoClient
+import com.microsoft.kusto.spark.utils.ExtendedKustoClient
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.json.JSONObject
 import org.junit.runner.RunWith
@@ -17,12 +17,12 @@ import java.util
 import scala.collection.JavaConverters._
 
 @RunWith(classOf[JUnitRunner])
-class KustoClientTests extends FlatSpec with Matchers {
+class ExtendedKustoClientTests extends FlatSpec with Matchers {
   val coords = KustoCoordinates("", "", "database", Some("table"))
-  class KustoClientStub(override val engineKcsb: ConnectionStringBuilder,
-                        override val ingestKcsb: ConnectionStringBuilder,
-                        override val clusterAlias: String,
-                        var tagsToReturn: util.ArrayList[String]) extends KustoClient(engineKcsb, ingestKcsb,
+  class ExtendedKustoClientStub(override val engineKcsb: ConnectionStringBuilder,
+                                override val ingestKcsb: ConnectionStringBuilder,
+                                override val clusterAlias: String,
+                                var tagsToReturn: util.ArrayList[String]) extends ExtendedKustoClient(engineKcsb, ingestKcsb,
     clusterAlias) {
     override lazy val engineClient = mock(classOf[Client])
     override def fetchTableExtentsTags(database: String, table: String, crp: ClientRequestProperties)
@@ -36,7 +36,7 @@ class KustoClientTests extends FlatSpec with Matchers {
 
   "IngestIfNotExists tags shouldIngest" should "return true if no extents given" in {
     val emptyTags = new util.ArrayList[String]
-    val stubbedClient = new KustoClientStub(null, null, "", null)
+    val stubbedClient = new ExtendedKustoClientStub(null, null, "", null)
     stubbedClient.tagsToReturn = emptyTags
     val props = new SparkIngestionProperties
     val shouldIngestWhenNoTags = stubbedClient.shouldIngestData(coords,
@@ -59,7 +59,7 @@ class KustoClientTests extends FlatSpec with Matchers {
 
   "initializeTablesBySchema" should "Not create table if queued mode" in {
     val tempTable = "temp"
-    val stubbedClient = new KustoClientStub(null, null, "", null)
+    val stubbedClient = new ExtendedKustoClientStub(null, null, "", null)
     val struct = StructType(Array(StructField("colA", StringType, nullable = true)))
     stubbedClient.initializeTablesBySchema(coords, tempTable, struct,  Array(new JSONObject("""{"Type":"System.String",
       "CslType":"string", "Name":"name"}""")), WriteOptions(isTransactionalMode = false), null, true)

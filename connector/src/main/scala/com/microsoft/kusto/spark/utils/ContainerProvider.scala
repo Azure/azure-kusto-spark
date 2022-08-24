@@ -9,7 +9,7 @@ import org.joda.time.{DateTime, DateTimeZone, Period, PeriodType}
 
 import scala.collection.JavaConverters._
 
-class ContainerProvider[A](val client: KustoClient, val clusterAlias: String, val command: String, cacheEntryCreator: ContainerAndSas => A) {
+class ContainerProvider[A](val client: ExtendedKustoClient, val clusterAlias: String, val command: String, cacheEntryCreator: ContainerAndSas => A) {
   private var roundRobinIdx = 0
   private var storageUris: Seq[A] = Seq.empty
   private var lastRefresh: DateTime = new DateTime(DateTimeZone.UTC)
@@ -19,7 +19,7 @@ class ContainerProvider[A](val client: KustoClient, val clusterAlias: String, va
 
   private def buildRetryConfig = {
     val sleepConfig = IntervalFunction.ofExponentialRandomBackoff(
-      KustoClient.BaseInterval, IntervalFunction.DEFAULT_MULTIPLIER, IntervalFunction.DEFAULT_RANDOMIZATION_FACTOR, KustoClient.MaxRetryInterval)
+      ExtendedKustoClient.BaseIntervalMs, IntervalFunction.DEFAULT_MULTIPLIER, IntervalFunction.DEFAULT_RANDOMIZATION_FACTOR, ExtendedKustoClient.MaxRetryIntervalMs)
     RetryConfig.custom
       .maxAttempts(MaxCommandsRetryAttempts)
       .intervalFunction(sleepConfig)
