@@ -159,7 +159,7 @@
                 </exclusion>
             </exclusions>
         </dependency>
-        <!--might need 2.7.0 here for local run query-->
+        <!--might need 3.2.0 here for local run query-->
         <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-azure</artifactId>

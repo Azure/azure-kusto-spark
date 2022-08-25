@@ -2,7 +2,6 @@ package com.microsoft.kusto.spark.datasource
 
 import java.security.InvalidParameterException
 import java.util.Locale
-import java.util.concurrent.TimeUnit
 
 import com.microsoft.azure.kusto.data.ClientRequestProperties
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
@@ -45,7 +44,7 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
   }
 
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
-    val kustoClient = KustoClientCache.getClient(kustoCoordinates.clusterUrl, authentication, kustoCoordinates.ingestionUrl, kustoCoordinates.clusterAlias).engineClient
+    val kustoClient = KustoClientCache.getClient(kustoCoordinates.clusterUrl, authentication, kustoCoordinates.ingestionUrl, kustoCoordinates.clusterAlias)
     var timedOutCounting = false
     val forceSingleMode = readOptions.readMode.isDefined && readOptions.readMode.get == ReadMode.ForceSingleMode
     var useSingleMode = forceSingleMode
@@ -54,8 +53,8 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
       var count = 0
       try {
         count = KDSU.
-          estimateRowsCount(kustoClient, query, kustoCoordinates.database, clientRequestProperties.orNull)
-      }catch {
+          estimateRowsCount(kustoClient.engineClient, query, kustoCoordinates.database, clientRequestProperties.orNull)
+      } catch {
         // Assume count is high if estimation got timed out
         case e: Exception =>
           if (forceSingleMode) {
@@ -88,7 +87,7 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
 
       if (!useSingleMode || exception.isDefined) {
         if(exception.isDefined){
-            KDSU.logError("KustoRelation",s"Failed with lean mode, falling back to distributed mode, requestId: $requestId. Exception : ${exception.get.getMessage}")
+            KDSU.logError("KustoRelation",s"Failed with Single mode, falling back to Distributed mode, requestId: $requestId. Exception : ${exception.get.getMessage}")
         }
 
         readOptions.partitionOptions.column = Some(getPartitioningColumn)
@@ -127,7 +126,7 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
     KDSU.getSchema(kustoCoordinates.database,
       getSchemaQuery,
       KustoClientCache.getClient(
-        kustoCoordinates.clusterUrl, authentication, kustoCoordinates.ingestionUrl, kustoCoordinates.clusterAlias).engineClient, clientRequestProperties)
+        kustoCoordinates.clusterUrl, authentication, kustoCoordinates.ingestionUrl, kustoCoordinates.clusterAlias), clientRequestProperties)
   }
 
   private def getPartitioningColumn: String = {

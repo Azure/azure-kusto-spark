@@ -12,7 +12,7 @@ import com.microsoft.kusto.spark.utils.CslCommandsGenerator.generateTableAlterMe
 import com.microsoft.kusto.spark.utils.KustoConstants.IngestSkippedTrace
 import org.apache.commons.lang3.exception.ExceptionUtils
 import shaded.parquet.org.codehaus.jackson.map.ObjectMapper
-import com.microsoft.kusto.spark.utils.{KustoClient, KustoClientCache, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.{ExtendedKustoClient, KustoClientCache, KustoDataSourceUtils => KDSU}
 import org.apache.spark.SparkContext
 import org.apache.spark.util.CollectionAccumulator
 
@@ -32,7 +32,7 @@ object FinalizeHelper {
                                                            tableExists: Boolean,
                                                            sparkContext: SparkContext,
                                                            authentication: KustoAuthentication,
-                                                           kustoClient: KustoClient
+                                                           kustoClient: ExtendedKustoClient
                                                           ): Unit = {
     if (!kustoClient.shouldIngestData(coordinates, writeOptions.ingestionProperties, tableExists, crp)) {
       KDSU.logInfo(myName, s"$IngestSkippedTrace '${coordinates.table}'")
@@ -64,7 +64,7 @@ object FinalizeHelper {
             val moveOperation = (_: Int) => {
               val client = KustoClientCache.getClient(coordinates.clusterUrl, authentication, coordinates.ingestionUrl,
                 coordinates.clusterAlias)
-              client.engineClient.execute(coordinates.database, generateTableAlterMergePolicyCommand(tmpTableName,
+              client.executeEngine(coordinates.database, generateTableAlterMergePolicyCommand(tmpTableName,
                 allowMerge = false,
                 allowRebuild = false), crp)
               client.moveExtents(coordinates.database, tmpTableName, coordinates.table.get, crp, writeOptions)
@@ -102,7 +102,7 @@ object FinalizeHelper {
               writeOptions.requestId
             )
         } finally {
-          kustoClient.cleanupIngestionByProducts(coordinates.database, kustoClient.engineClient, tmpTableName, crp)
+          kustoClient.cleanupIngestionByProducts(coordinates.database, tmpTableName, crp)
         }
       }
 
@@ -139,9 +139,16 @@ object FinalizeHelper {
       },
       0,
       DelayPeriodBetweenCalls,
-      res => res.isDefined && res.get.status == OperationStatus.Pending,
+      res => {
+        val pending = res.isDefined && res.get.status == OperationStatus.Pending
+        if (pending) {
+          KDSU.logDebug(loggerName, s"Polling on result for partition: '${partitionResult.partitionId}' in requestId: $requestId, status is-'Pending'")
+        }
+        pending
+      },
       res => finalRes = res,
-      maxWaitTimeBetweenCalls = KDSU.WriteMaxWaitTime.toMillis.toInt)
+      maxWaitTimeBetweenCallsMillis = KDSU.WriteInitialMaxWaitTime.toMillis.toInt,
+      maxWaitTimeAfterMinute = KDSU.WriteMaxWaitTime.toMillis.toInt)
       .await(timeout, TimeUnit.MILLISECONDS)
 
     if (finalRes.isDefined) {

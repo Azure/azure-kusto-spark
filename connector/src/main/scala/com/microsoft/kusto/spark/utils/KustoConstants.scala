@@ -22,12 +22,13 @@ object KustoConstants {
   val IngestByPrefix = "ingest-by:"
   val IngestSkippedTrace = s"Ingestion skipped: Provided ingest-by tags are present in the destination table: "
   val MaxSleepOnMoveExtentsMillis: Int = 3 * 60 * 1000
-  val DefaultBatchingLimit: Int = 100
+  val DefaultBatchingLimit: Int = 300
   val DefaultExtentsCountForSplitMergePerNode: Int = 400
   val DefaultMaxRetriesOnMoveExtents: Int = 10
   val DefaultExecutionQueueing: Int = TimeUnit.SECONDS.toMillis(15).toInt
   val DefaultTimeoutQueueing: Int = TimeUnit.SECONDS.toMillis(5).toInt
-  val MAX_INGEST_RETRY_ATTEMPTS = 2
+  val MaxIngestRetryAttempts = 2
+  val MaxCommandsRetryAttempts = 4
   val DefaultMaximumIngestionTime: FiniteDuration = FiniteDuration.apply(
-    MAX_INGEST_RETRY_ATTEMPTS * (DefaultExecutionQueueing + DefaultTimeoutQueueing) + 2000,"millis")
+    MaxIngestRetryAttempts * (DefaultExecutionQueueing + DefaultTimeoutQueueing) + 2000,"millis")
 }

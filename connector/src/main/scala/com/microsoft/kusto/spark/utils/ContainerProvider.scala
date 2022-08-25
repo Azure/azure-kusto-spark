@@ -1,16 +1,31 @@
 package com.microsoft.kusto.spark.utils
 
-import com.microsoft.azure.kusto.data.Client
+import com.microsoft.azure.kusto.data.exceptions.KustoDataExceptionBase
+import com.microsoft.azure.kusto.ingest.exceptions.IngestionServiceException
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
+import io.github.resilience4j.core.IntervalFunction
+import io.github.resilience4j.retry.RetryConfig
 import org.joda.time.{DateTime, DateTimeZone, Period, PeriodType}
 
 import scala.collection.JavaConverters._
 
-class ContainerProvider[A](val dmClient: Client, val clusterAlias: String, val command: String, cacheEntryCreator: ContainerAndSas => A) {
+class ContainerProvider[A](val client: ExtendedKustoClient, val clusterAlias: String, val command: String, cacheEntryCreator: ContainerAndSas => A) {
   private var roundRobinIdx = 0
   private var storageUris: Seq[A] = Seq.empty
   private var lastRefresh: DateTime = new DateTime(DateTimeZone.UTC)
   private val myName = this.getClass.getSimpleName
+  private val MaxCommandsRetryAttempts = 8
+  private val retryConfig = buildRetryConfig
+
+  private def buildRetryConfig = {
+    val sleepConfig = IntervalFunction.ofExponentialRandomBackoff(
+      ExtendedKustoClient.BaseIntervalMs, IntervalFunction.DEFAULT_MULTIPLIER, IntervalFunction.DEFAULT_RANDOMIZATION_FACTOR, ExtendedKustoClient.MaxRetryIntervalMs)
+    RetryConfig.custom
+      .maxAttempts(MaxCommandsRetryAttempts)
+      .intervalFunction(sleepConfig)
+      .retryOnException((e: Throwable) =>
+        e.isInstanceOf[IngestionServiceException] && !e.asInstanceOf[KustoDataExceptionBase].isPermanent).build
+  }
 
   def getContainer: A = {
     // Refresh if storageExpiryMinutes have passed since last refresh for this cluster as SAS should be valid for at least 120 minutes
@@ -34,7 +49,7 @@ class ContainerProvider[A](val dmClient: Client, val clusterAlias: String, val c
   }
 
   private def refresh = {
-      val res = dmClient.execute(command)
+      val res = client.executeDM(command, null, Some(retryConfig))
       val storage = res.getPrimaryResults.getData.asScala.map(row => {
         val parts = row.get(0).toString.split('?')
         cacheEntryCreator(ContainerAndSas(parts(0), '?' + parts(1)))

@@ -10,18 +10,18 @@ import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
 import org.apache.http.client.utils.URIBuilder
 
 object KustoClientCache {
-  var clientCache = new ConcurrentHashMap[ClusterAndAuth, KustoClient]
-
-  def getClient(clusterUrl: String, authentication: KustoAuthentication, ingestionUrl: Option[String], clusterAlias: String): KustoClient = {
+  var clientCache = new ConcurrentHashMap[ClusterAndAuth, ExtendedKustoClient]
+  // TODO Clear cache after a while so that ingestClient can be closed
+  def getClient(clusterUrl: String, authentication: KustoAuthentication, ingestionUrl: Option[String], clusterAlias: String): ExtendedKustoClient = {
     val clusterAndAuth = ClusterAndAuth(clusterUrl, authentication, ingestionUrl, clusterAlias)
     clientCache.computeIfAbsent(clusterAndAuth, adderSupplier)
   }
 
-  val adderSupplier: function.Function[ClusterAndAuth, KustoClient] = new java.util.function.Function[ClusterAndAuth, KustoClient]() {
-    override def apply(aa: ClusterAndAuth): KustoClient = createClient(aa)
+  val adderSupplier: function.Function[ClusterAndAuth, ExtendedKustoClient] = new java.util.function.Function[ClusterAndAuth, ExtendedKustoClient]() {
+    override def apply(aa: ClusterAndAuth): ExtendedKustoClient = createClient(aa)
   }
 
-  private def createClient(clusterAndAuth: ClusterAndAuth): KustoClient = {
+  private def createClient(clusterAndAuth: ClusterAndAuth): ExtendedKustoClient = {
     val (engineKcsb, ingestKcsb) = clusterAndAuth.authentication match {
       case app: AadApplicationAuthentication => (
         ConnectionStringBuilder.createWithAadApplicationCredentials(clusterAndAuth.engineUri, app.ID, app.password, app.authority),
@@ -56,7 +56,7 @@ object KustoClientCache {
     engineKcsb.setClientVersionForTracing(KCONST.ClientName)
     ingestKcsb.setClientVersionForTracing(KCONST.ClientName)
 
-    new KustoClient(engineKcsb, ingestKcsb, clusterAndAuth.clusterAlias)
+    new ExtendedKustoClient(engineKcsb, ingestKcsb, clusterAndAuth.clusterAlias)
   }
 
   private[kusto] case class ClusterAndAuth(engineUrl: String, authentication: KustoAuthentication, ingestionUri: Option[String], clusterAlias:String) {

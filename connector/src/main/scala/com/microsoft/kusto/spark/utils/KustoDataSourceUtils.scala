@@ -6,12 +6,15 @@ import com.microsoft.kusto.spark.authentication._
 import com.microsoft.kusto.spark.common.{KustoCoordinates, KustoDebugOptions}
 import com.microsoft.kusto.spark.datasink.KustoWriter.TempIngestionTablePrefix
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
-import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SchemaAdjustmentMode, SinkTableCreationMode, WriteMode, WriteOptions}
+import com.microsoft.kusto.spark.datasink._
 import com.microsoft.kusto.spark.datasource.ReadMode.ReadMode
+import com.microsoft.kusto.spark.datasource._
 import com.microsoft.kusto.spark.exceptions.{FailedOperationException, TimeoutAwaitingPendingOperationException}
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.KustoConstants.{DefaultBatchingLimit, DefaultExtentsCountForSplitMergePerNode, DefaultMaxRetriesOnMoveExtents}
 import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
+import io.github.resilience4j.retry.{Retry, RetryConfig}
+import io.vavr.CheckedFunction0
 import org.apache.commons.lang3.StringUtils
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.http.client.utils.URIBuilder
@@ -29,7 +32,6 @@ import java.util.{NoSuchElementException, Properties, StringJoiner, Timer, Timer
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
-import com.microsoft.kusto.spark.datasource.{KustoReadOptions, KustoResponseDeserializer, KustoSchema, KustoSourceOptions, PartitionOptions, ReadMode, TransientStorageCredentials, TransientStorageParameters}
 
 object KustoDataSourceUtils {
   def generateTempTableName(appName: String, destinationTableName: String, requestId:String,
@@ -80,8 +82,10 @@ object KustoDataSourceUtils {
 
   val DefaultMicrosoftTenant = "microsoft.com"
   val NewLine: String = sys.props("line.separator")
-  val ReadMaxWaitTime: FiniteDuration = 30 seconds
-  val WriteMaxWaitTime: FiniteDuration = 5 seconds
+  var ReadInitialMaxWaitTime: FiniteDuration = 4 seconds
+  var ReadMaxWaitTime: FiniteDuration = 30 seconds
+  var WriteInitialMaxWaitTime: FiniteDuration = 2 seconds
+  var WriteMaxWaitTime: FiniteDuration = 10 seconds
 
   val input: InputStream = getClass.getClassLoader.getResourceAsStream("spark.kusto.properties")
   val props = new Properties()
@@ -143,8 +147,8 @@ object KustoDataSourceUtils {
     tableSchemaBuilder.toString
   }
 
-  private[kusto] def getSchema(database: String, query: String, client: Client, clientRequestProperties: Option[ClientRequestProperties]): KustoSchema = {
-    KustoResponseDeserializer(client.execute(database, query, clientRequestProperties.orNull).getPrimaryResults).getSchema
+  private[kusto] def getSchema(database: String, query: String, client: ExtendedKustoClient, clientRequestProperties: Option[ClientRequestProperties]): KustoSchema = {
+    KustoResponseDeserializer(client.executeEngine(database, query, clientRequestProperties.orNull).getPrimaryResults).getSchema
   }
 
   private def parseAuthentication(parameters: Map[String, String], clusterUrl:String) = {
@@ -356,6 +360,15 @@ object KustoDataSourceUtils {
     SinkParameters(writeOptions, sourceParameters)
   }
 
+  def retryFunction[T](func:() => T, retryConfig: RetryConfig, retryName: String): T ={
+    val retry = Retry.of(retryName, retryConfig)
+    val f:CheckedFunction0[T] = new CheckedFunction0[T]() {
+      override def apply(): T = func()
+    }
+
+    retry.executeCheckedSupplier(f)
+  }
+
   def getClientRequestProperties(parameters: Map[String, String], requestId: String): ClientRequestProperties = {
     val crpOption = parameters.get(KustoSourceOptions.KUSTO_CLIENT_REQUEST_PROPERTIES_JSON)
 
@@ -441,25 +454,37 @@ object KustoDataSourceUtils {
    * @param func             - the function to run
    * @param delayBeforeStart - delay before first job
    * @param delayBeforeEach  - delay between jobs
-   * @param stopCondition    - stop jobs if condition holds for the func.apply output
+   * @param doWhileCondition - go one while the condition holds for the func.apply output
    * @param finalWork        - do final work with the last func.apply output
    */
-  def doWhile[A](func: () => A, delayBeforeStart: Long, delayBeforeEach: Int, stopCondition: A => Boolean, finalWork: A => Unit, maxWaitTimeBetweenCalls: Int): CountDownLatch = {
+  def doWhile[A](func: () => A,
+                 delayBeforeStart: Long,
+                 delayBeforeEach: Int,
+                 doWhileCondition: A => Boolean,
+                 finalWork: A => Unit,
+                 maxWaitTimeBetweenCallsMillis: Int,
+                 maxWaitTimeAfterMinute: Int): CountDownLatch = {
     val latch = new CountDownLatch(1)
     val t = new Timer()
     var currentWaitTime = delayBeforeEach
+    var waitedTime = 0
+    var maxWaitTime = maxWaitTimeBetweenCallsMillis
 
     class ExponentialBackoffTask extends TimerTask {
       def run(): Unit = {
         try {
           val res = func.apply()
 
-          if (!stopCondition.apply(res)) {
+          if (!doWhileCondition.apply(res)) {
             finalWork.apply(res)
             while (latch.getCount > 0) latch.countDown()
             t.cancel()
           } else {
-            currentWaitTime = if (currentWaitTime + currentWaitTime > maxWaitTimeBetweenCalls) maxWaitTimeBetweenCalls else currentWaitTime + currentWaitTime
+            waitedTime += currentWaitTime
+            if (waitedTime > TimeUnit.MINUTES.toMillis(1)) {
+              maxWaitTime = maxWaitTimeAfterMinute
+            }
+            currentWaitTime = if (currentWaitTime + currentWaitTime > maxWaitTime) maxWaitTime else currentWaitTime + currentWaitTime
             t.schedule(new ExponentialBackoffTask(), currentWaitTime)
           }
         } catch {
@@ -482,7 +507,9 @@ object KustoDataSourceUtils {
                                    commandResult: KustoResultSetTable,
                                    samplePeriod: FiniteDuration = KCONST.DefaultPeriodicSamplePeriod,
                                    timeOut: FiniteDuration,
-                                   doingWhat: String): Option[KustoResultSetTable] = {
+                                   doingWhat: String,
+                                   loggerName: String,
+                                   requestId: String): Option[KustoResultSetTable] = {
     commandResult.next()
     val operationId = commandResult.getString(0)
     val operationsShowCommand = CslCommandsGenerator.generateOperationsShowCommand(operationId)
@@ -499,7 +526,7 @@ object KustoDataSourceUtils {
       catch {
         case e: DataServiceException =>
           if (e.isPermanent) {
-            val message = s"Couldn't monitor the progress of the $doingWhat operation from the service, you may track" +
+            val message = s"Couldn't monitor the progress of the $doingWhat on requestId: $requestId operation from the service, you may track" +
               s" it using the command '$operationsShowCommand'."
             logError("verifyAsyncCommandCompletion", message)
             throw new Exception(message, e)
@@ -513,11 +540,19 @@ object KustoDataSourceUtils {
     val task = doWhile[Option[KustoResultSetTable]](
       func = statusCheck,
       delayBeforeStart = 0, delayBeforeEach = delayPeriodBetweenCalls,
-      stopCondition = (result: Option[KustoResultSetTable]) =>
-        result.isEmpty || (result.get.next() && result.get.getString(stateCol) == "InProgress"),
+      doWhileCondition = (result: Option[KustoResultSetTable]) => {
+        val inProgress = result.isEmpty || (result.get.next() && result.get.getString(stateCol) == "InProgress")
+        if (inProgress) {
+          logDebug(loggerName, s"Async operation $doingWhat on requestId $requestId, is in status 'InProgress'," +
+            "polling status again in a few seconds")
+        }
+        inProgress
+      },
       finalWork = (result: Option[KustoResultSetTable]) => {
         lastResponse = result
-      }, maxWaitTimeBetweenCalls = ReadMaxWaitTime.toMillis.toInt)
+      }, maxWaitTimeBetweenCallsMillis = ReadInitialMaxWaitTime.toMillis.toInt,
+      ReadMaxWaitTime.toMillis.toInt
+    )
 
     var success = true
     if (timeOut < FiniteDuration.apply(0, SECONDS)) {
@@ -605,6 +640,7 @@ object KustoDataSourceUtils {
     res.getInt(0)
   }
 
+  // No need to retry here - if an exception is caught - fallback to distributed mode
   private[kusto] def estimateRowsCount(client: Client, query: String, database: String, crp: ClientRequestProperties): Int = {
     var count = 1
     val estimationResult: util.List[AnyRef] = Await.result(Future {
