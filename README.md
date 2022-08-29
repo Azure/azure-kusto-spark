@@ -32,7 +32,7 @@ link your application with the artifact below to use the Azure Data Explorer Con
 ```
 groupId = com.microsoft.azure.kusto
 artifactId = kusto-spark_3.0_2.12
-version = 3.0.0
+version = 3.1.3
 ```
 
 **In Maven**:

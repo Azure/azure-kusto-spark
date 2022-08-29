@@ -49,12 +49,15 @@ class ExtendedKustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcs
 
   private def buildRetryConfig = {
     val sleepConfig = IntervalFunction.ofExponentialRandomBackoff(
-      ExtendedKustoClient.BaseIntervalMs, IntervalFunction.DEFAULT_MULTIPLIER, IntervalFunction.DEFAULT_RANDOMIZATION_FACTOR, ExtendedKustoClient.MaxRetryIntervalMs)
+      ExtendedKustoClient.BaseIntervalMs,
+      IntervalFunction.DEFAULT_MULTIPLIER,
+      IntervalFunction.DEFAULT_RANDOMIZATION_FACTOR,
+      ExtendedKustoClient.MaxRetryIntervalMs)
     RetryConfig.custom
       .maxAttempts(MaxCommandsRetryAttempts)
       .intervalFunction(sleepConfig)
-      .retryOnException((e: Throwable) =>
-        e.isInstanceOf[IngestionServiceException] && !e.asInstanceOf[KustoDataExceptionBase].isPermanent).build
+      .retryOnException(JavaConverter.asJavaPredicate((e: Throwable) =>
+        e.isInstanceOf[IngestionServiceException] && !e.asInstanceOf[KustoDataExceptionBase].isPermanent)).build
   }
 
   def initializeTablesBySchema(tableCoordinates: KustoCoordinates,

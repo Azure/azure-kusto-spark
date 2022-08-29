@@ -34,7 +34,11 @@ that is using it. Please verify the following first:
  .mode(SaveMode.Append)
  .save()
  ```
- 
+ ### Logging
+ Main logs are found on driver log4j logs. Workers serialization logs and ingest queuing is found on workers stderr.
+ To set driver logs verbosity use com.microsoft.kusto.spark.utils.KustoDataSourceUtils.setLoggingLevel("debug")
+ * Main usage - open debug to see polling job process report - otherwise nothing is printed throughout this job.
+
  ### Supported Options
  
  All the options that can be used in the Kusto Sink can be found in KustoSinkOptions.
@@ -59,9 +63,10 @@ that is using it. Please verify the following first:
  **Authentication Parameters** can be found here - [AAD Application Authentication](Authentication.md). 
  
  **Important Parameters:** 
-* **KUSTO_POLLING_ON_DRIVER**:
+ * **KUSTO_POLLING_ON_DRIVER**: 
 'pollingOnDriver' - If set to false (default) Kusto Spark will create a new job for the final two ingestion steps done after processing the data, so that the write operation doesn't seem to 'hang' on the Spark UI. 
 It's recommended to set this flag to true in production scenarios, so that the worker node doesn't occupy a core while completing the final ingestion steps.
+   >Note:In default mode (false) the logs for progress of the polling operations available on worker logs, else-driver logs and are on debug verbosity.
 
  * **KUSTO_TABLE_CREATE_OPTIONS**: 
  'tableCreateOptions' - If set to 'FailIfNotExist' (default), the operation will fail if the table is not found 
@@ -86,9 +91,16 @@ It's recommended to set this flag to true in production scenarios, so that the w
     
     - flushImmediately: Boolean - use with caution - flushes the data immediately upon ingestion without aggregation.
 
- **Optional Parameters:** 
+ **Advanced users parameters:** 
 
- * **KUSTO_TIMEOUT_LIMIT**:
+ * **KUSTO_WRITE_MODE**:
+   "writeMode" - If set to 'Transactional' - guarantees write operation to either completely succeed or fail together
+    but includes additional steps - it creates a temporary table and after processing the data it polls on ingestion result
+    after which it will move the data to the destination table (the last part is a metadata operation only).
+    If set to 'Queued', the write operation finishes after data is processed by the workers, the data may not be completely
+    available up until the service finishes loading it and failures on the service side will not propagate to Spark.
+
+* **KUSTO_TIMEOUT_LIMIT**:
    'timeoutLimit' - After the dataframe is processed, a polling operation begins. This integer corresponds to the period in seconds after which the polling
    process will timeout, eventually deleting the staging resources and fail the command. This is an upper limit that may coexist with addition timeout limits as configured on Spark or Kusto clusters.  
    Default: '172000' (2 days)
@@ -113,6 +125,15 @@ It's recommended to set this flag to true in production scenarios, so that the w
     
  * **KUSTO_REQUEST_ID**:
     'requestId' - A unique identifier UUID for this ingestion command. Will be used as part of the staging table name as well.
+
+* **KUSTO_TEMP_TABLE_NAME**:
+  "tempTableName" - Provide a temporary table name that will be used for this write operation to achieve transactional write and move
+  data to destination table on success. Table is expected to exist and unique per run (as we delete the table
+  at the end of the process and therefore should be per write operation). In case of success, the table will be
+  deleted; in case of failure, it's up to the user to delete. It is most recommended altering the table auto-delete
+  policy to not get stuck with 'ghost' tables -
+  https://docs.microsoft.com/azure/data-explorer/kusto/management/auto-delete-policy
+  Use this option if you want to persist partial write results (as the failure could be of a single partition)
     
  >**Note:**
  For both synchronous and asynchronous operation, 'write' is an atomic transaction, i.e. 
@@ -158,6 +179,10 @@ df.write.kusto(cluster,
              Some(sp)) // optional
 ```
 
+Open verbose logging:
+```scala
+com.microsoft.kusto.spark.utils.KustoDataSourceUtils.setLoggingLevel("debug")
+```
 Asynchronous mode, table may not exist and will be created:
 ```scala
 df.write
