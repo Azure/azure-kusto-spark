@@ -250,8 +250,9 @@ object KustoWriter {
 
   def createBlobWriter(tableCoordinates: KustoCoordinates,
                        tmpTableName: String,
-                       client: ExtendedKustoClient): BlobWriteResource = {
-    val blobName = s"${KustoQueryUtils.simplifyName(tableCoordinates.database)}_${tmpTableName}_${UUID.randomUUID.toString}_spark.csv.gz"
+                       client: ExtendedKustoClient,
+                       partitionId: String): BlobWriteResource = {
+    val blobName = s"${KustoQueryUtils.simplifyName(tableCoordinates.database)}_${tmpTableName}_${UUID.randomUUID.toString}_${partitionId}_spark.csv.gz"
 
     val containerAndSas = client.getTempBlobForIngestion
     val currentBlob = new CloudBlockBlob(new URI(containerAndSas.containerUrl + '/' + blobName + containerAndSas.sas))
@@ -274,9 +275,9 @@ object KustoWriter {
                                 ingestionProperties: IngestionProperties,
                                 partitionsResults: CollectionAccumulator[PartitionResult]): util.ArrayList[Future[Unit]]
   = {
+    val partitionId = TaskContext.getPartitionId
     def ingest(blob: CloudBlockBlob, size: Long, sas: String, flushImmediately: Boolean = false,
                transactional: Boolean, requestId: String): Future[Unit] = {
-      val partitionId = TaskContext.getPartitionId
       Future {
         var props = ingestionProperties
         if (!ingestionProperties.getFlushImmediately && flushImmediately) {
@@ -305,7 +306,7 @@ object KustoWriter {
     val maxBlobSize = writeOptions.batchLimit * KCONST.OneMegaByte
 
     // This blobWriter will be used later to write the rows to blob storage from which it will be ingested to Kusto
-    val initialBlobWriter: BlobWriteResource = createBlobWriter(coordinates, tmpTableName, kustoClient)
+    val initialBlobWriter: BlobWriteResource = createBlobWriter(coordinates, tmpTableName, kustoClient, partitionId.toString)
     val timeZone = TimeZone.getTimeZone(writeOptions.timeZone).toZoneId
 
     val ingestionTasks: util.ArrayList[Future[Unit]] = new util.ArrayList()
@@ -326,7 +327,7 @@ object KustoWriter {
           val task = ingest(blobWriter.blob, blobWriter.csvWriter.getCounter, blobWriter.sas, flushImmediately =
             true, writeOptions.isTransactionalMode, writeOptions.requestId)
           ingestionTasks.add(task)
-          createBlobWriter(coordinates, tmpTableName, kustoClient)
+          createBlobWriter(coordinates, tmpTableName, kustoClient, partitionId.toString)
         }
     }
 
