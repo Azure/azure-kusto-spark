@@ -71,8 +71,13 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
 
   def newRow(): String = s"row-${rowId.getAndIncrement()}"
   val random = new Random()
-  val maxBigDecimalSupported:BigDecimal = 12345678901234567890.123456789012345678
+  val maxBigDecimalTest:BigDecimal = 12345678901234567890.123456789012345678
   val minBigDecimalTest:BigDecimal = -12345678901234567890.123456789012345678
+  /*
+    This is the test we have to pass eventually when precision exceeds 34
+    val maxBigDecimalTest:BigDecimal = BigDecimal("12345678901234567890.123456789012345678")
+    val minBigDecimalTest:BigDecimal = BigDecimal("-12345678901234567890.123456789012345678")
+   */
   val expectedNumberOfRows: Int = 100
   val rows: immutable.IndexedSeq[(String, Int,BigDecimal)] = (1 to expectedNumberOfRows).map(valueCol => {
     val nameCol = newRow()
@@ -80,7 +85,7 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
       minBigDecimalTest
     }
     else if(valueCol == expectedNumberOfRows){
-      maxBigDecimalSupported
+      maxBigDecimalTest
     }else{
       BigDecimal.decimal(random.nextDouble() * (valueCol * 9999 - valueCol * 100) + valueCol * 100)
     }
