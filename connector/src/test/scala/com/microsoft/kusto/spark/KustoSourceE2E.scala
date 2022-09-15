@@ -15,9 +15,12 @@ import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode, SparkSession}
 import org.joda.time.DateTime
 import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
+import org.scalatest.time.Days
 import org.scalatest.{BeforeAndAfterAll, FlatSpec}
 
 import java.nio.file.{Files, Paths}
+import java.time.Instant
+import java.time.temporal.ChronoUnit
 import scala.collection.immutable
 
 @RunWith(classOf[JUnitRunner])
@@ -40,17 +43,18 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
   if (loggingLevel.isDefined) KDSU.setLoggingLevel(loggingLevel.get)
   override def beforeAll(): Unit = {
     super.beforeAll()
-
     sc = spark.sparkContext
     sqlContext = spark.sqlContext
     val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(KDSU.getEngineUrlFromAliasIfNeeded(kustoConnectionOptions.cluster),
       kustoConnectionOptions.appId, kustoConnectionOptions.appKey, kustoConnectionOptions.authority)
     kustoAdminClient = Some(ClientFactory.createClient(engineKcsb))
+    )
+
     try {
       kustoAdminClient.get.execute(kustoConnectionOptions.database, generateAlterIngestionBatchingPolicyCommand(
         "database",
         kustoConnectionOptions.database,
-        "@'{\"MaximumBatchingTimeSpan\":\"00:00:10\", \"MaximumNumberOfItems\": 500, \"MaximumRawDataSizeMB\": 1024}'"))
+        "{\"MaximumBatchingTimeSpan\":\"00:00:10\", \"MaximumNumberOfItems\": 500, \"MaximumRawDataSizeMB\": 1024}"))
     } catch {
       case e: Exception => // Just a nice to have - don't throw
         KDSU.reportExceptionAndThrow(myName, e,"Updating database batching policy", shouldNotThrow = true)
@@ -59,7 +63,13 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
 
   override def afterAll(): Unit = {
     super.afterAll()
-
+    try {
+      // Remove table if stopping gracefully
+      kustoAdminClient.get.execute(kustoConnectionOptions.database, generateTableDropCommand(table))
+    } catch {
+      case e: Exception =>
+        KDSU.reportExceptionAndThrow(myName, e,"Dropping test table", shouldNotThrow = true)
+    }
     sc.stop()
   }
 
@@ -70,7 +80,7 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
 
   def newRow(): String = s"row-${rowId.getAndIncrement()}"
 
-  val expectedNumberOfRows: Int = 100
+  val expectedNumberOfRows: Int = 10000
   val rows: immutable.IndexedSeq[(String, Int)] = (1 to expectedNumberOfRows).map(v => (newRow(), v))
   val dfOrig: DataFrame = rows.toDF("name", "value")
 
@@ -92,6 +102,9 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
       .option(KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS, SinkTableCreationMode.CreateIfNotExist.toString)
       .mode(SaveMode.Append)
       .save()
+
+    val instant = Instant.now.plus(1, ChronoUnit.HOURS)
+    kustoAdminClient.get.execute(kustoConnectionOptions.database, generateTableAlterAutoDeletePolicy(table, instant))
 
     val conf: Map[String, String] = Map(
       KustoSinkOptions.KUSTO_AAD_APP_ID -> kustoConnectionOptions.appId,

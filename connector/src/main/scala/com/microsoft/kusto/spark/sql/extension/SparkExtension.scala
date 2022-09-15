@@ -3,7 +3,7 @@ package com.microsoft.kusto.spark.sql.extension
 import com.microsoft.azure.kusto.data.ClientRequestProperties
 import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SparkIngestionProperties}
 import com.microsoft.kusto.spark.datasource.KustoSourceOptions
-import org.apache.spark.sql.streaming.DataStreamWriter
+import org.apache.spark.sql.streaming.{DataStreamWriter, Trigger}
 import org.apache.spark.sql.{DataFrameWriter, _}
 
 object SparkExtension {
@@ -51,6 +51,7 @@ object SparkExtension {
         .option(KustoSinkOptions.KUSTO_DATABASE, database)
         .option(KustoSinkOptions.KUSTO_TABLE, table)
         .options(conf)
+        .trigger(Trigger.Once())
     }
   }
 

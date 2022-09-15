@@ -222,6 +222,7 @@ object KustoDataSourceUtils {
         val deviceCodeProvider = new DeviceAuthentication(clusterUrl, authorityId)
         val accessToken = deviceCodeProvider.acquireToken()
         authentication = KustoAccessTokenAuthentication(accessToken)
+
       }
     }
     (authentication, keyVaultAuthentication)

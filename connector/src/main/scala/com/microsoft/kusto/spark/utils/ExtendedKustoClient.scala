@@ -54,7 +54,7 @@ class ExtendedKustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcs
       .maxAttempts(MaxCommandsRetryAttempts)
       .intervalFunction(sleepConfig)
       .retryOnException((e: Throwable) =>
-        e.isInstanceOf[IngestionServiceException] && !e.asInstanceOf[KustoDataExceptionBase].isPermanent).build
+        e.isInstanceOf[IngestionServiceException] || !e.asInstanceOf[KustoDataExceptionBase].isPermanent).build
   }
 
   def initializeTablesBySchema(tableCoordinates: KustoCoordinates,
