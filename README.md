@@ -39,25 +39,25 @@ version = 3.1.3
 
 Look for the following coordinates: 
 ```
-com.microsoft.azure.kusto:kusto-spark_3.0_2.12:3.0.0
+com.microsoft.azure.kusto:kusto-spark_3.0_2.12:3.1.3
 ```
 
 Or clone this repository and build it locally to add it to your local maven repository,.
 The jar can also be found under the [released package](https://github.com/Azure/azure-kusto-spark/releases)
 
  ```xml
-   <dependency>
-     <groupId>com.microsoft.azure.kusto</groupId>
-     <artifactId>spark-kusto-connector</artifactId>
-     <version>3.0.0</version>
-   </dependency>
+    <dependency>
+        <groupId>com.microsoft.azure.kusto</groupId>
+        <artifactId>kusto-spark_3.0_2.12</artifactId>
+        <version>3.1.3</version>
+    </dependency>
 ```
 
 **In SBT**:
 
 ```scala
 libraryDependencies ++= Seq(
-  "com.microsoft.azure.kusto" %% "kusto-spark_3.0" % "3.0.0"
+  "com.microsoft.azure.kusto" %% "kusto-spark_3.0" % "3.1.3"
 )
 ```
 
@@ -66,7 +66,7 @@ libraryDependencies ++= Seq(
 Libraries -> Install New -> Maven -> copy the following coordinates:
 
 ```
-com.microsoft.azure.kusto:kusto-spark_3.0_2.12:3.0.0
+com.microsoft.azure.kusto:kusto-spark_3.0_2.12:3.1.3
 ```
 
 #### Building Samples Module
