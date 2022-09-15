@@ -19,6 +19,7 @@ import org.scalatest.{BeforeAndAfterAll, FlatSpec}
 
 import java.nio.file.{Files, Paths}
 import scala.collection.immutable
+import scala.util.Random
 
 @RunWith(classOf[JUnitRunner])
 class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
@@ -69,10 +70,28 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
   val rowId = new AtomicInteger(1)
 
   def newRow(): String = s"row-${rowId.getAndIncrement()}"
-
+  val random = new Random()
+  val maxBigDecimalTest:BigDecimal = 12345678901234567890.123456789012345678
+  val minBigDecimalTest:BigDecimal = -12345678901234567890.123456789012345678
+  /*
+    This is the test we have to pass eventually when precision exceeds 34
+    val maxBigDecimalTest:BigDecimal = BigDecimal("12345678901234567890.123456789012345678")
+    val minBigDecimalTest:BigDecimal = BigDecimal("-12345678901234567890.123456789012345678")
+   */
   val expectedNumberOfRows: Int = 100
-  val rows: immutable.IndexedSeq[(String, Int)] = (1 to expectedNumberOfRows).map(v => (newRow(), v))
-  val dfOrig: DataFrame = rows.toDF("name", "value")
+  val rows: immutable.IndexedSeq[(String, Int,BigDecimal)] = (1 to expectedNumberOfRows).map(valueCol => {
+    val nameCol = newRow()
+    val decimalCol = if(valueCol==1){
+      minBigDecimalTest
+    }
+    else if(valueCol == expectedNumberOfRows){
+      maxBigDecimalTest
+    }else{
+      BigDecimal.decimal(random.nextDouble() * (valueCol * 9999 - valueCol * 100) + valueCol * 100)
+    }
+    (nameCol,valueCol,decimalCol)
+  })
+  val dfOrig: DataFrame = rows.toDF("name", "value","dec")
 
   "KustoConnector" should "write to a kusto table and read it back in default mode"  in {
     // Create a new table.
@@ -97,12 +116,9 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
       KustoSinkOptions.KUSTO_AAD_APP_ID -> kustoConnectionOptions.appId,
       KustoSinkOptions.KUSTO_AAD_APP_SECRET -> kustoConnectionOptions.appKey
     )
-
     val dfResult = spark.read.kusto(kustoConnectionOptions.cluster, kustoConnectionOptions.database, table, conf)
-
-    val orig = dfOrig.select("name", "value").rdd.map(x => (x.getString(0), x.getInt(1))).collect().sortBy(_._2)
-    val result = dfResult.select("name", "value").rdd.map(x => (x.getString(0), x.getInt(1))).collect().sortBy(_._2)
-
+    val orig = dfOrig.select("name", "value","dec").rdd.map(x => (x.getString(0), x.getInt(1), x.getDecimal(2))).collect().sortBy(_._2)
+    val result = dfResult.select("name", "value","dec").rdd.map(x => (x.getString(0), x.getInt(1),x.getDecimal(2))).collect().sortBy(_._2)
     assert(orig.deep == result.deep)
   }
 
