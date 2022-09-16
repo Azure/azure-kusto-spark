@@ -91,7 +91,7 @@ object KustoDataSourceUtils {
   val props = new Properties()
   props.load(input)
   var Version: String = props.getProperty("application.version")
-  var clientName = s"Kusto.Spark.Connector:$Version-Synapse"
+  var clientName = s"Kusto.Spark.Connector:$Version"
   val IngestPrefix: String = props.getProperty("ingestPrefix", "ingest-")
   val EnginePrefix: String = props.getProperty("enginePrefix", "https://")
   val DefaultDomainPostfix: String = props.getProperty("defaultDomainPostfix", "core.windows.net")
