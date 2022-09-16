@@ -48,7 +48,6 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
     val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(KDSU.getEngineUrlFromAliasIfNeeded(kustoConnectionOptions.cluster),
       kustoConnectionOptions.appId, kustoConnectionOptions.appKey, kustoConnectionOptions.authority)
     kustoAdminClient = Some(ClientFactory.createClient(engineKcsb))
-    )
 
     try {
       kustoAdminClient.get.execute(kustoConnectionOptions.database, generateAlterIngestionBatchingPolicyCommand(
