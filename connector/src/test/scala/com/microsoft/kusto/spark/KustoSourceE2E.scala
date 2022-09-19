@@ -15,13 +15,12 @@ import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode, SparkSession}
 import org.joda.time.DateTime
 import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
-import org.scalatest.time.Days
 import org.scalatest.{BeforeAndAfterAll, FlatSpec}
 
-import java.nio.file.{Files, Paths}
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import scala.collection.immutable
+import scala.util.{Failure, Try, Success}
 
 @RunWith(classOf[JUnitRunner])
 class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
@@ -49,14 +48,12 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
       kustoConnectionOptions.appId, kustoConnectionOptions.appKey, kustoConnectionOptions.authority)
     kustoAdminClient = Some(ClientFactory.createClient(engineKcsb))
 
-    try {
-      kustoAdminClient.get.execute(kustoConnectionOptions.database, generateAlterIngestionBatchingPolicyCommand(
-        "database",
-        kustoConnectionOptions.database,
-        "{\"MaximumBatchingTimeSpan\":\"00:00:10\", \"MaximumNumberOfItems\": 500, \"MaximumRawDataSizeMB\": 1024}"))
-    } catch {
-      case e: Exception => // Just a nice to have - don't throw
-        KDSU.reportExceptionAndThrow(myName, e,"Updating database batching policy", shouldNotThrow = true)
+    Try(kustoAdminClient.get.execute(kustoConnectionOptions.database, generateAlterIngestionBatchingPolicyCommand(
+      "database",
+      kustoConnectionOptions.database,
+      "@'{\"MaximumBatchingTimeSpan\":\"00:00:10\", \"MaximumNumberOfItems\": 500, \"MaximumRawDataSizeMB\": 1024}'"))) match {
+      case Success(kustoOperationResult) => KDSU.logDebug(myName,"Ingestion policy applied")
+      case Failure(exception:Exception) => KDSU.reportExceptionAndThrow(myName, exception,"Updating database batching policy", shouldNotThrow = true)
     }
   }
 
