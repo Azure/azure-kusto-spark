@@ -17,8 +17,10 @@ import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
 import org.scalatest.{BeforeAndAfterAll, FlatSpec}
 
-import java.nio.file.{Files, Paths}
+import java.time.Instant
+import java.time.temporal.ChronoUnit
 import scala.collection.immutable
+import scala.util.{Failure, Try, Success}
 import scala.util.Random
 
 @RunWith(classOf[JUnitRunner])
@@ -41,26 +43,30 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
   if (loggingLevel.isDefined) KDSU.setLoggingLevel(loggingLevel.get)
   override def beforeAll(): Unit = {
     super.beforeAll()
-
     sc = spark.sparkContext
     sqlContext = spark.sqlContext
     val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(KDSU.getEngineUrlFromAliasIfNeeded(kustoConnectionOptions.cluster),
       kustoConnectionOptions.appId, kustoConnectionOptions.appKey, kustoConnectionOptions.authority)
     kustoAdminClient = Some(ClientFactory.createClient(engineKcsb))
-    try {
-      kustoAdminClient.get.execute(kustoConnectionOptions.database, generateAlterIngestionBatchingPolicyCommand(
-        "database",
-        kustoConnectionOptions.database,
-        "@'{\"MaximumBatchingTimeSpan\":\"00:00:10\", \"MaximumNumberOfItems\": 500, \"MaximumRawDataSizeMB\": 1024}'"))
-    } catch {
-      case e: Exception => // Just a nice to have - don't throw
-        KDSU.reportExceptionAndThrow(myName, e,"Updating database batching policy", shouldNotThrow = true)
+
+    Try(kustoAdminClient.get.execute(kustoConnectionOptions.database, generateAlterIngestionBatchingPolicyCommand(
+      "database",
+      kustoConnectionOptions.database,
+      "@'{\"MaximumBatchingTimeSpan\":\"00:00:10\", \"MaximumNumberOfItems\": 500, \"MaximumRawDataSizeMB\": 1024}'"))) match {
+      case Success(_) => KDSU.logDebug(myName,"Ingestion policy applied")
+      case Failure(exception:Exception) => KDSU.reportExceptionAndThrow(myName, exception,"Updating database batching policy", shouldNotThrow = true)
     }
   }
 
   override def afterAll(): Unit = {
     super.afterAll()
-
+    Try(
+      // Remove table if stopping gracefully
+      kustoAdminClient.get.execute(kustoConnectionOptions.database, generateTableDropCommand(table))
+    ) match {
+        case Success(_) => KDSU.logDebug(myName, "Ingestion policy applied")
+        case Failure(e: Exception) => KDSU.reportExceptionAndThrow(myName, e, "Dropping test table", shouldNotThrow = true)
+    }
     sc.stop()
   }
 
@@ -111,6 +117,9 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
       .option(KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS, SinkTableCreationMode.CreateIfNotExist.toString)
       .mode(SaveMode.Append)
       .save()
+
+    val instant = Instant.now.plus(1, ChronoUnit.HOURS)
+    kustoAdminClient.get.execute(kustoConnectionOptions.database, generateTableAlterAutoDeletePolicy(table, instant))
 
     val conf: Map[String, String] = Map(
       KustoSinkOptions.KUSTO_AAD_APP_ID -> kustoConnectionOptions.appId,

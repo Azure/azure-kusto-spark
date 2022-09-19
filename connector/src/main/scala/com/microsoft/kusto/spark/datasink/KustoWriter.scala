@@ -250,11 +250,12 @@ object KustoWriter {
 
   def createBlobWriter(tableCoordinates: KustoCoordinates,
                        tmpTableName: String,
-                       client: ExtendedKustoClient): BlobWriteResource = {
-    val blobName = s"${KustoQueryUtils.simplifyName(tableCoordinates.database)}_${tmpTableName}_${UUID.randomUUID.toString}_spark.csv.gz"
+                       client: ExtendedKustoClient,
+                       partitionId: String): BlobWriteResource = {
+    val blobName = s"${KustoQueryUtils.simplifyName(tableCoordinates.database)}_${tmpTableName}_${UUID.randomUUID.toString}_${partitionId}_spark.csv.gz"
 
     val containerAndSas = client.getTempBlobForIngestion
-    val currentBlob = new CloudBlockBlob(new URI(containerAndSas.containerUrl + '/' + blobName + containerAndSas.sas))
+    val currentBlob = new CloudBlockBlob(new URI(s"${containerAndSas.containerUrl}/$blobName${containerAndSas.sas}"))
     val currentSas = containerAndSas.sas
     val options = new BlobRequestOptions()
     options.setConcurrentRequestCount(4) // Should be configured from outside
@@ -274,9 +275,10 @@ object KustoWriter {
                                 ingestionProperties: IngestionProperties,
                                 partitionsResults: CollectionAccumulator[PartitionResult]): util.ArrayList[Future[Unit]]
   = {
+    val partitionId = TaskContext.getPartitionId
+    val partitionIdString = TaskContext.getPartitionId.toString
     def ingest(blob: CloudBlockBlob, size: Long, sas: String, flushImmediately: Boolean = false,
                transactional: Boolean, requestId: String): Future[Unit] = {
-      val partitionId = TaskContext.getPartitionId
       Future {
         var props = ingestionProperties
         if (!ingestionProperties.getFlushImmediately && flushImmediately) {
@@ -291,7 +293,7 @@ object KustoWriter {
         if (transactional) {
           partitionsResults.add(
             PartitionResult(KDSU.retryFunction(() => {
-              KDSU.logInfo(myName, s"Queued blob for ingestion in partition $partitionId for requestId: '$requestId}")
+              KDSU.logInfo(myName, s"Queued blob for ingestion in partition $partitionIdString for requestId: '$requestId}")
               ingestClient.ingestFromBlob(blobSourceInfo, props)
             }, this.retryConfig, "Ingest into Kusto"),
               partitionId))
@@ -305,7 +307,7 @@ object KustoWriter {
     val maxBlobSize = writeOptions.batchLimit * KCONST.OneMegaByte
 
     // This blobWriter will be used later to write the rows to blob storage from which it will be ingested to Kusto
-    val initialBlobWriter: BlobWriteResource = createBlobWriter(coordinates, tmpTableName, kustoClient)
+    val initialBlobWriter: BlobWriteResource = createBlobWriter(coordinates, tmpTableName, kustoClient, partitionIdString)
     val timeZone = TimeZone.getTimeZone(writeOptions.timeZone).toZoneId
 
     val ingestionTasks: util.ArrayList[Future[Unit]] = new util.ArrayList()
@@ -320,17 +322,17 @@ object KustoWriter {
         if (shouldNotCommitBlockBlob) {
           blobWriter
         } else {
-          KDSU.logInfo(myName, s"Sealing blob in partition ${TaskContext.getPartitionId} for requestId: '${writeOptions.requestId}', " +
+          KDSU.logInfo(myName, s"Sealing blob in partition $partitionIdString for requestId: '${writeOptions.requestId}', " +
             s"blob number ${ingestionTasks.size}, with size $count")
           finalizeBlobWrite(blobWriter)
           val task = ingest(blobWriter.blob, blobWriter.csvWriter.getCounter, blobWriter.sas, flushImmediately =
             true, writeOptions.isTransactionalMode, writeOptions.requestId)
           ingestionTasks.add(task)
-          createBlobWriter(coordinates, tmpTableName, kustoClient)
+          createBlobWriter(coordinates, tmpTableName, kustoClient, partitionIdString)
         }
     }
 
-    KDSU.logInfo(myName, s"finished serializing rows in partition ${TaskContext.getPartitionId} for requestId: '${writeOptions.requestId}' ")
+    KDSU.logInfo(myName, s"finished serializing rows in partition $partitionIdString for requestId: '${writeOptions.requestId}' ")
     finalizeBlobWrite(lastBlobWriter)
     if (lastBlobWriter.csvWriter.getCounter > 0) {
       ingestionTasks.add(ingest(lastBlobWriter.blob, lastBlobWriter.csvWriter.getCounter, lastBlobWriter.sas,
