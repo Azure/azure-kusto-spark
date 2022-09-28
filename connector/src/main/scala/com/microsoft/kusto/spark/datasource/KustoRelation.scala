@@ -1,8 +1,5 @@
 package com.microsoft.kusto.spark.datasource
 
-import java.security.InvalidParameterException
-import java.util.Locale
-
 import com.microsoft.azure.kusto.data.ClientRequestProperties
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.{KustoCoordinates, KustoDebugOptions}
@@ -13,7 +10,10 @@ import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, Row, SQLContext, SparkSession}
 
+import java.security.InvalidParameterException
+import java.util.Locale
 import scala.concurrent.duration._
+import scala.util.{Failure, Success, Try}
 
 private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
                                         authentication: KustoAuthentication,
@@ -21,7 +21,7 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
                                         readOptions: KustoReadOptions,
                                         timeout: FiniteDuration,
                                         customSchema: Option[String] = None,
-                                        storageParameters: Option[TransientStorageParameters],
+                                        maybeStorageParameters: Option[TransientStorageParameters],
                                         clientRequestProperties: Option[ClientRequestProperties],
                                         requestId: String)
                                        (@transient val sparkSession: SparkSession)
@@ -38,79 +38,77 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
         val schema = StructType.fromDDL(customSchema.get)
         KustoSchema(schema, Set())
       }
-      else getSchema
+      else {
+        getSchema
+      }
     }
     cachedSchema.sparkSchema
   }
 
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
-    val kustoClient = KustoClientCache.getClient(kustoCoordinates.clusterUrl, authentication, kustoCoordinates.ingestionUrl, kustoCoordinates.clusterAlias)
-    var timedOutCounting = false
-    val forceSingleMode = readOptions.readMode.isDefined && readOptions.readMode.get == ReadMode.ForceSingleMode
-    var useSingleMode = forceSingleMode
-    var res: Option[RDD[Row]] = None
-    if (readOptions.readMode.isEmpty){
-      var count = 0
-      try {
-        count = KDSU.
-          estimateRowsCount(kustoClient.engineClient, query, kustoCoordinates.database, clientRequestProperties.orNull)
-      } catch {
-        // Assume count is high if estimation got timed out
-        case e: Exception =>
-          if (forceSingleMode) {
-            // Throw in case user forced LeanMode
-            throw e
-          }
-          // By default we fallback to distributed mode
-          timedOutCounting = true
-      }
-      if (count == 0 && !timedOutCounting) {
-        res = Some(sparkSession.emptyDataFrame.rdd)
-      } else {
-        // Use distributed mode if count is high or in case of a time out
-        useSingleMode =  !(timedOutCounting || count > KustoConstants.DirectQueryUpperBoundRows)
-      }
+    val kustoClient = KustoClientCache.getClient(kustoCoordinates.clusterUrl, authentication,
+      kustoCoordinates.ingestionUrl, kustoCoordinates.clusterAlias)
+    val isUserOptionForceSingleMode = readOptions.readMode.contains(ReadMode.ForceSingleMode)
+    val storageParameters = maybeStorageParameters.getOrElse(kustoClient.getTempBlobsForExport)
+    val (useSingleMode, estimatedRecordCount) = readOptions.readMode match {
+      // if the user provides a specific option , this is to be used no matter what
+      case Some(_) => (isUserOptionForceSingleMode, -1)
+      // If there is no option mentioned , then estimate which option to use
+      // Count records and see if we wat a distributed or single mode
+      case None => val estimatedRecordCountResult =  Try(KDSU.
+        estimateRowsCount(kustoClient.engineClient, query, kustoCoordinates.database, clientRequestProperties.orNull))
+        estimatedRecordCountResult match {
+          // if the count is lss than the 5k threshold,use single mode.
+          case Success(recordCount) => (recordCount <= KustoConstants.DirectQueryUpperBoundRows, recordCount)
+          // A case of query timing out. ForceDistributedMode will be used here
+          case Failure(_) => (false, -1)
+        }
     }
-
-    var exception: Option[Exception] = None
-    if(res.isEmpty) {
-      if (useSingleMode) {
-        try {
-          res = Some(KustoReader.singleBuildScan(
-            kustoClient,
-            KustoReadRequest(sparkSession, cachedSchema, kustoCoordinates, query, authentication, timeout, clientRequestProperties, requestId),
-            KustoFiltering(requiredColumns, filters)))
-        } catch {
-          case ex: Exception => exception = Some(ex)
-        }
-      }
-
-      if (!useSingleMode || exception.isDefined) {
-        if(exception.isDefined){
-            KDSU.logError("KustoRelation",s"Failed with Single mode, falling back to Distributed mode, requestId: $requestId. Exception : ${exception.get.getMessage}")
-        }
-
-        readOptions.partitionOptions.column = Some(getPartitioningColumn)
-        readOptions.partitionOptions.mode = Some(getPartitioningMode)
-
-        res = Some(KustoReader.distributedBuildScan(
+    // if the selection yields 0 rows there are no records to scan and process
+    if(estimatedRecordCount == 0){
+      sparkSession.emptyDataFrame.rdd
+    } else {
+      // either a case of non-zero records or a case of timed-out.`
+      if(useSingleMode){
+        // there are less than 5000 (KustoConstants.DirectQueryUpperBoundRows) records, perform a single scan
+        Try(KustoReader.singleBuildScan(
           kustoClient,
           KustoReadRequest(sparkSession, cachedSchema, kustoCoordinates, query, authentication, timeout, clientRequestProperties, requestId),
-          if (storageParameters.isDefined) storageParameters.get else
-            KustoClientCache.getClient(kustoCoordinates.clusterUrl, authentication, kustoCoordinates.ingestionUrl, kustoCoordinates.clusterAlias).getTempBlobsForExport,
+          KustoFiltering(requiredColumns, filters))) match {
+          case Success(rdd) => rdd
+          case Failure(exception) =>
+            KDSU.logError("KustoRelation","Failed with Single mode, falling back to Distributed mode," +
+              s"requestId: $requestId. Exception : ${exception.getMessage}")
+            // If the user specified forceSingleMode explicitly and that cannot be honored , throw an exception back
+            if(isUserOptionForceSingleMode){
+              // Expected behavior for Issue#261
+              throw exception
+            } else {
+              // The case where used did not provide an option and we estimated to be a single scan.
+              // Our approximate estimate failed here , fallback to distributed
+              readOptions.partitionOptions.column = Some(getPartitioningColumn)
+              readOptions.partitionOptions.mode = Some(getPartitioningMode)
+              KustoReader.distributedBuildScan(
+                kustoClient,
+                KustoReadRequest(sparkSession, cachedSchema, kustoCoordinates, query, authentication, timeout, clientRequestProperties, requestId),
+                storageParameters,
+                readOptions,
+                KustoFiltering(requiredColumns, filters))
+            }
+        }
+      }
+      else {
+        // determined to be distributed mode , through user property or by record count
+        readOptions.partitionOptions.column = Some(getPartitioningColumn)
+        readOptions.partitionOptions.mode = Some(getPartitioningMode)
+        KustoReader.distributedBuildScan(
+          kustoClient,
+          KustoReadRequest(sparkSession, cachedSchema, kustoCoordinates, query, authentication, timeout, clientRequestProperties, requestId),
+          storageParameters,
           readOptions,
           KustoFiltering(requiredColumns, filters))
-
-        )
-      }
-
-      if(res.isEmpty && exception.isDefined){
-        throw exception.get
       }
     }
-
-    KDSU.logInfo("KustoRelation", s"Finished reading. OperationId: $requestId")
-    res.get
   }
 
   private def getSchema: KustoSchema = {
@@ -130,25 +128,28 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
   }
 
   private def getPartitioningColumn: String = {
-    if (readOptions.partitionOptions.column.isDefined) {
-      val requestedColumn = readOptions.partitionOptions.column.get
-      if (!schema.fields.exists(p => p.name equals requestedColumn)) {
-        throw new InvalidParameterException(
-          s"Cannot partition by column '$requestedColumn' since it is not part of the query schema: ${KDSU.NewLine}${schema.mkString(", ")}")
-      }
-      requestedColumn
-    } else schema.head.name
+    readOptions.partitionOptions.column match {
+      case Some(requestedColumn) =>
+        if (!schema.fields.exists(p => p.name equals requestedColumn)) {
+          throw new InvalidParameterException(
+            s"Cannot partition by column '$requestedColumn' since it is not part of the query schema: ${KDSU.NewLine}${schema.mkString(", ")}")
+        }
+        requestedColumn
+      case None => schema.head.name
+    }
   }
 
   private def getPartitioningMode: String = {
-    if (readOptions.partitionOptions.mode.isDefined) {
-      val mode = readOptions.partitionOptions.mode.get.toLowerCase(Locale.ROOT)
-      if (!KustoDebugOptions.supportedPartitioningModes.contains(mode)) {
-        throw new InvalidParameterException(
-          s"Specified partitioning mode '$mode' : ${KDSU.NewLine}${KustoDebugOptions.supportedPartitioningModes.mkString(", ")}")
-      }
-      mode
-    } else "hash"
+    readOptions.partitionOptions.mode match {
+      case Some(mode) =>
+        val normalizedMode = mode.toLowerCase(Locale.ROOT)
+        if (!KustoDebugOptions.supportedPartitioningModes.contains(normalizedMode)){
+          throw new InvalidParameterException(
+            s"Specified partitioning mode '$mode' : ${KDSU.NewLine}${KustoDebugOptions.supportedPartitioningModes.mkString(", ")}")
+        }
+        normalizedMode
+      case None => "hash"
+    }
   }
 
   // Used for cached results
