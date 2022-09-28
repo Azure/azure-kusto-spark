@@ -130,9 +130,7 @@ class KustoSinkSchemaAdjustmentE2E extends FlatSpec
     val sourceValues = (1 to expectedNumberOfRows).map(v => (newRow(v), v))
     val df = sourceValues.toDF("SourceColA", "SourceColB")
     val schemaAdjustmentMode = "GenerateDynamicCsvMapping"
-
     val testTable = KustoQueryUtils.simplifyName(s"KustoBatchSinkE2E_SchemaAdjust_${UUID.randomUUID()}")
-    // KustoTestUtils.createTestTable(kustoConnectionOptions, "KustoBatchSinkE2E_SchemaAdjust", targetSchema)
     KustoTestUtils.ingest(kustoConnectionOptions.copy(createTableIfNotExists = SinkTableCreationMode.CreateIfNotExist),
       df, testTable, schemaAdjustmentMode)
     assert(KustoTestUtils.validateTargetTable(kustoConnectionOptions, testTable, df, spark))
