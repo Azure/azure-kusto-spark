@@ -28,7 +28,7 @@ import java.net.URI
 import java.security.InvalidParameterException
 import java.util
 import java.util.concurrent.{Callable, CountDownLatch, TimeUnit}
-import java.util.{NoSuchElementException, Properties, StringJoiner, Timer, TimerTask, UUID}
+import java.util.{NoSuchElementException, Objects, Properties, StringJoiner, Timer, TimerTask, UUID}
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
@@ -642,25 +642,29 @@ object KustoDataSourceUtils {
 
   // No need to retry here - if an exception is caught - fallback to distributed mode
   private[kusto] def estimateRowsCount(client: Client, query: String, database: String, crp: ClientRequestProperties): Int = {
-    var count = 1
     val estimationResult: util.List[AnyRef] = Await.result(Future {
       val res = client.execute(database, generateEstimateRowsCountQuery(query), crp).getPrimaryResults
       res.next()
       res.getCurrentRow
     }, KustoConstants.TimeoutForCountCheck)
-    val estimated = estimationResult.get(1)
-    if (estimated == null || StringUtils.isBlank(estimated.toString)) {
-      // Estimation can be empty for certain cases
+    val maybeEstimatedCount = Option(estimationResult.get(1))
+    /*
+     Check if the result is null or an empty string return a 0 , else return the numeric value
+    */
+    val estimatedCount = maybeEstimatedCount match {
+      case Some(ecStr: String) => if (StringUtils.isBlank(ecStr) || !StringUtils.isNumeric(ecStr)) /* Empty estimate */ 0 else ecStr.toInt
+      case Some(ecInt: java.lang.Number) => ecInt.intValue() // Is a numeric , get the int value back
+      case None => 0 // No value
+    }
+    // We cannot be finitely determine the count , or have a 0 count. Recheck using a 'query | count()'
+    if (estimatedCount == 0) {
       Await.result(Future {
         val res = client.execute(database, generateCountQuery(query), crp).getPrimaryResults
         res.next()
-        count = res.getInt(0)
+        res.getInt(0)
       }, KustoConstants.TimeoutForCountCheck)
     } else {
-      // Zero estimation count does not indicate zero results, therefore we add 1 here so that we won't return an empty RDD
-      count = estimated.asInstanceOf[Int] + 1
+      estimatedCount
     }
-
-    count
   }
 }
