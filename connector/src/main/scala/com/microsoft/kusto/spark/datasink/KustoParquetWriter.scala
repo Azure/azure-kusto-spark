@@ -2,7 +2,7 @@ package com.microsoft.kusto.spark.datasink
 
 import com.microsoft.kusto.spark.datasource.TransientStorageCredentials
 import com.microsoft.kusto.spark.utils.{KustoAzureFsSetupCache, KustoQueryUtils}
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, SaveMode}
 import org.apache.spark.{SparkContext, TaskContext}
 import org.joda.time.{DateTime, DateTimeZone}
 
@@ -11,7 +11,7 @@ import java.util.UUID
 /*
   Serializes and writes data as a parquet blob
 */
-class KustoParquetWriter(val sparkContext: SparkContext, val storageCredentials: TransientStorageCredentials) {
+class KustoParquetWriter(sparkContext: SparkContext, storageCredentials: TransientStorageCredentials) {
   def write(inputDataFrame: DataFrame,
             databaseName: String,
             tmpTableName: String): Unit = {
@@ -46,8 +46,8 @@ class KustoParquetWriter(val sparkContext: SparkContext, val storageCredentials:
       }
     }
 
-    if (!KustoAzureFsSetupCache.updateAndGetPrevNativeAzureFs(now)) {
-      hadoopConfiguration.set("fs.azure", "org.apache.hadoop.fs.azure.NativeAzureFileSystem")
-    }
+    hadoopConfiguration.set("fs.azure", "org.apache.hadoop.fs.azure.NativeAzureFileSystem")
+    hadoopConfiguration.set("fs.wasbs.impl", "org.apache.hadoop.fs.azure.NativeAzureFileSystem")
+    hadoopConfiguration.set("fs.wasb.impl", "org.apache.hadoop.fs.azure.NativeAzureFileSystem")
   }
 }
