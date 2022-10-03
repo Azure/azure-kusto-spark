@@ -2,7 +2,7 @@ package com.microsoft.kusto.spark.datasink
 
 import com.microsoft.kusto.spark.datasource.TransientStorageCredentials
 import com.microsoft.kusto.spark.utils.{KustoAzureFsSetupCache, KustoQueryUtils}
-import org.apache.spark.sql.{DataFrame, SaveMode}
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.{SparkContext, TaskContext}
 import org.joda.time.{DateTime, DateTimeZone}
 
