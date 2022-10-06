@@ -5,7 +5,8 @@ import java.util.concurrent.atomic.AtomicInteger
 import com.microsoft.azure.kusto.data.{Client, ClientFactory, ClientRequestProperties}
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.kusto.spark.KustoTestUtils.KustoConnectionOptions
-import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode}
+import com.microsoft.kusto.spark.common.KustoDebugOptions
+import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode, SparkIngestionProperties}
 import com.microsoft.kusto.spark.datasource.{KustoSourceOptions, ReadMode, TransientStorageCredentials, TransientStorageParameters}
 import com.microsoft.kusto.spark.sql.extension.SparkExtension._
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
@@ -20,7 +21,7 @@ import org.scalatest.{BeforeAndAfterAll, FlatSpec}
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import scala.collection.immutable
-import scala.util.{Failure, Try, Success}
+import scala.util.{Failure, Success, Try}
 import scala.util.Random
 
 @RunWith(classOf[JUnitRunner])
@@ -104,6 +105,12 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
     KDSU.logInfo("e2e","running KustoConnector");
     val crp = new ClientRequestProperties
     crp.setTimeoutInMilliSec(2000)
+    val ingestByTags = new java.util.ArrayList[String]
+    val tag = "dammyTag"
+    ingestByTags.add(tag)
+    val sp = new SparkIngestionProperties()
+    sp.ingestByTags = ingestByTags
+
     dfOrig.write
       .format("com.microsoft.kusto.spark.datasource")
       .option(KustoSinkOptions.KUSTO_CLUSTER, kustoConnectionOptions.cluster)
@@ -115,6 +122,9 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
       .option(KustoSinkOptions.KUSTO_REQUEST_ID, "04ec0408-3cc3_.asd")
       .option(KustoSinkOptions.KUSTO_CLIENT_REQUEST_PROPERTIES_JSON, crp.toString)
       .option(KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS, SinkTableCreationMode.CreateIfNotExist.toString)
+      .option(KustoDebugOptions.KUSTO_ENSURE_NO_DUPLICATED_BLOBS, true.toString)
+      .option(KustoDebugOptions.KUSTO_DISABLE_FLUSH_IMMEDIATELY, true.toString)
+      .option(KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON, sp.toString)
       .mode(SaveMode.Append)
       .save()
 
