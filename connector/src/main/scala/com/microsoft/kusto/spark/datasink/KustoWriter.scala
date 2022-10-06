@@ -22,6 +22,7 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.CollectionAccumulator
 import org.json.JSONObject
 import io.github.resilience4j.retry.{Retry, RetryConfig}
+
 import java.io._
 import java.net.URI
 import java.nio.charset.StandardCharsets
@@ -29,7 +30,6 @@ import java.security.InvalidParameterException
 import java.util
 import java.util.zip.GZIPOutputStream
 import java.util.{TimeZone, UUID}
-
 import com.microsoft.kusto.spark.datasink.FinalizeHelper.finalizeIngestionWhenWorkersSucceeded
 
 import java.time.Instant
@@ -37,6 +37,7 @@ import scala.collection.Iterator
 import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.{Await, Future, TimeoutException}
+import scala.util.{Failure, Success, Try}
 
 object KustoWriter {
   private val myName = this.getClass.getSimpleName
@@ -305,7 +306,6 @@ object KustoWriter {
           props.setIngestByTags(ingestBy)
           props.setIngestIfNotExists(ingestIfNotExist)
         }
-
         if (!ingestionProperties.getFlushImmediately && flushImmediately) {
           // Need to copy the ingestionProperties so that only this one will be flushed immediately
           props = SparkIngestionProperties.cloneIngestionProperties(ingestionProperties)
@@ -317,10 +317,17 @@ object KustoWriter {
         if (writeOptions.isTransactionalMode) {
           partitionsResults.add(
             PartitionResult(KDSU.retryFunction(() => {
-              KDSU.logInfo(myName, s"Queued blob for ingestion in partition $partitionIdString for requestId: '${writeOptions.requestId}")
-              ingestClient.ingestFromBlob(blobSourceInfo, props)
-            }, this.retryConfig, "Ingest into Kusto"),
+              Try(
+                ingestClient.ingestFromBlob(blobSourceInfo, props)
+              ) match {
+                case Success(x) => x
+                case Failure(e: Exception) =>
+                  KDSU.reportExceptionAndThrow(myName, e, "Queueing blob for ingestion in partition $partitionIdString for requestId: '${writeOptions.requestId}", shouldNotThrow = false)
+                  null
+              }
+        }, this.retryConfig, "Ingest into Kusto"),
               partitionId))
+          KDSU.logInfo(myName, s"Queued blob for ingestion in partition $partitionIdString for requestId: '${writeOptions.requestId}")
         }
       }
     }
