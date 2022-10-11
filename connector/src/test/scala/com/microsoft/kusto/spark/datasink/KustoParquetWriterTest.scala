@@ -21,7 +21,6 @@ class KustoParquetWriterTest extends FunSuite with BeforeAndAfterAll {
       .appName("KustoSink")
       .master(f"local[$nofExecutors]")
       .getOrCreate()
-//    val transientStorageCredentials = new TransientStorageCredentials(sas = "https://sdke2eteststorage.blob.core.windows.net/e2e-tests?sp=racwdl&st=2022-10-03T06:12:44Z&se=2022-10-03T14:12:44Z&spr=https&sv=2021-06-08&sr=c&sig=xLfPq52muU%2FwLpoSO7yPu3rko0N3bTTsdGJQeHKtq%2Bc%3D")
 
     val transientStorageCredentials = new TransientStorageCredentials(storageAccountName = "",
       storageAccountKey = "",
