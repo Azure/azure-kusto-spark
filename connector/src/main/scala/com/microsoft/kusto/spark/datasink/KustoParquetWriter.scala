@@ -4,17 +4,18 @@ import com.microsoft.kusto.spark.datasource.TransientStorageCredentials
 import com.microsoft.kusto.spark.utils.{KustoAzureFsSetupCache, KustoQueryUtils}
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.io.IOUtils
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.{SparkContext, TaskContext}
 import org.joda.time.{DateTime, DateTimeZone}
 
+import java.time.Instant
 import java.util.UUID
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 /*
   Serializes and writes data as a parquet blob
 */
-class KustoParquetWriter(sparkContext: SparkContext, storageCredentials: TransientStorageCredentials) {
+class KustoParquetWriter(sparkSession: SparkSession, storageCredentials: TransientStorageCredentials) {
   def write(inputDataFrame: DataFrame,
             databaseName: String,
             tmpTableName: String): Unit = {
@@ -29,28 +30,28 @@ class KustoParquetWriter(sparkContext: SparkContext, storageCredentials: Transie
     setUpAccessForAzureFS()
     // Write the file
     // inputDataFrame.write.format("com.microsoft.kusto.spark.datasink.parquet.KustoParquetSinkProvider").option("create_table", "true").save(blobPath)
+
+    println(s"Starting ${Instant.now()}")
+
     inputDataFrame.write.parquet(blobPath)
 
-    val hadoopConfig = sparkContext.hadoopConfiguration
-    val hdfs = FileSystem.get(hadoopConfig)
-    val s = new Path(blobPath)
-    val d = new Path(blobDestinationPath)
-    // Source path is expected to be a directory:
-    Try {
-      hdfs
-        .listStatus(s)
-        .sortBy(_.getPath.getName)
-        .collect {
-          case status if status.isFile =>
-            val inputFile = hdfs.open(status.getPath)
-            println(s"Files ==> $inputFile")
-        }
-    }
-    sparkContext.binaryFiles(blobPath).foreachPartition(partition=>{
-      partition.foreach(part=>{
-        println(s"Partitioned Files ==> ${part._1}")
-      })
+    println(s"Processing next at ${Instant.now()}")
+
+    // CloudBlockBlob
+    val listOfFiles = Seq("","","")
+
+    import sparkSession.implicits._
+    val files = listOfFiles.toDF()
+    files.foreachPartition(file=>{
+
     })
+
+//    sparkContext.binaryFiles(blobPath).foreachPartition(partition=>{
+//      partition.foreach(part=>{
+//        val timeNow = Instant.now()
+//        println(s"$timeNow :: Partitioned Files ==> ${part._1}")
+//      })
+//    })
   }
 
   private[kusto] def setUpAccessForAzureFS(): Unit = {
