@@ -23,7 +23,7 @@ class KustoParquetWriter(sparkContext: SparkContext, storageCredentials: Transie
     // Set up the access in spark config
     setUpAccessForAzureFS()
     // Write the file
-    inputDataFrame.write.parquet(blobPath)
+    inputDataFrame.write.format("com.microsoft.kusto.spark.datasink.parquet.KustoParquetSinkProvider").save(blobPath)
   }
 
   private[kusto] def setUpAccessForAzureFS(): Unit = {
