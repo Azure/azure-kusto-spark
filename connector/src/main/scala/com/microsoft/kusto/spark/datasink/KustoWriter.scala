@@ -304,6 +304,9 @@ object KustoWriter {
           props.setIngestByTags(ingestBy)
           props.setIngestIfNotExists(ingestIfNotExist)
         }
+        KDSU.logInfo(myName, s"Setting write-options for duplicates RequestId :'${parameters.writeOptions.requestId}" +
+          s"ensureNoDupBlobs:${parameters.writeOptions.ensureNoDupBlobs}, ingestTags: ${props.getIngestByTags}" +
+          s", ingestIfNotExists: ${props.getIngestIfNotExists}")
         if (!ingestionProperties.getFlushImmediately && flushImmediately) {
           // Need to copy the ingestionProperties so that only this one will be flushed immediately
           props = SparkIngestionProperties.cloneIngestionProperties(ingestionProperties)
