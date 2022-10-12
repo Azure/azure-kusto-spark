@@ -90,8 +90,8 @@ object KustoWriter {
       writeOptions.ensureNoDupBlobs
     )
 
-    implicit val parameters: KustoWriteResource = KustoWriteResource(authentication, tableCoordinates, data.schema,
-      rebuiltOptions, tmpTableName)
+//    implicit val parameters: KustoWriteResource = KustoWriteResource(authentication, tableCoordinates, data.schema,
+//      rebuiltOptions, tmpTableName)
 
     val tableExists = schemaShowCommandResult.count() > 0
     val shouldIngest = kustoClient.shouldIngestData(tableCoordinates, writeOptions.ingestionProperties, tableExists,
@@ -126,8 +126,9 @@ object KustoWriter {
 
       val rdd = data.queryExecution.toRdd
       val partitionsResults = rdd.sparkContext.collectionAccumulator[PartitionResult]
+      val parameters = KustoWriteResource(authentication = authentication, coordinates = tableCoordinates, schema = data.schema, writeOptions = rebuiltOptions, tmpTableName = tmpTableName)
       if (writeOptions.isAsync) {
-        val asyncWork = rdd.foreachPartitionAsync { rows => ingestRowsIntoTempTbl(rows, batchIdIfExists, partitionsResults) }
+        val asyncWork = rdd.foreachPartitionAsync { rows => ingestRowsIntoTempTbl(rows, batchIdIfExists, partitionsResults,parameters) }
         KDSU.logInfo(myName, s"asynchronous write to Kusto table '$table' in progress")
         // This part runs back on the driver
         if (writeOptions.isTransactionalMode) {
@@ -148,7 +149,7 @@ object KustoWriter {
         }
       } else {
         try
-          rdd.foreachPartition { rows => ingestRowsIntoTempTbl(rows, batchIdIfExists, partitionsResults) }
+          rdd.foreachPartition { rows => ingestRowsIntoTempTbl(rows, batchIdIfExists, partitionsResults,parameters) }
         catch {
           case exception: Exception => if (writeOptions.isTransactionalMode) {
             if (writeOptions.userTempTableName.isEmpty) {
@@ -168,28 +169,25 @@ object KustoWriter {
     }
   }
 
-  def ingestRowsIntoTempTbl(rows: Iterator[InternalRow], batchIdForTracing: String, partitionsResults: CollectionAccumulator[PartitionResult])
-                           (implicit parameters: KustoWriteResource): Unit = {
+  def ingestRowsIntoTempTbl(rows: Iterator[InternalRow], batchIdForTracing: String, partitionsResults: CollectionAccumulator[PartitionResult],parameters: KustoWriteResource)
+                           : Unit = {
     if (rows.isEmpty) {
       KDSU.logWarn(myName, s"sink to Kusto table '${parameters.coordinates.table.get}' with no rows to write on partition ${TaskContext.getPartitionId} $batchIdForTracing")
     } else {
-      ingestToTemporaryTableByWorkers(batchIdForTracing, rows, partitionsResults)
+      ingestToTemporaryTableByWorkers(batchIdForTracing, rows, partitionsResults,parameters)
     }
   }
 
   def ingestRowsIntoKusto(rows: Iterator[InternalRow],
                           ingestClient: IngestClient,
                           partitionsResults: CollectionAccumulator[PartitionResult],
-                          batchIdForTracing: String)
-                         (implicit parameters: KustoWriteResource): Unit = {
-   import parameters._
-
+                          batchIdForTracing: String , parameters: KustoWriteResource): Unit = {
    // Transactional mode write into the temp table instead of the destination table
-   val ingestionProperties = getIngestionProperties(writeOptions,
+   val ingestionProperties = getIngestionProperties(parameters.writeOptions,
       parameters.coordinates.database,
-      if (writeOptions.isTransactionalMode) parameters.tmpTableName else parameters.coordinates.table.get)
+      if (parameters.writeOptions.isTransactionalMode) parameters.tmpTableName else parameters.coordinates.table.get)
 
-    if (writeOptions.isTransactionalMode) {
+    if (parameters.writeOptions.isTransactionalMode) {
       ingestionProperties.setReportMethod(IngestionProperties.IngestionReportMethod.TABLE)
       ingestionProperties.setReportLevel(IngestionProperties.IngestionReportLevel.FAILURES_AND_SUCCESSES)
     }
@@ -199,15 +197,16 @@ object KustoWriter {
       val tasks = ingestRows(rows, parameters, ingestClient, ingestionProperties, partitionsResults, batchIdForTracing)
 
       KDSU.logInfo(myName, s"Ingesting from ${if(tasks.size() == 1) "blob" else tasks.size() +
-        " blobs"} - partition: ${TaskContext.getPartitionId()} requestId: '${writeOptions.requestId}' batch$batchIdForTracing")
+        " blobs"} - partition: ${TaskContext.getPartitionId()} requestId: '${parameters.writeOptions.requestId}' batch$batchIdForTracing")
 
       tasks.asScala.foreach(t => try {
         Await.result(t, KCONST.DefaultMaximumIngestionTime)
       } catch {
-        case _: TimeoutException => throw new TimeoutAwaitingPendingOperationException(s"Timed out trying to ingest requestId: '${writeOptions.requestId}'")
+        case _: TimeoutException => throw new TimeoutAwaitingPendingOperationException("Timed out trying to ingest " +
+          s"requestId: '${parameters.writeOptions.requestId}'")
       })
     } catch {
-      case e: Exception => if(writeOptions.isTransactionalMode) throw e
+      case e: Exception => if(parameters.writeOptions.isTransactionalMode) throw e
     }
   }
 
@@ -235,14 +234,14 @@ object KustoWriter {
   private def ingestToTemporaryTableByWorkers(
                                                batchIdForTracing: String,
                                                rows: Iterator[InternalRow],
-                                               partitionsResults: CollectionAccumulator[PartitionResult])
-                                             (implicit parameters: KustoWriteResource): Unit = {
+                                               partitionsResults: CollectionAccumulator[PartitionResult],
+                                               parameters:KustoWriteResource): Unit = {
 
-    import parameters._
     val partitionId = TaskContext.getPartitionId
-    KDSU.logInfo(myName, s"Processing partition: '$partitionId' in requestId: '${writeOptions.
+    KDSU.logInfo(myName, s"Processing partition: '$partitionId' in requestId: '${parameters.writeOptions.
       requestId}'$batchIdForTracing")
-    val ingestClient = KustoClientCache.getClient(coordinates.clusterUrl, authentication, coordinates.ingestionUrl, coordinates.clusterAlias).ingestClient
+    val ingestClient = KustoClientCache.getClient(parameters.coordinates.clusterUrl,
+      parameters.authentication, parameters.coordinates.ingestionUrl, parameters.coordinates.clusterAlias).ingestClient
     val queueRequestOptions = new QueueRequestOptions
     queueRequestOptions.setMaximumExecutionTimeInMs(KCONST.DefaultExecutionQueueing)
     queueRequestOptions.setTimeoutIntervalInMs(KCONST.DefaultTimeoutQueueing)
@@ -250,7 +249,7 @@ object KustoWriter {
     ingestClient.setQueueRequestOptions(queueRequestOptions)
     // We force blocking here, since the driver can only complete the ingestion process
     // once all partitions are ingested into the temporary table
-    ingestRowsIntoKusto(rows, ingestClient, partitionsResults, batchIdForTracing)
+    ingestRowsIntoKusto(rows, ingestClient, partitionsResults, batchIdForTracing,parameters)
   }
 
   def createBlobWriter(tableCoordinates: KustoCoordinates,
@@ -285,15 +284,14 @@ object KustoWriter {
                                 partitionsResults: CollectionAccumulator[PartitionResult],
                                 batchIdForTracing: String): util.ArrayList[Future[Unit]]
   = {
-    import parameters._
     val partitionId = TaskContext.getPartitionId
     val partitionIdString = TaskContext.getPartitionId.toString
     def ingest(blob: CloudBlockBlob, size: Long, sas: String, flushImmediately: Boolean = false, blobUUID: String): Future[Unit] = {
       Future {
         var props = ingestionProperties
         val blobUri = blob.getStorageUri.getPrimaryUri.toString
-        if (writeOptions.ensureNoDupBlobs) {
-          val pref = KDSU.getDedupTagsPrefix(writeOptions.requestId, batchIdForTracing)
+        if (parameters.writeOptions.ensureNoDupBlobs) {
+          val pref = KDSU.getDedupTagsPrefix(parameters.writeOptions.requestId, batchIdForTracing)
           val tag = pref + blobUUID
           val ingestIfNotExist = new util.ArrayList[String]
           ingestIfNotExist.addAll(props.getIngestIfNotExists)
@@ -314,7 +312,7 @@ object KustoWriter {
         val blobPath = blobUri + sas
         val blobSourceInfo = new BlobSourceInfo(blobPath, size)
 
-        if (writeOptions.isTransactionalMode) {
+        if (parameters.writeOptions.isTransactionalMode) {
           partitionsResults.add(
             PartitionResult(KDSU.retryFunction(() => {
               Try(
@@ -327,25 +325,27 @@ object KustoWriter {
               }
         }, this.retryConfig, "Ingest into Kusto"),
               partitionId))
-          KDSU.logInfo(myName, s"Queued blob for ingestion in partition $partitionIdString for requestId: '${writeOptions.requestId}")
+          KDSU.logInfo(myName, s"Queued blob for ingestion in partition $partitionIdString for requestId: '${parameters.writeOptions.requestId}")
         }
       }
     }
 
 
-    val kustoClient = KustoClientCache.getClient(coordinates.clusterUrl, authentication, coordinates.ingestionUrl, coordinates.clusterAlias)
-    val maxBlobSize = writeOptions.batchLimit * KCONST.OneMegaByte
+    val kustoClient = KustoClientCache.getClient(parameters.coordinates.clusterUrl, parameters.authentication,
+      parameters.coordinates.ingestionUrl, parameters.coordinates.clusterAlias)
+    val maxBlobSize = parameters.writeOptions.batchLimit * KCONST.OneMegaByte
     var curBlobUUID = UUID.randomUUID().toString
     // This blobWriter will be used later to write the rows to blob storage from which it will be ingested to Kusto
-    val initialBlobWriter: BlobWriteResource = createBlobWriter(coordinates, tmpTableName, kustoClient, partitionIdString, 0, curBlobUUID)
-    val timeZone = TimeZone.getTimeZone(writeOptions.timeZone).toZoneId
+    val initialBlobWriter: BlobWriteResource = createBlobWriter(parameters.coordinates,
+      parameters.tmpTableName, kustoClient, partitionIdString, 0, curBlobUUID)
+    val timeZone = TimeZone.getTimeZone(parameters.writeOptions.timeZone).toZoneId
 
     val ingestionTasks: util.ArrayList[Future[Unit]] = new util.ArrayList()
 
     // Serialize rows to ingest and send to blob storage.
     val lastBlobWriter = rows.foldLeft[BlobWriteResource](initialBlobWriter) {
       case (blobWriter, row) =>
-        RowCSVWriterUtils.writeRowAsCSV(row, schema, timeZone, blobWriter.csvWriter)
+        RowCSVWriterUtils.writeRowAsCSV(row, parameters.schema, timeZone, blobWriter.csvWriter)
 
         val count = blobWriter.csvWriter.getCounter
         val shouldNotCommitBlockBlob = count < maxBlobSize
@@ -353,18 +353,19 @@ object KustoWriter {
           blobWriter
         } else {
           val blobNumber = ingestionTasks.size
-          KDSU.logInfo(myName, s"Sealing blob in partition $partitionIdString for requestId: '${writeOptions.requestId}', " +
+          KDSU.logInfo(myName, s"Sealing blob in partition $partitionIdString for requestId: '${parameters.writeOptions.requestId}', " +
             s"blob number ${ingestionTasks.size}, with size $count")
           finalizeBlobWrite(blobWriter)
           val task = ingest(blobWriter.blob, blobWriter.csvWriter.getCounter, blobWriter.sas, flushImmediately =
-            !writeOptions.disableFlushImmediately, curBlobUUID)
+            !parameters.writeOptions.disableFlushImmediately, curBlobUUID)
           ingestionTasks.add(task)
           curBlobUUID = UUID.randomUUID().toString
-          createBlobWriter(coordinates, tmpTableName, kustoClient, partitionIdString, blobNumber + 1, curBlobUUID)
+          createBlobWriter(parameters.coordinates, parameters.tmpTableName, kustoClient, partitionIdString, blobNumber + 1, curBlobUUID)
         }
     }
 
-    KDSU.logInfo(myName, s"finished serializing rows in partition $partitionIdString for requestId: '${writeOptions.requestId}' ")
+    KDSU.logInfo(myName, s"finished serializing rows in partition $partitionIdString for " +
+      s"requestId: '${parameters.writeOptions.requestId}' ")
     finalizeBlobWrite(lastBlobWriter)
     if (lastBlobWriter.csvWriter.getCounter > 0) {
       ingestionTasks.add(ingest(lastBlobWriter.blob, lastBlobWriter.csvWriter.getCounter, lastBlobWriter.sas,
