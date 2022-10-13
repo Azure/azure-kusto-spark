@@ -57,11 +57,36 @@ object KustoIngestionUtils {
         columnMapping
       })
 
-    ingestionProperties.csvMapping = csvMappingToString(columnMappingReset.toArray)
+    ingestionProperties.csvMapping = mappingToString(columnMappingReset.toArray)
 
   }
 
-  private[kusto] def csvMappingToString(columnMappings: Array[ColumnMapping]) : String = {
+  private[kusto] def setParquetMapping(sourceSchema: StructType,
+                                   targetSchema: Array[JSONObject],
+                                   ingestionProperties: SparkIngestionProperties): Unit = {
+    require(ingestionProperties.parquetMappingNameReference == null || ingestionProperties.parquetMappingNameReference.isEmpty,
+      "Sink options SparkIngestionProperties.parquetMappingNameReference and adjustSchema.GenerateDynamicParquetMapping are not compatible. Use only one.")
+
+    val targetSchemaColumns = targetSchema.map(c => (c.getString("Name"),c.getString("CslType"))).toMap
+    val sourceSchemaColumns = sourceSchema.fields.zipWithIndex.map(c => (c._1.name, c._2 )).toMap
+    val notFoundSourceColumns = sourceSchemaColumns.filter(c => !targetSchemaColumns.contains(c._1)).keys
+    if(notFoundSourceColumns.nonEmpty)
+      throw SchemaMatchException(s"Source schema has columns that are not present in the target: ${notFoundSourceColumns.mkString(", ")}.")
+
+    val columnMappingReset = sourceSchemaColumns
+      .map(sourceColumn => {
+        val targetDataType = targetSchemaColumns.get(sourceColumn._1)
+        val columnMapping = new ColumnMapping(sourceColumn._1, targetDataType.get)
+        columnMapping.setPath(s"$$.${sourceColumn._1}")
+        columnMapping
+      })
+
+    val mappedString = mappingToString(columnMappingReset.toArray)
+    ingestionProperties.parquetMapping = mappedString.replace("columnName","Column")
+    ingestionProperties.parquetColumnMapping = columnMappingReset.toArray
+  }
+
+  private[kusto] def mappingToString(columnMappings: Array[ColumnMapping]) : String = {
 
     if(columnMappings == null)
       return ""

@@ -3,11 +3,13 @@ package com.microsoft.kusto.spark.datasink
 import com.microsoft.azure.kusto.ingest.IngestionMapping.IngestionMappingKind
 
 import java.util
-import com.microsoft.azure.kusto.ingest.{IngestionMapping, IngestionProperties}
+import com.microsoft.azure.kusto.ingest.{ColumnMapping, IngestionMapping, IngestionProperties}
 import org.codehaus.jackson.annotate.JsonAutoDetect.Visibility
 import org.codehaus.jackson.annotate.JsonMethod
 import org.codehaus.jackson.map.ObjectMapper
 import org.joda.time.DateTime
+
+import java.util.Calendar
 
 class SparkIngestionProperties(var flushImmediately: Boolean = false,
                                var dropByTags: util.ArrayList[String] = null,
@@ -16,7 +18,11 @@ class SparkIngestionProperties(var flushImmediately: Boolean = false,
                                var ingestIfNotExists: util.ArrayList[String] = null,
                                var creationTime: DateTime = null,
                                var csvMapping: String = null,
-                               var csvMappingNameReference: String = null){
+                               var csvMappingNameReference: String = null,
+                               var parquetMapping: String = null,
+                               var parquetMappingNameReference: String = null,
+                               var parquetColumnMapping : Array[ColumnMapping]= null
+                              ){
   // C'tor for serialization
   def this(){
     this(false)
@@ -63,6 +69,17 @@ class SparkIngestionProperties(var flushImmediately: Boolean = false,
 
     if (this.csvMappingNameReference != null) {
       ingestionProperties.setIngestionMapping(new IngestionMapping(this.csvMappingNameReference, IngestionMapping.IngestionMappingKind.CSV))
+    }
+
+    if (this.parquetMapping != null) {
+      additionalProperties.put("ingestionMapping", this.parquetMapping)
+      additionalProperties.put("ingestionMappingType", IngestionMappingKind.PARQUET.getKustoValue)
+      ingestionProperties.setIngestionMapping(this.parquetColumnMapping,IngestionMapping.IngestionMappingKind.PARQUET)
+    }
+
+    if (this.parquetMappingNameReference != null) {
+      ingestionProperties.setIngestionMapping(new IngestionMapping(this.parquetMappingNameReference, IngestionMapping.IngestionMappingKind.PARQUET))
+      ingestionProperties.setDataFormat(IngestionProperties.DataFormat.PARQUET)
     }
 
     ingestionProperties.setAdditionalProperties(additionalProperties)

@@ -1,16 +1,21 @@
 package com.microsoft.kusto.spark.datasink
 
-import com.microsoft.azure.kusto.ingest.IngestionProperties
+import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
+import com.microsoft.azure.kusto.data.{ClientImpl, ClientRequestProperties}
 import com.microsoft.kusto.spark.datasource.TransientStorageCredentials
-import com.microsoft.kusto.spark.utils.{KustoAzureFsSetupCache, KustoDataSourceUtils, KustoQueryUtils}
+import com.microsoft.kusto.spark.utils.CslCommandsGenerator.generateTableGetSchemaAsRowsCommand
+import com.microsoft.kusto.spark.utils.KustoIngestionUtils.{setCsvMapping, setParquetMapping}
+import com.microsoft.kusto.spark.utils.{ExtendedKustoClient, KustoAzureFsSetupCache, KustoDataSourceUtils, KustoQueryUtils}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.joda.time.{DateTime, DateTimeZone}
+import org.json.JSONObject
 
 import java.net.URI
 import java.util.UUID
+import scala.collection.JavaConverters.asScalaBufferConverter
 import scala.collection.mutable.ListBuffer
 import scala.util.{Failure, Success, Try}
 
@@ -53,12 +58,38 @@ class KustoParquetWriter(sparkSession: SparkSession, storageCredentials: Transie
     }
     import sparkSession.implicits._
     val listOfFilesToProcess = listOfFiles.toDF()
+    val blobFileBase = s"https://${storageCredentials.storageAccountName}.blob.${storageCredentials.domainSuffix}/${storageCredentials.blobContainer}"
+    val sourceSchema = inputDataFrame.schema
+
     listOfFilesToProcess.rdd.foreachPartition(partitionResult => {
-      val ingestionProperties = new IngestionProperties("", "")
-      val parquetIngestor = new KustoParquetIngestor(ingestionProperties)
+      val database: String = "" //System.getProperty(KustoSinkOptions.KUSTO_DATABASE)
+      val tableName = ""
+      //val tableName = "stormsspark"
+
+      /*val ingestionProperties = new IngestionProperties(database, tableName)
+      ingestionProperties.getIngestionMapping().setIngestionMappingReference("spark_data_ref2", IngestionMappingKind.PARQUET)
+      ingestionProperties.setDataFormat(IngestionProperties.DataFormat.PARQUET)
+      ingestionProperties.setReportLevel(IngestionProperties.IngestionReportLevel.FAILURES_AND_SUCCESSES)*/
+
+
+      //build the table schema if not exists
+      val kustoClient = new ExtendedKustoClient(ConnectionStringBuilder.createWithAadApplicationCredentials(
+        "",
+        "",
+        "",
+        ""), null,"")
+      val schemaShowCommandResult = kustoClient.executeEngine(database,
+        generateTableGetSchemaAsRowsCommand(tableName), new ClientRequestProperties).getPrimaryResults
+      val targetSchema = schemaShowCommandResult.getData.asScala.map(c => c.get(0).asInstanceOf[JSONObject]).toArray
+      val sparkIngestionProperties = new SparkIngestionProperties()
+
+      setParquetMapping(sourceSchema, targetSchema, sparkIngestionProperties)
+      val parquetIngestor = new KustoParquetIngestor(sparkIngestionProperties.toIngestionProperties(database, tableName))
+      //val parquetIngestor = new KustoParquetIngestor(ingestionProperties)
       partitionResult.foreach(rowIterator => {
         val fileName = rowIterator.getString(0)
-        parquetIngestor.ingest(fileName)
+        val fullPath = s"$blobFileBase$blobPath/$fileName"
+        parquetIngestor.ingest(fullPath)
       })
     })
   }

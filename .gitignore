@@ -45,9 +45,11 @@ buildNumber.properties
 .history/
 .lib/
 dist/*
-target/
 lib_managed/
 src_managed/
 project/boot/
 project/plugins/project/
 
+.vscode
+.devcontainer
+.metals
