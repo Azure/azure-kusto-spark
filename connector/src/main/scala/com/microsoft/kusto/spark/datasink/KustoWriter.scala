@@ -299,20 +299,15 @@ object KustoWriter {
           props.setIngestByTags(ingestBy)
           props.setIngestIfNotExists(ingestIfNotExist)
         }
-        val blobUuid = UUID.randomUUID()
-        KDSU.logInfo(myName, s"Setting write-options for duplicates RequestId :'${parameters.writeOptions.requestId}" +
-          s" ensureNoDupBlobs:${parameters.writeOptions.ensureNoDupBlobs}, ingestTags: ${props.getIngestByTags}" +
-          s", ingestIfNotExists: ${props.getIngestIfNotExists} with BlobUUId $blobUuid")
-        if (!ingestionProperties.getFlushImmediately && flushImmediately) {
-          // Need to copy the ingestionProperties so that only this one will be flushed immediately
-          props = SparkIngestionProperties.cloneIngestionProperties(ingestionProperties)
-          props.setFlushImmediately(true)
-        }
-        val blobPath = blobUri + sas
-        val blobSourceInfo = new BlobSourceInfo(blobPath, size)
-        blobSourceInfo.setSourceId(blobUuid)
-
+        props.setFlushImmediately(!ingestionProperties.getFlushImmediately && flushImmediately)
+        // write the data here
         if (parameters.writeOptions.isTransactionalMode) {
+          val blobUuid = UUID.randomUUID()
+          KDSU.logInfo(myName, s"Setting write-options for duplicates RequestId :'${parameters.writeOptions.requestId}" +
+            s" ensureNoDupBlobs:${parameters.writeOptions.ensureNoDupBlobs}, ingestTags: ${props.getIngestByTags}" +
+            s", ingestIfNotExists: ${props.getIngestIfNotExists} with BlobUUId $blobUuid")
+          val blobPath = blobUri + sas
+          val blobSourceInfo = new BlobSourceInfo(blobPath, size, blobUuid)
           partitionsResults.add(
             PartitionResult(KDSU.retryFunction(() => {
               Try(
@@ -338,35 +333,32 @@ object KustoWriter {
     val initialBlobWriter: BlobWriteResource = createBlobWriter(parameters.coordinates,
       parameters.tmpTableName, kustoClient, partitionIdString, 0, curBlobUUID)
     val timeZone = TimeZone.getTimeZone(parameters.writeOptions.timeZone).toZoneId
-    val ingestionTasks: util.ArrayList[Unit] = new util.ArrayList()
     // Serialize rows to ingest and send to blob storage.
-    val lastBlobWriter = rows.foldLeft[BlobWriteResource](initialBlobWriter) {
+    val lastBlobWriter = rows.zipWithIndex.foldLeft[BlobWriteResource](initialBlobWriter) {
       case (blobWriter, row) =>
-        RowCSVWriterUtils.writeRowAsCSV(row, parameters.schema, timeZone, blobWriter.csvWriter)
+        RowCSVWriterUtils.writeRowAsCSV(row._1, parameters.schema, timeZone, blobWriter.csvWriter)
 
         val count = blobWriter.csvWriter.getCounter
         val shouldNotCommitBlockBlob = count < maxBlobSize
         if (shouldNotCommitBlockBlob) {
           blobWriter
         } else {
-          val blobNumber = ingestionTasks.size
           KDSU.logInfo(myName, s"Sealing blob in partition $partitionIdString for requestId: '${parameters.writeOptions.requestId}', " +
-            s"blob number ${ingestionTasks.size}, with size $count")
+            s"blob number ${row._2}, with size $count")
           finalizeBlobWrite(blobWriter)
-          val task = ingest(blobWriter.blob, blobWriter.csvWriter.getCounter, blobWriter.sas, flushImmediately =
+          ingest(blobWriter.blob, blobWriter.csvWriter.getCounter, blobWriter.sas, flushImmediately =
             !parameters.writeOptions.disableFlushImmediately, curBlobUUID)
-          ingestionTasks.add(task)
           curBlobUUID = UUID.randomUUID().toString
-          createBlobWriter(parameters.coordinates, parameters.tmpTableName, kustoClient, partitionIdString, blobNumber + 1, curBlobUUID)
+          createBlobWriter(parameters.coordinates, parameters.tmpTableName, kustoClient, partitionIdString, row._2, curBlobUUID)
         }
     }
 
-    KDSU.logInfo(myName, s"finished serializing rows in partition $partitionIdString for " +
+    KDSU.logInfo(myName, s"Finished serializing rows in partition $partitionIdString for " +
       s"requestId: '${parameters.writeOptions.requestId}' ")
     finalizeBlobWrite(lastBlobWriter)
     if (lastBlobWriter.csvWriter.getCounter > 0) {
-      ingestionTasks.add(ingest(lastBlobWriter.blob, lastBlobWriter.csvWriter.getCounter, lastBlobWriter.sas,
-        flushImmediately = false, curBlobUUID))
+      ingest(lastBlobWriter.blob, lastBlobWriter.csvWriter.getCounter, lastBlobWriter.sas,
+        flushImmediately = false, curBlobUUID)
     }
   }
 
@@ -378,12 +370,11 @@ object KustoWriter {
   }
 }
 
-case class BlobWriteResource(writer: BufferedWriter, gzip: GZIPOutputStream, csvWriter: CountingWriter, blob: CloudBlockBlob, sas: String)
-
-case class KustoWriteResource(authentication: KustoAuthentication,
+final case class BlobWriteResource(writer: BufferedWriter, gzip: GZIPOutputStream, csvWriter: CountingWriter,
+                             blob: CloudBlockBlob, sas: String)
+final case class KustoWriteResource(authentication: KustoAuthentication,
                               coordinates: KustoCoordinates,
                               schema: StructType,
                               writeOptions: WriteOptions,
                               tmpTableName: String)
-
-case class PartitionResult(ingestionResult: IngestionResult, partitionId: Int)
+final case class PartitionResult(ingestionResult: IngestionResult, partitionId: Int)
