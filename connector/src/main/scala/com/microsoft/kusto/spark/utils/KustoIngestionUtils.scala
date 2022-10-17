@@ -21,6 +21,7 @@ object KustoIngestionUtils {
       case SchemaAdjustmentMode.NoAdjustment =>
       case SchemaAdjustmentMode.FailIfNotMatch => forceAdjustSchema(sourceSchema, targetSchema)
       case SchemaAdjustmentMode.GenerateDynamicCsvMapping => setCsvMapping(sourceSchema, targetSchema, ingestionProperties)
+      case SchemaAdjustmentMode.GenerateDynamicParquetMapping => setParquetMapping(sourceSchema, targetSchema, ingestionProperties)
     }
 
   }

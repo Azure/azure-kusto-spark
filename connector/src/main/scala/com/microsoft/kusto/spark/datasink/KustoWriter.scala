@@ -14,16 +14,16 @@ import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.exceptions.TimeoutAwaitingPendingOperationException
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator.generateTableGetSchemaAsRowsCommand
 import com.microsoft.kusto.spark.utils.KustoConstants.{IngestSkippedTrace, MaxIngestRetryAttempts}
-import com.microsoft.kusto.spark.utils.{ExtendedKustoClient, KustoClientCache, KustoIngestionUtils, KustoQueryUtils, KustoConstants => KCONST, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.{ExtendedKustoClient, KustoAzureFsSetupCache, KustoClientCache, KustoDataSourceUtils, KustoIngestionUtils, KustoQueryUtils, KustoConstants => KCONST, KustoDataSourceUtils => KDSU}
 import org.apache.spark.TaskContext
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.CollectionAccumulator
 import org.json.JSONObject
 import io.github.resilience4j.retry.{Retry, RetryConfig}
 import io.vavr.CheckedFunction0
-import java.io._
+
 import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.security.InvalidParameterException
@@ -32,11 +32,17 @@ import java.util.zip.GZIPOutputStream
 import java.util.{TimeZone, UUID}
 
 import com.microsoft.kusto.spark.datasink.FinalizeHelper.finalizeIngestionWhenWorkersSucceeded
+import com.microsoft.kusto.spark.datasource.{TransientStorageCredentials, TransientStorageParameters}
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileSystem, Path}
+import org.joda.time.{DateTime, DateTimeZone}
 
-import scala.collection.Iterator
-import scala.collection.JavaConverters._
+import java.io.{BufferedWriter, IOException, OutputStreamWriter}
+import scala.collection.JavaConverters.collectionAsScalaIterableConverter
+import scala.collection.mutable.ListBuffer
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.{Await, Future, TimeoutException}
+import scala.util.{Failure, Success, Try}
 
 object KustoWriter {
   private val myName = this.getClass.getSimpleName
@@ -119,7 +125,32 @@ object KustoWriter {
       //        KDSU.logWarn(myName, "It's not recommended to set flushImmediately to true on production")
       //      }
 
-      val rdd = data.queryExecution.toRdd
+      /*
+        * ingest df here
+       * */
+      if (writeOptions.isAsync) {
+            ingestParquetDataIntoTempTbl(data,batchIdIfExists)
+      }else {
+        try
+          ingestParquetDataIntoTempTbl(data,batchIdIfExists)
+        catch {
+          case exception: Exception => if (writeOptions.isTransactionalMode) {
+            if (writeOptions.userTempTableName.isEmpty) {
+              kustoClient.cleanupIngestionByProducts(
+                tableCoordinates.database, tmpTableName, crp)
+            }
+
+            throw exception
+          }
+        }
+        if (writeOptions.isTransactionalMode) {
+          finalizeIngestionWhenWorkersSucceeded(
+            tableCoordinates, batchIdIfExists, tmpTableName, partitionsResults, writeOptions,
+            crp, tableExists, rdd.sparkContext, authentication, kustoClient)
+        }
+      }
+
+      /*val rdd = data.queryExecution.toRdd
       val partitionsResults = rdd.sparkContext.collectionAccumulator[PartitionResult]
       if (writeOptions.isAsync) {
         val asyncWork = rdd.foreachPartitionAsync { rows => ingestRowsIntoTempTbl(rows, batchIdIfExists, partitionsResults) }
@@ -159,7 +190,15 @@ object KustoWriter {
           tableCoordinates, batchIdIfExists, tmpTableName, partitionsResults, writeOptions,
           crp, tableExists, rdd.sparkContext, authentication, kustoClient)
         }
-      }
+      }*/
+    }
+  }
+
+  def ingestParquetDataIntoTempTbl(data : DataFrame, batchIdForTracing: String)  (implicit parameters: KustoWriteResource): Unit = {
+    if (data.isEmpty) {
+      KDSU.logWarn(myName, s"sink to Kusto table '${parameters.coordinates.table.get}' with no rows to write on partition ${TaskContext.getPartitionId} $batchIdForTracing")
+    } else {
+      ingestToTemporaryTableByWorkers(batchIdForTracing, data)
     }
   }
 
@@ -168,7 +207,33 @@ object KustoWriter {
     if (rows.isEmpty) {
       KDSU.logWarn(myName, s"sink to Kusto table '${parameters.coordinates.table.get}' with no rows to write on partition ${TaskContext.getPartitionId} $batchIdForTracing")
     } else {
-      ingestToTemporaryTableByWorkers(batchIdForTracing, rows, partitionsResults)
+      //ingestToTemporaryTableByWorkers(batchIdForTracing, rows, partitionsResults)
+    }
+  }
+
+  def ingestParquetDataIntoKusto(data: DataFrame,
+                                 ingestClient: IngestClient,
+                                 batchIdForTracing: String)
+                                (implicit parameters: KustoWriteResource): Unit = {
+    import parameters._
+
+    // Transactional mode write into the temp table instead of the destination table
+    val ingestionProperties = getIngestionProperties(writeOptions,
+      parameters.coordinates.database,
+      if (writeOptions.isTransactionalMode) parameters.tmpTableName else parameters.coordinates.table.get)
+
+    if (writeOptions.isTransactionalMode) {
+      ingestionProperties.setReportMethod(IngestionProperties.IngestionReportMethod.TABLE)
+      ingestionProperties.setReportLevel(IngestionProperties.IngestionReportLevel.FAILURES_AND_SUCCESSES)
+    }
+    ingestionProperties.setDataFormat(DataFormat.PARQUET.name)
+
+    try {
+      ingestParquetData(data, parameters, ingestClient, ingestionProperties)
+
+      KDSU.logDebug(myName, s"Ingesting from - partition: ${TaskContext.getPartitionId()} requestId: '${writeOptions.requestId}' $batchIdForTracing")
+    } catch {
+      case e: Exception => if (writeOptions.isTransactionalMode) throw e
     }
   }
 
@@ -229,8 +294,7 @@ object KustoWriter {
 
   private def ingestToTemporaryTableByWorkers(
                                                batchIdForTracing: String,
-                                               rows: Iterator[InternalRow],
-                                               partitionsResults: CollectionAccumulator[PartitionResult])
+                                               data: DataFrame)
                                              (implicit parameters: KustoWriteResource): Unit = {
 
     import parameters._
@@ -245,7 +309,7 @@ object KustoWriter {
     ingestClient.setQueueRequestOptions(queueRequestOptions)
     // We force blocking here, since the driver can only complete the ingestion process
     // once all partitions are ingested into the temporary table
-    ingestRowsIntoKusto(rows, ingestClient, partitionsResults, batchIdForTracing)
+    ingestParquetDataIntoKusto(data, ingestClient, batchIdForTracing)
   }
 
   def createBlobWriter(tableCoordinates: KustoCoordinates,
@@ -268,7 +332,115 @@ object KustoWriter {
     BlobWriteResource(buffer, gzip, csvWriter, currentBlob, currentSas)
   }
 
+  private[kusto] def getWasbHadoopConfig(hadoopConfig: Configuration): Configuration = {
+    hadoopConfig.set("fs.azure", "org.apache.hadoop.fs.azure.NativeAzureFileSystem")
+    hadoopConfig.set("fs.wasbs.impl", "org.apache.hadoop.fs.azure.NativeAzureFileSystem")
+    hadoopConfig.set("fs.wasb.impl", "org.apache.hadoop.fs.azure.NativeAzureFileSystem")
+    hadoopConfig
+  }
+
   @throws[IOException]
+  private[kusto] def ingestParquetData(data: DataFrame,
+                                       parameters: KustoWriteResource,
+                                       ingestClient: IngestClient,
+                                       ingestionProperties: IngestionProperties): Unit
+  = {
+    val partitionId = TaskContext.getPartitionId
+    val partitionIdString = TaskContext.getPartitionId.toString
+
+    import parameters._
+    val kustoClient = KustoClientCache.getClient(coordinates.clusterUrl, authentication, coordinates.ingestionUrl, coordinates.clusterAlias)
+
+    val blobName = s"${KustoQueryUtils.simplifyName(coordinates.database)}_${tmpTableName}_${UUID.randomUUID.toString}_${partitionId}_spark.parquet"
+    val containerAndSas = kustoClient.getTempBlobForIngestion
+    val currentBlobURI = new URI(s"${containerAndSas.containerUrl}/$blobName${containerAndSas.sas}")
+    //val currentBlob = new CloudBlockBlob(currentBlobURI)
+    //val currentSas = containerAndSas.sas
+
+    val storageCredentials = new TransientStorageCredentials()
+    storageCredentials.parseSas(currentBlobURI.toString)
+
+    // Set up the access in spark config
+    val hadoopConfig = getWasbHadoopConfig(SparkSession.builder.getOrCreate().sparkContext.hadoopConfiguration)
+    setUpAccessForAzureFS(hadoopConfig, storageCredentials)
+    // Create the blob file path
+    val blobRoot = s"wasbs://${storageCredentials.blobContainer}@${storageCredentials.storageAccountName}.blob.${storageCredentials.domainSuffix}"
+    val blobNamePath = s"/$blobName"
+
+    // Write the file
+    data.write.parquet(s"$blobRoot$blobNamePath")
+
+    // Get the list of files created. This will be used for ingestion
+    val hdfs = FileSystem.get(currentBlobURI, hadoopConfig)
+    val sourcePath = new Path(blobNamePath)
+    val listOfFiles = new ListBuffer[String]()
+    // List these files and add them to the list for processing
+    Try(hdfs.listFiles(sourcePath, true)) match {
+      case Success(remoteFileIterator) =>
+        while (remoteFileIterator.hasNext) {
+          val mayBeRemoteFile = Option(remoteFileIterator.next())
+          mayBeRemoteFile match {
+            case Some(remoteFile) => if (!"_SUCCESS".equals(remoteFile.getPath.getName)) listOfFiles.append(remoteFile.getPath.getName)
+            case None => KustoDataSourceUtils.logInfo(this.getClass.getName, s"Empty paths while parsing $sourcePath. " +
+              "Will not be added for processing")
+          }
+        }
+      // Cannot list these files. Error accessing the file system needs to be halted processing
+      case Failure(exception) => throw exception
+    }
+    val sparkSession = SparkSession.builder.getOrCreate()
+    import sparkSession.implicits._
+
+    val listOfFilesToProcess = listOfFiles.toDF()
+    val blobFileBase = s"https://${storageCredentials.storageAccountName}.blob.${storageCredentials.domainSuffix}/${storageCredentials.blobContainer}"
+
+    listOfFilesToProcess.rdd.foreachPartition(partitionResult => {
+
+      var props = ingestionProperties
+      if (!ingestionProperties.getFlushImmediately) {
+        // Need to copy the ingestionProperties so that only this one will be flushed immediately
+        props = SparkIngestionProperties.cloneIngestionProperties(ingestionProperties)
+        props.setFlushImmediately(true)
+      }
+      val parquetIngestor = new KustoParquetIngestor(ingestClient)
+      //val parquetIngestor = new KustoParquetIngestor(ingestionProperties)
+      partitionResult.foreach(rowIterator => {
+        val fileName = rowIterator.getString(0)
+        val fullPath = s"$blobFileBase$blobNamePath/$fileName"
+        if (writeOptions.isTransactionalMode) {
+          val blobSourceInfo = new BlobSourceInfo(fullPath)
+          ingestClient.ingestFromBlob(blobSourceInfo, props)
+          //parquetIngestor.ingest(fullPath, props)
+        }
+      })
+    })
+
+
+    KDSU.logInfo(myName, s"finished ingesting data  to tempTable $partitionIdString for requestId: '${writeOptions.requestId}' ")
+  }
+
+  private[kusto] def setUpAccessForAzureFS(hadoopConfig: Configuration, storageCredentials: TransientStorageCredentials): Unit = {
+    val now = DateTime.now(DateTimeZone.UTC)
+    if (!storageCredentials.sasDefined) {
+      if (!KustoAzureFsSetupCache.updateAndGetPrevStorageAccountAccess(storageCredentials.storageAccountName
+        , storageCredentials.storageAccountKey, now)) {
+        hadoopConfig.set(s"fs.azure.account.key.${storageCredentials.storageAccountName}." +
+          s"blob.${storageCredentials.domainSuffix}",
+          s"${storageCredentials.storageAccountKey}")
+      }
+    }
+    else {
+      if (!KustoAzureFsSetupCache.updateAndGetPrevSas(storageCredentials.blobContainer,
+        storageCredentials.storageAccountName, storageCredentials.sasKey, now)) {
+        hadoopConfig.set(s"fs.azure.sas.${storageCredentials.blobContainer}.${storageCredentials.storageAccountName}." +
+          s"blob.${storageCredentials.domainSuffix}",
+          s"${storageCredentials.sasKey}")
+      }
+    }
+  }
+
+
+@throws[IOException]
   private[kusto] def ingestRows(rows: Iterator[InternalRow],
                                 parameters: KustoWriteResource,
                                 ingestClient: IngestClient,

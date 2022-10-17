@@ -77,7 +77,7 @@ object SinkTableCreationMode extends Enumeration {
 
 object SchemaAdjustmentMode extends Enumeration {
   type SchemaAdjustmentMode = Value
-  val NoAdjustment, FailIfNotMatch, GenerateDynamicCsvMapping = Value
+  val NoAdjustment, FailIfNotMatch, GenerateDynamicCsvMapping, GenerateDynamicParquetMapping = Value
 }
 
 object WriteMode extends Enumeration {
