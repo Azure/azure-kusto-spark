@@ -55,7 +55,7 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
       kustoConnectionOptions.database,
       "@'{\"MaximumBatchingTimeSpan\":\"00:00:10\", \"MaximumNumberOfItems\": 500, \"MaximumRawDataSizeMB\": 1024}'"))) match {
       case Success(_) => KDSU.logDebug(myName,"Ingestion policy applied")
-      case Failure(exception:Exception) => KDSU.reportExceptionAndThrow(myName, exception,"Updating database batching policy", shouldNotThrow = true)
+      case Failure(exception:Throwable) => KDSU.reportExceptionAndThrow(myName, exception,"Updating database batching policy", shouldNotThrow = true)
     }
   }
 
@@ -66,7 +66,7 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
       kustoAdminClient.get.execute(kustoConnectionOptions.database, generateTableDropCommand(table))
     ) match {
         case Success(_) => KDSU.logDebug(myName, "Ingestion policy applied")
-        case Failure(e: Exception) => KDSU.reportExceptionAndThrow(myName, e, "Dropping test table", shouldNotThrow = true)
+        case Failure(e: Throwable) => KDSU.reportExceptionAndThrow(myName, e, "Dropping test table", shouldNotThrow = true)
     }
     sc.stop()
   }
