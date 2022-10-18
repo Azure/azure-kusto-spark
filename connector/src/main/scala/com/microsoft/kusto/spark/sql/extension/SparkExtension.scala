@@ -41,12 +41,12 @@ object SparkExtension {
   }
 
   implicit class DataStreamWriterExtension(df: DataStreamWriter[Row]) {
-    def kusto(kustoCluster: String, database: String, table: String, conf: Map[String, String] = Map.empty[String, String], sparkIngestionProperties: Option[SparkIngestionProperties] = None): Unit = {
+    def kusto(kustoCluster: String, database: String, table: String, conf: Map[String, String] = Map.empty[String, String], sparkIngestionProperties: Option[SparkIngestionProperties] = None) = {
       if (sparkIngestionProperties.isDefined) {
         df.option(KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON, sparkIngestionProperties.get.toString)
       }
 
-      df.format("com.microsoft.kusto.spark.datasource")
+      df.format("com.microsoft.kusto.spark.datasink.KustoSinkProvider")
         .option(KustoSinkOptions.KUSTO_CLUSTER, kustoCluster)
         .option(KustoSinkOptions.KUSTO_DATABASE, database)
         .option(KustoSinkOptions.KUSTO_TABLE, table)

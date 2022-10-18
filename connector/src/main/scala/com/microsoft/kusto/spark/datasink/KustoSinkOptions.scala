@@ -13,7 +13,7 @@ object KustoSinkOptions extends KustoOptions{
   val KUSTO_TABLE: String = newOption("kustoTable")
 
   /** Optional options */
-  // IMPORTANT: If set to false -> polling will not block on worker node and will be executed on a driver pool thread
+  // IMPORTANT: If set to true -> polling will not block on worker node and will be executed on a driver pool thread
   // 'true' is recommended for production.
   val KUSTO_POLLING_ON_DRIVER: String = newOption("pollingOnDriver")
 
