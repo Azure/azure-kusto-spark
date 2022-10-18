@@ -391,7 +391,7 @@ object KustoDataSourceUtils {
 
   private[kusto] def reportExceptionAndThrow(
                                               reporter: String,
-                                              exception: Exception,
+                                              exception: Throwable,
                                               doingWhat: String = "",
                                               cluster: String = "",
                                               database: String = "",
