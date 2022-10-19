@@ -299,7 +299,13 @@ object KustoWriter {
           props.setIngestByTags(ingestBy)
           props.setIngestIfNotExists(ingestIfNotExist)
         }
-        props.setFlushImmediately(!ingestionProperties.getFlushImmediately && flushImmediately)
+
+        if (!props.getFlushImmediately && flushImmediately) {
+          // Need to copy the ingestionProperties so that only this blob will be flushed immediately
+          props = SparkIngestionProperties.cloneIngestionProperties(props)
+          props.setFlushImmediately(true)
+        }
+
         // write the data here
         if (parameters.writeOptions.isTransactionalMode) {
           val blobUuid = UUID.randomUUID()
