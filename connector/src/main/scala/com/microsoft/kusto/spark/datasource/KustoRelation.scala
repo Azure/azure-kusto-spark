@@ -2,11 +2,10 @@ package com.microsoft.kusto.spark.datasource
 
 import java.security.InvalidParameterException
 import java.util.Locale
-
 import com.microsoft.azure.kusto.data.ClientRequestProperties
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.{KustoCoordinates, KustoDebugOptions}
-import com.microsoft.kusto.spark.datasink.{KustoWriter, WriteOptions}
+import com.microsoft.kusto.spark.datasink.{KustoParquetWriter, KustoWriter, WriteOptions}
 import com.microsoft.kusto.spark.utils.{KustoClientCache, KustoConstants, KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.sources._
@@ -160,7 +159,7 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
   override def hashCode(): Int = kustoCoordinates.hashCode() ^ query.hashCode ^ authentication.hashCode()
 
   override def insert(data: DataFrame, overwrite: Boolean): Unit = {
-    KustoWriter.write(None, data, kustoCoordinates, authentication, writeOptions =
+    new KustoParquetWriter().write(None, data, kustoCoordinates, authentication, writeOptions =
       WriteOptions.apply(),
       clientRequestProperties.get)
   }

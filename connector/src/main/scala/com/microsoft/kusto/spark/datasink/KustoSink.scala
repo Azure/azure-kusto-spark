@@ -1,13 +1,12 @@
 package com.microsoft.kusto.spark.datasink
 
 import java.io._
-
 import com.microsoft.azure.kusto.data.ClientRequestProperties
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import org.apache.spark.sql.execution.streaming.Sink
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.{DataFrame, SQLContext, SparkSession}
 
 class KustoSink(sqlContext: SQLContext,
                 tableCoordinates: KustoCoordinates,
@@ -25,7 +24,7 @@ class KustoSink(sqlContext: SQLContext,
     if (batchId <= latestBatchId) {
       KDSU.logInfo(myName, s"Skipping already committed batch $batchId")
     } else {
-      KustoWriter.write(Option(batchId), data, tableCoordinates, authentication, writeOptions, clientRequestProperties)
+      new KustoParquetWriter().write(Option(batchId), data, tableCoordinates, authentication, writeOptions, clientRequestProperties)
       latestBatchId = batchId
     }
   }

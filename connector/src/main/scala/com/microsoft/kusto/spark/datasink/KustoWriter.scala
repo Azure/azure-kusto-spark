@@ -14,7 +14,7 @@ import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.exceptions.TimeoutAwaitingPendingOperationException
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator.generateTableGetSchemaAsRowsCommand
 import com.microsoft.kusto.spark.utils.KustoConstants.{IngestSkippedTrace, MaxIngestRetryAttempts}
-import com.microsoft.kusto.spark.utils.{ExtendedKustoClient, KustoAzureFsSetupCache, KustoClientCache, KustoDataSourceUtils, KustoIngestionUtils, KustoQueryUtils, KustoConstants => KCONST, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.{ExtendedKustoClient, KustoAzureFsSetupCache, KustoClientCache, KustoIngestionUtils, KustoQueryUtils, KustoConstants => KCONST, KustoDataSourceUtils => KDSU}
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -125,10 +125,7 @@ object KustoWriter {
       //        KDSU.logWarn(myName, "It's not recommended to set flushImmediately to true on production")
       //      }
 
-      /*
-        * ingest df here
-       * */
-      if (writeOptions.isAsync) {
+    /*if (writeOptions.isAsync) {
             ingestParquetDataIntoTempTbl(data,batchIdIfExists)
       }else {
         try
@@ -143,14 +140,15 @@ object KustoWriter {
             throw exception
           }
         }
-        if (writeOptions.isTransactionalMode) {
+        /*if (writeOptions.isTransactionalMode) {
           finalizeIngestionWhenWorkersSucceeded(
             tableCoordinates, batchIdIfExists, tmpTableName, partitionsResults, writeOptions,
             crp, tableExists, rdd.sparkContext, authentication, kustoClient)
-        }
-      }
+        }*/
+      }*/
 
-      /*val rdd = data.queryExecution.toRdd
+
+      val rdd = data.queryExecution.toRdd
       val partitionsResults = rdd.sparkContext.collectionAccumulator[PartitionResult]
       if (writeOptions.isAsync) {
         val asyncWork = rdd.foreachPartitionAsync { rows => ingestRowsIntoTempTbl(rows, batchIdIfExists, partitionsResults) }
@@ -190,7 +188,7 @@ object KustoWriter {
           tableCoordinates, batchIdIfExists, tmpTableName, partitionsResults, writeOptions,
           crp, tableExists, rdd.sparkContext, authentication, kustoClient)
         }
-      }*/
+      }
     }
   }
 
@@ -316,7 +314,7 @@ object KustoWriter {
                        tmpTableName: String,
                        client: ExtendedKustoClient,
                        partitionId: String): BlobWriteResource = {
-    val blobName = s"${KustoQueryUtils.simplifyName(tableCoordinates.database)}_${tmpTableName}_${UUID.randomUUID.toString}_${partitionId}_spark.csv.gz"
+    val blobName = s"${KustoQueryUtils.simplifyName(tableCoordinates.database)}_${tmpTableName}_${UUID.randomUUID.toString}_${partitionId}_spark.csv.gz_bkp"
 
     val containerAndSas = client.getTempBlobForIngestion
     val currentBlob = new CloudBlockBlob(new URI(s"${containerAndSas.containerUrl}/$blobName${containerAndSas.sas}"))
@@ -381,7 +379,7 @@ object KustoWriter {
           val mayBeRemoteFile = Option(remoteFileIterator.next())
           mayBeRemoteFile match {
             case Some(remoteFile) => if (!"_SUCCESS".equals(remoteFile.getPath.getName)) listOfFiles.append(remoteFile.getPath.getName)
-            case None => KustoDataSourceUtils.logInfo(this.getClass.getName, s"Empty paths while parsing $sourcePath. " +
+            case None => KDSU.logInfo(this.getClass.getName, s"Empty paths while parsing $sourcePath. " +
               "Will not be added for processing")
           }
         }

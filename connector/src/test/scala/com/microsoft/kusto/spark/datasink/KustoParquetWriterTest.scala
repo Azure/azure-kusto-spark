@@ -20,7 +20,8 @@ class KustoParquetWriterTest extends FunSuite with BeforeAndAfterAll {
       .appName("KustoSink")
       .master(f"local[$nofExecutors]")
       .getOrCreate()
-    val appId: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_APP_ID)
+
+    /*val appId: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_APP_ID)
     val appKey: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_APP_SECRET)
     val authority: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com")
     val cluster: String = System.getProperty(KustoSinkOptions.KUSTO_CLUSTER)
@@ -39,7 +40,7 @@ class KustoParquetWriterTest extends FunSuite with BeforeAndAfterAll {
     ingestionProperties.setFlushImmediately(true)*/
 
 
-    kustoParquetWriter = new KustoParquetWriter(spark, storageCredentials = transientStorageCredentials)
+    kustoParquetWriter = new KustoParquetWriter(spark, storageCredentials = transientStorageCredentials)*/
   }
 
   test("testWrite") {
@@ -55,8 +56,8 @@ class KustoParquetWriterTest extends FunSuite with BeforeAndAfterAll {
     val rdd = spark.sparkContext.parallelize(rawSequence)
     val rowRDD = rdd.map(attributes => Row(attributes._1, attributes._2, attributes._3, attributes._4))
     val languageDF = spark.createDataFrame(rowRDD, schema)
-    kustoParquetWriter.write(languageDF,"a-test-db","a-test-table")*/
-
+    kustoParquetWriter.write(languageDF,"a-test-db","a-test-table")
+    /**********/
 
     val schema = StructType(Array(
       StructField("Language", StringType, nullable = true),
@@ -70,6 +71,6 @@ class KustoParquetWriterTest extends FunSuite with BeforeAndAfterAll {
     val rdd = spark.sparkContext.parallelize(inputDataFrame)
     val rowRDD = rdd.map(attributes => Row(attributes._1, attributes._2, attributes._3))
     val languageDF = spark.createDataFrame(rowRDD, schema)
-    kustoParquetWriter.write(languageDF,"a-test-db","a-test-table")
+    //kustoParquetWriter.write(languageDF,"a-test-db","a-test-table")*/
   }
 }
