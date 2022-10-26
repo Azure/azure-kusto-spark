@@ -2,16 +2,17 @@ package com.microsoft.kusto.spark
 
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.{Client, ClientFactory}
-import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SparkIngestionProperties}
+import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
+import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode, SparkIngestionProperties}
 import com.microsoft.kusto.spark.datasource.KustoSourceOptions
 import com.microsoft.kusto.spark.sql.extension.SparkExtension.DataFrameReaderExtension
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
-import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.{ KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
+
 import java.nio.file.{Files, Paths}
 import java.security.InvalidParameterException
 import java.util.UUID
-
 import org.apache.commons.lang3.StringUtils
 
 import scala.collection.JavaConverters._
@@ -113,6 +114,7 @@ private[kusto] object KustoTestUtils {
       .option(KustoSinkOptions.KUSTO_ADJUST_SCHEMA, schemaAdjustmentMode)
       .option(KustoSinkOptions.KUSTO_TIMEOUT_LIMIT, (8 * 60).toString)
       .option(KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON, sparkIngestionProperties.toString)
+      .option(KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS, kustoConnectionOptions.createTableIfNotExists.toString)
       .mode(SaveMode.Append)
       .save()
 
@@ -182,5 +184,6 @@ private[kusto] object KustoTestUtils {
     KustoConnectionOptions(cluster, database, appId, appKey, authority)
   }
 
-  case class KustoConnectionOptions(cluster: String, database: String, appId: String, appKey: String, authority: String)
+  case class KustoConnectionOptions(cluster: String, database: String, appId: String, appKey: String, authority: String,
+                                    createTableIfNotExists:SinkTableCreationMode=SinkTableCreationMode.CreateIfNotExist)
 }
