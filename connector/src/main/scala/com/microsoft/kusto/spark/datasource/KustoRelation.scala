@@ -104,8 +104,8 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
             } else {
               // The case where used did not provide an option and we estimated to be a single scan.
               // Our approximate estimate failed here , fallback to distributed
-              KDSU.logError("KustoRelation", "Failed with Single mode, falling back to Distributed mode," +
-                s"requestId: $requestId. Exception : ${exception.getMessage}")
+              KDSU.reportExceptionAndThrow("KustoRelation", exception,"Failed with Single mode, falling back to Distributed mode,",
+                kustoCoordinates.clusterAlias, kustoCoordinates.database, requestId = requestId, shouldNotThrow = true)
               readOptions.partitionOptions.column = Some(getPartitioningColumn)
               readOptions.partitionOptions.mode = Some(getPartitioningMode)
               KustoReader.distributedBuildScan(

@@ -28,13 +28,13 @@ import java.net.URI
 import java.security.InvalidParameterException
 import java.util
 import java.util.concurrent.{Callable, CountDownLatch, TimeUnit}
-import java.util.{NoSuchElementException, Objects, Properties, StringJoiner, Timer, TimerTask, UUID}
+import java.util.{NoSuchElementException, Properties, StringJoiner, Timer, TimerTask, UUID}
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 
 object KustoDataSourceUtils {
-  def generateTempTableName(appName: String, destinationTableName: String, requestId:String,
+  def generateTempTableName(appName: String, destinationTableName: String, requestId: String,
                             batchIdAsString: String, userTempTableName: Option[String]): String = {
     if (userTempTableName.isDefined) {
       userTempTableName.get
@@ -151,7 +151,7 @@ object KustoDataSourceUtils {
     KustoResponseDeserializer(client.executeEngine(database, query, clientRequestProperties.orNull).getPrimaryResults).getSchema
   }
 
-  private def parseAuthentication(parameters: Map[String, String], clusterUrl:String) = {
+  private def parseAuthentication(parameters: Map[String, String], clusterUrl: String) = {
     // Parse KustoAuthentication
     val applicationId = parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_APP_ID, "")
     val applicationKey = parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_APP_SECRET, "")
@@ -255,7 +255,7 @@ object KustoDataSourceUtils {
     val requestId: String = parameters.getOrElse(KustoSinkOptions.KUSTO_REQUEST_ID, UUID.randomUUID().toString)
     val clientRequestProperties = getClientRequestProperties(parameters, requestId)
 
-    val (authentication,keyVaultAuthentication) = parseAuthentication(parameters, clusterUrl.get)
+    val (authentication, keyVaultAuthentication) = parseAuthentication(parameters, clusterUrl.get)
 
     val ingestionUri = parameters.get(KustoSinkOptions.KUSTO_INGESTION_URI)
     SourceParameters(authentication, KustoCoordinates(clusterUrl.get, alias.get, database.get, table, ingestionUri),
@@ -349,8 +349,10 @@ object KustoDataSourceUtils {
       ""
     }
 
-    logInfo("parseSinkParameters", s"Parsed write options for sink: {'table': '${sourceParameters.
-      kustoCoordinates.table}', 'timeout': '${writeOptions.timeout}, 'async': ${writeOptions.isAsync}, " +
+    logInfo("parseSinkParameters", s"Parsed write options for sink: {'table': '${
+      sourceParameters.
+        kustoCoordinates.table
+    }', 'timeout': '${writeOptions.timeout}, 'async': ${writeOptions.isAsync}, " +
       s"'tableCreationMode': ${writeOptions.tableCreateOptions}, 'writeLimit': ${writeOptions.writeResultLimit}, 'batchLimit': ${writeOptions.batchLimit}" +
       s", 'timeout': ${writeOptions.timeout}, 'timezone': ${writeOptions.timeZone}, " +
       s"'ingestionProperties': $ingestionPropertiesAsJson, 'requestId': '${sourceParameters.requestId}', 'pollingOnDriver': ${writeOptions.pollingOnDriver}," +
@@ -360,9 +362,9 @@ object KustoDataSourceUtils {
     SinkParameters(writeOptions, sourceParameters)
   }
 
-  def retryFunction[T](func:() => T, retryConfig: RetryConfig, retryName: String): T ={
+  def retryFunction[T](func: () => T, retryConfig: RetryConfig, retryName: String): T = {
     val retry = Retry.of(retryName, retryConfig)
-    val f:CheckedFunction0[T] = new CheckedFunction0[T]() {
+    val f: CheckedFunction0[T] = new CheckedFunction0[T]() {
       override def apply(): T = func()
     }
 
@@ -384,7 +386,7 @@ object KustoDataSourceUtils {
 
   private[kusto] def reportExceptionAndThrow(
                                               reporter: String,
-                                              exception: Exception,
+                                              exception: Throwable,
                                               doingWhat: String = "",
                                               cluster: String = "",
                                               database: String = "",
