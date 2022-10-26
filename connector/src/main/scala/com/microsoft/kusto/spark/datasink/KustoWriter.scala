@@ -285,6 +285,11 @@ object KustoWriter {
     def ingest(blob: CloudBlockBlob, size: Long, sas: String, flushImmediately: Boolean = false, blobUUID: String): Unit = {
         var props = ingestionProperties
         val blobUri = blob.getStorageUri.getPrimaryUri.toString
+        if (parameters.writeOptions.ensureNoDupBlobs || (!props.getFlushImmediately && flushImmediately)) {
+          // Need to copy the ingestionProperties so that only this blob ingestion will be effected
+          props = SparkIngestionProperties.cloneIngestionProperties(ingestionProperties)
+        }
+
         if (parameters.writeOptions.ensureNoDupBlobs) {
           val pref = KDSU.getDedupTagsPrefix(parameters.writeOptions.requestId, batchIdForTracing)
           val tag = pref + blobUUID
@@ -295,14 +300,11 @@ object KustoWriter {
 
           ingestBy.add(tag)
           ingestIfNotExist.add(tag)
-          props = SparkIngestionProperties.cloneIngestionProperties(ingestionProperties)
           props.setIngestByTags(ingestBy)
           props.setIngestIfNotExists(ingestIfNotExist)
         }
 
         if (!props.getFlushImmediately && flushImmediately) {
-          // Need to copy the ingestionProperties so that only this blob will be flushed immediately
-          props = SparkIngestionProperties.cloneIngestionProperties(props)
           props.setFlushImmediately(true)
         }
 
