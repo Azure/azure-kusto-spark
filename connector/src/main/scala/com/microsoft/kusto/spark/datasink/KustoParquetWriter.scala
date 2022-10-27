@@ -143,8 +143,8 @@ class KustoParquetWriter() {
       ingestionProperties.setDataFormat(DataFormat.PARQUET.name)
 
       try {
-        getPartitionResultsPostIngestion(listOfFilesToProcess.rdd,
-          tableCoordinates, authentication, s"$blobFileBase$blobNamePath",writeOptions, tmpTableName, batchIdIfExists, crp, tableExists, sparkContext )
+        ingestAndFinalizeData(listOfFilesToProcess.rdd,
+          tableCoordinates, authentication, s"$blobFileBase$blobNamePath",writeOptions, tmpTableName, batchIdIfExists, crp, tableExists )
       }
       catch {
         case exception: Exception => if (writeOptions.isTransactionalMode) {
@@ -158,10 +158,10 @@ class KustoParquetWriter() {
     }
   }
 
-  private def getPartitionResultsPostIngestion(rdd: RDD[Row],
+  private def ingestAndFinalizeData(rdd: RDD[Row],
                                                tableCoordinates: KustoCoordinates, authentication: KustoAuthentication,
                                                blobDirPath: String, writeOptions: WriteOptions, tmpTableName : String,
-                                               batchIdIfExists : String, crp : ClientRequestProperties, tableExists: Boolean , sparkContext: SparkContext ) = {
+                                               batchIdIfExists : String, crp : ClientRequestProperties, tableExists: Boolean ) = {
     val partitionId = TaskContext.getPartitionId
     val partitionIdString = TaskContext.getPartitionId.toString
 
