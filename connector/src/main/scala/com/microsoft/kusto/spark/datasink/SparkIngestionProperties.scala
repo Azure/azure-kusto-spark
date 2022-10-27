@@ -21,7 +21,6 @@ class SparkIngestionProperties(var flushImmediately: Boolean = false,
                                var csvMappingNameReference: String = null,
                                var parquetMapping: String = null,
                                var parquetMappingNameReference: String = null,
-                               var parquetColumnMapping : Array[ColumnMapping]= null
                               ){
   // C'tor for serialization
   def this(){
@@ -74,7 +73,7 @@ class SparkIngestionProperties(var flushImmediately: Boolean = false,
     if (this.parquetMapping != null) {
       additionalProperties.put("ingestionMapping", this.parquetMapping)
       additionalProperties.put("ingestionMappingType", IngestionMappingKind.PARQUET.getKustoValue)
-      ingestionProperties.setIngestionMapping(this.parquetColumnMapping,IngestionMapping.IngestionMappingKind.PARQUET)
+      ingestionProperties.getIngestionMapping.setIngestionMappingReference(this.parquetMapping, IngestionMappingKind.PARQUET)
     }
 
     if (this.parquetMappingNameReference != null) {

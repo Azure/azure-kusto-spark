@@ -20,7 +20,6 @@ object KustoIngestionUtils {
     mode match {
       case SchemaAdjustmentMode.NoAdjustment =>
       case SchemaAdjustmentMode.FailIfNotMatch => forceAdjustSchema(sourceSchema, targetSchema)
-      case SchemaAdjustmentMode.GenerateDynamicCsvMapping => setCsvMapping(sourceSchema, targetSchema, ingestionProperties)
       case SchemaAdjustmentMode.GenerateDynamicParquetMapping => setParquetMapping(sourceSchema, targetSchema, ingestionProperties)
     }
 
@@ -38,40 +37,16 @@ object KustoIngestionUtils {
     }
   }
 
-  private[kusto] def setCsvMapping(sourceSchema: StructType,
-                                   targetSchema: Array[JSONObject],
-                                   ingestionProperties: SparkIngestionProperties): Unit = {
-    require(ingestionProperties.csvMappingNameReference == null || ingestionProperties.csvMappingNameReference.isEmpty,
-      "Sink options SparkIngestionProperties.csvMappingNameReference and adjustSchema.GenerateDynamicCsvMapping are not compatible. Use only one.")
-
-    val targetSchemaColumns = targetSchema.map(c => (c.getString("Name"),c.getString("CslType"))).toMap
-    val sourceSchemaColumns = sourceSchema.fields.zipWithIndex.map(c => (c._1.name, c._2 )).toMap
-    val notFoundSourceColumns = sourceSchemaColumns.filter(c => !targetSchemaColumns.contains(c._1)).keys
-    if(notFoundSourceColumns.nonEmpty)
-      throw SchemaMatchException(s"Source schema has columns that are not present in the target: ${notFoundSourceColumns.mkString(", ")}.")
-
-    val columnMappingReset = sourceSchemaColumns
-      .map(sourceColumn => {
-        val targetDataType = targetSchemaColumns.get(sourceColumn._1)
-        val columnMapping = new ColumnMapping(sourceColumn._1, targetDataType.get)
-        columnMapping.setOrdinal(sourceColumn._2)
-        columnMapping
-      })
-
-    ingestionProperties.csvMapping = mappingToString(columnMappingReset.toArray)
-
-  }
-
   private[kusto] def setParquetMapping(sourceSchema: StructType,
-                                   targetSchema: Array[JSONObject],
-                                   ingestionProperties: SparkIngestionProperties): Unit = {
+                                       targetSchema: Array[JSONObject],
+                                       ingestionProperties: SparkIngestionProperties): Unit = {
     require(ingestionProperties.parquetMappingNameReference == null || ingestionProperties.parquetMappingNameReference.isEmpty,
       "Sink options SparkIngestionProperties.parquetMappingNameReference and adjustSchema.GenerateDynamicParquetMapping are not compatible. Use only one.")
 
-    val targetSchemaColumns = targetSchema.map(c => (c.getString("Name"),c.getString("CslType"))).toMap
-    val sourceSchemaColumns = sourceSchema.fields.zipWithIndex.map(c => (c._1.name, c._2 )).toMap
+    val targetSchemaColumns = targetSchema.map(c => (c.getString("Name"), c.getString("CslType"))).toMap
+    val sourceSchemaColumns = sourceSchema.fields.zipWithIndex.map(c => (c._1.name, c._2)).toMap
     val notFoundSourceColumns = sourceSchemaColumns.filter(c => !targetSchemaColumns.contains(c._1)).keys
-    if(notFoundSourceColumns.nonEmpty)
+    if (notFoundSourceColumns.nonEmpty)
       throw SchemaMatchException(s"Source schema has columns that are not present in the target: ${notFoundSourceColumns.mkString(", ")}.")
 
     val columnMappingReset = sourceSchemaColumns
@@ -83,8 +58,7 @@ object KustoIngestionUtils {
       })
 
     val mappedString = mappingToString(columnMappingReset.toArray)
-    ingestionProperties.parquetMapping = mappedString.replace("columnName","Column")
-    ingestionProperties.parquetColumnMapping = columnMappingReset.toArray
+    ingestionProperties.parquetMapping = mappedString.replace("columnName", "Column")
   }
 
   private[kusto] def mappingToString(columnMappings: Array[ColumnMapping]) : String = {
