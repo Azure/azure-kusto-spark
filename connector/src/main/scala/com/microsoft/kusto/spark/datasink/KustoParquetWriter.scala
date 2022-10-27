@@ -14,7 +14,7 @@ import com.microsoft.kusto.spark.utils._
 import io.github.resilience4j.retry.RetryConfig
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.spark.TaskContext
+import org.apache.spark.{TaskContext, SparkContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 import org.apache.spark.util.CollectionAccumulator
@@ -119,15 +119,12 @@ class KustoParquetWriter() {
                                         ingestionProperties: IngestionProperties): Unit = {
     val sparkContext = data.sparkSession.sparkContext
     // get container details
-    val containerAndSas = getContainerDetails(tableCoordinates.clusterUrl, authentication,
-      Option(tableCoordinates.clusterUrl), tableCoordinates.clusterAlias)
-    val currentBlobURI = new URI(s"${containerAndSas.containerUrl}${containerAndSas.sas}")
-    val storageCredentials = new TransientStorageCredentials(currentBlobURI.toString)
+    val storageCredentials =  KustoClientCache.getClient(tableCoordinates.clusterUrl, authentication, tableCoordinates.ingestionUrl, tableCoordinates.clusterAlias).getTempBlobsForExport.storageCredentials(1)
 
     val blobName = s"${KustoQueryUtils.simplifyName(tableCoordinates.database)}_${tmpTableName}_" +
       s"${UUID.randomUUID.toString}_${TaskContext.getPartitionId}_spark.parquet"
     // set up the access in spark config
-    val hadoopConfig = setUpAccessForAzureFS(getWasbHadoopConfig(data.sparkSession.sparkContext.hadoopConfiguration),storageCredentials)
+    val hadoopConfig = setUpAccessForAzureFS(getWasbHadoopConfig(sparkContext.hadoopConfiguration),storageCredentials)
     // create the blob file path
     val blobRoot = s"wasbs://${storageCredentials.blobContainer}@${storageCredentials.storageAccountName}.blob.${storageCredentials.domainSuffix}"
     val blobNamePath = s"/$blobName"
@@ -146,11 +143,8 @@ class KustoParquetWriter() {
       ingestionProperties.setDataFormat(DataFormat.PARQUET.name)
 
       try {
-        val partitionsResults = getPartitionResultsPostIngestion(data.rdd, ingestionProperties, writeOptions.requestId,
-          tableCoordinates, authentication, s"$blobFileBase$blobNamePath")
-        finalizeIngestionWhenWorkersSucceeded(
-          tableCoordinates, batchIdIfExists, tmpTableName, partitionsResults, writeOptions,
-          crp, tableExists,sparkContext , authentication, kustoClient)
+        getPartitionResultsPostIngestion(listOfFilesToProcess.rdd,
+          tableCoordinates, authentication, s"$blobFileBase$blobNamePath",writeOptions, tmpTableName, batchIdIfExists, crp, tableExists, sparkContext )
       }
       catch {
         case exception: Exception => if (writeOptions.isTransactionalMode) {
@@ -164,15 +158,27 @@ class KustoParquetWriter() {
     }
   }
 
-  private def getPartitionResultsPostIngestion(rdd: RDD[Row], ingestionProperties: IngestionProperties, requestId: String,
+  private def getPartitionResultsPostIngestion(rdd: RDD[Row],
                                                tableCoordinates: KustoCoordinates, authentication: KustoAuthentication,
-                                               blobDirPath: String): CollectionAccumulator[PartitionResult] = {
+                                               blobDirPath: String, writeOptions: WriteOptions, tmpTableName : String,
+                                               batchIdIfExists : String, crp : ClientRequestProperties, tableExists: Boolean , sparkContext: SparkContext ) = {
     val partitionId = TaskContext.getPartitionId
     val partitionIdString = TaskContext.getPartitionId.toString
 
-    val partitionResult = rdd.sparkContext.collectionAccumulator[PartitionResult]
+    val database = tableCoordinates.database
+    val clusterUrl = tableCoordinates.clusterUrl
+    val ingestionUrl = tableCoordinates.ingestionUrl
+    val clusterAlias = tableCoordinates.clusterAlias
+    val isTransactionalMode = writeOptions.isTransactionalMode
 
     rdd.foreachPartition(partition => {
+      val sparkContext = SparkContext.getOrCreate()
+      val kustoClient = KustoClientCache.getClient(tableCoordinates.clusterUrl, authentication, tableCoordinates.ingestionUrl, tableCoordinates.clusterAlias)
+      val partitionResult = sparkContext.collectionAccumulator[PartitionResult]
+      val tableName = if (writeOptions.isTransactionalMode) tmpTableName else tableCoordinates.table.getOrElse(tmpTableName)
+      val ingestionProperties = SparkIngestionProperties.fromString(writeOptions.ingestionProperties.get).toIngestionProperties(database, tableName)
+
+      //val ingestionProperties = new IngestionProperties(database,table)
       var props = ingestionProperties
       if (!ingestionProperties.getFlushImmediately) {
         // Need to copy the ingestionProperties so that only this one will be flushed immediately
@@ -182,20 +188,25 @@ class KustoParquetWriter() {
       partition.foreach(rowIterator => {
         val fileName = rowIterator.getString(0)
         val fullPath = s"$blobDirPath/$fileName"
-        val ingestClient = KustoClientCache.getClient(tableCoordinates.clusterUrl,
+        val ingestClient = KustoClientCache.getClient(clusterUrl,
           authentication,
-          tableCoordinates.ingestionUrl,
-          tableCoordinates.clusterAlias).ingestClient
-        partitionResult.add(PartitionResult(KustoDataSourceUtils.retryFunction(() => {
-          KustoDataSourceUtils.logInfo(myName, s"Queued blob for ingestion in partition " +
-            s"$partitionIdString for requestId: '$requestId")
-          val parquetIngestor = new KustoParquetIngestor(ingestClient)
-          parquetIngestor.ingest(fullPath, ingestionProperties)
-        }, this.retryConfig, "Ingest into Kusto"),
-          partitionId))
+          ingestionUrl,
+          clusterAlias).ingestClient
+        val parquetIngestor = new KustoParquetIngestor(ingestClient)
+        val retryConfig = RetryConfig.custom.maxAttempts(MaxIngestRetryAttempts).retryExceptions(classOf[IngestionServiceException]).build
+        partitionResult.add(
+          PartitionResult(
+            KustoDataSourceUtils.retryFunction(() => {
+              //KustoDataSourceUtils.logInfo(myName, s"Queued blob for ingestion in partition $partitionIdString for requestId: '$requestId}")
+              parquetIngestor.ingest(fullPath, props)
+            }, retryConfig, "Ingest into Kusto"),
+            partitionId)
+        )
       })
+      /*finalizeIngestionWhenWorkersSucceeded(
+        tableCoordinates, batchIdIfExists, tmpTableName,partitionResult , writeOptions,
+        crp, tableExists, sparkContext , authentication, kustoClient)*/
     })
-    partitionResult
   }
 
   private def getIngestionProperties(writeOptions: WriteOptions, database: String, tableName: String): IngestionProperties = {
@@ -239,10 +250,7 @@ class KustoParquetWriter() {
 
   private def writeToBlob(data: DataFrame, blobPath: String): Unit = {
     // Write the file
-    println(s"------------=========>>>>>>>>>>> HERE writing : $blobPath")
     data.write.parquet(blobPath)
-    println(s"------------=========>>>>>>>>>>> HERE written")
-
   }
 
   private def getSparkIngestionProperties(writeOptions: WriteOptions): SparkIngestionProperties = {
