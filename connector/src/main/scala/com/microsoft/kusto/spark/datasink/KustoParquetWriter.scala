@@ -4,27 +4,31 @@ import com.microsoft.azure.kusto.data.ClientRequestProperties
 import com.microsoft.azure.kusto.ingest.IngestionProperties
 import com.microsoft.azure.kusto.ingest.IngestionProperties.DataFormat
 import com.microsoft.azure.kusto.ingest.exceptions.IngestionServiceException
+import com.microsoft.azure.kusto.ingest.result.IngestionResult
+import com.microsoft.azure.storage.blob.CloudBlockBlob
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.FinalizeHelper.finalizeIngestionWhenWorkersSucceeded
+import com.microsoft.kusto.spark.datasink.SparkIngestionProperties.{ingestionPropertiesFromString, ingestionPropertiesToString, toIngestionProperties}
 import com.microsoft.kusto.spark.datasource.TransientStorageCredentials
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator.generateTableGetSchemaAsRowsCommand
 import com.microsoft.kusto.spark.utils.KustoConstants.{IngestSkippedTrace, MaxIngestRetryAttempts}
+import com.microsoft.kusto.spark.utils.KustoIngestionUtils.adjustSchema
 import com.microsoft.kusto.spark.utils._
 import io.github.resilience4j.retry.RetryConfig
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.spark.{TaskContext, SparkContext}
+import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Row, SparkSession}
-import org.apache.spark.util.CollectionAccumulator
+import org.apache.spark.sql.{DataFrame, Row}
 import org.joda.time.{DateTime, DateTimeZone}
 import org.json.JSONObject
 
+import java.io.BufferedWriter
 import java.net.URI
 import java.security.InvalidParameterException
-import java.util
 import java.util.UUID
+import java.util.zip.GZIPOutputStream
 import scala.collection.JavaConverters.asScalaBufferConverter
 import scala.collection.mutable.ListBuffer
 import scala.util.{Failure, Success, Try}
@@ -32,12 +36,8 @@ import scala.util.{Failure, Success, Try}
 /*
   Serializes and writes data as a parquet blob
 */
-class KustoParquetWriter() {
-  val LegacyTempIngestionTablePrefix = "_tmpTable"
-  val TempIngestionTablePrefix = "sparkTempTable_"
+class KustoParquetWriter {
   private val className = this.getClass.getName
-  private val retryConfig = RetryConfig.custom.maxAttempts(MaxIngestRetryAttempts).retryExceptions(classOf[IngestionServiceException]).build
-  private val myName = this.getClass.getSimpleName
 
   def write(batchId: Option[Long],
             data: DataFrame,
@@ -47,117 +47,116 @@ class KustoParquetWriter() {
             crp: ClientRequestProperties): Unit = {
     val sparkContext = data.sparkSession.sparkContext
     val batchIdIfExists = batchId.map(b => s",batch: ${b.toString}").getOrElse("")
-    val kustoClient = KustoClientCache.getClient(tableCoordinates.clusterUrl, authentication, tableCoordinates.ingestionUrl, tableCoordinates.clusterAlias)
-    val table = tableCoordinates.table.get
-
+    val kustoClient = KustoClientCache.getClient(tableCoordinates.clusterUrl, authentication,
+      tableCoordinates.ingestionUrl, tableCoordinates.clusterAlias)
+    val table = tableCoordinates.table.getOrElse("")
     val tmpTableName: String = KustoDataSourceUtils.generateTempTableName(sparkContext.appName, table,
-      writeOptions.requestId, batchIdIfExists, writeOptions.userTempTableName)
-
+      writeOptions.requestId, batchIdIfExists, writeOptions.maybeUserTempTableName)
     // Get and create/adjust schema if the final table exists
     val schemaShowCommandResult = kustoClient.executeEngine(tableCoordinates.database,
       generateTableGetSchemaAsRowsCommand(tableCoordinates.table.get), crp).getPrimaryResults
     val targetSchema = schemaShowCommandResult.getData.asScala.map(c => c.get(0).asInstanceOf[JSONObject]).toArray
-    val stagingTableIngestionProperties = getSparkIngestionProperties(writeOptions)
-    KustoIngestionUtils.adjustSchema(writeOptions.adjustSchema, data.schema, targetSchema, stagingTableIngestionProperties)
-
+    val stagingTableIngestionProperties = adjustSchema(writeOptions.adjustSchema, data.schema, targetSchema,
+      sparkIngestionPropertiesFromWriteOptions(writeOptions))
     val tableExists = schemaShowCommandResult.count() > 0
-    val shouldIngest = kustoClient.shouldIngestData(tableCoordinates, writeOptions.ingestionProperties, tableExists, crp)
-
-    if (!shouldIngest) {
-      KustoDataSourceUtils.logInfo(myName, s"$IngestSkippedTrace '$table'")
-      return
-    }
-
-    if (writeOptions.userTempTableName.isDefined) {
-      if (kustoClient.executeEngine(tableCoordinates.database,
-        generateTableGetSchemaAsRowsCommand(writeOptions.userTempTableName.get), crp).getPrimaryResults.count() <= 0 ||
-        !tableExists) {
-        throw new InvalidParameterException("Temp table name provided but the table does not exist. Either drop this " +
-          "option or create the table beforehand.")
+    val shouldIngest = kustoClient.shouldIngestData(tableCoordinates, writeOptions.maybeSparkIngestionProperties, tableExists, crp)
+    if (shouldIngest) {
+      // If the temp table already exists , then creation of the temp table will fail (and also cause schema mismatches)
+      // Throw an exception back and report that this table needs to be dropped.
+      val updatedStagingTableIngestionProperties = writeOptions.maybeUserTempTableName match {
+        case Some(userTempTable) => if (kustoClient.executeEngine(tableCoordinates.database,
+          generateTableGetSchemaAsRowsCommand(userTempTable), crp).getPrimaryResults.count() <= 0 ||
+          !tableExists) {
+          throw new InvalidParameterException("Temp table name provided but the table does not exist. Either drop this " +
+            "option or create the table beforehand.")
+        }
+        stagingTableIngestionProperties
+        case None =>
+          // KustoWriter will create a temporary table ingesting the data to it.
+          // Only if all executors succeeded the table will be appended to the original destination table.
+          kustoClient.initializeTablesBySchema(tableCoordinates, tmpTableName, data.schema, targetSchema, writeOptions,
+            crp, stagingTableIngestionProperties.maybeCreationTime.isEmpty)
+          // Get the schema if the table is newly created
+          if (targetSchema.isEmpty && writeOptions.tableCreateOptions != SinkTableCreationMode.FailIfNotExist) {
+            val schemaShowCommandResult = kustoClient.executeEngine(tableCoordinates.database,
+              generateTableGetSchemaAsRowsCommand(tableCoordinates.table.get), crp).getPrimaryResults
+            val newTargetSchema = schemaShowCommandResult.getData.asScala.
+              map(c => c.get(0).asInstanceOf[JSONObject]).toArray
+            adjustSchema(SchemaAdjustmentMode.GenerateDynamicParquetMapping, data.schema,
+              newTargetSchema, stagingTableIngestionProperties)
+          }else {
+            stagingTableIngestionProperties
+          }
       }
-    } else {
-      // KustoWriter will create a temporary table ingesting the data to it.
-      // Only if all executors succeeded the table will be appended to the original destination table.
-      kustoClient.initializeTablesBySchema(tableCoordinates, tmpTableName, data.schema, targetSchema, writeOptions,
-        crp, stagingTableIngestionProperties.creationTime == null)
-
-      // Get the schema if the table is newly created
-      if(targetSchema.isEmpty && writeOptions.tableCreateOptions != SinkTableCreationMode.FailIfNotExist) {
-        val schemaShowCommandResult = kustoClient.executeEngine(tableCoordinates.database,
-          generateTableGetSchemaAsRowsCommand(tableCoordinates.table.get), crp).getPrimaryResults
-        val newTargetSchema = schemaShowCommandResult.getData.asScala.map(c => c.get(0).asInstanceOf[JSONObject]).toArray
-        KustoIngestionUtils.adjustSchema(SchemaAdjustmentMode.GenerateDynamicParquetMapping, data.schema, newTargetSchema, stagingTableIngestionProperties)
-
+      // Rebuild writeOptions with modified ingest properties
+      val rebuiltOptions = writeOptions.copy(maybeSparkIngestionProperties = Some(ingestionPropertiesToString(updatedStagingTableIngestionProperties)))
+      kustoClient.setMappingOnStagingTable(updatedStagingTableIngestionProperties,
+        tableCoordinates.database,tmpTableName, table, crp)
+      if (stagingTableIngestionProperties.flushImmediately) {
+        KustoDataSourceUtils.logWarn(className, "It's not recommended to set flushImmediately to true")
       }
+      val ingestionProperties = getIngestionProperties(writeOptions,
+        tableCoordinates.database,
+        if (writeOptions.isTransactionalMode) tmpTableName else tableCoordinates.table.getOrElse(tmpTableName))
+
+      val transactionWriteParams = TransactionWriteParams(tableCoordinates, authentication, rebuiltOptions, crp, batchIdIfExists,
+        kustoClient, tmpTableName, tableExists)
+      performWrite(data, transactionWriteParams, ingestionProperties)
     }
-
-    // Rebuild writeOptions with modified ingest properties
-    val rebuiltOptions = writeOptions.copy(ingestionProperties = Some(stagingTableIngestionProperties.toString()))
-
-    kustoClient.setMappingOnStagingTableIfNeeded(stagingTableIngestionProperties, tableCoordinates.database,
-      tmpTableName, table, crp)
-
-    if (stagingTableIngestionProperties.flushImmediately) {
-      KustoDataSourceUtils.logWarn(myName, "It's not recommended to set flushImmediately to true")
+    else {
+      KustoDataSourceUtils.logInfo(className, s"$IngestSkippedTrace '$table'")
     }
-    val ingestionProperties = getIngestionProperties(writeOptions,
-      tableCoordinates.database,
-      if (writeOptions.isTransactionalMode) tmpTableName else tableCoordinates.table.getOrElse(tmpTableName))
-    if (writeOptions.isTransactionalMode) {
-      performTransactionalWrite(data, tableCoordinates, authentication, rebuiltOptions, crp,
-        batchIdIfExists, kustoClient, tmpTableName, tableExists)
+  }
+
+  private def performWrite(data: DataFrame, transactionWriteParams: TransactionWriteParams,
+                           ingestionProperties: IngestionProperties): Unit = {
+    if (transactionWriteParams.writeOptions.isTransactionalMode) {
+      performTransactionalWrite(data, transactionWriteParams)
     } else {
-      //call queued ingestion
-      val ingestClient = KustoClientCache.getClient(tableCoordinates.clusterUrl, authentication,
-        tableCoordinates.ingestionUrl,tableCoordinates.clusterAlias).ingestClient
+      // call queued ingestion
       ingestionProperties.setDataFormat(DataFormat.PARQUET.name)
-      //ingestClient.in
       val rdd = data.queryExecution.toRdd
       rdd.foreachPartitionAsync { rows =>
-        (
-          rows.foreach(row => {
-          })
-          )
+        rows.foreach(_ => {
+        })
       }
     }
   }
 
-  private def performTransactionalWrite(data: DataFrame, tableCoordinates: KustoCoordinates,
-                                        authentication: KustoAuthentication, writeOptions: WriteOptions,
-                                        crp: ClientRequestProperties,
-                                        batchIdIfExists: String, kustoClient: ExtendedKustoClient,
-                                        tmpTableName: String, tableExists: Boolean): Unit = {
-    val sparkContext = data.sparkSession.sparkContext
-    // get container details
-    val storageCredentials =  KustoClientCache.getClient(tableCoordinates.clusterUrl, authentication, tableCoordinates.ingestionUrl, tableCoordinates.clusterAlias).getTempBlobsForExport.storageCredentials(1)
+  private def performTransactionalWrite(data: DataFrame, transactionWriteParams: TransactionWriteParams): Unit = {
 
-    val blobName = s"${KustoQueryUtils.simplifyName(tableCoordinates.database)}_${tmpTableName}_" +
+    // get container details - TODO don't use magic numbers like (1)
+    val storageCredentials = KustoClientCache.getClient(transactionWriteParams.tableCoordinates.clusterUrl,
+      transactionWriteParams.authentication, transactionWriteParams.tableCoordinates.ingestionUrl,
+      transactionWriteParams.tableCoordinates.clusterAlias).getTempBlobsForExport.storageCredentials(1)
+
+    val blobName = s"${KustoQueryUtils.simplifyName(transactionWriteParams.tableCoordinates.database)}_${transactionWriteParams.tmpTableName}_" +
       s"${UUID.randomUUID.toString}_${TaskContext.getPartitionId}_spark.parquet"
     // set up the access in spark config
-    val hadoopConfig = setUpAccessForAzureFS(getWasbHadoopConfig(sparkContext.hadoopConfiguration),storageCredentials)
+    val hadoopConfig = setUpAccessForAzureFS(getWasbHadoopConfig(data.sparkSession.sparkContext.hadoopConfiguration), storageCredentials)
     // create the blob file path
     val blobRoot = s"wasbs://${storageCredentials.blobContainer}@${storageCredentials.storageAccountName}.blob.${storageCredentials.domainSuffix}"
     val blobNamePath = s"/$blobName"
     // write data to blob
-    writeToBlob(data, s"$blobRoot$blobNamePath")
+    data.write.parquet(s"$blobRoot$blobNamePath")
     // Enumerate the list of files
     val listOfFiles = getListOfFileFromDirectory(blobRoot, blobNamePath, hadoopConfig)
     // ingest blobs to kusto table
     if (listOfFiles.nonEmpty) {
       import data.sparkSession.implicits._
-      // TODO we need to iterate the dataFrame below ??
       val listOfFilesToProcess = listOfFiles.toDF()
-      val blobFileBase = s"https://${storageCredentials.storageAccountName}.blob.${storageCredentials.domainSuffix}/${storageCredentials.blobContainer.split("/")(0)}"
-
-      try {
-        ingestAndFinalizeData(listOfFilesToProcess.rdd,
-          tableCoordinates, authentication, s"$blobFileBase$blobNamePath",writeOptions, tmpTableName, batchIdIfExists, crp, tableExists )
-      }
-      catch {
-        case exception: Exception => if (writeOptions.isTransactionalMode) {
-          if (writeOptions.userTempTableName.isEmpty) {
-            kustoClient.cleanupIngestionByProducts(
-              tableCoordinates.database, tmpTableName, crp)
+      // TODO use of magic numbers (0)
+      val blobFileBase = s"https://${storageCredentials.storageAccountName}.blob." +
+        s"${storageCredentials.domainSuffix}/${storageCredentials.blobContainer.split("/")(0)}"
+      Try(
+        ingestAndFinalizeData(listOfFilesToProcess.rdd, s"$blobFileBase$blobNamePath", transactionWriteParams)
+      ) match {
+        case Success(_) => KustoDataSourceUtils.logDebug(className, s"Ingestion completed for blob $blobFileBase")
+        case Failure(exception) => if (transactionWriteParams.writeOptions.isTransactionalMode) {
+          if (transactionWriteParams.writeOptions.maybeUserTempTableName.isEmpty) {
+            transactionWriteParams.kustoClient.cleanupIngestionByProducts(
+              transactionWriteParams.tableCoordinates.database, transactionWriteParams.tmpTableName,
+              transactionWriteParams.crp)
           }
           throw exception
         }
@@ -165,68 +164,55 @@ class KustoParquetWriter() {
     }
   }
 
-  private def ingestAndFinalizeData(rdd: RDD[Row],
-                                    tableCoordinates: KustoCoordinates, authentication: KustoAuthentication,
-                                    blobDirPath: String, writeOptions: WriteOptions, tmpTableName: String,
-                                    batchIdIfExists: String, crp: ClientRequestProperties, tableExists: Boolean): Unit = {
+  private def ingestAndFinalizeData(rdd: RDD[Row], blobDirPath: String,
+                                    transactionWriteParams: TransactionWriteParams): Unit = {
     val partitionId = TaskContext.getPartitionId
-    val partitionIdString = TaskContext.getPartitionId.toString
-
-    val database = tableCoordinates.database
-    val clusterUrl = tableCoordinates.clusterUrl
-    val ingestionUrl = tableCoordinates.ingestionUrl
-    val clusterAlias = tableCoordinates.clusterAlias
-
     rdd.foreachPartition(partition => {
-      val sparkContext = SparkContext.getOrCreate()
-      val kustoClient = KustoClientCache.getClient(tableCoordinates.clusterUrl, authentication, tableCoordinates.ingestionUrl, tableCoordinates.clusterAlias)
-      val partitionResult = sparkContext.collectionAccumulator[PartitionResult]
-      val tableName = if (writeOptions.isTransactionalMode) tmpTableName else tableCoordinates.table.getOrElse(tmpTableName)
-      val ingestionProperties = SparkIngestionProperties.fromString(writeOptions.ingestionProperties.get).toIngestionProperties(database, tableName)
+      // Create the client
+      val partitionResult = rdd.sparkContext.collectionAccumulator[PartitionResult]
+      val tableName = if (transactionWriteParams.writeOptions.isTransactionalMode) {
+        transactionWriteParams.tmpTableName
+      } else {
+        transactionWriteParams.tableCoordinates.table.getOrElse(transactionWriteParams.tmpTableName)
+      }
+      // Get the ingestion properties
+      val ingestionProperties = transactionWriteParams.writeOptions.maybeSparkIngestionProperties match {
+        case Some(ip) => toIngestionProperties(transactionWriteParams.tableCoordinates.database, tableName,
+          ingestionPropertiesFromString(ip))
+        case None => new IngestionProperties(transactionWriteParams.tableCoordinates.database, tableName)
+      }
       ingestionProperties.setReportMethod(IngestionProperties.IngestionReportMethod.TABLE)
       ingestionProperties.setReportLevel(IngestionProperties.IngestionReportLevel.FAILURES_AND_SUCCESSES)
       ingestionProperties.setDataFormat(DataFormat.PARQUET.name)
-
-      //val ingestionProperties = new IngestionProperties(database,table)
-      var props = ingestionProperties
-      if (!ingestionProperties.getFlushImmediately) {
+      // Clone the properties and set flush immediately
+      val clonedIngestionProperties = if (!ingestionProperties.getFlushImmediately) {
         // Need to copy the ingestionProperties so that only this one will be flushed immediately
-        props = SparkIngestionProperties.cloneIngestionProperties(ingestionProperties)
-        props.setFlushImmediately(true)
+        val copiedProperties = new IngestionProperties(ingestionProperties)
+        copiedProperties.setFlushImmediately(true)
+        copiedProperties
+      } else {
+        ingestionProperties
       }
       partition.foreach(rowIterator => {
         val fileName = rowIterator.getString(0)
         val fullPath = s"$blobDirPath/$fileName"
-        val ingestClient = KustoClientCache.getClient(clusterUrl,
-          authentication,
-          ingestionUrl,
-          clusterAlias).ingestClient
+        val ingestClient = KustoClientCache.getClient(transactionWriteParams.tableCoordinates.clusterUrl,
+          transactionWriteParams.authentication,
+          transactionWriteParams.tableCoordinates.ingestionUrl,
+          transactionWriteParams.tableCoordinates.clusterAlias).ingestClient
         val parquetIngestor = new KustoParquetIngestor(ingestClient)
-        val retryConfig = RetryConfig.custom.maxAttempts(MaxIngestRetryAttempts).retryExceptions(classOf[IngestionServiceException]).build
+        val retryConfig = RetryConfig.custom.maxAttempts(MaxIngestRetryAttempts).
+          retryExceptions(classOf[IngestionServiceException]).build
         partitionResult.add(
           PartitionResult(
             KustoDataSourceUtils.retryFunction(() => {
-              //KustoDataSourceUtils.logInfo(myName, s"Queued blob for ingestion in partition $partitionIdString for requestId: '$requestId}")
-              parquetIngestor.ingest(fullPath, props)
+              parquetIngestor.ingest(fullPath, clonedIngestionProperties)
             }, retryConfig, "Ingest into Kusto"),
             partitionId)
         )
       })
-      finalizeIngestionWhenWorkersSucceeded(
-        tableCoordinates, batchIdIfExists, tmpTableName,partitionResult , writeOptions,
-        crp, tableExists, sparkContext , authentication, kustoClient)
+      finalizeIngestionWhenWorkersSucceeded(partitionResult, rdd.sparkContext, transactionWriteParams)
     })
-  }
-
-  private def getIngestionProperties(writeOptions: WriteOptions, database: String, tableName: String): IngestionProperties = {
-    if (writeOptions.ingestionProperties.isDefined) {
-      val ingestionProperties = SparkIngestionProperties.fromString(writeOptions.ingestionProperties.get)
-        .toIngestionProperties(database, tableName)
-
-      ingestionProperties
-    } else {
-      new IngestionProperties(database, tableName)
-    }
   }
 
   private def getListOfFileFromDirectory(blobRoot: String, blobNamePath: String, hadoopConfig: Configuration): ListBuffer[String] = {
@@ -234,7 +220,6 @@ class KustoParquetWriter() {
     val hdfs = FileSystem.get(new URI(blobRoot), hadoopConfig)
     val sourcePath = new Path(blobNamePath)
     val listOfFiles = new ListBuffer[String]()
-
     // List these files and add them to the list for processing
     Try(hdfs.listFiles(sourcePath, true)) match {
       case Success(remoteFileIterator) =>
@@ -250,26 +235,6 @@ class KustoParquetWriter() {
       case Failure(exception) => throw exception
     }
     listOfFiles
-  }
-
-  private def getContainerDetails(clusterUrl: String, authentication: KustoAuthentication, maybeIngestionUrl: Option[String]
-                                  , clusterAlias: String): ContainerAndSas = {
-    KustoClientCache.getClient(clusterUrl, authentication, maybeIngestionUrl, clusterAlias).getTempBlobForIngestion
-  }
-
-  private def writeToBlob(data: DataFrame, blobPath: String): Unit = {
-    // Write the file
-    data.write.parquet(blobPath)
-  }
-
-  private def getSparkIngestionProperties(writeOptions: WriteOptions): SparkIngestionProperties = {
-    val ingestionProperties = if (writeOptions.ingestionProperties.isDefined)
-      SparkIngestionProperties.fromString(writeOptions.ingestionProperties.get)
-    else
-      new SparkIngestionProperties()
-    ingestionProperties.ingestIfNotExists = new util.ArrayList()
-
-    ingestionProperties
   }
 
 
@@ -300,4 +265,23 @@ class KustoParquetWriter() {
     }
     hadoopConfig
   }
+
+  private def getIngestionProperties(writeOptions: WriteOptions, database: String, tableName: String): IngestionProperties = {
+    writeOptions.maybeSparkIngestionProperties match {
+      case Some(value) => toIngestionProperties(database, tableName, ingestionPropertiesFromString(value))
+      case None => new IngestionProperties(database, tableName)
+    }
+  }
+  private def sparkIngestionPropertiesFromWriteOptions(writeOptions: WriteOptions): SparkIngestionProperties = {
+    writeOptions.maybeSparkIngestionProperties match {
+      case Some(sip) => ingestionPropertiesFromString(sip)
+      case None => new SparkIngestionProperties()
+    }
+  }
 }
+
+case class BlobWriteResource(writer: BufferedWriter, gzip: GZIPOutputStream, csvWriter: CountingWriter,
+                             blob: CloudBlockBlob, sas: String)
+
+case class PartitionResult(ingestionResult: IngestionResult, partitionId: Int)
+

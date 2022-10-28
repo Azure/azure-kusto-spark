@@ -1,17 +1,17 @@
 package com.microsoft.kusto.spark.datasource
 
-import java.security.InvalidParameterException
-import java.util.Locale
 import com.microsoft.azure.kusto.data.ClientRequestProperties
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.{KustoCoordinates, KustoDebugOptions}
-import com.microsoft.kusto.spark.datasink.{KustoParquetWriter, KustoWriter, WriteOptions}
+import com.microsoft.kusto.spark.datasink.{KustoParquetWriter, WriteOptions}
 import com.microsoft.kusto.spark.utils.{KustoClientCache, KustoConstants, KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, Row, SQLContext, SparkSession}
 
+import java.security.InvalidParameterException
+import java.util.Locale
 import scala.concurrent.duration._
 
 private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
@@ -24,7 +24,7 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
                                         clientRequestProperties: Option[ClientRequestProperties],
                                         requestId: String)
                                        (@transient val sparkSession: SparkSession)
-  extends BaseRelation with PrunedFilteredScan with Serializable with InsertableRelation  {
+  extends BaseRelation with PrunedFilteredScan with Serializable with InsertableRelation {
 
   private val normalizedQuery = KustoQueryUtils.normalizeQuery(query)
   var cachedSchema: KustoSchema = _
@@ -48,7 +48,7 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
     val forceSingleMode = readOptions.readMode.isDefined && readOptions.readMode.get == ReadMode.ForceSingleMode
     var useSingleMode = forceSingleMode
     var res: Option[RDD[Row]] = None
-    if (readOptions.readMode.isEmpty){
+    if (readOptions.readMode.isEmpty) {
       var count = 0
       try {
         count = KDSU.
@@ -67,12 +67,12 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
         res = Some(sparkSession.emptyDataFrame.rdd)
       } else {
         // Use distributed mode if count is high or in case of a time out
-        useSingleMode =  !(timedOutCounting || count > KustoConstants.DirectQueryUpperBoundRows)
+        useSingleMode = !(timedOutCounting || count > KustoConstants.DirectQueryUpperBoundRows)
       }
     }
 
     var exception: Option[Exception] = None
-    if(res.isEmpty) {
+    if (res.isEmpty) {
       if (useSingleMode) {
         try {
           res = Some(KustoReader.singleBuildScan(
@@ -85,8 +85,8 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
       }
 
       if (!useSingleMode || exception.isDefined) {
-        if(exception.isDefined){
-            KDSU.logError("KustoRelation",s"Failed with Single mode, falling back to Distributed mode, requestId: $requestId. Exception : ${exception.get.getMessage}")
+        if (exception.isDefined) {
+          KDSU.logError("KustoRelation", s"Failed with Single mode, falling back to Distributed mode, requestId: $requestId. Exception : ${exception.get.getMessage}")
         }
 
         readOptions.partitionOptions.column = Some(getPartitioningColumn)
@@ -103,7 +103,7 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
         )
       }
 
-      if(res.isEmpty && exception.isDefined){
+      if (res.isEmpty && exception.isDefined) {
         throw exception.get
       }
     }
@@ -151,7 +151,7 @@ private[kusto] case class KustoRelation(kustoCoordinates: KustoCoordinates,
   }
 
   // Used for cached results
-  override def equals(other: Any): Boolean = other match  {
+  override def equals(other: Any): Boolean = other match {
     case that: KustoRelation => kustoCoordinates == that.kustoCoordinates && query == that.query && authentication == that.authentication
     case _ => false
   }

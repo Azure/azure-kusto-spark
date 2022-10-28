@@ -20,7 +20,7 @@ object KustoConstants {
   val DirectQueryUpperBoundRows = 5000
   val TimeoutForCountCheck: FiniteDuration = 3 seconds
   val IngestByPrefix = "ingest-by:"
-  val IngestSkippedTrace = s"Ingestion skipped: Provided ingest-by tags are present in the destination table: "
+  val IngestSkippedTrace = "Ingestion skipped: Provided ingest-by tags are present in the destination table: "
   val MaxSleepOnMoveExtentsMillis: Int = 3 * 60 * 1000
   val DefaultBatchingLimit: Int = 300
   val DefaultExtentsCountForSplitMergePerNode: Int = 400
@@ -31,4 +31,5 @@ object KustoConstants {
   val MaxCommandsRetryAttempts = 4
   val DefaultMaximumIngestionTime: FiniteDuration = FiniteDuration.apply(
     MaxIngestRetryAttempts * (DefaultExecutionQueueing + DefaultTimeoutQueueing) + 2000,"millis")
+  val TempIngestionTablePrefix = "sparkTempTable_"
 }

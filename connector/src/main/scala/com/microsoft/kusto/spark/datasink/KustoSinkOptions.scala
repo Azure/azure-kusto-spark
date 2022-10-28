@@ -1,14 +1,15 @@
 package com.microsoft.kusto.spark.datasink
 
-import java.util.UUID
-import java.util.concurrent.TimeUnit
-
 import com.microsoft.kusto.spark.common.KustoOptions
-import com.microsoft.kusto.spark.utils.KustoConstants
+import com.microsoft.kusto.spark.datasink.KustoSinkOptions.NONE_RESULT_LIMIT
+import com.microsoft.kusto.spark.datasink.SchemaAdjustmentMode.SchemaAdjustmentMode
+import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
+import com.microsoft.kusto.spark.utils.KustoConstants.{DefaultBatchingLimit, DefaultCleaningInterval, DefaultWaitingIntervalLongRunning}
 
-import scala.concurrent.duration.FiniteDuration
+import java.util.UUID
+import scala.concurrent.duration.{FiniteDuration, SECONDS}
 
-object KustoSinkOptions extends KustoOptions{
+object KustoSinkOptions extends KustoOptions {
   /** Required options */
   val KUSTO_TABLE: String = newOption("kustoTable")
 
@@ -85,21 +86,23 @@ object WriteMode extends Enumeration {
   val Transactional, Queued = Value
 }
 
-case class WriteOptions(pollingOnDriver:Boolean = false,
-                        tableCreateOptions: SinkTableCreationMode.SinkTableCreationMode = SinkTableCreationMode.FailIfNotExist,
-                        isAsync: Boolean = false,
-                        writeResultLimit: String = KustoSinkOptions.NONE_RESULT_LIMIT,
-                        timeZone: String = "UTC",
-                        timeout: FiniteDuration = new FiniteDuration(KustoConstants.DefaultWaitingIntervalLongRunning.toInt,
-                          TimeUnit.SECONDS),
-                        ingestionProperties: Option[String] = None,
-                        batchLimit: Int = KustoConstants.DefaultBatchingLimit,
-                        requestId: String = UUID.randomUUID().toString,
-                        autoCleanupTime: FiniteDuration = new FiniteDuration(KustoConstants.DefaultCleaningInterval.toInt,
-                          TimeUnit.SECONDS),
-                        maxRetriesOnMoveExtents: Int = 10,
-                        minimalExtentsCountForSplitMerge: Int = 400,
-                        adjustSchema: SchemaAdjustmentMode.SchemaAdjustmentMode = SchemaAdjustmentMode.NoAdjustment,
-                        isTransactionalMode: Boolean = true,
-                        userTempTableName: Option[String] = None)
+final case class WriteOptions(
+                               pollingOnDriver: Boolean = false,
+                               tableCreateOptions: SinkTableCreationMode = SinkTableCreationMode.FailIfNotExist,
+                               isAsync: Boolean = false,
+                               writeResultLimit: String = NONE_RESULT_LIMIT,
+                               timeZone: String = "UTC",
+                               timeout: FiniteDuration = new FiniteDuration(DefaultWaitingIntervalLongRunning.toInt,
+                                 SECONDS),
+                               maybeSparkIngestionProperties: Option[String] = None,
+                               batchLimit: Int = DefaultBatchingLimit,
+                               requestId: String = UUID.randomUUID().toString,
+                               autoCleanupTime: FiniteDuration = new FiniteDuration(DefaultCleaningInterval.toInt,
+                                 SECONDS),
+                               maxRetriesOnMoveExtents: Int = 10,
+                               minimalExtentsCountForSplitMerge: Int = 400,
+                               adjustSchema: SchemaAdjustmentMode = SchemaAdjustmentMode.NoAdjustment,
+                               isTransactionalMode: Boolean = true,
+                               maybeUserTempTableName: Option[String] = None
+                             )
 

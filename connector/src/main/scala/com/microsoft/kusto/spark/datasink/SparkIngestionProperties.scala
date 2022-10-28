@@ -1,107 +1,60 @@
 package com.microsoft.kusto.spark.datasink
 
+import com.fasterxml.jackson.databind.json.JsonMapper
+import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import com.microsoft.azure.kusto.ingest.IngestionMapping.IngestionMappingKind
+import com.microsoft.azure.kusto.ingest.IngestionProperties
 
-import java.util
-import com.microsoft.azure.kusto.ingest.{ColumnMapping, IngestionMapping, IngestionProperties}
-import org.codehaus.jackson.annotate.JsonAutoDetect.Visibility
-import org.codehaus.jackson.annotate.JsonMethod
-import org.codehaus.jackson.map.ObjectMapper
-import org.joda.time.DateTime
+import java.time.Instant
+import scala.collection.JavaConverters._
+import scala.collection.mutable
 
-import java.util.Calendar
-
-class SparkIngestionProperties(var flushImmediately: Boolean = false,
-                               var dropByTags: util.ArrayList[String] = null,
-                               var ingestByTags: util.ArrayList[String] = null,
-                               var additionalTags: util.ArrayList[String] = null,
-                               var ingestIfNotExists: util.ArrayList[String] = null,
-                               var creationTime: DateTime = null,
-                               var csvMapping: String = null,
-                               var csvMappingNameReference: String = null,
-                               var parquetMapping: String = null,
-                               var parquetMappingNameReference: String = null,
-                              ){
-  // C'tor for serialization
-  def this(){
-    this(false)
-  }
-
-  override def toString: String = {
-    new ObjectMapper().setVisibility(JsonMethod.FIELD, Visibility.ANY)
-      .writerWithDefaultPrettyPrinter
-      .writeValueAsString(this)
-  }
-
-  def toIngestionProperties(database: String, table: String): IngestionProperties ={
-    val ingestionProperties = new IngestionProperties(database, table)
-    val additionalProperties = new util.HashMap[String, String]()
-
-    if (this.flushImmediately){
-      ingestionProperties.setFlushImmediately(true)
-    }
-
-    if (this.dropByTags != null) {
-      ingestionProperties.setDropByTags(this.dropByTags)
-    }
-
-    if (this.ingestByTags != null) {
-      ingestionProperties.setIngestByTags(this.ingestByTags)
-    }
-
-    if (this.additionalTags != null) {
-      ingestionProperties.setAdditionalTags(this.additionalTags)
-    }
-
-    if (this.ingestIfNotExists != null) {
-      ingestionProperties.setIngestIfNotExists(this.ingestIfNotExists)
-    }
-
-    if (this.creationTime != null) {
-      additionalProperties.put("creationTime", this.creationTime.toString())
-    }
-
-    if (this.csvMapping != null) {
-      additionalProperties.put("ingestionMapping", this.csvMapping)
-      additionalProperties.put("ingestionMappingType", IngestionMappingKind.CSV.getKustoValue)
-    }
-
-    if (this.csvMappingNameReference != null) {
-      ingestionProperties.setIngestionMapping(new IngestionMapping(this.csvMappingNameReference, IngestionMapping.IngestionMappingKind.CSV))
-    }
-
-    if (this.parquetMapping != null) {
-      additionalProperties.put("ingestionMapping", this.parquetMapping)
-      additionalProperties.put("ingestionMappingType", IngestionMappingKind.PARQUET.getKustoValue)
-      ingestionProperties.getIngestionMapping.setIngestionMappingReference(this.parquetMapping, IngestionMappingKind.PARQUET)
-    }
-
-    if (this.parquetMappingNameReference != null) {
-      ingestionProperties.setIngestionMapping(new IngestionMapping(this.parquetMappingNameReference, IngestionMapping.IngestionMappingKind.PARQUET))
-      ingestionProperties.setDataFormat(IngestionProperties.DataFormat.PARQUET)
-    }
-
-    ingestionProperties.setAdditionalProperties(additionalProperties)
-    ingestionProperties
-  }
-}
+final case class SparkIngestionProperties(flushImmediately: Boolean = false,
+                                          dropByTags: List[String] = List.empty,
+                                          ingestByTags: List[String] = List.empty,
+                                          additionalTags: List[String] = List.empty,
+                                          ingestIfNotExists: List[String] = List.empty,
+                                          maybeCreationTime: Option[Instant] = None,
+                                          maybeParquetMapping: Option[String] = None,
+                                          maybeParquetMappingNameReference: Option[String] = None,
+                                         )
 
 object SparkIngestionProperties {
-  def cloneIngestionProperties(ingestionProperties: IngestionProperties, destinationTable: Option[String] = None): IngestionProperties = {
-    val cloned = new IngestionProperties(ingestionProperties.getDatabaseName,
-      if(destinationTable.isDefined) destinationTable.get else ingestionProperties.getTableName)
-    cloned.setReportLevel(ingestionProperties.getReportLevel)
-    cloned.setReportMethod(ingestionProperties.getReportMethod)
-    cloned.setAdditionalTags(ingestionProperties.getAdditionalTags)
-    cloned.setDropByTags(ingestionProperties.getDropByTags)
-    cloned.setIngestByTags(ingestionProperties.getIngestByTags)
-    cloned.setIngestIfNotExists(ingestionProperties.getIngestIfNotExists)
-    cloned.setDataFormat(ingestionProperties.getDataFormat)
-    cloned.setIngestionMapping(ingestionProperties.getIngestionMapping)
-    cloned
+  private final val mapper = JsonMapper.builder()
+    .addModule(DefaultScalaModule)
+    .build()
+
+  def ingestionPropertiesToString(sparkIngestionProperties: SparkIngestionProperties): String = {
+    mapper.writeValueAsString(sparkIngestionProperties)
   }
 
-  private[kusto] def fromString(json: String): SparkIngestionProperties = {
-    new ObjectMapper().setVisibility(JsonMethod.FIELD, Visibility.ANY).readValue(json, classOf[SparkIngestionProperties])
+  def toIngestionProperties(database: String, table: String,
+                            sparkIngestionProperties: SparkIngestionProperties): IngestionProperties = {
+    val ingestionProperties = new IngestionProperties(database, table)
+    val additionalProperties = new mutable.HashMap[String, String]()
+    ingestionProperties.setFlushImmediately(true)
+    ingestionProperties.setDropByTags(sparkIngestionProperties.dropByTags.asJava)
+    ingestionProperties.setIngestByTags(sparkIngestionProperties.ingestByTags.asJava)
+    ingestionProperties.setAdditionalTags(sparkIngestionProperties.additionalTags.asJava)
+    ingestionProperties.setIngestIfNotExists(sparkIngestionProperties.ingestIfNotExists.asJava)
+    sparkIngestionProperties.maybeCreationTime.map(creationTime => creationTime.toString).
+      foreach(creationTime => additionalProperties.put("creationTime", creationTime))
+    sparkIngestionProperties.maybeParquetMapping.foreach(parquetMapping => {
+      additionalProperties.put("ingestionMapping", parquetMapping)
+      additionalProperties.put("ingestionMappingType", IngestionMappingKind.PARQUET.getKustoValue)
+      ingestionProperties.setDataFormat(IngestionProperties.DataFormat.PARQUET)
+      ingestionProperties.setIngestionMapping(parquetMapping, IngestionMappingKind.PARQUET)
+    })
+    sparkIngestionProperties.maybeParquetMappingNameReference.foreach(parquetMappingReference => {
+      ingestionProperties.setDataFormat(IngestionProperties.DataFormat.PARQUET)
+      ingestionProperties.getIngestionMapping.setIngestionMappingReference(parquetMappingReference,
+        IngestionMappingKind.PARQUET)
+    })
+    ingestionProperties.setAdditionalProperties(additionalProperties.asJava)
+    ingestionProperties
+  }
+
+  private[kusto] def ingestionPropertiesFromString(json: String): SparkIngestionProperties = {
+    mapper.readValue(json, classOf[SparkIngestionProperties])
   }
 }
