@@ -355,6 +355,9 @@ object KustoDataSourceUtils {
         case Success(enumValue) => enumValue
         case Failure(_: NoSuchElementException) =>
           throw new InvalidParameterException(s"No such $propertyName option: '${maybePropertyValue}'")
+        case Failure(ex:Throwable) =>
+          throw new InvalidParameterException(s"No such $propertyName option: '${maybePropertyValue}' " +
+            s"with exception ${ex.getMessage}")
       }
       case None => defaultValue
     }

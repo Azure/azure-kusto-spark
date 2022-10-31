@@ -1,7 +1,7 @@
 package com.microsoft.kusto.spark.datasink
 
 import com.microsoft.azure.kusto.data.ClientRequestProperties
-import com.microsoft.azure.kusto.ingest.IngestionProperties
+import com.microsoft.azure.kusto.ingest.{IngestionMapping, IngestionProperties}
 import com.microsoft.azure.kusto.ingest.IngestionProperties.DataFormat
 import com.microsoft.azure.kusto.ingest.exceptions.IngestionServiceException
 import com.microsoft.azure.kusto.ingest.result.IngestionResult
@@ -13,14 +13,14 @@ import com.microsoft.kusto.spark.datasink.SparkIngestionProperties.{ingestionPro
 import com.microsoft.kusto.spark.datasource.TransientStorageCredentials
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator.generateTableGetSchemaAsRowsCommand
 import com.microsoft.kusto.spark.utils.KustoConstants.{IngestSkippedTrace, MaxIngestRetryAttempts}
-import com.microsoft.kusto.spark.utils.KustoIngestionUtils.adjustSchema
+import com.microsoft.kusto.spark.utils.KustoIngestionUtils.{adjustSchema, stringToMapping}
 import com.microsoft.kusto.spark.utils._
 import io.github.resilience4j.retry.RetryConfig
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.spark.TaskContext
+import org.apache.spark.{SparkContext, TaskContext}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 import org.joda.time.{DateTime, DateTimeZone}
 import org.json.JSONObject
 
@@ -88,33 +88,33 @@ class KustoParquetWriter {
             stagingTableIngestionProperties
           }
       }
-      // Rebuild writeOptions with modified ingest properties
-      val rebuiltOptions = writeOptions.copy(maybeSparkIngestionProperties = Some(ingestionPropertiesToString(updatedStagingTableIngestionProperties)))
-      kustoClient.setMappingOnStagingTable(updatedStagingTableIngestionProperties,
-        tableCoordinates.database,tmpTableName, table, crp)
       if (stagingTableIngestionProperties.flushImmediately) {
         KustoDataSourceUtils.logWarn(className, "It's not recommended to set flushImmediately to true")
       }
-      val ingestionProperties = getIngestionProperties(writeOptions,
-        tableCoordinates.database,
-        if (writeOptions.isTransactionalMode) tmpTableName else tableCoordinates.table.getOrElse(tmpTableName))
-
-      val transactionWriteParams = TransactionWriteParams(tableCoordinates, authentication, rebuiltOptions, crp, batchIdIfExists,
-        kustoClient, tmpTableName, tableExists)
-      performWrite(data, transactionWriteParams, ingestionProperties)
+      // Rebuild writeOptions with modified ingest properties
+      val updatedSparkIngestionProperties = ingestionPropertiesToString(updatedStagingTableIngestionProperties)
+      val rebuiltOptions = writeOptions.copy(maybeSparkIngestionProperties = Some(updatedSparkIngestionProperties))
+/* TODO
+      kustoClient.setMappingOnStagingTable(updatedStagingTableIngestionProperties,
+        tableCoordinates.database, tmpTableName, table, crp)
+*/
+      if (stagingTableIngestionProperties.flushImmediately) {
+        KustoDataSourceUtils.logWarn(className, "It's not recommended to set flushImmediately to true")
+      }
+      val transactionWriteParams = TransactionWriteParams(tableCoordinates, authentication, rebuiltOptions, crp,
+        batchIdIfExists,tmpTableName, tableExists)
+      performWrite(data, transactionWriteParams)
     }
     else {
       KustoDataSourceUtils.logInfo(className, s"$IngestSkippedTrace '$table'")
     }
   }
 
-  private def performWrite(data: DataFrame, transactionWriteParams: TransactionWriteParams,
-                           ingestionProperties: IngestionProperties): Unit = {
+  private def performWrite(data: DataFrame, transactionWriteParams: TransactionWriteParams): Unit = {
     if (transactionWriteParams.writeOptions.isTransactionalMode) {
       performTransactionalWrite(data, transactionWriteParams)
     } else {
       // call queued ingestion
-      ingestionProperties.setDataFormat(DataFormat.PARQUET.name)
       val rdd = data.queryExecution.toRdd
       rdd.foreachPartitionAsync { rows =>
         rows.foreach(_ => {
@@ -124,11 +124,11 @@ class KustoParquetWriter {
   }
 
   private def performTransactionalWrite(data: DataFrame, transactionWriteParams: TransactionWriteParams): Unit = {
-
     // get container details - TODO don't use magic numbers like (1)
-    val storageCredentials = KustoClientCache.getClient(transactionWriteParams.tableCoordinates.clusterUrl,
+    val kustoClient = KustoClientCache.getClient(transactionWriteParams.tableCoordinates.clusterUrl,
       transactionWriteParams.authentication, transactionWriteParams.tableCoordinates.ingestionUrl,
-      transactionWriteParams.tableCoordinates.clusterAlias).getTempBlobsForExport.storageCredentials(1)
+      transactionWriteParams.tableCoordinates.clusterAlias)
+    val storageCredentials = kustoClient.getTempBlobsForExport.storageCredentials(1)
 
     val blobName = s"${KustoQueryUtils.simplifyName(transactionWriteParams.tableCoordinates.database)}_${transactionWriteParams.tmpTableName}_" +
       s"${UUID.randomUUID.toString}_${TaskContext.getPartitionId}_spark.parquet"
@@ -143,8 +143,9 @@ class KustoParquetWriter {
     val listOfFiles = getListOfFileFromDirectory(blobRoot, blobNamePath, hadoopConfig)
     // ingest blobs to kusto table
     if (listOfFiles.nonEmpty) {
-      import data.sparkSession.implicits._
-      val listOfFilesToProcess = listOfFiles.toDF()
+      val spark = SparkSession.builder.config(data.rdd.sparkContext.getConf).getOrCreate()
+      import spark.implicits._
+      val  listOfFilesToProcess = listOfFiles.toDF()
       // TODO use of magic numbers (0)
       val blobFileBase = s"https://${storageCredentials.storageAccountName}.blob." +
         s"${storageCredentials.domainSuffix}/${storageCredentials.blobContainer.split("/")(0)}"
@@ -154,7 +155,7 @@ class KustoParquetWriter {
         case Success(_) => KustoDataSourceUtils.logDebug(className, s"Ingestion completed for blob $blobFileBase")
         case Failure(exception) => if (transactionWriteParams.writeOptions.isTransactionalMode) {
           if (transactionWriteParams.writeOptions.maybeUserTempTableName.isEmpty) {
-            transactionWriteParams.kustoClient.cleanupIngestionByProducts(
+            kustoClient.cleanupIngestionByProducts(
               transactionWriteParams.tableCoordinates.database, transactionWriteParams.tmpTableName,
               transactionWriteParams.crp)
           }
@@ -169,7 +170,8 @@ class KustoParquetWriter {
     val partitionId = TaskContext.getPartitionId
     rdd.foreachPartition(partition => {
       // Create the client
-      val partitionResult = rdd.sparkContext.collectionAccumulator[PartitionResult]
+      val sparkContext = SparkContext.getOrCreate()
+      val partitionResult = sparkContext.collectionAccumulator[PartitionResult]
       val tableName = if (transactionWriteParams.writeOptions.isTransactionalMode) {
         transactionWriteParams.tmpTableName
       } else {
@@ -211,7 +213,7 @@ class KustoParquetWriter {
             partitionId)
         )
       })
-      finalizeIngestionWhenWorkersSucceeded(partitionResult, rdd.sparkContext, transactionWriteParams)
+      finalizeIngestionWhenWorkersSucceeded(partitionResult, sparkContext, transactionWriteParams)
     })
   }
 
@@ -279,9 +281,4 @@ class KustoParquetWriter {
     }
   }
 }
-
-case class BlobWriteResource(writer: BufferedWriter, gzip: GZIPOutputStream, csvWriter: CountingWriter,
-                             blob: CloudBlockBlob, sas: String)
-
-case class PartitionResult(ingestionResult: IngestionResult, partitionId: Int)
-
+final case class PartitionResult(ingestionResult: IngestionResult, partitionId: Int)

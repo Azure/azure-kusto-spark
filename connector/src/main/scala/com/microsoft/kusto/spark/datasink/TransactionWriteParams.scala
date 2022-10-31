@@ -10,6 +10,5 @@ final case class TransactionWriteParams(tableCoordinates: KustoCoordinates,
                                         writeOptions: WriteOptions,
                                         crp: ClientRequestProperties,
                                         batchIdIfExists: String,
-                                        kustoClient: ExtendedKustoClient,
                                         tmpTableName: String,
                                         tableExists: Boolean)

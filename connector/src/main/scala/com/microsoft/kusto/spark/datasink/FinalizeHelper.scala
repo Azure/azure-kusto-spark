@@ -2,7 +2,9 @@ package com.microsoft.kusto.spark.datasink
 
 import com.microsoft.azure.kusto.ingest.result.{IngestionStatus, OperationStatus}
 import com.microsoft.azure.storage.StorageException
+import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator.generateTableAlterMergePolicyCommand
+import com.microsoft.kusto.spark.utils.KustoClientCache.getClient
 import com.microsoft.kusto.spark.utils.KustoConstants.IngestSkippedTrace
 import com.microsoft.kusto.spark.utils.{KustoConstants, KustoDataSourceUtils => KDSU}
 import org.apache.commons.lang3.exception.ExceptionUtils
@@ -14,6 +16,7 @@ import java.util.concurrent.TimeUnit
 import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.{Await, Future, TimeoutException}
+import scala.util.{Failure, Success, Try}
 
 object FinalizeHelper {
   private val logClassName = this.getClass.getSimpleName
@@ -22,23 +25,23 @@ object FinalizeHelper {
                                                            sparkContext: SparkContext,
                                                            transactionWriteParams: TransactionWriteParams
                                                           ): Unit = {
-    if (!transactionWriteParams.kustoClient.shouldIngestData(transactionWriteParams.tableCoordinates,
+    val kustoClient = getClient(transactionWriteParams.tableCoordinates.clusterUrl,transactionWriteParams.authentication,
+      transactionWriteParams.tableCoordinates.ingestionUrl,transactionWriteParams.tableCoordinates.clusterAlias)
+    if (!kustoClient.shouldIngestData(transactionWriteParams.tableCoordinates,
       transactionWriteParams.writeOptions.maybeSparkIngestionProperties, transactionWriteParams.tableExists,
       transactionWriteParams.crp)) {
       KDSU.logInfo(logClassName, s"$IngestSkippedTrace '${transactionWriteParams.tableCoordinates.table}'")
     } else {
       val mergeTask = Future {
-        val loggerName = logClassName
         val requestId = transactionWriteParams.writeOptions.requestId
         val ingestionInfoString = s"RequestId: $requestId cluster: '${transactionWriteParams.tableCoordinates.clusterAlias}', " +
           s"database: '${transactionWriteParams.tableCoordinates.database}', table: '${transactionWriteParams.tmpTableName}' " +
           s"${transactionWriteParams.batchIdIfExists}"
-        KDSU.logInfo(loggerName, s"Polling on ingestion results for requestId: $requestId, will move data to " +
+        KDSU.logInfo(logClassName, s"Polling on ingestion results for requestId: $requestId, will move data to " +
           "destination table when finished")
-
         try {
           if (transactionWriteParams.writeOptions.pollingOnDriver) {
-            partitionsResults.value.asScala.foreach(partitionResult => pollOnResult(partitionResult, loggerName, requestId,
+            partitionsResults.value.asScala.foreach(partitionResult => pollOnResult(partitionResult, logClassName, requestId,
               transactionWriteParams.writeOptions.timeout.toMillis,
               ingestionInfoString))
           } else {
@@ -49,17 +52,17 @@ object FinalizeHelper {
             val resultsRdd = sparkContext.parallelize(partitionsResults.value.asScala, numSlices = 1)
             resultsRdd.sparkContext.setJobDescription("Polling on ingestion results")
             resultsRdd.foreachPartition((results: Iterator[PartitionResult]) => results.foreach(
-              partitionResult => pollOnResult(partitionResult, loggerName, requestId,
+              partitionResult => pollOnResult(partitionResult, logClassName, requestId,
                 transactionWriteParams.writeOptions.timeout.toMillis,
                 ingestionInfoString)
             ))
           }
           if (partitionsResults.value.size > 0) {
             val moveOperation = (_: Int) => {
-              transactionWriteParams.kustoClient.executeEngine(transactionWriteParams.tableCoordinates.database,
+              kustoClient.executeEngine(transactionWriteParams.tableCoordinates.database,
                 generateTableAlterMergePolicyCommand(transactionWriteParams.tmpTableName, allowMerge = false,
                   allowRebuild = false), transactionWriteParams.crp)
-              transactionWriteParams.kustoClient.moveExtents(transactionWriteParams.tableCoordinates.database,
+              kustoClient.moveExtents(transactionWriteParams.tableCoordinates.database,
                 transactionWriteParams.tmpTableName, transactionWriteParams.tableCoordinates.table.get,
                 transactionWriteParams.crp, transactionWriteParams.writeOptions)
             }
@@ -77,7 +80,6 @@ object FinalizeHelper {
               moveExtentsRdd.sparkContext.setJobDescription("Moving extents to target table")
               moveExtentsRdd.foreach(moveOperation)
             }
-
             KDSU.logInfo(logClassName, "Write to Kusto table " +
               s"'${transactionWriteParams.tableCoordinates.table.getOrElse("")}' finished successfully " +
               s"requestId: ${transactionWriteParams.writeOptions.requestId} ${transactionWriteParams.batchIdIfExists}")
@@ -98,11 +100,10 @@ object FinalizeHelper {
               transactionWriteParams.writeOptions.requestId
             )
         } finally {
-          transactionWriteParams.kustoClient.cleanupIngestionByProducts(transactionWriteParams.tableCoordinates.database,
+          kustoClient.cleanupIngestionByProducts(transactionWriteParams.tableCoordinates.database,
             transactionWriteParams.tmpTableName, transactionWriteParams.crp)
         }
       }
-
       if (!transactionWriteParams.writeOptions.isAsync) {
         try {
           Await.result(mergeTask, transactionWriteParams.writeOptions.timeout)

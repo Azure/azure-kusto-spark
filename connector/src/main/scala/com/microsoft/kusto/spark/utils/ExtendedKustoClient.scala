@@ -6,7 +6,7 @@ import com.microsoft.azure.kusto.data.exceptions.KustoDataExceptionBase
 import com.microsoft.azure.kusto.ingest.exceptions.IngestionServiceException
 import com.microsoft.azure.kusto.ingest.{IngestClientFactory, IngestionMapping, QueuedIngestClient}
 import com.microsoft.kusto.spark.common.KustoCoordinates
-import com.microsoft.kusto.spark.datasink.SparkIngestionProperties.{ingestionPropertiesFromString, toIngestionProperties}
+import com.microsoft.kusto.spark.datasink.SparkIngestionProperties.ingestionPropertiesFromString
 import com.microsoft.kusto.spark.datasink.{SinkTableCreationMode, SparkIngestionProperties, WriteOptions}
 import com.microsoft.kusto.spark.datasource.{TransientStorageCredentials, TransientStorageParameters}
 import com.microsoft.kusto.spark.exceptions.{FailedOperationException, RetriesExhaustedException}
