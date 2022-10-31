@@ -18,8 +18,7 @@ final case class SparkIngestionProperties(flushImmediately: Boolean = false,
                                           additionalTags: List[String] = List.empty,
                                           ingestIfNotExists: List[String] = List.empty,
                                           maybeCreationTime: Option[Instant] = None,
-                                          maybeParquetMapping: Option[String] = None,
-                                          maybeParquetMappingCols: List[ColumnMapping] = List.empty
+                                          maybeParquetMapping: Option[String] = None
                                          ) extends Serializable
 
 object SparkIngestionProperties {

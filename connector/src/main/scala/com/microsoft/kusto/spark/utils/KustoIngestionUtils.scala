@@ -70,7 +70,7 @@ object KustoIngestionUtils {
         columnMapping.setPath(s"$$.${sourceColumn._1}")
         columnMapping
       }).toList
-    ingestionProperties.copy(maybeParquetMappingCols = columnMappingReset,
+    ingestionProperties.copy(,
       maybeParquetMapping = Some(mappingToString(columnMappingReset.toArray)))
         // replaceAll("columnName", "Column")))
   }
