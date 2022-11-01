@@ -311,7 +311,7 @@ object KustoWriter {
         // write the data here
         if (parameters.writeOptions.isTransactionalMode) {
           val blobUuid = UUID.randomUUID()
-          KDSU.logInfo(myName, s"Setting write-options for duplicates RequestId :'${parameters.writeOptions.requestId}" +
+          KDSU.logDebug(myName, s"Setting write-options for duplicates RequestId :'${parameters.writeOptions.requestId}" +
             s" ensureNoDupBlobs:${parameters.writeOptions.ensureNoDupBlobs}, ingestTags: ${props.getIngestByTags}" +
             s", ingestIfNotExists: ${props.getIngestIfNotExists} with BlobUUId $blobUuid")
           val blobPath = blobUri + sas
