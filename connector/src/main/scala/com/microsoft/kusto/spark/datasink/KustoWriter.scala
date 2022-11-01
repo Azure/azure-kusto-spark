@@ -311,9 +311,6 @@ object KustoWriter {
         // write the data here
         if (parameters.writeOptions.isTransactionalMode) {
           val blobUuid = UUID.randomUUID()
-          KDSU.logInfo(myName, s"Setting write-options for duplicates RequestId :'${parameters.writeOptions.requestId}" +
-            s" ensureNoDupBlobs:${parameters.writeOptions.ensureNoDupBlobs}, ingestTags: ${props.getIngestByTags}" +
-            s", ingestIfNotExists: ${props.getIngestIfNotExists} with BlobUUId $blobUuid")
           val blobPath = blobUri + sas
           val blobSourceInfo = new BlobSourceInfo(blobPath, size, blobUuid)
           partitionsResults.add(
@@ -330,7 +327,7 @@ object KustoWriter {
         }, this.retryConfig, "Ingest into Kusto"),
               partitionId))
           KDSU.logInfo(myName, s"Queued blob for ingestion in partition $partitionIdString " +
-            s"for requestId: '${parameters.writeOptions.requestId}")
+            s"for requestId: '${parameters.writeOptions.requestId}, blobUuid: $blobUuid")
         }
     }
     val kustoClient = KustoClientCache.getClient(parameters.coordinates.clusterUrl, parameters.authentication,
