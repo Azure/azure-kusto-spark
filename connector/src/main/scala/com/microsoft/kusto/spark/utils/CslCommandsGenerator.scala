@@ -176,4 +176,14 @@ private[kusto] object CslCommandsGenerator {
   def generateCreateTableMappingCommand(tableName: String, kind: String, name: String, mappingAsJson: String): String = {
     s""".create table ${KustoQueryUtils.normalizeTableName(tableName)} ingestion ${kind.toLowerCase} mapping "$name" @"$mappingAsJson""""
   }
+
+  def generateExtentTagsDropByPrefixCommand(tableName:String , prefix: String): String = {
+    s""".drop extent tags <|
+         .show table $tableName extents
+         | where isnotempty(Tags)
+         | extend Tags = split(Tags, '\\r\\n')
+         | mv-expand Tags to typeof(string)
+         | where Tags startswith 'ingest-by:$prefix'
+       """
+  }
 }

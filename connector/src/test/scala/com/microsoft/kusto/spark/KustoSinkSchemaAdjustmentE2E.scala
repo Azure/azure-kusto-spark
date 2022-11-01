@@ -1,13 +1,16 @@
 package com.microsoft.kusto.spark
 
 import com.microsoft.kusto.spark.KustoTestUtils.KustoConnectionOptions
-import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SparkIngestionProperties}
+import com.microsoft.kusto.spark.datasink.{SinkTableCreationMode, SparkIngestionProperties}
 import com.microsoft.kusto.spark.exceptions.SchemaMatchException
+import com.microsoft.kusto.spark.utils.KustoQueryUtils
 import org.apache.spark.sql._
 import org.apache.spark.sql.types.StringType
 import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FlatSpec}
+
+import java.util.UUID
 
 
 @RunWith(classOf[JUnitRunner])
@@ -32,7 +35,7 @@ class KustoSinkSchemaAdjustmentE2E extends FlatSpec
   }
 
   override def afterEach(): Unit = {
-    KustoTestUtils.cleanup(kustoConnectionOptions, testTablePrefix)
+   // KustoTestUtils.cleanup(kustoConnectionOptions, testTablePrefix)
   }
 
 
@@ -121,4 +124,15 @@ class KustoSinkSchemaAdjustmentE2E extends FlatSpec
     assert(thrown.getMessage.contains("are not compatible"))
   }
 
+
+  "Source DataFrame schema adjustment" should "generate dynamic csv mapping according to column names when table does not exist " taggedAs KustoE2E in {
+    import spark.implicits._
+    val sourceValues = (1 to expectedNumberOfRows).map(v => (newRow(v), v))
+    val df = sourceValues.toDF("SourceColA", "SourceColB")
+    val schemaAdjustmentMode = "GenerateDynamicCsvMapping"
+    val testTable = KustoQueryUtils.simplifyName(s"KustoBatchSinkE2E_SchemaAdjust_${UUID.randomUUID()}")
+    KustoTestUtils.ingest(kustoConnectionOptions.copy(createTableIfNotExists = SinkTableCreationMode.CreateIfNotExist),
+      df, testTable, schemaAdjustmentMode)
+    assert(KustoTestUtils.validateTargetTable(kustoConnectionOptions, testTable, df, spark))
+  }
 }

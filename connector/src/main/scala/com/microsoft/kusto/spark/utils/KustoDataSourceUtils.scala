@@ -34,7 +34,10 @@ import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 
 object KustoDataSourceUtils {
+  def getDedupTagsPrefix(requestId: String, batchId: String) = s"${requestId}_$batchId"
+
   def generateTempTableName(appName: String, destinationTableName: String, requestId:String,
+
                             batchIdAsString: String, userTempTableName: Option[String]): String = {
     if (userTempTableName.isDefined) {
       userTempTableName.get
@@ -151,7 +154,7 @@ object KustoDataSourceUtils {
     KustoResponseDeserializer(client.executeEngine(database, query, clientRequestProperties.orNull).getPrimaryResults).getSchema
   }
 
-  private def parseAuthentication(parameters: Map[String, String], clusterUrl:String) = {
+  private def parseAuthentication(parameters: Map[String, String], clusterUrl: String) = {
     // Parse KustoAuthentication
     val applicationId = parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_APP_ID, "")
     val applicationKey = parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_APP_SECRET, "")
@@ -255,7 +258,7 @@ object KustoDataSourceUtils {
     val requestId: String = parameters.getOrElse(KustoSinkOptions.KUSTO_REQUEST_ID, UUID.randomUUID().toString)
     val clientRequestProperties = getClientRequestProperties(parameters, requestId)
 
-    val (authentication,keyVaultAuthentication) = parseAuthentication(parameters, clusterUrl.get)
+    val (authentication, keyVaultAuthentication) = parseAuthentication(parameters, clusterUrl.get)
 
     val ingestionUri = parameters.get(KustoSinkOptions.KUSTO_INGESTION_URI)
     SourceParameters(authentication, KustoCoordinates(clusterUrl.get, alias.get, database.get, table, ingestionUri),
@@ -317,6 +320,9 @@ object KustoDataSourceUtils {
     val autoCleanupTime = new FiniteDuration(parameters.getOrElse(KustoSinkOptions.KUSTO_STAGING_RESOURCE_AUTO_CLEANUP_TIMEOUT, KCONST
       .DefaultCleaningInterval).toInt, TimeUnit.SECONDS)
 
+    val disableFlushImmediately = parameters.getOrElse(KustoDebugOptions.KUSTO_DISABLE_FLUSH_IMMEDIATELY, "false").toBoolean
+    val ensureNoDupBlobs = parameters.getOrElse(KustoDebugOptions.KUSTO_ENSURE_NO_DUPLICATED_BLOBS,"false").toBoolean
+
     val ingestionPropertiesAsJson = parameters.get(KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON)
 
     val sourceParameters = parseSourceParameters(parameters, allowProxy = false)
@@ -336,7 +342,9 @@ object KustoDataSourceUtils {
       minimalExtentsCountForSplitMergePerNode,
       adjustSchema,
       isTransactionalMode,
-      userTempTableName
+      userTempTableName,
+      disableFlushImmediately,
+      ensureNoDupBlobs
     )
 
     if (sourceParameters.kustoCoordinates.table.isEmpty) {
@@ -349,8 +357,10 @@ object KustoDataSourceUtils {
       ""
     }
 
-    logInfo("parseSinkParameters", s"Parsed write options for sink: {'table': '${sourceParameters.
-      kustoCoordinates.table}', 'timeout': '${writeOptions.timeout}, 'async': ${writeOptions.isAsync}, " +
+    logInfo("parseSinkParameters", s"Parsed write options for sink: {'table': '${
+      sourceParameters.
+        kustoCoordinates.table
+    }', 'timeout': '${writeOptions.timeout}, 'async': ${writeOptions.isAsync}, " +
       s"'tableCreationMode': ${writeOptions.tableCreateOptions}, 'writeLimit': ${writeOptions.writeResultLimit}, 'batchLimit': ${writeOptions.batchLimit}" +
       s", 'timeout': ${writeOptions.timeout}, 'timezone': ${writeOptions.timeZone}, " +
       s"'ingestionProperties': $ingestionPropertiesAsJson, 'requestId': '${sourceParameters.requestId}', 'pollingOnDriver': ${writeOptions.pollingOnDriver}," +
@@ -360,9 +370,9 @@ object KustoDataSourceUtils {
     SinkParameters(writeOptions, sourceParameters)
   }
 
-  def retryFunction[T](func:() => T, retryConfig: RetryConfig, retryName: String): T ={
+  def retryFunction[T](func: () => T, retryConfig: RetryConfig, retryName: String): T = {
     val retry = Retry.of(retryName, retryConfig)
-    val f:CheckedFunction0[T] = new CheckedFunction0[T]() {
+    val f: CheckedFunction0[T] = new CheckedFunction0[T]() {
       override def apply(): T = func()
     }
 
@@ -384,7 +394,7 @@ object KustoDataSourceUtils {
 
   private[kusto] def reportExceptionAndThrow(
                                               reporter: String,
-                                              exception: Exception,
+                                              exception: Throwable,
                                               doingWhat: String = "",
                                               cluster: String = "",
                                               database: String = "",
@@ -642,25 +652,29 @@ object KustoDataSourceUtils {
 
   // No need to retry here - if an exception is caught - fallback to distributed mode
   private[kusto] def estimateRowsCount(client: Client, query: String, database: String, crp: ClientRequestProperties): Int = {
-    var count = 1
     val estimationResult: util.List[AnyRef] = Await.result(Future {
       val res = client.execute(database, generateEstimateRowsCountQuery(query), crp).getPrimaryResults
       res.next()
       res.getCurrentRow
     }, KustoConstants.TimeoutForCountCheck)
-    val estimated = estimationResult.get(1)
-    if (estimated == null || StringUtils.isBlank(estimated.toString)) {
-      // Estimation can be empty for certain cases
+    val maybeEstimatedCount = Option(estimationResult.get(1))
+    /*
+     Check if the result is null or an empty string return a 0 , else return the numeric value
+    */
+    val estimatedCount = maybeEstimatedCount match {
+      case Some(ecStr: String) => if (StringUtils.isBlank(ecStr) || !StringUtils.isNumeric(ecStr)) /* Empty estimate */ 0 else ecStr.toInt
+      case Some(ecInt: java.lang.Number) => ecInt.intValue() // Is a numeric , get the int value back
+      case None => 0 // No value
+    }
+    // We cannot be finitely determine the count , or have a 0 count. Recheck using a 'query | count()'
+    if (estimatedCount == 0) {
       Await.result(Future {
         val res = client.execute(database, generateCountQuery(query), crp).getPrimaryResults
         res.next()
-        count = res.getInt(0)
+        res.getInt(0)
       }, KustoConstants.TimeoutForCountCheck)
     } else {
-      // Zero estimation count does not indicate zero results, therefore we add 1 here so that we won't return an empty RDD
-      count = estimated.asInstanceOf[Int] + 1
+      estimatedCount
     }
-
-    count
   }
 }

@@ -1,14 +1,13 @@
 package com.microsoft.kusto.spark.datasink
 
 import java.util.concurrent.TimeUnit
-
 import com.microsoft.azure.kusto.data.ClientRequestProperties
-import com.microsoft.azure.kusto.ingest.result.{IngestionStatus, OperationStatus}
+import com.microsoft.azure.kusto.ingest.result.{IngestionErrorCode, IngestionStatus, OperationStatus}
 import com.microsoft.azure.storage.StorageException
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.KustoWriter.DelayPeriodBetweenCalls
-import com.microsoft.kusto.spark.utils.CslCommandsGenerator.generateTableAlterMergePolicyCommand
+import com.microsoft.kusto.spark.utils.CslCommandsGenerator.{generateExtentTagsDropByPrefixCommand, generateTableAlterMergePolicyCommand}
 import com.microsoft.kusto.spark.utils.KustoConstants.IngestSkippedTrace
 import org.apache.commons.lang3.exception.ExceptionUtils
 import shaded.parquet.org.codehaus.jackson.map.ObjectMapper
@@ -48,7 +47,7 @@ object FinalizeHelper {
         try {
           if (writeOptions.pollingOnDriver) {
             partitionsResults.value.asScala.foreach(partitionResult => pollOnResult(partitionResult,loggerName, requestId, writeOptions.timeout.toMillis,
-              ingestionInfoString))
+              ingestionInfoString, !writeOptions.ensureNoDupBlobs))
           } else {
             KDSU.logWarn(myName, "IMPORTANT: It's highly recommended to set pollingOnDriver to true on production!\tRead here why https://github.com/Azure/azure-kusto-spark/blob/master/docs/KustoSink.md#supported-options")
             // Specifiying numSlices = 1 so that only one task is created
@@ -56,7 +55,7 @@ object FinalizeHelper {
             resultsRdd.sparkContext.setJobDescription("Polling on ingestion results")
             resultsRdd.foreachPartition((results: Iterator[PartitionResult]) => results.foreach(
               partitionResult => pollOnResult(partitionResult,loggerName, requestId, writeOptions.timeout.toMillis,
-                ingestionInfoString)
+                ingestionInfoString, !writeOptions.ensureNoDupBlobs)
             ))
           }
 
@@ -75,6 +74,13 @@ object FinalizeHelper {
             // several flows started together only one of them would ingest
             KDSU.logInfo(myName, s"Final ingestion step: Moving extents from '$tmpTableName, requestId: ${writeOptions.requestId}," +
               s"$batchIdIfExists")
+
+            // Drop dedup tags
+            if (writeOptions.ensureNoDupBlobs){
+              val pref = KDSU.getDedupTagsPrefix(writeOptions.requestId, batchIdIfExists)
+              kustoClient.executeEngine(coordinates.database, generateExtentTagsDropByPrefixCommand(tmpTableName, pref), crp)
+            }
+
             if (writeOptions.pollingOnDriver) {
               moveOperation(0)
             } else {
@@ -121,7 +127,7 @@ object FinalizeHelper {
     }
   }
 
-  def pollOnResult(partitionResult: PartitionResult, loggerName: String, requestId:String, timeout: Long, ingestionInfoString: String): Unit = {
+  def pollOnResult(partitionResult: PartitionResult, loggerName: String, requestId:String, timeout: Long, ingestionInfoString: String, shouldThrowOnTagsAlreadyExists: Boolean): Unit = {
     var finalRes: Option[IngestionStatus] = None
     KDSU.doWhile[Option[IngestionStatus]](
       () => {
@@ -160,13 +166,34 @@ object FinalizeHelper {
           KDSU.logInfo(loggerName, s"Ingestion to Kusto succeeded. $ingestionInfoString, " +
             s"partition: '${partitionResult.partitionId}', from: '${finalRes.get.ingestionSourcePath}', " +
             s"Operation ${finalRes.get.operationId}")
+        case OperationStatus.Skipped =>
+          // TODO: should we throw ?
+          KDSU.logInfo(loggerName, s"Ingestion to Kusto skipped. $ingestionInfoString, " +
+            s"partition: '${partitionResult.partitionId}', from: '${finalRes.get.ingestionSourcePath}', " +
+            s"Operation ${finalRes.get.operationId}")
         case otherStatus: Any =>
-          throw new RuntimeException(s"Ingestion to Kusto failed with status '$otherStatus'." +
-            s" $ingestionInfoString, partition: '${partitionResult.partitionId}'. Ingestion info: '${
-              new ObjectMapper()
-                .writerWithDefaultPrettyPrinter
-                .writeValueAsString(finalRes.get)
-            }'")
+          // TODO error code should be added to java client
+          if (finalRes.get.errorCodeString != "Skipped_IngestByTagAlreadyExists"){
+              throw new RuntimeException(s"Ingestion to Kusto failed with status '$otherStatus'." +
+                s" $ingestionInfoString, partition: '${partitionResult.partitionId}'. Ingestion info: '${
+                  new ObjectMapper()
+                    .writerWithDefaultPrettyPrinter
+                    .writeValueAsString(finalRes.get)
+                }'")
+          } else if (shouldThrowOnTagsAlreadyExists) {
+            // TODO - think about this logic and other cases that should not throw all (maybe everything that starts with skip? this actualy
+            //  seems like a bug in engine that the operation status is not Skipped)
+            //  (Skipped_IngestByTagAlreadyExists is relevant for dedup flow only as in other cases we cancel the ingestion altogether)
+            throw new RuntimeException(s"Ingestion to Kusto skipped with status '$otherStatus'." +
+              s" $ingestionInfoString, partition: '${partitionResult.partitionId}'. Ingestion info: '${
+                new ObjectMapper()
+                  .writerWithDefaultPrettyPrinter
+                  .writeValueAsString(finalRes.get)
+              }'")
+          }
+          KDSU.logInfo(loggerName, s"Ingestion to Kusto failed. $ingestionInfoString, " +
+            s"partition: '${partitionResult.partitionId}', from: '${finalRes.get.ingestionSourcePath}', " +
+            s"Operation ${finalRes.get.operationId}")
       }
     } else {
       throw new RuntimeException("Failed to poll on ingestion status.")

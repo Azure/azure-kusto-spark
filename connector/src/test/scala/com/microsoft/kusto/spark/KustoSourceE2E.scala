@@ -5,7 +5,8 @@ import java.util.concurrent.atomic.AtomicInteger
 import com.microsoft.azure.kusto.data.{Client, ClientFactory, ClientRequestProperties}
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.kusto.spark.KustoTestUtils.KustoConnectionOptions
-import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode}
+import com.microsoft.kusto.spark.common.KustoDebugOptions
+import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode, SparkIngestionProperties}
 import com.microsoft.kusto.spark.datasource.{KustoSourceOptions, ReadMode, TransientStorageCredentials, TransientStorageParameters}
 import com.microsoft.kusto.spark.sql.extension.SparkExtension._
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
@@ -17,8 +18,10 @@ import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
 import org.scalatest.{BeforeAndAfterAll, FlatSpec}
 
-import java.nio.file.{Files, Paths}
+import java.time.Instant
+import java.time.temporal.ChronoUnit
 import scala.collection.immutable
+import scala.util.{Failure, Success, Try}
 import scala.util.Random
 
 @RunWith(classOf[JUnitRunner])
@@ -41,26 +44,30 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
   if (loggingLevel.isDefined) KDSU.setLoggingLevel(loggingLevel.get)
   override def beforeAll(): Unit = {
     super.beforeAll()
-
     sc = spark.sparkContext
     sqlContext = spark.sqlContext
     val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(KDSU.getEngineUrlFromAliasIfNeeded(kustoConnectionOptions.cluster),
       kustoConnectionOptions.appId, kustoConnectionOptions.appKey, kustoConnectionOptions.authority)
     kustoAdminClient = Some(ClientFactory.createClient(engineKcsb))
-    try {
-      kustoAdminClient.get.execute(kustoConnectionOptions.database, generateAlterIngestionBatchingPolicyCommand(
-        "database",
-        kustoConnectionOptions.database,
-        "@'{\"MaximumBatchingTimeSpan\":\"00:00:10\", \"MaximumNumberOfItems\": 500, \"MaximumRawDataSizeMB\": 1024}'"))
-    } catch {
-      case e: Exception => // Just a nice to have - don't throw
-        KDSU.reportExceptionAndThrow(myName, e,"Updating database batching policy", shouldNotThrow = true)
+
+    Try(kustoAdminClient.get.execute(kustoConnectionOptions.database, generateAlterIngestionBatchingPolicyCommand(
+      "database",
+      kustoConnectionOptions.database,
+      "@'{\"MaximumBatchingTimeSpan\":\"00:00:10\", \"MaximumNumberOfItems\": 500, \"MaximumRawDataSizeMB\": 1024}'"))) match {
+      case Success(_) => KDSU.logDebug(myName,"Ingestion policy applied")
+      case Failure(exception:Throwable) => KDSU.reportExceptionAndThrow(myName, exception,"Updating database batching policy", shouldNotThrow = true)
     }
   }
 
   override def afterAll(): Unit = {
     super.afterAll()
-
+    Try(
+      // Remove table if stopping gracefully
+      kustoAdminClient.get.execute(kustoConnectionOptions.database, generateTableDropCommand(table))
+    ) match {
+        case Success(_) => KDSU.logDebug(myName, "Ingestion policy applied")
+        case Failure(e: Throwable) => KDSU.reportExceptionAndThrow(myName, e, "Dropping test table", shouldNotThrow = true)
+    }
     sc.stop()
   }
 
@@ -98,6 +105,12 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
     KDSU.logInfo("e2e","running KustoConnector");
     val crp = new ClientRequestProperties
     crp.setTimeoutInMilliSec(2000)
+    val ingestByTags = new java.util.ArrayList[String]
+    val tag = "dammyTag"
+    ingestByTags.add(tag)
+    val sp = new SparkIngestionProperties()
+    sp.ingestByTags = ingestByTags
+
     dfOrig.write
       .format("com.microsoft.kusto.spark.datasource")
       .option(KustoSinkOptions.KUSTO_CLUSTER, kustoConnectionOptions.cluster)
@@ -109,8 +122,14 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
       .option(KustoSinkOptions.KUSTO_REQUEST_ID, "04ec0408-3cc3_.asd")
       .option(KustoSinkOptions.KUSTO_CLIENT_REQUEST_PROPERTIES_JSON, crp.toString)
       .option(KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS, SinkTableCreationMode.CreateIfNotExist.toString)
+      .option(KustoDebugOptions.KUSTO_ENSURE_NO_DUPLICATED_BLOBS, true.toString)
+      .option(KustoDebugOptions.KUSTO_DISABLE_FLUSH_IMMEDIATELY, true.toString)
+      .option(KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON, sp.toString)
       .mode(SaveMode.Append)
       .save()
+
+    val instant = Instant.now.plus(1, ChronoUnit.HOURS)
+    kustoAdminClient.get.execute(kustoConnectionOptions.database, generateTableAlterAutoDeletePolicy(table, instant))
 
     val conf: Map[String, String] = Map(
       KustoSinkOptions.KUSTO_AAD_APP_ID -> kustoConnectionOptions.appId,
