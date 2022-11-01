@@ -34,7 +34,10 @@ import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 
 object KustoDataSourceUtils {
-  def generateTempTableName(appName: String, destinationTableName: String, requestId: String,
+  def getDedupTagsPrefix(requestId: String, batchId: String) = s"${requestId}_$batchId"
+
+  def generateTempTableName(appName: String, destinationTableName: String, requestId:String,
+
                             batchIdAsString: String, userTempTableName: Option[String]): String = {
     if (userTempTableName.isDefined) {
       userTempTableName.get
@@ -317,6 +320,9 @@ object KustoDataSourceUtils {
     val autoCleanupTime = new FiniteDuration(parameters.getOrElse(KustoSinkOptions.KUSTO_STAGING_RESOURCE_AUTO_CLEANUP_TIMEOUT, KCONST
       .DefaultCleaningInterval).toInt, TimeUnit.SECONDS)
 
+    val disableFlushImmediately = parameters.getOrElse(KustoDebugOptions.KUSTO_DISABLE_FLUSH_IMMEDIATELY, "false").toBoolean
+    val ensureNoDupBlobs = parameters.getOrElse(KustoDebugOptions.KUSTO_ENSURE_NO_DUPLICATED_BLOBS,"false").toBoolean
+
     val ingestionPropertiesAsJson = parameters.get(KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON)
 
     val sourceParameters = parseSourceParameters(parameters, allowProxy = false)
@@ -336,7 +342,9 @@ object KustoDataSourceUtils {
       minimalExtentsCountForSplitMergePerNode,
       adjustSchema,
       isTransactionalMode,
-      userTempTableName
+      userTempTableName,
+      disableFlushImmediately,
+      ensureNoDupBlobs
     )
 
     if (sourceParameters.kustoCoordinates.table.isEmpty) {

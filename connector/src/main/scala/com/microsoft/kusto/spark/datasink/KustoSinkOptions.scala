@@ -13,7 +13,7 @@ object KustoSinkOptions extends KustoOptions{
   val KUSTO_TABLE: String = newOption("kustoTable")
 
   /** Optional options */
-  // IMPORTANT: If set to false -> polling will not block on worker node and will be executed on a driver pool thread
+  // IMPORTANT: If set to true -> polling will not block on worker node and will be executed on a driver pool thread
   // 'true' is recommended for production.
   val KUSTO_POLLING_ON_DRIVER: String = newOption("pollingOnDriver")
 
@@ -101,5 +101,7 @@ case class WriteOptions(pollingOnDriver:Boolean = false,
                         minimalExtentsCountForSplitMerge: Int = 400,
                         adjustSchema: SchemaAdjustmentMode.SchemaAdjustmentMode = SchemaAdjustmentMode.NoAdjustment,
                         isTransactionalMode: Boolean = true,
-                        userTempTableName: Option[String] = None)
+                        userTempTableName: Option[String] = None,
+                        disableFlushImmediately:Boolean = false,
+                        ensureNoDupBlobs: Boolean = false)
 

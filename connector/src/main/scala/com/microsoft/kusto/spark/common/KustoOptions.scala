@@ -118,4 +118,11 @@ private[kusto] object KustoDebugOptions {
   val KUSTO_MAXIMAL_EXTENTS_COUNT_FOR_SPLIT_MERGE_PER_NODE
   : String = newOption("maximalExtentsCountForSplitMergePerNode")
   val KUSTO_MAX_RETRIES_ON_MOVE_EXTENTS: String = newOption("maxRetriesOnMoveExtents")
+
+  val KUSTO_DISABLE_FLUSH_IMMEDIATELY: String = newOption("disableFlushImmediately")
+
+  // Needed only if your task produce big blobs in high volume
+  val KUSTO_ENSURE_NO_DUPLICATED_BLOBS: String = newOption("ensureNoDuplicatedBlobs")
+
+  val KUSTO_DISABLE_QUEUE_REQUEST_OPTIONS_OVERRIDE: String = newOption("disableQueueRequestOptionsOverride")
 }
