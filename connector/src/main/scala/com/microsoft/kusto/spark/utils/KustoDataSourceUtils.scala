@@ -351,12 +351,6 @@ object KustoDataSourceUtils {
       throw new InvalidParameterException("KUSTO_TABLE parameter is missing. Must provide a destination table name")
     }
 
-    val tempTableLog = if (writeOptions.userTempTableName.isDefined) {
-      s", userTempTableName: ${userTempTableName.get}"
-    } else {
-      ""
-    }
-
     logInfo("parseSinkParameters", s"Parsed write options for sink: {'table': '${
       sourceParameters.
         kustoCoordinates.table
@@ -365,7 +359,8 @@ object KustoDataSourceUtils {
       s", 'timeout': ${writeOptions.timeout}, 'timezone': ${writeOptions.timeZone}, " +
       s"'ingestionProperties': $ingestionPropertiesAsJson, 'requestId': '${sourceParameters.requestId}', 'pollingOnDriver': ${writeOptions.pollingOnDriver}," +
       s"'maxRetriesOnMoveExtents':$maxRetriesOnMoveExtents, 'minimalExtentsCountForSplitMergePerNode':$minimalExtentsCountForSplitMergePerNode, " +
-      s"'adjustSchema': $adjustSchema, 'autoCleanupTime': $autoCleanupTime$tempTableLog}")
+      s"'adjustSchema': $adjustSchema, 'autoCleanupTime': $autoCleanupTime${if (writeOptions.userTempTableName.isDefined) s", userTempTableName: ${userTempTableName.get}"
+      else ""}, disableFlushImmediately: $disableFlushImmediately${if (ensureNoDupBlobs) "ensureNoDupBlobs: true" else ""}")
 
     SinkParameters(writeOptions, sourceParameters)
   }
