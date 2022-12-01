@@ -205,8 +205,8 @@ class ExtendedKustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcs
     var delayPeriodBetweenCalls = DelayPeriodBetweenCalls
     var consecutiveSuccesses = 0
     val useMaterializedViewFlag = shouldUseMaterializedViewFlag(database, targetTable, crp)
-    var firstMoveRetries = writeOptions.maxRetriesOnMoveExtents
-    var secondMovesRetries = 1000
+    val firstMoveRetries = writeOptions.maxRetriesOnMoveExtents
+    val secondMovesRetries = 10
     while (extentsProcessed < totalAmount) {
       var error: Object = null
       var res: Option[KustoResultSetTable] = None
@@ -234,22 +234,10 @@ class ExtendedKustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcs
           if (ex.getResult.isDefined) {
             error = ex.getResult.get.getString("Status")
           }
-//            val failedResult: KustoResultSetTable = ex.getResult.get
-//            if (!failedResult.getBoolean("ShouldRetry")) {
-//              throw ex
-//            }
-
-            failed = true
-//          } else {
-//            throw ex
-//          }
+          failed = true
         case ex: KustoDataExceptionBase =>
-//          if (ex.getCause.isInstanceOf[SocketTimeoutException] || !ex.isPermanent) {
             error = ExceptionUtils.getStackTrace(ex)
             failed = true
-//          } else {
-//            throw ex
-//          }
       }
 
       // When some node fails the move - it will put "failed" as the target extent id
