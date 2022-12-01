@@ -23,7 +23,6 @@ import org.apache.log4j.Level
 import org.apache.spark.sql.types.StructType
 import org.json.{JSONArray, JSONObject}
 
-import java.net.SocketTimeoutException
 import java.time.Instant
 import java.util.StringJoiner
 import scala.collection.JavaConverters._
@@ -197,16 +196,16 @@ class ExtendedKustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcs
     }
   }
 
-  def moveExtentsWithRetries(batchSize: Int, totalAmount: Int, database: String, tmpTableName: String, targetTable: String,
+  def moveExtentsWithRetries(batchSize: Option[Int], totalAmount: Int, database: String, tmpTableName: String, targetTable: String,
                              crp: ClientRequestProperties, writeOptions: WriteOptions): Unit = {
     var extentsProcessed = 0
     var retry = 0
-    var curBatchSize = batchSize
+    var curBatchSize = batchSize.getOrElse(0)
     var delayPeriodBetweenCalls = DelayPeriodBetweenCalls
     var consecutiveSuccesses = 0
     val useMaterializedViewFlag = shouldUseMaterializedViewFlag(database, targetTable, crp)
     val firstMoveRetries = writeOptions.maxRetriesOnMoveExtents
-    val secondMovesRetries = 10
+    val secondMovesRetries = Math.max(10, writeOptions.maxRetriesOnMoveExtents)
     while (extentsProcessed < totalAmount) {
       var error: Object = null
       var res: Option[KustoResultSetTable] = None
@@ -214,12 +213,13 @@ class ExtendedKustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcs
       // Execute move batch and keep any transient error for handling
       try {
         val operation = executeEngine(database, generateTableMoveExtentsAsyncCommand(tmpTableName,
-          targetTable, curBatchSize, useMaterializedViewFlag), crp).getPrimaryResults
+          targetTable, if (batchSize.isEmpty) None else Some(curBatchSize), useMaterializedViewFlag), crp).getPrimaryResults
         val operationResult = KDSU.verifyAsyncCommandCompletion(engineClient, database, operation, samplePeriod =
           KustoConstants
             .DefaultPeriodicSamplePeriod, writeOptions.timeout, s"move extents to destination table '$targetTable' ",
           myName,
           writeOptions.requestId)
+        // TODO: use count over the show operations
         res = Some(executeEngine(database, generateShowOperationDetails(operationResult.get.getString(0)), crp)
           .getPrimaryResults)
         if (res.get.count() == 0) {
@@ -266,12 +266,14 @@ class ExtendedKustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcs
       } else {
         consecutiveSuccesses += 1
         if (consecutiveSuccesses > 2) {
-          curBatchSize = Math.min(curBatchSize * 2, batchSize)
+          // After curBatchSize size has decreased - we can lower it again according to original batch size
+          curBatchSize = Math.min(curBatchSize * 2, batchSize.getOrElse(curBatchSize * 2))
         }
 
         extentsProcessed += res.get.count()
+        val batchSizeString = if (batchSize.isDefined) s"maxBatch: $curBatchSize," else ""
         KDSU.logDebug(myName, s"Moving extents batch succeeded at retry: $retry," +
-          s" maxBatch: $curBatchSize, consecutive successfull batches: $consecutiveSuccesses, successes this " +
+          s" $batchSizeString consecutive successfull batches: $consecutiveSuccesses, successes this " +
           s"batch: ${res.get.count()}," +
           s" extentsProcessed: $extentsProcessed, backoff: $delayPeriodBetweenCalls, total:$totalAmount")
 
@@ -290,10 +292,10 @@ class ExtendedKustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcs
       val nodeCountQuery = executeEngine(database, generateNodesCountCommand(), crp).getPrimaryResults
       nodeCountQuery.next()
       val nodeCount = nodeCountQuery.getInt(0)
-      moveExtentsWithRetries(nodeCount * writeOptions.minimalExtentsCountForSplitMerge, extentsCount, database,
+      moveExtentsWithRetries(Some(nodeCount * writeOptions.minimalExtentsCountForSplitMerge), extentsCount, database,
         tmpTableName, targetTable, crp, writeOptions)
     } else {
-      moveExtentsWithRetries(extentsCount, extentsCount, database,
+      moveExtentsWithRetries(None, extentsCount, database,
         tmpTableName, targetTable, crp, writeOptions)
     }
   }
