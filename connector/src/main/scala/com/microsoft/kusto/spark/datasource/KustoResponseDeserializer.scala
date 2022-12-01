@@ -71,7 +71,6 @@ class KustoResponseDeserializer(val kustoResult: KustoResultSetTable) {
     kustoResult.getData.asScala.foreach(row => {
       val genericRow = row.toArray().zipWithIndex.map(
         column => {
-          println(s"------------->>>>>>>>>> column : ${column._1} : ${column._2}")
           if (column._1 == null) null else valueTransformers(column._2)(column._1)
         })
       value.add(new GenericRowWithSchema(genericRow, schema.sparkSchema))
