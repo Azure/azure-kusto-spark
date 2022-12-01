@@ -365,7 +365,7 @@ object KustoDataSourceUtils {
     SinkParameters(writeOptions, sourceParameters)
   }
 
-  def retryFunction[T](func: () => T, retryConfig: RetryConfig, retryName: String): T = {
+  def retryApplyFunction[T](func: () => T, retryConfig: RetryConfig, retryName: String): T = {
     val retry = Retry.of(retryName, retryConfig)
     val f: CheckedFunction0[T] = new CheckedFunction0[T]() {
       override def apply(): T = func()

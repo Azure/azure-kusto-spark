@@ -308,7 +308,7 @@ object KustoWriter {
           props.setFlushImmediately(true)
         }
         // write the data here
-        val partitionsResult = KDSU.retryFunction(() => {
+        val partitionsResult = KDSU.retryApplyFunction(() => {
           Try(
             ingestClient.ingestFromBlob(new BlobSourceInfo(blobUri + sas, size, UUID.randomUUID()), props)
           ) match {
