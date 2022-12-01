@@ -8,7 +8,7 @@ import com.microsoft.kusto.spark.utils.DataTypeMapping
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.types.{StructType, _}
-import org.joda.time.DateTime
+import java.time.Instant
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -31,7 +31,7 @@ class KustoResponseDeserializer(val kustoResult: KustoResultSetTable) {
     valueType.toLowerCase() match {
       case "string" => value: Any => value
       case "int64" => value: Any => value
-      case "datetime" => value: Any => new Timestamp(new DateTime(value).getMillis)
+      case "datetime" => value: Any => Timestamp.from(Instant.parse(value.toString))
       case "timespan" => value: Any => value
       case "sbyte" => value: Any => value
       case "long" => value: Any => value match {
@@ -71,6 +71,7 @@ class KustoResponseDeserializer(val kustoResult: KustoResultSetTable) {
     kustoResult.getData.asScala.foreach(row => {
       val genericRow = row.toArray().zipWithIndex.map(
         column => {
+          println(s"------------->>>>>>>>>> column : ${column._1} : ${column._2}")
           if (column._1 == null) null else valueTransformers(column._2)(column._1)
         })
       value.add(new GenericRowWithSchema(genericRow, schema.sparkSchema))
