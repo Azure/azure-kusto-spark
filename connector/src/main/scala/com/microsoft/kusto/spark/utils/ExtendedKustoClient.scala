@@ -205,6 +205,8 @@ class ExtendedKustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcs
     var delayPeriodBetweenCalls = DelayPeriodBetweenCalls
     var consecutiveSuccesses = 0
     val useMaterializedViewFlag = shouldUseMaterializedViewFlag(database, targetTable, crp)
+    var firstMoveRetries = writeOptions.maxRetriesOnMoveExtents
+    var secondMovesRetries = 1000
     while (extentsProcessed < totalAmount) {
       var error: Object = null
       var res: Option[KustoResultSetTable] = None
@@ -230,23 +232,24 @@ class ExtendedKustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcs
       } catch {
         case ex: FailedOperationException =>
           if (ex.getResult.isDefined) {
-            val failedResult: KustoResultSetTable = ex.getResult.get
-            if (!failedResult.getBoolean("ShouldRetry")) {
-              throw ex
-            }
-
-            error = failedResult.getString("Status")
-            failed = true
-          } else {
-            throw ex
+            error = ex.getResult.get.getString("Status")
           }
+//            val failedResult: KustoResultSetTable = ex.getResult.get
+//            if (!failedResult.getBoolean("ShouldRetry")) {
+//              throw ex
+//            }
+
+            failed = true
+//          } else {
+//            throw ex
+//          }
         case ex: KustoDataExceptionBase =>
-          if (ex.getCause.isInstanceOf[SocketTimeoutException] || !ex.isPermanent) {
+//          if (ex.getCause.isInstanceOf[SocketTimeoutException] || !ex.isPermanent) {
             error = ExceptionUtils.getStackTrace(ex)
             failed = true
-          } else {
-            throw ex
-          }
+//          } else {
+//            throw ex
+//          }
       }
 
       // When some node fails the move - it will put "failed" as the target extent id
@@ -259,9 +262,13 @@ class ExtendedKustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcs
       if (failed) {
         consecutiveSuccesses = 0
         retry += 1
-        if (retry > writeOptions.maxRetriesOnMoveExtents) {
-          throw RetriesExhaustedException(s"Failed to move extents after $retry tries")
-        }
+        val extentsProcessedErrorString = if (extentsProcessed > 0) s"and ${extentsProcessed} were moved" else ""
+        if (extentsProcessed > 0) {
+          // This is not the first move command
+          if (retry > secondMovesRetries)
+            throw RetriesExhaustedException(s"Failed to move extents after $retry tries$extentsProcessedErrorString.")
+        } else if (retry > firstMoveRetries)
+            throw RetriesExhaustedException(s"Failed to move extents after $retry tries$extentsProcessedErrorString.")
 
         // Lower batch size, increase delay
         val params = handleRetryFail(curBatchSize, retry, delayPeriodBetweenCalls, targetTable, error)
