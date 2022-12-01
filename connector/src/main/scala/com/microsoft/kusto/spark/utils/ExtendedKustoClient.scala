@@ -230,6 +230,9 @@ class ExtendedKustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcs
           }
         }
       } catch {
+        // We don't check for the shouldRetry or permanent errors because we know
+        // The issue is not with syntax or non-existing tables, it can only be transient
+        // issues that might be solved in retries even if engine reports them as permanent
         case ex: FailedOperationException =>
           if (ex.getResult.isDefined) {
             error = ex.getResult.get.getString("Status")
