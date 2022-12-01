@@ -299,7 +299,7 @@ object KustoDataSourceUtils {
       case _: NoSuchElementException => throw new InvalidParameterException(s"No such WriteMode option: '${writeModeParam.get}'")
     }
     val userTempTableName = parameters.get(KustoSinkOptions.KUSTO_TEMP_TABLE_NAME)
-    if (userTempTableName.isDefined && tableCreation == SinkTableCreationMode.CreateIfNotExist || !isTransactionalMode) {
+    if (userTempTableName.isDefined && (tableCreation == SinkTableCreationMode.CreateIfNotExist || !isTransactionalMode)) {
       throw new InvalidParameterException("tempTableName can't be used with CreateIfNotExist or Queued write mode.")
     }
     isAsync = parameters.getOrElse(KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC, "false").trim.toBoolean
@@ -365,7 +365,7 @@ object KustoDataSourceUtils {
     SinkParameters(writeOptions, sourceParameters)
   }
 
-  def retryFunction[T](func: () => T, retryConfig: RetryConfig, retryName: String): T = {
+  def retryApplyFunction[T](func: () => T, retryConfig: RetryConfig, retryName: String): T = {
     val retry = Retry.of(retryName, retryConfig)
     val f: CheckedFunction0[T] = new CheckedFunction0[T]() {
       override def apply(): T = func()

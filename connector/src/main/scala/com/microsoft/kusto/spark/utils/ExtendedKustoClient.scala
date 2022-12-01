@@ -372,12 +372,12 @@ class ExtendedKustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcs
   }
 
   def executeEngine(database: String, command: String, crp: ClientRequestProperties, retryConfig: Option[RetryConfig] = None): KustoOperationResult = {
-    KDSU.retryFunction(() => engineClient.execute(database, command, crp), retryConfig.getOrElse(this.retryConfig),
+    KDSU.retryApplyFunction(() => engineClient.execute(database, command, crp), retryConfig.getOrElse(this.retryConfig),
       "Execute engine command with retries")
   }
 
   def executeDM(command: String, crp: ClientRequestProperties, retryConfig: Option[RetryConfig] = None): KustoOperationResult = {
-    KDSU.retryFunction(() => dmClient.execute(ExtendedKustoClient.DefaultDb, command, crp), retryConfig.getOrElse(this.retryConfig),
+    KDSU.retryApplyFunction(() => dmClient.execute(ExtendedKustoClient.DefaultDb, command, crp), retryConfig.getOrElse(this.retryConfig),
       "Execute DM command with retries")
   }
 }
