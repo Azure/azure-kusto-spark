@@ -307,16 +307,12 @@ object KustoWriter {
         if (!props.getFlushImmediately && flushImmediately) {
           props.setFlushImmediately(true)
         }
-
         // write the data here
         if (parameters.writeOptions.isTransactionalMode) {
-          val blobUuid = UUID.randomUUID()
-          val blobPath = blobUri + sas
-          val blobSourceInfo = new BlobSourceInfo(blobPath, size, blobUuid)
           partitionsResults.add(
             PartitionResult(KDSU.retryFunction(() => {
               Try(
-                ingestClient.ingestFromBlob(blobSourceInfo, props)
+              ingestClient.ingestFromBlob(new BlobSourceInfo(blobUri + sas, size, UUID.randomUUID()), props)
               ) match {
                 case Success(x) => x
                 case Failure(e: Throwable) =>
@@ -327,7 +323,7 @@ object KustoWriter {
         }, this.retryConfig, "Ingest into Kusto"),
               partitionId))
           KDSU.logInfo(myName, s"Queued blob for ingestion in partition $partitionIdString " +
-            s"for requestId: '${parameters.writeOptions.requestId}, blobUuid: $blobUuid")
+            s"for requestId: '${parameters.writeOptions.requestId}")
         }
     }
     val kustoClient = KustoClientCache.getClient(parameters.coordinates.clusterUrl, parameters.authentication,

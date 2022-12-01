@@ -89,12 +89,13 @@ private[kusto] object CslCommandsGenerator {
        |  distinct ExtentId"""
   }
 
-  def generateTableMoveExtentsAsyncCommand(sourceTableName: String, destinationTableName: String, batchSize: Int,
+  def generateTableMoveExtentsAsyncCommand(sourceTableName: String, destinationTableName: String, batchSize: Option[Int],
                                            isDestinationTableMaterializedViewSource: Boolean = false): String
   = {
+    val withClause = if (batchSize.isDefined) s"""with(extentsShowFilteringRuntimePolicy='{"MaximumResultsCount":${batchSize.get}}')""" else ""
     val setNewIngestionTime: String = if (isDestinationTableMaterializedViewSource) "with(SetNewIngestionTime=true)" else ""
     s""".move async extents to table $destinationTableName $setNewIngestionTime <|
-       .show table $sourceTableName extents with(extentsShowFilteringRuntimePolicy='{"MaximumResultsCount":$batchSize}');
+       .show table $sourceTableName extents $withClause;
        """
   }
 
