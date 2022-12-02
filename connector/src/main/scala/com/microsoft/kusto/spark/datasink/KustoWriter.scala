@@ -307,28 +307,24 @@ object KustoWriter {
         if (!props.getFlushImmediately && flushImmediately) {
           props.setFlushImmediately(true)
         }
-
         // write the data here
+        val partitionsResult = KDSU.retryApplyFunction(() => {
+          Try(
+            ingestClient.ingestFromBlob(new BlobSourceInfo(blobUri + sas, size, UUID.randomUUID()), props)
+          ) match {
+            case Success(x) => x
+            case Failure(e: Throwable) =>
+              KDSU.reportExceptionAndThrow(myName, e, "Queueing blob for ingestion in partition " +
+                s"$partitionIdString for requestId: '${parameters.writeOptions.requestId}")
+              null
+          }
+        }, this.retryConfig, "Ingest into Kusto")
         if (parameters.writeOptions.isTransactionalMode) {
-          val blobUuid = UUID.randomUUID()
-          val blobPath = blobUri + sas
-          val blobSourceInfo = new BlobSourceInfo(blobPath, size, blobUuid)
           partitionsResults.add(
-            PartitionResult(KDSU.retryFunction(() => {
-              Try(
-                ingestClient.ingestFromBlob(blobSourceInfo, props)
-              ) match {
-                case Success(x) => x
-                case Failure(e: Throwable) =>
-                  KDSU.reportExceptionAndThrow(myName, e, "Queueing blob for ingestion in partition " +
-                    s"$partitionIdString for requestId: '${parameters.writeOptions.requestId}")
-                  null
-              }
-        }, this.retryConfig, "Ingest into Kusto"),
-              partitionId))
-          KDSU.logInfo(myName, s"Queued blob for ingestion in partition $partitionIdString " +
-            s"for requestId: '${parameters.writeOptions.requestId}, blobUuid: $blobUuid")
+            PartitionResult(partitionsResult, partitionId))
         }
+      KDSU.logInfo(myName, s"Queued blob for ingestion in partition $partitionIdString " +
+        s"for requestId: '${parameters.writeOptions.requestId}")
     }
     val kustoClient = KustoClientCache.getClient(parameters.coordinates.clusterUrl, parameters.authentication,
       parameters.coordinates.ingestionUrl, parameters.coordinates.clusterAlias)
