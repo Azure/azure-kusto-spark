@@ -43,7 +43,11 @@ class KustoResponseDeserializer(val kustoResult: KustoResultSetTable) {
       case "int" => value: Any => value
       case "int32" => value: Any => value
       case "bool" => value: Any => value
-      case "real" => value: Any => value
+      case "real" => {
+        case v: Int => v.toDouble
+        case v: Long => v.toDouble
+        case v => v.asInstanceOf[Double]
+      }
       case _ => value: Any => value.toString
       }
   }
