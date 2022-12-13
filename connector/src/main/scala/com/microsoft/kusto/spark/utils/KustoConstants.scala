@@ -25,8 +25,8 @@ object KustoConstants {
   val DefaultBatchingLimit: Int = 300
   val DefaultExtentsCountForSplitMergePerNode: Int = 400
   val DefaultMaxRetriesOnMoveExtents: Int = 10
-  val DefaultExecutionQueueing: Int = TimeUnit.SECONDS.toMillis(15).toInt
-  val DefaultTimeoutQueueing: Int = TimeUnit.SECONDS.toMillis(5).toInt
+  val DefaultExecutionQueueing: Int = TimeUnit.SECONDS.toMillis(60).toInt
+  val DefaultTimeoutQueueing: Int = TimeUnit.SECONDS.toMillis(40).toInt
   val MaxIngestRetryAttempts = 2
   val MaxCommandsRetryAttempts = 4
   val DefaultMaximumIngestionTime: FiniteDuration = FiniteDuration.apply(
