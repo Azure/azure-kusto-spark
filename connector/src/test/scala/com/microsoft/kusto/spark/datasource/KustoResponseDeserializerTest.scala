@@ -2,12 +2,14 @@ package com.microsoft.kusto.spark.datasource
 
 import com.microsoft.azure.kusto.data.KustoOperationResult
 import org.scalatest.FlatSpec
+import org.junit.runner.RunWith
+import org.scalatest.junit.JUnitRunner
 
 import java.sql.Timestamp
 import scala.collection.JavaConverters.collectionAsScalaIterableConverter
 import scala.io.Source
 
-
+@RunWith(classOf[JUnitRunner])
 class KustoResponseDeserializerTest extends FlatSpec {
 
   "Data types should get resolved and rows" should "get extracted - v1 queries" in {
