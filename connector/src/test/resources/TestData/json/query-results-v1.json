@@ -1,0 +1,272 @@
+{
+  "Tables": [
+    {
+      "TableName": "Table_0",
+      "Columns": [
+        {
+          "ColumnName": "vnum",
+          "DataType": "Int32",
+          "ColumnType": "int"
+        },
+        {
+          "ColumnName": "vdec",
+          "DataType": "SqlDecimal",
+          "ColumnType": "decimal"
+        },
+        {
+          "ColumnName": "vdate",
+          "DataType": "DateTime",
+          "ColumnType": "datetime"
+        },
+        {
+          "ColumnName": "vspan",
+          "DataType": "TimeSpan",
+          "ColumnType": "timespan"
+        },
+        {
+          "ColumnName": "vobj",
+          "DataType": "Object",
+          "ColumnType": "dynamic"
+        },
+        {
+          "ColumnName": "vb",
+          "DataType": "SByte",
+          "ColumnType": "bool"
+        },
+        {
+          "ColumnName": "vreal",
+          "DataType": "Double",
+          "ColumnType": "real"
+        },
+        {
+          "ColumnName": "vstr",
+          "DataType": "String",
+          "ColumnType": "string"
+        },
+        {
+          "ColumnName": "vlong",
+          "DataType": "Int64",
+          "ColumnType": "long"
+        },
+        {
+          "ColumnName": "vguid",
+          "DataType": "Guid",
+          "ColumnType": "guid"
+        }
+      ],
+      "Rows": [
+        [
+          0,
+          "2",
+          "2021-03-04T14:05:01.3109965Z",
+          null,
+          "'{\"key\": \"value\"}'",
+          false,
+          0.1111111111,
+          "'zxcv'",
+          9223372036854775806,
+          null
+        ],
+        [
+          1,
+          "2.00000000000001",
+          "2020-03-04T14:05:01.3109965Z",
+          "01:23:45.6789000",
+          {
+            "key": "value"
+          },
+          true,
+          1111111111.1111111111,
+          "asdf",
+          9223372036854775807,
+          "74be27de-1e4e-49d9-b579-fe0b331d3642"
+        ],
+        [
+          2,
+          "2",
+          "2020-03-01T00:05:01.4109965Z",
+          null,
+          "'{\"key\": \"value\"}'",
+          false,
+          1,
+          "'zxcv'",
+          9223372036854775806,
+          null
+        ],
+        [
+          3,
+          "2",
+          "2021-04-04T14:05:01.3109965Z",
+          null,
+          "'{\"key\": \"value\"}'",
+          false,
+          9223372036854775806,
+          "'zxcv'",
+          9223372036854775806,
+          null
+        ],
+        [
+          4,
+          "2",
+          "2022-03-04T14:05:01.3109965Z",
+          null,
+          "'{\"key\": \"value\"}'",
+          false,
+          9223372036854775806,
+          "'zxcv'",
+          9223372036854775806,
+          null
+        ]
+      ]
+    },
+    {
+      "TableName": "Table_1",
+      "Columns": [
+        {
+          "ColumnName": "Value",
+          "DataType": "String",
+          "ColumnType": "string"
+        }
+      ],
+      "Rows": [
+        [
+          "{\"Visualization\":null,\"Title\":null,\"XColumn\":null,\"Series\":null,\"YColumns\":null,\"AnomalyColumns\":null,\"XTitle\":null,\"YTitle\":null,\"XAxis\":null,\"YAxis\":null,\"Legend\":null,\"YSplit\":null,\"Accumulate\":false,\"IsQuerySorted\":false,\"Kind\":null,\"Ymin\":\"NaN\",\"Ymax\":\"NaN\",\"Xmin\":null,\"Xmax\":null}"
+        ]
+      ]
+    },
+    {
+      "TableName": "Table_2",
+      "Columns": [
+        {
+          "ColumnName": "Timestamp",
+          "DataType": "DateTime",
+          "ColumnType": "datetime"
+        },
+        {
+          "ColumnName": "Severity",
+          "DataType": "Int32",
+          "ColumnType": "int"
+        },
+        {
+          "ColumnName": "SeverityName",
+          "DataType": "String",
+          "ColumnType": "string"
+        },
+        {
+          "ColumnName": "StatusCode",
+          "DataType": "Int32",
+          "ColumnType": "int"
+        },
+        {
+          "ColumnName": "StatusDescription",
+          "DataType": "String",
+          "ColumnType": "string"
+        },
+        {
+          "ColumnName": "Count",
+          "DataType": "Int32",
+          "ColumnType": "int"
+        },
+        {
+          "ColumnName": "RequestId",
+          "DataType": "Guid",
+          "ColumnType": "guid"
+        },
+        {
+          "ColumnName": "ActivityId",
+          "DataType": "Guid",
+          "ColumnType": "guid"
+        },
+        {
+          "ColumnName": "SubActivityId",
+          "DataType": "Guid",
+          "ColumnType": "guid"
+        },
+        {
+          "ColumnName": "ClientActivityId",
+          "DataType": "String",
+          "ColumnType": "string"
+        }
+      ],
+      "Rows": [
+        [
+          "2022-12-14T07:04:52.9148512Z",
+          4,
+          "Info",
+          0,
+          "Query completed successfully",
+          1,
+          "2414f3e5-9c7d-4a0e-ba7d-3cbba616821a",
+          "2414f3e5-9c7d-4a0e-ba7d-3cbba616821a",
+          "63fbf587-7df7-4c4a-8a17-7642b13938e3",
+          "unspecified;5ef17816-08e1-49d4-ae17-4c3c73863e75"
+        ],
+        [
+          "2022-12-14T07:04:52.9148512Z",
+          6,
+          "Stats",
+          0,
+          "{\"ExecutionTime\":0.0156089,\"resource_usage\":{\"cache\":{\"memory\":{\"hits\":0,\"misses\":0,\"total\":0},\"disk\":{\"hits\":0,\"misses\":0,\"total\":0},\"shards\":{\"hot\":{\"hitbytes\":2089,\"missbytes\":0,\"retrievebytes\":0},\"cold\":{\"hitbytes\":0,\"missbytes\":0,\"retrievebytes\":0},\"bypassbytes\":0}},\"cpu\":{\"user\":\"00:00:00\",\"kernel\":\"00:00:00\",\"total cpu\":\"00:00:00\"},\"memory\":{\"peak_per_node\":2624400},\"network\":{\"inter_cluster_total_bytes\":1115,\"cross_cluster_total_bytes\":0}},\"input_dataset_statistics\":{\"extents\":{\"total\":2,\"scanned\":2,\"scanned_min_datetime\":\"2022-11-15T12:53:51.6452197Z\",\"scanned_max_datetime\":\"2022-12-09T03:41:37.3226553Z\"},\"rows\":{\"total\":2,\"scanned\":100},\"rowstores\":{\"scanned_rows\":0,\"scanned_values_size\":0},\"shards\":{\"queries_generic\":2,\"queries_specialized\":0}},\"dataset_statistics\":[{\"table_row_count\":2,\"table_size\":213}],\"cross_cluster_resource_usage\":{}}",
+          1,
+          "2414f3e5-9c7d-4a0e-ba7d-3cbba616821a",
+          "2414f3e5-9c7d-4a0e-ba7d-3cbba616821a",
+          "63fbf587-7df7-4c4a-8a17-7642b13938e3",
+          "unspecified;5ef17816-08e1-49d4-ae17-4c3c73863e75"
+        ]
+      ]
+    },
+    {
+      "TableName": "Table_3",
+      "Columns": [
+        {
+          "ColumnName": "Ordinal",
+          "DataType": "Int64",
+          "ColumnType": "long"
+        },
+        {
+          "ColumnName": "Kind",
+          "DataType": "String",
+          "ColumnType": "string"
+        },
+        {
+          "ColumnName": "Name",
+          "DataType": "String",
+          "ColumnType": "string"
+        },
+        {
+          "ColumnName": "Id",
+          "DataType": "String",
+          "ColumnType": "string"
+        },
+        {
+          "ColumnName": "PrettyName",
+          "DataType": "String",
+          "ColumnType": "string"
+        }
+      ],
+      "Rows": [
+        [
+          0,
+          "QueryResult",
+          "PrimaryResult",
+          "0eee0899-b744-49d9-96f6-464332a02e6b",
+          ""
+        ],
+        [
+          1,
+          "QueryProperties",
+          "@ExtendedProperties",
+          "382aae91-7828-4064-b262-491aad3e6c23",
+          ""
+        ],
+        [
+          2,
+          "QueryStatus",
+          "QueryStatus",
+          "00000000-0000-0000-0000-000000000000",
+          ""
+        ]
+      ]
+    }
+  ]
+}
