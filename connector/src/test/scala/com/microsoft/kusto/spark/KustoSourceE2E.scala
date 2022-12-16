@@ -20,6 +20,8 @@ import org.scalatest.{BeforeAndAfterAll, FlatSpec}
 
 import java.time.Instant
 import java.time.temporal.ChronoUnit
+import java.util
+import scala.collection.JavaConverters.asScalaBufferConverter
 import scala.collection.immutable
 import scala.util.{Failure, Success, Try}
 import scala.util.Random
@@ -105,11 +107,11 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
     KDSU.logInfo("e2e","running KustoConnector");
     val crp = new ClientRequestProperties
     crp.setTimeoutInMilliSec(2000)
-    val ingestByTags = new java.util.ArrayList[String]
-    val tag = "dammyTag"
+    val ingestByTags = new util.ArrayList[String]
+    val tag = "dummyTag"
     ingestByTags.add(tag)
     val sp = new SparkIngestionProperties()
-    sp.ingestByTags = ingestByTags
+    //sp.ingestByTags = ingestByTags.asScala.toList
 
     dfOrig.write
       .format("com.microsoft.kusto.spark.datasource")
@@ -124,7 +126,7 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
       .option(KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS, SinkTableCreationMode.CreateIfNotExist.toString)
       .option(KustoDebugOptions.KUSTO_ENSURE_NO_DUPLICATED_BLOBS, true.toString)
       .option(KustoDebugOptions.KUSTO_DISABLE_FLUSH_IMMEDIATELY, true.toString)
-      .option(KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON, sp.toString)
+      .option(KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON, SparkIngestionProperties.ingestionPropertiesToString(sp))
       .mode(SaveMode.Append)
       .save()
 

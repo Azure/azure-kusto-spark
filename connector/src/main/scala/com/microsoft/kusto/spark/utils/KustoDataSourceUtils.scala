@@ -4,14 +4,13 @@ import com.microsoft.azure.kusto.data.exceptions.{DataClientException, DataServi
 import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties, KustoResultSetTable}
 import com.microsoft.kusto.spark.authentication._
 import com.microsoft.kusto.spark.common.{KustoCoordinates, KustoDebugOptions}
-import com.microsoft.kusto.spark.datasink.KustoWriter.TempIngestionTablePrefix
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
 import com.microsoft.kusto.spark.datasink._
 import com.microsoft.kusto.spark.datasource.ReadMode.ReadMode
 import com.microsoft.kusto.spark.datasource._
 import com.microsoft.kusto.spark.exceptions.{FailedOperationException, TimeoutAwaitingPendingOperationException}
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
-import com.microsoft.kusto.spark.utils.KustoConstants.{DefaultBatchingLimit, DefaultExtentsCountForSplitMergePerNode, DefaultMaxRetriesOnMoveExtents}
+import com.microsoft.kusto.spark.utils.KustoConstants.{DefaultBatchingLimit, DefaultExtentsCountForSplitMergePerNode, DefaultMaxRetriesOnMoveExtents, TempIngestionTablePrefix}
 import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
 import io.github.resilience4j.retry.{Retry, RetryConfig}
 import io.vavr.CheckedFunction0

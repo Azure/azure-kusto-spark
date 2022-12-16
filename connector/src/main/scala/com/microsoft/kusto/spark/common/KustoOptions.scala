@@ -68,7 +68,7 @@ trait KustoOptions {
   val KUSTO_REQUEST_ID: String = newOption("requestId")
 }
 
-case class KustoCoordinates(clusterUrl: String,
+final case class KustoCoordinates(clusterUrl: String,
                             clusterAlias: String,
                             database: String,
                             table: Option[String] = None,

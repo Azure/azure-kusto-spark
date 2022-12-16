@@ -38,15 +38,14 @@ class ExtendedKustoClientTests extends FlatSpec with Matchers {
     val emptyTags = new util.ArrayList[String]
     val stubbedClient = new ExtendedKustoClientStub(null, null, "", null)
     stubbedClient.tagsToReturn = emptyTags
-    val props = new SparkIngestionProperties
+    val props = new SparkIngestionProperties(ingestIfNotExists = List("otherTag") )
     val shouldIngestWhenNoTags = stubbedClient.shouldIngestData(coords,
-      Some(props.toString), tableExists = true, null)
+      Some(SparkIngestionProperties.ingestionPropertiesToString(props)), tableExists = true, null)
     shouldIngestWhenNoTags shouldEqual true
 
     val tags = new util.ArrayList[String]
     tags.add("tag")
     stubbedClient.tagsToReturn = tags
-    props.ingestIfNotExists = new util.ArrayList[String](){{add("otherTag")}}
     val shouldIngestWhenNoOverlap = stubbedClient.shouldIngestData(coords,
       Some(props.toString), tableExists = true, null)
     shouldIngestWhenNoOverlap shouldEqual true

@@ -118,8 +118,7 @@ class KustoSinkSchemaAdjustmentE2E extends FlatSpec
 
       val testTable = KustoTestUtils.createTestTable(kustoConnectionOptions, "", targetSchema)
       KustoTestUtils.ingest(kustoConnectionOptions, df, testTable, schemaAdjustmentMode,
-        new SparkIngestionProperties(csvMappingNameReference = "testError"))
-
+        new SparkIngestionProperties(maybeParquetMapping = Some("testError")))
     }
     assert(thrown.getMessage.contains("are not compatible"))
   }

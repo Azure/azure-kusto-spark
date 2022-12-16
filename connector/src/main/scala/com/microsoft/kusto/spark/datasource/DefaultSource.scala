@@ -5,12 +5,12 @@ import java.util.concurrent.TimeUnit
 import com.microsoft.azure.kusto.data.ClientRequestProperties
 import com.microsoft.kusto.spark.authentication.{KeyVaultAuthentication, KustoAuthentication}
 import com.microsoft.kusto.spark.common.KustoCoordinates
-import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, KustoWriter}
-import com.microsoft.kusto.spark.utils.{KeyVaultUtils, KustoQueryUtils, KustoConstants => KCONST, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.datasink.{KustoParquetWriter, KustoSinkOptions}
+import com.microsoft.kusto.spark.utils.{KeyVaultUtils, KustoConstants => KCONST, KustoDataSourceUtils => KDSU, KustoQueryUtils}
 import com.microsoft.kusto.spark.utils.KustoDataSourceUtils.SourceParameters
 import org.apache.commons.lang3.StringUtils
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister, RelationProvider}
-import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode}
+import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode, SparkSession}
 
 import scala.concurrent.duration.FiniteDuration
 
@@ -40,7 +40,7 @@ class DefaultSource extends CreatableRelationProvider
       authenticationParameters = Some(KDSU.mergeKeyVaultAndOptionsAuthentication(paramsFromKeyVault, authenticationParameters))
     }
 
-    KustoWriter.write(
+    new KustoParquetWriter().write(
       None,
       data,
       kustoCoordinates,
@@ -72,7 +72,7 @@ class DefaultSource extends CreatableRelationProvider
     val readOptions = KDSU.getReadParameters(parameters, sqlContext)
     if (authenticationParameters.isEmpty) {
       // Parse parameters if haven't got parsed before
-      val sourceParameters = KDSU.parseSourceParameters(parameters, true)
+      val sourceParameters = KDSU.parseSourceParameters(parameters, allowProxy = true)
       initCommonParams(sourceParameters)
     }
 

@@ -71,12 +71,7 @@ class KustoSinkStreamingE2E extends FlatSpec with BeforeAndAfterAll {
       .trigger(Trigger.Once)
     consoleQ.start()
 
-    val sp = new SparkIngestionProperties
-    val tags = new java.util.ArrayList[String]()
-    tags.add("tagytag")
-    sp.ingestByTags = tags
-    sp.ingestIfNotExists = tags
-
+    val sp = new SparkIngestionProperties(ingestByTags = List("tagytag"),ingestIfNotExists= List("tagytag"))
     spark.conf.set("spark.sql.streaming.checkpointLocation", "target/temp/checkpoint")
 
     val kustoQ = csvDf
@@ -97,7 +92,8 @@ class KustoSinkStreamingE2E extends FlatSpec with BeforeAndAfterAll {
 
     // Sleep util table is expected to be created
     Thread.sleep(sleepTimeTillTableCreate)
-    KustoTestUtils.validateResultsAndCleanup(kustoAdminClient, table, database, expectedNumberOfRows, timeoutMs - sleepTimeTillTableCreate, tableCleanupPrefix = prefix)
+    KustoTestUtils.validateResultsAndCleanup(kustoAdminClient, table, database, expectedNumberOfRows,
+      timeoutMs - sleepTimeTillTableCreate, tableCleanupPrefix = prefix)
   }
 
   "KustoStreamingSinkAsync" should "also ingest structured data to a Kusto cluster" taggedAs KustoE2E in {

@@ -83,21 +83,6 @@ class WriterTests extends FlatSpec with Matchers {
     csvWriter.getCounter shouldEqual expectedSize
   }
 
-  "finalizeFileWrite" should "should flush and close buffers" in {
-    val gzip = mock(classOf[GZIPOutputStream])
-    val buffer = mock(classOf[BufferedWriter])
-    val csvWriter = CountingWriter(buffer)
-
-    val fileWriteResource = BlobWriteResource(buffer, gzip, csvWriter, null, null)
-    KustoWriter.finalizeBlobWrite(fileWriteResource)
-
-    verify(gzip, times(1)).flush()
-    verify(gzip, times(1)).close()
-
-    verify(buffer, times(1)).flush()
-    verify(buffer, times(1)).close()
-  }
-
   "getColumnsSchema" should "parse table schema correctly" in {
     //Verify part of the following schema:
     // "{\"Name\":\"Subscriptions\",\"OrderedColumns\":[{\"Name\":\"SubscriptionGuid\",\"Type\":\"System.String\",\"CslType\":\"string\"},{\"Name\":\"Identifier\",\"Type\":\"System.String\",\"CslType\":\"string\"},{\"Name\":\"SomeNumber\",\"Type\":\"System.Int64\",\"CslType\":\"long\"},{\"Name\":\"IsCurrent\",\"Type\":\"System.SByte\",\"CslType\":\"bool\"},{\"Name\":\"LastModifiedOn\",\"Type\":\"System.DateTime\",\"CslType\":\"datetime\"},{\"Name\":\"IntegerValue\",\"Type\":\"System.Int32\",\"CslType\":\"int\"}]}"

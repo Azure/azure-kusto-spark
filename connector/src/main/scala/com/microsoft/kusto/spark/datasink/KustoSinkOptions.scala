@@ -77,7 +77,7 @@ object SinkTableCreationMode extends Enumeration {
 
 object SchemaAdjustmentMode extends Enumeration {
   type SchemaAdjustmentMode = Value
-  val NoAdjustment, FailIfNotMatch, GenerateDynamicCsvMapping = Value
+  val NoAdjustment, FailIfNotMatch, GenerateDynamicParquetMapping = Value
 }
 
 object WriteMode extends Enumeration {
@@ -92,7 +92,7 @@ case class WriteOptions(pollingOnDriver:Boolean = false,
                         timeZone: String = "UTC",
                         timeout: FiniteDuration = new FiniteDuration(KustoConstants.DefaultWaitingIntervalLongRunning.toInt,
                           TimeUnit.SECONDS),
-                        ingestionProperties: Option[String] = None,
+                        maybeSparkIngestionProperties: Option[String] = None,
                         batchLimit: Int = KustoConstants.DefaultBatchingLimit,
                         requestId: String = UUID.randomUUID().toString,
                         autoCleanupTime: FiniteDuration = new FiniteDuration(KustoConstants.DefaultCleaningInterval.toInt,
@@ -103,5 +103,7 @@ case class WriteOptions(pollingOnDriver:Boolean = false,
                         isTransactionalMode: Boolean = true,
                         userTempTableName: Option[String] = None,
                         disableFlushImmediately:Boolean = false,
-                        ensureNoDupBlobs: Boolean = false)
+                        ensureNoDupBlobs: Boolean = false,
+                        maybeUserTempTableName: Option[String] = None
+                       )
 
