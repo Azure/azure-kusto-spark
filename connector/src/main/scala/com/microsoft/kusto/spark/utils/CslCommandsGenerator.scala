@@ -4,6 +4,7 @@ import java.time.Instant
 import com.microsoft.kusto.spark.datasource.{TransientStorageCredentials, TransientStorageParameters}
 
 private[kusto] object CslCommandsGenerator {
+  private final val defaultKeySet = Set("compressionType","namePrefix","sizeLimit")
   def generateFetchTableIngestByTagsCommand(table: String): String = {
     s""".show table $table  extents;
        $$command_results
@@ -137,18 +138,21 @@ private[kusto] object CslCommandsGenerator {
       val blobUri = s"https://${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}"
       s"$blobUri/${storage.blobContainer}$secretString"
     }
-
     val async = if (isAsync) "async " else ""
     val compress = if (isCompressed) "compressed " else ""
-    val sizeLimitIfDefined = if (sizeLimit.isDefined) s"sizeLimit=${sizeLimit.get * 1024 * 1024}, " else ""
-    val additionalOptionsString = additionalExportOptions.map {
+    // if (sizeLimit.isDefined) s"sizeLimit=${sizeLimit.get * 1024 * 1024}, " else ""
+    val sizeLimitFallback = sizeLimit.map(size => s"sizeLimit=${size * 1024 * 1024} ,").getOrElse("")
+    val additionalOptionsString = additionalExportOptions.filterKeys(key=> !defaultKeySet.contains(key)).map {
       case (k,v) => s"""$k="$v""""
     }.mkString(",")
-    // TODO compressionType can be configured too and passed as an option
+    // Values in the map will override,We could have chosen sizeLimit option as the default.
+    // Chosen the one in the map for consistency
+    val compressionFormat = additionalExportOptions.getOrElse("compressionType","snappy")
+    val namePrefix = additionalExportOptions.getOrElse("namePrefix",s"${directory}part$partitionId")
+    val sizeLimitOverride = additionalExportOptions.get("sizeLimit").map(size => s"sizeLimit=${size * 1024 * 1024} ,").getOrElse(sizeLimitFallback)
     var command =
       s""".export $async${compress}to parquet ("${storageParameters.storageCredentials.map(getFullUrlFromParams).reduce((s, s1) => s + ",\"" + s1)})""" +
-        s""" with (${sizeLimitIfDefined}namePrefix="${directory}part$partitionId", compressionType=snappy,$additionalOptionsString) <| $query"""
-
+        s""" with ($sizeLimitOverride namePrefix="$namePrefix", compressionType="$compressionFormat",$additionalOptionsString) <| $query"""
     if (partitionPredicate.nonEmpty) {
       command += s" | where ${partitionPredicate.get}"
     }
