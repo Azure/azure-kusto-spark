@@ -39,6 +39,7 @@ import scala.util.{Failure, Success, Try}
 
 object KustoDataSourceUtils {
 
+  private final val className = this.getClass.getSimpleName
   private final val objectMapper = new ObjectMapper().registerModule(DefaultScalaModule)
   def getDedupTagsPrefix(requestId: String, batchId: String):String = s"${requestId}_$batchId"
 
@@ -76,7 +77,10 @@ object KustoDataSourceUtils {
       case Some(exportOptionsJsonString) => Try(objectMapper.readValue(exportOptionsJsonString, new TypeReference[Map[String, String]] {})) match {
         case Success(exportConfigMap) => exportConfigMap
         // TODO check if we should throw an exception or warn the user.
-        case Failure(exception) => throw exception
+        case Failure(exception) =>
+          logError(className, "The configuration " +
+            s"for ${KustoSourceOptions.KUSTO_EXPORT_OPTIONS_JSON} has a value $exportOptionsJsonString that cannot be parsed as Map")
+          throw exception
       }
       case None => Map.empty()
     }
