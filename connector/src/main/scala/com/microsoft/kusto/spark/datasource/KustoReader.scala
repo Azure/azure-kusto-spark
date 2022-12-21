@@ -82,12 +82,12 @@ private[kusto] object KustoReader {
         paths = distributedReadModeTransientCache(key)
       } else {
         KDSU.logInfo(myName, "distributedReadModeTransientCache: miss, exporting to cache paths")
-        val filter = determineFilterPushDown(options.queryFilterPushDown, queryFilterPushDownDefault = false, filtering)
+        val filter = determineFilterPushDown(options.queryFilterPushDown, false, filtering)
         paths = exportToStorage(kustoClient, request, storage, options, filter)
         distributedReadModeTransientCache(key) = paths
       }
     } else{
-      val filter = determineFilterPushDown(options.queryFilterPushDown, queryFilterPushDownDefault = true, filtering)
+      val filter = determineFilterPushDown(options.queryFilterPushDown, true, filtering)
       paths = exportToStorage(kustoClient, request, storage, options, filter)
     }
 
@@ -104,7 +104,7 @@ private[kusto] object KustoReader {
     val rdd = try {
       request.sparkSession.read.parquet(paths: _*).rdd
     } catch {
-      case ex: Exception =>
+      case ex: Exception => {
         // Check whether the result is empty, causing an IO exception on reading empty parquet file
         // We don't mind generating the filtered query again - it only happens upon exception
         val filteredQuery = KustoFilter.pruneAndFilter(request.schema, request.query, filtering)
@@ -116,6 +116,7 @@ private[kusto] object KustoReader {
         } else {
           throw ex
         }
+      }
     }
 
     KDSU.logInfo(myName, "Transaction data read from blob storage, paths:" + paths)
@@ -154,8 +155,7 @@ private[kusto] object KustoReader {
       }
       container.getDirectoryReference(directory).listBlobsSegmented().getLength > 0
     }
-    val paths = storage.storageCredentials.filter(directoryExists).
-      map(params => s"wasbs://${params.blobContainer}@${params.storageAccountName}.blob.${storage.endpointSuffix}/$directory")
+    val paths = storage.storageCredentials.filter(directoryExists).map(params => s"wasbs://${params.blobContainer}@${params.storageAccountName}.blob.${storage.endpointSuffix}/$directory")
     KDSU.logInfo(myName, s"Finished exporting from Kusto to ${paths.mkString(",")}" +
       s", on requestId: ${request.requestId}, will start parquet reading now")
     paths

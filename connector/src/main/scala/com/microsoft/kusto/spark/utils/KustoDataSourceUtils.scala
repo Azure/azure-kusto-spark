@@ -43,6 +43,7 @@ object KustoDataSourceUtils {
   def getDedupTagsPrefix(requestId: String, batchId: String):String = s"${requestId}_$batchId"
 
   def generateTempTableName(appName: String, destinationTableName: String, requestId:String,
+
                             batchIdAsString: String, userTempTableName: Option[String]): String = {
     if (userTempTableName.isDefined) {
       userTempTableName.get

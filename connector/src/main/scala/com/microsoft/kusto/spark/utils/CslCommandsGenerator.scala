@@ -142,9 +142,9 @@ private[kusto] object CslCommandsGenerator {
     val compress = if (isCompressed) "compressed " else ""
     val sizeLimitIfDefined = if (sizeLimit.isDefined) s"sizeLimit=${sizeLimit.get * 1024 * 1024}, " else ""
     val additionalOptionsString = additionalExportOptions.map {
-      case (k,v) => s"$k=$v"
-    }
-    //TODO compressionType can be configured too
+      case (k,v) => s"""$k="$v""""
+    }.mkString(",")
+    // TODO compressionType can be configured too and passed as an option
     var command =
       s""".export $async${compress}to parquet ("${storageParameters.storageCredentials.map(getFullUrlFromParams).reduce((s, s1) => s + ",\"" + s1)})""" +
         s""" with (${sizeLimitIfDefined}namePrefix="${directory}part$partitionId", compressionType=snappy,$additionalOptionsString) <| $query"""
