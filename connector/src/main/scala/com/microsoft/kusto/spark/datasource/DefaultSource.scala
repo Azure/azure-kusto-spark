@@ -21,7 +21,7 @@ class DefaultSource extends CreatableRelationProvider
   var keyVaultAuthentication: Option[KeyVaultAuthentication] = None
   var clientRequestProperties: Option[ClientRequestProperties] = None
   var requestId: Option[String] = None
-  val myName: String = this.getClass.getSimpleName
+  private val className: String = this.getClass.getSimpleName
 
   def initCommonParams(sourceParams: SourceParameters): Unit ={
     keyVaultAuthentication = sourceParams.keyVaultAuth
@@ -53,7 +53,8 @@ class DefaultSource extends CreatableRelationProvider
         Some(sinkParameters.writeOptions.writeResultLimit.toInt)
       }
       catch {
-        case _: Exception => throw new InvalidParameterException(s"KustoOptions.KUSTO_WRITE_RESULT_LIMIT is set to '${sinkParameters.writeOptions.writeResultLimit}'. Must be either 'none' or an integer value")
+        case _: Exception => throw new InvalidParameterException(s"KustoOptions.KUSTO_WRITE_RESULT_LIMIT is set " +
+          s"to '${sinkParameters.writeOptions.writeResultLimit}'. Must be either 'none' or an integer value")
       }
     }
 
@@ -109,9 +110,11 @@ class DefaultSource extends CreatableRelationProvider
       }
     }
 
-    val timeout = new FiniteDuration(parameters.getOrElse(KustoSourceOptions.KUSTO_TIMEOUT_LIMIT, KCONST.DefaultWaitingIntervalLongRunning).toLong, TimeUnit.SECONDS)
+    val timeout = new FiniteDuration(parameters.getOrElse(KustoSourceOptions.KUSTO_TIMEOUT_LIMIT,
+      KCONST.DefaultWaitingIntervalLongRunning).toLong, TimeUnit.SECONDS)
 
-    KDSU.logInfo(myName, s"Finished serializing parameters for reading: {requestId: $requestId, timeout: $timeout, readMode: ${readOptions.readMode.getOrElse("Default")}, clientRequestProperties: $clientRequestProperties")
+    KDSU.logInfo(className, s"Finished serializing parameters for reading: {requestId: $requestId, " +
+      s"timeout: $timeout, readMode: ${readOptions.readMode.getOrElse("Default")}, clientRequestProperties: $clientRequestProperties")
     KustoRelation(
       kustoCoordinates,
       kustoAuthentication.get,

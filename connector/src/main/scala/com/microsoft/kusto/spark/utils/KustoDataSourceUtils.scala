@@ -1,5 +1,8 @@
 package com.microsoft.kusto.spark.utils
 
+import com.fasterxml.jackson.core.`type`.TypeReference
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import com.microsoft.azure.kusto.data.exceptions.{DataClientException, DataServiceException}
 import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties, KustoResultSetTable}
 import com.microsoft.kusto.spark.authentication._
@@ -32,12 +35,14 @@ import java.util.{NoSuchElementException, Properties, StringJoiner, Timer, Timer
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
+import scala.util.{Failure, Success, Try}
 
 object KustoDataSourceUtils {
-  def getDedupTagsPrefix(requestId: String, batchId: String) = s"${requestId}_$batchId"
+
+  private final val objectMapper = new ObjectMapper().registerModule(DefaultScalaModule)
+  def getDedupTagsPrefix(requestId: String, batchId: String):String = s"${requestId}_$batchId"
 
   def generateTempTableName(appName: String, destinationTableName: String, requestId:String,
-
                             batchIdAsString: String, userTempTableName: Option[String]): String = {
     if (userTempTableName.isDefined) {
       userTempTableName.get
@@ -65,7 +70,17 @@ object KustoDataSourceUtils {
     val queryFilterPushDown = parameters.get(KustoSourceOptions.KUSTO_QUERY_FILTER_PUSH_DOWN).map(s => s.trim.toBoolean)
     val partitionColumn = parameters.get(KustoDebugOptions.KUSTO_PARTITION_COLUMN)
     val partitionOptions = PartitionOptions(numPartitions, partitionColumn, partitioningMode)
-    KustoReadOptions(readMode, shouldCompressOnExport, exportSplitLimitMb, partitionOptions, distributedReadModeTransientCacheEnabled, queryFilterPushDown)
+    // Parse upfront and throw back an error if there is a wrongly formatted JSON
+    val additionalExportOptions = parameters.get(KustoSourceOptions.KUSTO_EXPORT_OPTIONS_JSON) match {
+      case Some(exportOptionsJsonString) => Try(objectMapper.readValue(exportOptionsJsonString, new TypeReference[Map[String, String]] {})) match {
+        case Success(exportConfigMap) => exportConfigMap
+        // TODO check if we should throw an exception or warn the user.
+        case Failure(exception) => throw exception
+      }
+      case None => Map.empty()
+    }
+    KustoReadOptions(readMode, shouldCompressOnExport, exportSplitLimitMb, partitionOptions,
+      distributedReadModeTransientCacheEnabled, queryFilterPushDown,additionalExportOptions)
   }
 
 

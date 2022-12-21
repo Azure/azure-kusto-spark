@@ -39,7 +39,9 @@ private[kusto] case class KustoReadOptions(readMode: Option[ReadMode] = None,
                                            exportSplitLimitMb: Long = 1024,
                                            partitionOptions: PartitionOptions,
                                            distributedReadModeTransientCacheEnabled: Boolean = false,
-                                           queryFilterPushDown: Option[Boolean])
+                                           queryFilterPushDown: Option[Boolean],
+                                           additionalExportOptions:Map[String,String] = Map.empty
+                                          )
 
 private[kusto] case class PartitionOptions(amount: Int, var column: Option[String], var mode: Option[String])
 
@@ -80,12 +82,12 @@ private[kusto] object KustoReader {
         paths = distributedReadModeTransientCache(key)
       } else {
         KDSU.logInfo(myName, "distributedReadModeTransientCache: miss, exporting to cache paths")
-        val filter = determineFilterPushDown(options.queryFilterPushDown, false, filtering)
+        val filter = determineFilterPushDown(options.queryFilterPushDown, queryFilterPushDownDefault = false, filtering)
         paths = exportToStorage(kustoClient, request, storage, options, filter)
         distributedReadModeTransientCache(key) = paths
       }
     } else{
-      val filter = determineFilterPushDown(options.queryFilterPushDown, true, filtering)
+      val filter = determineFilterPushDown(options.queryFilterPushDown, queryFilterPushDownDefault = true, filtering)
       paths = exportToStorage(kustoClient, request, storage, options, filter)
     }
 
@@ -102,7 +104,7 @@ private[kusto] object KustoReader {
     val rdd = try {
       request.sparkSession.read.parquet(paths: _*).rdd
     } catch {
-      case ex: Exception => {
+      case ex: Exception =>
         // Check whether the result is empty, causing an IO exception on reading empty parquet file
         // We don't mind generating the filtered query again - it only happens upon exception
         val filteredQuery = KustoFilter.pruneAndFilter(request.schema, request.query, filtering)
@@ -114,7 +116,6 @@ private[kusto] object KustoReader {
         } else {
           throw ex
         }
-      }
     }
 
     KDSU.logInfo(myName, "Transaction data read from blob storage, paths:" + paths)
@@ -153,7 +154,8 @@ private[kusto] object KustoReader {
       }
       container.getDirectoryReference(directory).listBlobsSegmented().getLength > 0
     }
-    val paths = storage.storageCredentials.filter(directoryExists).map(params => s"wasbs://${params.blobContainer}@${params.storageAccountName}.blob.${storage.endpointSuffix}/$directory")
+    val paths = storage.storageCredentials.filter(directoryExists).
+      map(params => s"wasbs://${params.blobContainer}@${params.storageAccountName}.blob.${storage.endpointSuffix}/$directory")
     KDSU.logInfo(myName, s"Finished exporting from Kusto to ${paths.mkString(",")}" +
       s", on requestId: ${request.requestId}, will start parquet reading now")
     paths
@@ -202,7 +204,7 @@ private[kusto] object KustoReader {
 
   private def calculateHashPartitions(partitionInfo: PartitionOptions): Array[Partition] = {
     // Single partition
-    if (partitionInfo.amount <= 1) return Array[Partition](KustoPartition(None, 0))
+    if (partitionInfo.amount <= 1)  Array[Partition](KustoPartition(None, 0))
 
     val partitions = new Array[Partition](partitionInfo.amount)
     for (partitionId <- 0 until partitionInfo.amount) {
