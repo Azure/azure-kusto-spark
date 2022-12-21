@@ -36,7 +36,6 @@ private[kusto] case class KustoReadRequest(sparkSession: SparkSession,
 
 private[kusto] case class KustoReadOptions(readMode: Option[ReadMode] = None,
                                            shouldCompressOnExport: Boolean = true,
-                                           exportSplitLimitMb: Long = 1024,
                                            partitionOptions: PartitionOptions,
                                            distributedReadModeTransientCacheEnabled: Boolean = false,
                                            queryFilterPushDown: Option[Boolean],
@@ -226,16 +225,12 @@ private[kusto] class KustoReader(client: ExtendedKustoClient) {
                                            directory: String,
                                            options: KustoReadOptions,
                                            filtering: KustoFiltering): Unit = {
-
-    val limit = if (options.exportSplitLimitMb <= 0) None else Some(options.exportSplitLimitMb)
-
     val exportCommand = CslCommandsGenerator.generateExportDataCommand(
       KustoFilter.pruneAndFilter(request.schema, request.query, filtering),
       directory,
       partition.idx,
       storage,
       partition.predicate,
-      limit,
       isCompressed = options.shouldCompressOnExport
     )
 

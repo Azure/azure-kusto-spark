@@ -127,7 +127,6 @@ private[kusto] object CslCommandsGenerator {
                                  partitionId: Int,
                                  storageParameters: TransientStorageParameters,
                                  partitionPredicate: Option[String] = None,
-                                 sizeLimit: Option[Long],
                                  isAsync: Boolean = true,
                                  isCompressed: Boolean = false,
                                  additionalExportOptions: Map[String,String] = Map.empty
@@ -141,7 +140,6 @@ private[kusto] object CslCommandsGenerator {
     val async = if (isAsync) "async " else ""
     val compress = if (isCompressed) "compressed " else ""
     // if (sizeLimit.isDefined) s"sizeLimit=${sizeLimit.get * 1024 * 1024}, " else ""
-    val sizeLimitFallback = sizeLimit.map(size => s"sizeLimit=${size * 1024 * 1024} ,").getOrElse("")
     val additionalOptionsString = additionalExportOptions.filterKeys(key=> !defaultKeySet.contains(key)).map {
       case (k,v) => s"""$k="$v""""
     }.mkString(",")
@@ -149,7 +147,7 @@ private[kusto] object CslCommandsGenerator {
     // Chosen the one in the map for consistency
     val compressionFormat = additionalExportOptions.getOrElse("compressionType","snappy")
     val namePrefix = additionalExportOptions.getOrElse("namePrefix",s"${directory}part$partitionId")
-    val sizeLimitOverride = additionalExportOptions.get("sizeLimit").map(size => s"sizeLimit=${size * 1024 * 1024} ,").getOrElse(sizeLimitFallback)
+    val sizeLimitOverride = additionalExportOptions.get("sizeLimit").map(size => s"sizeLimit=${size.toLong * 1024 * 1024} ,").getOrElse("")
     var command =
       s""".export $async${compress}to parquet ("${storageParameters.storageCredentials.map(getFullUrlFromParams).reduce((s, s1) => s + ",\"" + s1)})""" +
         s""" with ($sizeLimitOverride namePrefix="$namePrefix", compressionType="$compressionFormat",$additionalOptionsString) <| $query"""

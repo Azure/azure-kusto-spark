@@ -123,8 +123,7 @@ class KustoBlobAccessE2E extends FlatSpec with BeforeAndAfterAll {
       directory,
       partitionId,
       new TransientStorageParameters(Array(new TransientStorageCredentials(storageAccount, secret, container))),
-      Some(partitionPredicate),
-      None
+      Some(partitionPredicate)
     )
 
     val blobs = kustoAdminClient.execute(database, exportCommand)

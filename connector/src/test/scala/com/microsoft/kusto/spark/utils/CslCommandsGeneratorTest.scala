@@ -11,14 +11,14 @@ import org.scalatest.prop.Tables.Table
 class CslCommandsGeneratorTest extends FlatSpec{
   val dataCombinations =
     Table(
-      ("sizeLimit", "additionalExportOptions", "expectedOptions","iteration"),
-      (Some(1000L), Map("key1" -> "value1", "exportOption2" -> "eo2"), "with (sizeLimit=1048576000 , namePrefix=\"storms/data/part1\", " +
+      ("additionalExportOptions", "expectedOptions","iteration"),
+      (Map("key1" -> "value1", "exportOption2" -> "eo2","sizeLimit"->"1"), "with (sizeLimit=1048576000 , namePrefix=\"storms/data/part1\", " +
         "compressionType=\"snappy\",key1=\"value1\",exportOption2=\"eo2\")",1),
-      (None, Map("key1" -> "value1", "exportOption2" -> "eo2", "namePrefix" -> "Np-2","compressionType"->"gz"),
+      (Map("key1" -> "value1", "exportOption2" -> "eo2", "namePrefix" -> "Np-2","compressionType"->"gz"),
         "with ( namePrefix=\"Np-2\", compressionType=\"gz\",key1=\"value1\",exportOption2=\"eo2\")",2)
     )
 
-  forAll(dataCombinations) { (sizeLimit, additionalExportOptions, expectedOptions ,iteration)=>
+  forAll(dataCombinations) { (additionalExportOptions, expectedOptions ,iteration)=>
     "TestGenerateExportDataCommand" should s"generate command with additional options-$iteration" in {
       val query = "Storms | take 100"
       val directory = "storms/data/"
@@ -28,9 +28,8 @@ class CslCommandsGeneratorTest extends FlatSpec{
         "test-storage-account-key",
         "test-storage-account-container")
       val transientStorageParameters = new TransientStorageParameters(Array(transientStorageCredentials))
-      // val additionalExportOptions = Map("key1" -> "value1", "exportOption2" -> "eo2")
       val commandResult = CslCommandsGenerator.generateExportDataCommand(query, directory, partitionId,
-        transientStorageParameters, Option.empty[String], sizeLimit, isCompressed = true, additionalExportOptions = additionalExportOptions)
+        transientStorageParameters, Option.empty[String], isCompressed = true, additionalExportOptions = additionalExportOptions)
       assert(commandResult.nonEmpty)
       val expectedResult = ".export async compressed to parquet " +
         "(\"https://test-storage-account.blob.core.windows.net/test-storage-account-container;\" h@\"test-storage-account-key\") " +
