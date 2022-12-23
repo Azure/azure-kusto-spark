@@ -113,7 +113,11 @@ It's recommended to set this flag to true in production scenarios, so that the w
     
  * **KUSTO_REQUEST_ID**:
     'requestId' - A unique identifier UUID for this ingestion command. Will be used as part of the staging table name as well.
-    
+
+ * **KUSTO_EXPORT_OPTIONS_JSON**:
+    'kustoExportOptionsJson' - JSON that provides the list of [export options](https://learn.microsoft.com/en-us/azure/data-explorer/kusto/management/data-export/export-data-to-storage) in case of distributed read (either because of query limits getting hit or user request for ForceDistributed mode). The export options do not support the _OutputDataFormat_ which is defaulted to _parquet_, _namePrefix_ which is defaulted based on the
+    partition of the export. _async_ is defaulted to true (implying the export will be export async) and _compressed_ is defaulted to snappy.To turn these options off these values can be set to _none_ (**not recommended**)
+     
  >**Note:**
  For both synchronous and asynchronous operation, 'write' is an atomic transaction, i.e. 
  either all data is written to Kusto, or no data is written. 
