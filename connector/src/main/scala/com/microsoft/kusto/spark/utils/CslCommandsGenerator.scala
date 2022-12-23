@@ -4,7 +4,10 @@ import java.time.Instant
 import com.microsoft.kusto.spark.datasource.{TransientStorageCredentials, TransientStorageParameters}
 
 private[kusto] object CslCommandsGenerator {
-  private final val defaultKeySet = Set("compressionType","namePrefix","sizeLimit")
+  // We want to process these export options on a case to case basis. We want a default of snappy for compression
+  // and also want to ignore namePrefix because the files get exported with this name and then we need to read
+  // them with the same name in downstream processing.
+  private final val defaultKeySet = Set("compressionType","namePrefix","sizeLimit","compressed","async")
   def generateFetchTableIngestByTagsCommand(table: String): String = {
     s""".show table $table  extents;
        $$command_results
@@ -127,9 +130,7 @@ private[kusto] object CslCommandsGenerator {
                                  partitionId: Int,
                                  storageParameters: TransientStorageParameters,
                                  partitionPredicate: Option[String] = None,
-                                 isAsync: Boolean = true,
-                                 isCompressed: Boolean = false,
-                                 additionalExportOptions: Map[String,String] = Map.empty
+                                 additionalExportOptions: Map[String,String] = Map.empty[String,String]
                                ): String = {
     val getFullUrlFromParams = (storage: TransientStorageCredentials) => {
       val secretString = if (!storage.sasDefined) s""";" h@"${storage.storageAccountKey}"""" else if
@@ -137,20 +138,21 @@ private[kusto] object CslCommandsGenerator {
       val blobUri = s"https://${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}"
       s"$blobUri/${storage.blobContainer}$secretString"
     }
-    val async = if (isAsync) "async " else ""
-    val compress = if (isCompressed) "compressed " else ""
-    // if (sizeLimit.isDefined) s"sizeLimit=${sizeLimit.get * 1024 * 1024}, " else ""
+    // only if the user passes async option as "none" it is async
+    val async = if (additionalExportOptions.get("async").exists(compressed=>"none".equalsIgnoreCase(compressed))) " " else "async "
+    // if we pass in compress as 'none' explicitly then do not compress, else compress
+    val compress =  if (additionalExportOptions.get("compressed").exists(compressed=>"none".equalsIgnoreCase(compressed))) "" else "compressed"
     val additionalOptionsString = additionalExportOptions.filterKeys(key=> !defaultKeySet.contains(key)).map {
       case (k,v) => s"""$k="$v""""
-    }.mkString(",")
+    }.mkString(",",",","")
     // Values in the map will override,We could have chosen sizeLimit option as the default.
     // Chosen the one in the map for consistency
     val compressionFormat = additionalExportOptions.getOrElse("compressionType","snappy")
-    val namePrefix = additionalExportOptions.getOrElse("namePrefix",s"${directory}part$partitionId")
+    val namePrefix = s"${directory}part$partitionId"
     val sizeLimitOverride = additionalExportOptions.get("sizeLimit").map(size => s"sizeLimit=${size.toLong * 1024 * 1024} ,").getOrElse("")
     var command =
-      s""".export $async${compress}to parquet ("${storageParameters.storageCredentials.map(getFullUrlFromParams).reduce((s, s1) => s + ",\"" + s1)})""" +
-        s""" with ($sizeLimitOverride namePrefix="$namePrefix", compressionType="$compressionFormat",$additionalOptionsString) <| $query"""
+      s""".export $async$compress to parquet ("${storageParameters.storageCredentials.map(getFullUrlFromParams).reduce((s, s1) => s + ",\"" + s1)})""" +
+        s""" with ($sizeLimitOverride namePrefix="$namePrefix", compressionType="$compressionFormat"$additionalOptionsString) <| $query"""
     if (partitionPredicate.nonEmpty) {
       command += s" | where ${partitionPredicate.get}"
     }

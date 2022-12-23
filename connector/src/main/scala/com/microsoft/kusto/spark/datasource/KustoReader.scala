@@ -35,7 +35,6 @@ private[kusto] case class KustoReadRequest(sparkSession: SparkSession,
                                            requestId: String)
 
 private[kusto] case class KustoReadOptions(readMode: Option[ReadMode] = None,
-                                           shouldCompressOnExport: Boolean = true,
                                            partitionOptions: PartitionOptions,
                                            distributedReadModeTransientCacheEnabled: Boolean = false,
                                            queryFilterPushDown: Option[Boolean],
@@ -207,8 +206,12 @@ private[kusto] object KustoReader {
 
     val partitions = new Array[Partition](partitionInfo.amount)
     for (partitionId <- 0 until partitionInfo.amount) {
-      val partitionPredicate = s" hash(${partitionInfo.column}, ${partitionInfo.amount}) == $partitionId"
-      partitions(partitionId) = KustoPartition(Some(partitionPredicate), partitionId)
+      partitionInfo.column match {
+        case Some(columnName) =>
+          val partitionPredicate = s" hash($columnName, ${partitionInfo.amount}) == $partitionId"
+          partitions(partitionId) = KustoPartition(Some(partitionPredicate), partitionId)
+        case None => KDSU.logWarn(myName,"Column name is empty when requesting for export")
+      }
     }
     partitions
   }
@@ -226,12 +229,12 @@ private[kusto] class KustoReader(client: ExtendedKustoClient) {
                                            options: KustoReadOptions,
                                            filtering: KustoFiltering): Unit = {
     val exportCommand = CslCommandsGenerator.generateExportDataCommand(
-      KustoFilter.pruneAndFilter(request.schema, request.query, filtering),
-      directory,
-      partition.idx,
-      storage,
-      partition.predicate,
-      isCompressed = options.shouldCompressOnExport
+      query=KustoFilter.pruneAndFilter(request.schema, request.query, filtering),
+      directory=directory,
+      partitionId=partition.idx,
+      storageParameters=storage,
+      partitionPredicate=partition.predicate,
+      additionalExportOptions=options.additionalExportOptions
     )
 
     val commandResult: KustoResultSetTable = client.executeEngine(request.kustoCoordinates.database,

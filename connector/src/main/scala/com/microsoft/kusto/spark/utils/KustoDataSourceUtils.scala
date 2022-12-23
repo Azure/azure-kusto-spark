@@ -58,7 +58,6 @@ object KustoDataSourceUtils {
     val requestedPartitions = parameters.get(KustoDebugOptions.KUSTO_NUM_PARTITIONS)
     val partitioningMode = parameters.get(KustoDebugOptions.KUSTO_READ_PARTITION_MODE)
     val numPartitions = setNumPartitions(sqlContext, requestedPartitions, partitioningMode)
-    val shouldCompressOnExport = parameters.getOrElse(KustoDebugOptions.KUSTO_DBG_BLOB_COMPRESS_ON_EXPORT, "true").trim.toBoolean
     // Set default export split limit as 1GB, maximal allowed
     val readModeOption = parameters.get(KustoSourceOptions.KUSTO_READ_MODE)
     val readMode: Option[ReadMode] = if (readModeOption.isDefined) {
@@ -74,15 +73,15 @@ object KustoDataSourceUtils {
     val additionalExportOptions = parameters.get(KustoSourceOptions.KUSTO_EXPORT_OPTIONS_JSON) match {
       case Some(exportOptionsJsonString) => Try(objectMapper.readValue(exportOptionsJsonString, new TypeReference[Map[String, String]] {})) match {
         case Success(exportConfigMap) => exportConfigMap
-        // TODO check if we should throw an exception or warn the user.
         case Failure(exception) =>
-          logError(className, "The configuration " +
-            s"for ${KustoSourceOptions.KUSTO_EXPORT_OPTIONS_JSON} has a value $exportOptionsJsonString that cannot be parsed as Map")
-          throw exception
+          val errorMessage = s"The configuration for ${KustoSourceOptions.KUSTO_EXPORT_OPTIONS_JSON} has a value " +
+            s"$exportOptionsJsonString that cannot be parsed as Map"
+          logError(className,errorMessage )
+          throw new IllegalArgumentException(errorMessage)
       }
-      case None => Map.empty()
+      case None => Map.empty[String,String]
     }
-    KustoReadOptions(readMode, shouldCompressOnExport, partitionOptions,
+    KustoReadOptions(readMode, partitionOptions,
       distributedReadModeTransientCacheEnabled, queryFilterPushDown,additionalExportOptions)
   }
 
