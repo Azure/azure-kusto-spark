@@ -146,7 +146,8 @@ private[kusto] object KustoReader {
 
     val directoryExists = (params: TransientStorageCredentials) => {
       val container = if (params.sasDefined) {
-        new CloudBlobContainer(new URI(s"https://${params.storageAccountName}.blob.${storage.endpointSuffix}/${params.blobContainer}${params.sasKey}"))
+        val sas = if (params.sasKey(0) == '?') params.sasKey else s"?${params.sasKey}"
+        new CloudBlobContainer(new URI(s"https://${params.storageAccountName}.blob.${storage.endpointSuffix}/${params.blobContainer}$sas"))
       } else {
         new CloudBlobContainer(new URI(s"https://${params.storageAccountName}.blob.${storage.endpointSuffix}/${params.blobContainer}"),
           new StorageCredentialsAccountAndKey(params.storageAccountName, params.storageAccountKey))

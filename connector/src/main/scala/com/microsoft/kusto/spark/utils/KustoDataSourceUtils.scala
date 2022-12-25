@@ -76,11 +76,16 @@ object KustoDataSourceUtils {
         case Failure(exception) =>
           val errorMessage = s"The configuration for ${KustoSourceOptions.KUSTO_EXPORT_OPTIONS_JSON} has a value " +
             s"$exportOptionsJsonString that cannot be parsed as Map"
-          logError(className,errorMessage )
+          logError(className, errorMessage)
           throw new IllegalArgumentException(errorMessage)
       }
       case None => Map.empty[String,String]
     }
+    val userNamePrefix = additionalExportOptions.get("namePrefix")
+    if (userNamePrefix.isDefined) {
+      logWarn(className, "User cannot specify namePrefix for additionalExportOptions as it can lead to unexpected behavior in reading output")
+    }
+
     KustoReadOptions(readMode, partitionOptions,
       distributedReadModeTransientCacheEnabled, queryFilterPushDown,additionalExportOptions)
   }

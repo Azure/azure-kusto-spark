@@ -59,9 +59,22 @@ that is using it. Please verify the following first:
  **Authentication Parameters** can be found here - [AAD Application Authentication](Authentication.md). 
  
  **Important Parameters:** 
-* **KUSTO_POLLING_ON_DRIVER**:
+
+ * **KUSTO_WRITE_MODE**
+  'writeMode' - For production big loads it is most suggest to move to Queued mode !    
+    'Transactional' mode (default) - guarantees write operation to either completely succeed or fail together
+    this will include the following additional work: create a temporary table and after processing the data - poll on the ingestion result
+    after which the operation move the data to the destination table (the last part is a metadata operation only).  
+   'Queued' mode - The write operation finishes after data is processed by the workers, the data may not be completely
+   available up until the service finishes loading it, failures on the service side will not propagate to Spark but can still be seen.
+    'Queued' mode scales better than the Transactional mode as it doesn't need to do track each individual ingestion created by the workers.
+    This can also solve many problems faced when using Transactional mode intermediate table and better work with Materialized views.
+   *Note - Both modes are using Kusto native queued ingestion as described [here](https://learn.microsoft.com/azure/data-explorer/kusto/api/netfx/about-kusto-ingest#queued-ingestion).
+
+ * **KUSTO_POLLING_ON_DRIVER**:
 'pollingOnDriver' - If set to false (default) Kusto Spark will create a new job for the final two ingestion steps done after processing the data, so that the write operation doesn't seem to 'hang' on the Spark UI. 
 It's recommended to set this flag to true in production scenarios, so that the worker node doesn't occupy a core while completing the final ingestion steps.
+This is irrelevant for 'Queued' mode
 
  * **KUSTO_TABLE_CREATE_OPTIONS**: 
  'tableCreateOptions' - If set to 'FailIfNotExist' (default), the operation will fail if the table is not found 
@@ -114,14 +127,6 @@ It's recommended to set this flag to true in production scenarios, so that the w
  * **KUSTO_REQUEST_ID**:
     'requestId' - A unique identifier UUID for this ingestion command. Will be used as part of the staging table name as well.
 
- * **KUSTO_EXPORT_OPTIONS_JSON**:
-    'kustoExportOptionsJson' - JSON that provides the list of [export options](https://learn.microsoft.com/en-us/azure/data-explorer/kusto/management/data-export/export-data-to-storage) in case of distributed read (either because of query limits getting hit or user request for ForceDistributed mode). The export options do not support the _OutputDataFormat_ which is defaulted to _parquet_, _namePrefix_ which is defaulted based on the
-    partition of the export. _async_ is defaulted to true (implying the export will be export async) and _compressed_ is defaulted to snappy.To turn these options off these values can be set to _none_ (**not recommended**)
-     
- >**Note:**
- For both synchronous and asynchronous operation, 'write' is an atomic transaction, i.e. 
- either all data is written to Kusto, or no data is written. 
- 
 ### Performance Considerations
 
 Write performance depends on multiple factors, such as scale of both Spark and Kusto clusters.
