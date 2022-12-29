@@ -112,7 +112,7 @@ All the options that can be used in the Kusto Sink can be found in KustoSinkOpti
 
 * **KUSTO_STAGING_RESOURCE_AUTO_CLEANUP_TIMEOUT**:
   'stagingResourcesAutoCleanupTimeout' - An integer number corresponding to the period in seconds after which the staging resources used for the writing
-  operation are cleaned if they weren't cleaned gracefully at the end of the run.
+  operations are cleaned if they weren't cleaned gracefully at the end of the run.
   Default: '172000' (7 days)
 
 * **KUSTO_ADJUST_SCHEMA**:
@@ -135,11 +135,10 @@ All the options that can be used in the Kusto Sink can be found in KustoSinkOpti
   "tempTableName" - Provide a temporary table name that will be used for this write operation to achieve transactional write and move
   data to destination table on success. Table is expected to exist and unique per run (as we delete the table
   at the end of the process and therefore should be per write operation). In case of success, the table will be
-  deleted; in case of failure, it's up to the user to delete. It is most recommended altering the table auto-delete
-  policy to not get stuck with 'ghost' tables -
-  https://docs.microsoft.com/azure/data-explorer/kusto/management/auto-delete-policy
-  Use this option if you want to persist partial write results (as the failure could be of a single partition)
-
+  deleted; in case of failure, it's up to the user to delete. It is most recommended altering the table [auto-delete
+  policy](https://docs.microsoft.com/azure/data-explorer/kusto/management/auto-delete-policy) to not get stuck with 'ghost' tables -
+  Use this option if you want to persist partial write results as result of error (as the failure could be of a single partition that exhausted its retries)
+  This is not relevant for 'Queued' mode
 ### Performance Considerations
 
 Write performance depends on multiple factors, such as scale of both Spark and Kusto clusters.
@@ -247,4 +246,4 @@ For more reference code examples, please see:
 
 [KustoConnectorDemo](../samples/src/main/scala/KustoConnectorDemo.scala)
 
-[Python samples](../samples/src/main/python/pyKusto.py)
+[Python samples](../samples/src/main/python)
