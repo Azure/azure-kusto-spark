@@ -185,7 +185,7 @@ private[kusto] object CslCommandsGenerator {
   }
 
   def generateExtentTagsDropByPrefixCommand(tableName:String , prefix: String): String = {
-    s""".drop extent tags <|
+    s""".drop async extent tags <|
          .show table $tableName extents
          | where isnotempty(Tags)
          | extend Tags = split(Tags, '\\r\\n')

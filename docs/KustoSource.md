@@ -129,8 +129,8 @@ transientStorage = "{ \"storageCredentials\" : [ { \
     \"storageAccountName\": \"1jdldsdke2etestcluster01\",\
     \"blobContainer\": \"20221225-exportresults-0\",\
     \"sasUrl\" : \"https://1jdldsdke2etestcluster01.blob.core.windows.net/20221225-exportresults-0\", \
-  \"sasKey\" : \"?sv=2018-03-28&sr=c&sig=IpdreLgIV7nZyLdENdukhRS3gdS5IxPapiKJa6j40Ig%3D&st=2022-12-25T13%3A45%3A12Z&se=2022-12-29T14%3A45%3A12Z&sp=rwdl\"\
-  } ] }"
+  \"sasKey\" : \"?sas\"\,
+  } ],"endpointSuffix" : "core.windows.net" }"
   ...
   option("transientStorage", transientStorage). \
  ```
