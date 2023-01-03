@@ -1,16 +1,14 @@
 package com.microsoft.kusto.spark.datasink
 
+import com.fasterxml.jackson.databind.ObjectMapper
+
 import java.util.concurrent.TimeUnit
-import com.microsoft.azure.kusto.data.ClientRequestProperties
 import com.microsoft.azure.kusto.ingest.result.{IngestionErrorCode, IngestionStatus, OperationStatus}
 import com.microsoft.azure.storage.StorageException
-import com.microsoft.kusto.spark.authentication.KustoAuthentication
-import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator.{generateExtentTagsDropByPrefixCommand, generateTableAlterMergePolicyCommand}
 import com.microsoft.kusto.spark.utils.KustoConstants.IngestSkippedTrace
 import org.apache.commons.lang3.exception.ExceptionUtils
-import shaded.parquet.org.codehaus.jackson.map.ObjectMapper
-import com.microsoft.kusto.spark.utils.{ExtendedKustoClient, KustoClientCache, KustoDataSourceUtils => KDSU, KustoConstants => KCONST}
+import com.microsoft.kusto.spark.utils.{ExtendedKustoClient, KustoClientCache, KustoConstants => KCONST, KustoDataSourceUtils => KDSU}
 import org.apache.spark.SparkContext
 import org.apache.spark.util.CollectionAccumulator
 
@@ -20,6 +18,7 @@ import scala.concurrent.ExecutionContext.Implicits.global
 
 object FinalizeHelper {
   private val myName = this.getClass.getSimpleName
+  private val objectMapper = new ObjectMapper().writerWithDefaultPrettyPrinter
   val DelayPeriodBetweenCalls: Int = KCONST.DefaultPeriodicSamplePeriod.toMillis.toInt
   private[kusto] def finalizeIngestionWhenWorkersSucceeded(partitionsResults: CollectionAccumulator[PartitionResult],
                                                            sparkContext: SparkContext,
@@ -169,9 +168,7 @@ object FinalizeHelper {
           if (finalRes.get.errorCodeString != "Skipped_IngestByTagAlreadyExists"){
               throw new RuntimeException(s"Ingestion to Kusto failed with status '$otherStatus'." +
                 s" $ingestionInfoString, partition: '${partitionResult.partitionId}'. Ingestion info: '${
-                  new ObjectMapper()
-                    .writerWithDefaultPrettyPrinter
-                    .writeValueAsString(finalRes.get)
+                  objectMapper.writeValueAsString(finalRes.get)
                 }'")
           } else if (shouldThrowOnTagsAlreadyExists) {
             // TODO - think about this logic and other cases that should not throw all (maybe everything that starts with skip? this actualy
@@ -179,9 +176,7 @@ object FinalizeHelper {
             //  (Skipped_IngestByTagAlreadyExists is relevant for dedup flow only as in other cases we cancel the ingestion altogether)
             throw new RuntimeException(s"Ingestion to Kusto skipped with status '$otherStatus'." +
               s" $ingestionInfoString, partition: '${partitionResult.partitionId}'. Ingestion info: '${
-                new ObjectMapper()
-                  .writerWithDefaultPrettyPrinter
-                  .writeValueAsString(finalRes.get)
+                objectMapper.writeValueAsString(finalRes.get)
               }'")
           }
           KDSU.logInfo(loggerName, s"Ingestion to Kusto failed. $ingestionInfoString, " +
