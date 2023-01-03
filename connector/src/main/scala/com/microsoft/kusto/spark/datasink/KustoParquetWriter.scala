@@ -145,12 +145,11 @@ class KustoParquetWriter {
     if (listOfFiles.nonEmpty) {
       val spark = SparkSession.builder.config(data.rdd.sparkContext.getConf).getOrCreate()
       import spark.implicits._
-      val  listOfFilesToProcess = listOfFiles.toDF()
       // TODO use of magic numbers (0)
       val blobFileBase = s"https://${storageCredentials.storageAccountName}.blob." +
         s"${storageCredentials.domainSuffix}/${storageCredentials.blobContainer.split("/")(0)}"
       Try(
-        ingestAndFinalizeData(listOfFilesToProcess.rdd, s"$blobFileBase$blobNamePath", transactionWriteParams)
+        ingestAndFinalizeData(listOfFiles, s"$blobFileBase$blobNamePath" , storageCredentials.sasKey , transactionWriteParams)
       ) match {
         case Success(_) => KustoDataSourceUtils.logDebug(className, s"Ingestion completed for blob $blobFileBase")
         case Failure(exception) => if (transactionWriteParams.writeOptions.isTransactionalMode) {
@@ -165,10 +164,9 @@ class KustoParquetWriter {
     }
   }
 
-  private def ingestAndFinalizeData(rdd: RDD[Row], blobDirPath: String,
+  private def ingestAndFinalizeData(listOfFiles : ListBuffer[String], blobDirPath: String, sastoken: String,
                                     transactionWriteParams: TransactionWriteParams): Unit = {
     val partitionId = TaskContext.getPartitionId
-    rdd.foreachPartition(partition => {
       // Create the client
       val sparkContext = SparkContext.getOrCreate()
       val partitionResult = sparkContext.collectionAccumulator[PartitionResult]
@@ -195,13 +193,13 @@ class KustoParquetWriter {
       } else {
         ingestionProperties
       }
-      partition.foreach(rowIterator => {
-        val fileName = rowIterator.getString(0)
-        val fullPath = s"$blobDirPath/$fileName"
-        val ingestClient = KustoClientCache.getClient(transactionWriteParams.tableCoordinates.clusterUrl,
-          transactionWriteParams.authentication,
-          transactionWriteParams.tableCoordinates.ingestionUrl,
-          transactionWriteParams.tableCoordinates.clusterAlias).ingestClient
+    val kustoClient = KustoClientCache.getClient(transactionWriteParams.tableCoordinates.clusterUrl,
+      transactionWriteParams.authentication,
+      transactionWriteParams.tableCoordinates.ingestionUrl,
+      transactionWriteParams.tableCoordinates.clusterAlias)
+      listOfFiles.foreach(fileName => {
+        val fullPath = s"$blobDirPath/$fileName$sastoken"
+        val ingestClient = kustoClient.ingestClient
         val parquetIngestor = new KustoParquetIngestor(ingestClient)
         val retryConfig = RetryConfig.custom.maxAttempts(MaxIngestRetryAttempts).
           retryExceptions(classOf[IngestionServiceException]).build
@@ -213,12 +211,10 @@ class KustoParquetWriter {
             partitionId)
         )
       })
-      val kustoClient =  KustoClientCache.getClient(transactionWriteParams.tableCoordinates.clusterUrl,
-        transactionWriteParams.authentication,
-        transactionWriteParams.tableCoordinates.ingestionUrl,
-        transactionWriteParams.tableCoordinates.clusterAlias)
+
+    if(transactionWriteParams.writeOptions.isTransactionalMode){
       finalizeIngestionWhenWorkersSucceeded(partitionResult, sparkContext, kustoClient, transactionWriteParams)
-    })
+    }
   }
 
   private def getListOfFileFromDirectory(blobRoot: String, blobNamePath: String, hadoopConfig: Configuration): ListBuffer[String] = {
