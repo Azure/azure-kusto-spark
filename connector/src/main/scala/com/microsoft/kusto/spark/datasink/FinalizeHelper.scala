@@ -78,12 +78,8 @@ object FinalizeHelper {
             // Drop dedup tags
             if (writeOptions.ensureNoDupBlobs){
               val pref = KDSU.getDedupTagsPrefix(writeOptions.requestId, batchIdIfExists)
-              val operation = kustoClient.executeEngine(coordinates.database, generateExtentTagsDropByPrefixCommand(tmpTableName, pref), crp).getPrimaryResults
-              KDSU.verifyAsyncCommandCompletion(kustoClient.engineClient, coordinates.database, operation, samplePeriod =
-                KustoConstants
-                  .DefaultPeriodicSamplePeriod, writeOptions.timeout, s"drops extents from temp table '$tmpTableName' ",
-                myName,
-                writeOptions.requestId)
+              kustoClient.retryAsyncOp(coordinates.database, generateExtentTagsDropByPrefixCommand(tmpTableName, pref), crp, writeOptions.timeout,
+                s"drops extents from temp table '$tmpTableName'", requestId)
             }
 
             if (writeOptions.pollingOnDriver) {
@@ -144,7 +140,7 @@ object FinalizeHelper {
             KDSU.logWarn(loggerName, "Failed to fetch operation status transiently - will keep polling. " +
               s"RequestId: $requestId. Error: ${ExceptionUtils.getStackTrace(e)}")
             None
-          case e: Exception => KDSU.reportExceptionAndThrow(loggerName, e, s"Failed to fetch operation status. RequestId: $requestId");
+          case e: Exception => KDSU.reportExceptionAndThrow(loggerName, e, s"Failed to fetch operation status. RequestId: $requestId")
             None
         }
       },
