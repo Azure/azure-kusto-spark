@@ -6,7 +6,8 @@ import com.microsoft.azure.storage.blob.CloudBlobContainer
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasource.ReadMode.ReadMode
-import com.microsoft.kusto.spark.utils.{CslCommandsGenerator, KustoAzureFsSetupCache, KustoBlobStorageUtils, ExtendedKustoClient, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.{CslCommandsGenerator, ExtendedKustoClient, KustoAzureFsSetupCache, KustoBlobStorageUtils, KustoDataSourceUtils => KDSU}
+import org.apache.hadoop.util.ComparableVersion
 import org.apache.spark.Partition
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.sources.Filter
@@ -50,7 +51,7 @@ private[kusto] object KustoReader {
   private val myName = this.getClass.getSimpleName
   private val distributedReadModeTransientCache: concurrent.Map[DistributedReadModeTransientCacheKey,Seq[String]] =
     new concurrent.TrieMap()
-
+  private val minimalParquetWriterVersion = "3.3.0"
   private[kusto] def singleBuildScan(kustoClient: ExtendedKustoClient,
                                      request: KustoReadRequest,
                                      filtering: KustoFiltering): RDD[Row] = {
@@ -229,13 +230,16 @@ private[kusto] class KustoReader(client: ExtendedKustoClient) {
                                            directory: String,
                                            options: KustoReadOptions,
                                            filtering: KustoFiltering): Unit = {
+    val supportNewParquetWriter = new ComparableVersion(request.sparkSession.version)
+      .compareTo(new ComparableVersion(KustoReader.minimalParquetWriterVersion)) > 0
     val exportCommand = CslCommandsGenerator.generateExportDataCommand(
       query=KustoFilter.pruneAndFilter(request.schema, request.query, filtering),
       directory=directory,
       partitionId=partition.idx,
       storageParameters=storage,
       partitionPredicate=partition.predicate,
-      additionalExportOptions=options.additionalExportOptions
+      additionalExportOptions=options.additionalExportOptions,
+      supportNewParquetWriter=supportNewParquetWriter
     )
 
     val commandResult: KustoResultSetTable = client.executeEngine(request.kustoCoordinates.database,
