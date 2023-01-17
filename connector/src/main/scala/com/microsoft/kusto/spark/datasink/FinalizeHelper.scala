@@ -23,7 +23,7 @@ object FinalizeHelper {
   private[kusto] def finalizeIngestionWhenWorkersSucceeded(partitionsResults: CollectionAccumulator[PartitionResult],
                                                            sparkContext: SparkContext,
                                                            kustoClient: ExtendedKustoClient,
-                                                           transactionWriteParams: TransactionWriteParams
+                                                           transactionWriteParams: WriteParams
                                                           ): Unit = {
     if (!kustoClient.shouldIngestData(transactionWriteParams.tableCoordinates, transactionWriteParams.writeOptions.maybeSparkIngestionProperties, transactionWriteParams.tableExists, transactionWriteParams.crp)) {
       KDSU.logInfo(myName, s"$IngestSkippedTrace '${transactionWriteParams.tableCoordinates.table}'")
