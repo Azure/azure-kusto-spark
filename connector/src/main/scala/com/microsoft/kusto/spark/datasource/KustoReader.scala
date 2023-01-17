@@ -237,6 +237,11 @@ private[kusto] class KustoReader(client: ExtendedKustoClient) {
                                            filtering: KustoFiltering): Unit = {
     val supportNewParquetWriter = new ComparableVersion(request.sparkSession.version)
       .compareTo(new ComparableVersion(KustoReader.minimalParquetWriterVersion)) > 0
+    if (!supportNewParquetWriter) {
+      KDSU.logWarn(myName,
+        "Setting useNativeParquetWriter=false. Users are advised to move to Spark versions >= 3.3.0 to leverage the performance and cost improvements of" +
+          "new encoding schemes introduced in both Kusto parquet files write and Spark parquet read")
+    }
     val exportCommand = CslCommandsGenerator.generateExportDataCommand(
       query=KustoFilter.pruneAndFilter(request.schema, request.query, filtering),
       directory=directory,
