@@ -109,10 +109,12 @@ If set to 'true', query executed on kusto cluster will include the filters.
   'true' by default if KUSTO_DISTRIBUTED_READ_MODE_TRANSIENT_CACHE=false
 
 * **KUSTO_EXPORT_OPTIONS_JSON**:
-  'kustoExportOptionsJson' - JSON that provides the list of [export options](https://learn.microsoft.com/azure/data-explorer/kusto/management/data-export/export-data-to-storage) in case of distributed read (either because of query limits getting hit or user request for ForceDistributed mode). The export options do not support the _OutputDataFormat_ which is defaulted to _parquet_, _namePrefix_ which is defaulted based on the
-  partition of the export. _compressionType_ is defaulted to snappy and the command also specifies _compressed_ (to create .snappy.gz files), to turn extra compression off - it can be set to _none_ (**not recommended**)
+  'kustoExportOptionsJson' - JSON that provides the list of [export options](https://learn.microsoft.com/azure/data-explorer/kusto/management/data-export/export-data-to-storage) in case of distributed read (either because of query limits getting hit or user request for ForceDistributed mode). 
+  The export options do not support the _OutputDataFormat_ which is defaulted to _parquet_, _namePrefix_ which is a new directory specifically for the current read,
+   _compressionType_ is defaulted to snappy and the command also specifies _compressed_ (to create .snappy.gz files), to turn extra compression off - it can be set to _none_ (**not recommended**)
   i.e .option("kustoExportOptionsJson", "{\"distribution\":\"per_node\"}")
-* 
+>Note: Connector versions >= 3.1.10 will automatically set useNativeParquetWriter=false if Spark version < 3.3.0 as Kusto service uses now vectorized parquet writer introduced in this version. Do not set to true for lower versions as it will fail.
+ 
 #### Transient Storage Parameters
 When reading data from Kusto in 'distributed' mode, the data is exported from Kusto into a blob storage every time the corresponding RDD is materialized.
 If the user doesn't specify storage parameters and a 'Distributed' read mode is chosen - the storage used will be provided by Kusto ingest service.
@@ -129,8 +131,8 @@ transientStorage = "{ \"storageCredentials\" : [ { \
     \"storageAccountName\": \"1jdldsdke2etestcluster01\",\
     \"blobContainer\": \"20221225-exportresults-0\",\
     \"sasUrl\" : \"https://1jdldsdke2etestcluster01.blob.core.windows.net/20221225-exportresults-0\", \
-  \"sasKey\" : \"?sv=2018-03-28&sr=c&sig=IpdreLgIV7nZyLdENdukhRS3gdS5IxPapiKJa6j40Ig%3D&st=2022-12-25T13%3A45%3A12Z&se=2022-12-29T14%3A45%3A12Z&sp=rwdl\"\
-  } ] }"
+  \"sasKey\" : \"?sas\"\,
+  } ],"endpointSuffix" : "core.windows.net" }"
   ...
   option("transientStorage", transientStorage). \
  ```

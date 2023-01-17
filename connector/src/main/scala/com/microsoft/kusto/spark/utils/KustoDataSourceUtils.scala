@@ -529,6 +529,7 @@ object KustoDataSourceUtils {
     latch
   }
 
+  // Throws on Failure or timeout
   def verifyAsyncCommandCompletion(client: Client,
                                    database: String,
                                    commandResult: KustoResultSetTable,

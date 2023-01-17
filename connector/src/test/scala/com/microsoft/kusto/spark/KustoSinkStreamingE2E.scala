@@ -1,9 +1,10 @@
 package com.microsoft.kusto.spark
 
 import java.util.UUID
-
 import com.microsoft.azure.kusto.data.ClientFactory
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
+import com.microsoft.kusto.spark.KustoTestUtils.KustoConnectionOptions
+import com.microsoft.kusto.spark.common.KustoDebugOptions
 import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode, SparkIngestionProperties}
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import org.apache.spark.SparkContext
@@ -39,25 +40,16 @@ class KustoSinkStreamingE2E extends FlatSpec with BeforeAndAfterAll {
 
     sc.stop()
   }
+  private val kustoConnectionOptions: KustoConnectionOptions = KustoTestUtils.getSystemTestOptions
 
-  val appId: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_APP_ID)
-  val appKey: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_APP_SECRET)
-  val authority: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com")
-  val cluster: String = System.getProperty(KustoSinkOptions.KUSTO_CLUSTER)
-  val database: String = System.getProperty(KustoSinkOptions.KUSTO_DATABASE)
-
-  val csvPath: String = System.getProperty("path", "src/test/resources/TestData/csv")
+  val csvPath: String = System.getProperty("path", "connector/src/test/resources/TestData/csv")
   val customSchema: StructType = new StructType().add("colA", StringType, nullable = true).add("colB", IntegerType, nullable = true)
 
   "KustoStreamingSinkSyncWithTableCreateAndIngestIfNotExist" should "ingest structured data to a Kusto cluster" taggedAs KustoE2E in {
-
-    if (appId == null || appKey == null || authority == null || cluster == null || database == null) {
-      fail()
-    }
-
     val prefix = "KustoStreamingSparkE2E_Ingest"
     val table = s"${prefix}_${UUID.randomUUID().toString.replace("-", "_")}"
-    val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://$cluster.kusto.windows.net", appId, appKey, authority)
+    val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://${kustoConnectionOptions.cluster}.kusto.windows.net",
+      kustoConnectionOptions.appId, kustoConnectionOptions.appKey, kustoConnectionOptions.authority)
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
 
     val csvDf = spark
@@ -83,35 +75,32 @@ class KustoSinkStreamingE2E extends FlatSpec with BeforeAndAfterAll {
       .writeStream
       .format("com.microsoft.kusto.spark.datasink.KustoSinkProvider")
       .options(Map(
-        KustoSinkOptions.KUSTO_CLUSTER -> cluster,
+        KustoSinkOptions.KUSTO_CLUSTER -> kustoConnectionOptions.cluster,
         KustoSinkOptions.KUSTO_TABLE -> table,
-        KustoSinkOptions.KUSTO_DATABASE -> database,
-        KustoSinkOptions.KUSTO_AAD_APP_ID -> appId,
-        KustoSinkOptions.KUSTO_AAD_APP_SECRET -> appKey,
-        KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID -> authority,
+        KustoSinkOptions.KUSTO_DATABASE -> kustoConnectionOptions.database,
+        KustoSinkOptions.KUSTO_AAD_APP_ID -> kustoConnectionOptions.appId,
+        KustoSinkOptions.KUSTO_AAD_APP_SECRET -> kustoConnectionOptions.appKey,
+        KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID -> kustoConnectionOptions.authority,
         KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS -> SinkTableCreationMode.CreateIfNotExist.toString,
+        KustoDebugOptions.KUSTO_ENSURE_NO_DUPLICATED_BLOBS-> true.toString,
         KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON -> sp.toString))
       .trigger(Trigger.Once)
 
-    kustoQ.start()
+    kustoQ.start().awaitTermination(sleepTimeTillTableCreate)
 
     // Sleep util table is expected to be created
     Thread.sleep(sleepTimeTillTableCreate)
-    KustoTestUtils.validateResultsAndCleanup(kustoAdminClient, table, database, expectedNumberOfRows, timeoutMs - sleepTimeTillTableCreate, tableCleanupPrefix = prefix)
+    KustoTestUtils.validateResultsAndCleanup(kustoAdminClient, table, kustoConnectionOptions.database, expectedNumberOfRows, timeoutMs - sleepTimeTillTableCreate, tableCleanupPrefix = prefix)
   }
 
   "KustoStreamingSinkAsync" should "also ingest structured data to a Kusto cluster" taggedAs KustoE2E in {
-
-    if(appId == null || appKey == null || authority == null || cluster == null || database == null){
-      fail()
-    }
-
     val prefix = "KustoStreamingSparkE2EAsync_Ingest"
     val table = s"${prefix}_${UUID.randomUUID().toString.replace("-","_")}"
-    val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://$cluster.kusto.windows.net", appId, appKey, authority)
+    val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://${kustoConnectionOptions.cluster}.kusto.windows.net",
+      kustoConnectionOptions.appId, kustoConnectionOptions.appKey, kustoConnectionOptions.authority)
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
 
-    kustoAdminClient.execute(database, generateTempTableCreateCommand(table, columnsTypesAndNames = "ColA:string, ColB:int"))
+    kustoAdminClient.execute(kustoConnectionOptions.database, generateTempTableCreateCommand(table, columnsTypesAndNames = "ColA:string, ColB:int"))
 
     val csvDf = spark
       .readStream
@@ -131,17 +120,17 @@ class KustoSinkStreamingE2E extends FlatSpec with BeforeAndAfterAll {
       .writeStream
       .format("com.microsoft.kusto.spark.datasink.KustoSinkProvider")
       .options(Map(
-        KustoSinkOptions.KUSTO_CLUSTER -> cluster,
+        KustoSinkOptions.KUSTO_CLUSTER -> kustoConnectionOptions.cluster,
         KustoSinkOptions.KUSTO_TABLE -> table,
-        KustoSinkOptions.KUSTO_DATABASE -> database,
-        KustoSinkOptions.KUSTO_AAD_APP_ID -> appId,
-        KustoSinkOptions.KUSTO_AAD_APP_SECRET -> appKey,
-        KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID -> authority,
+        KustoSinkOptions.KUSTO_DATABASE -> kustoConnectionOptions.database,
+        KustoSinkOptions.KUSTO_AAD_APP_ID -> kustoConnectionOptions.appId,
+        KustoSinkOptions.KUSTO_AAD_APP_SECRET -> kustoConnectionOptions.appKey,
+        KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID -> kustoConnectionOptions.authority,
         KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC -> "true"))
       .trigger(Trigger.Once)
 
     kustoQ.start().awaitTermination()
 
-    KustoTestUtils.validateResultsAndCleanup(kustoAdminClient, table, database, expectedNumberOfRows, timeoutMs, tableCleanupPrefix = prefix)
+    KustoTestUtils.validateResultsAndCleanup(kustoAdminClient, table, kustoConnectionOptions.database, expectedNumberOfRows, timeoutMs, tableCleanupPrefix = prefix)
   }
 }
