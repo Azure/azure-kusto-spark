@@ -51,6 +51,11 @@ private[kusto] object KustoReader {
   private val myName = this.getClass.getSimpleName
   private val distributedReadModeTransientCache: concurrent.Map[DistributedReadModeTransientCacheKey,Seq[String]] =
     new concurrent.TrieMap()
+  /*
+  A new native implementation of Parquet writer that uses new encoding schemes was rolled out on the ADX side. This uses delta byte array for strings and other byte array-based Parquet types (default in Parquet V2 which most modern parquet readers support by default).
+  To avoid breaking changes for applications, if the runtime is on a lower version than 3.3.0 of spark runtime we explicitly set the ADX export to not use the useNativeIngestion
+  TODO - add test
+  */
   private val minimalParquetWriterVersion = "3.3.0"
   private[kusto] def singleBuildScan(kustoClient: ExtendedKustoClient,
                                      request: KustoReadRequest,
