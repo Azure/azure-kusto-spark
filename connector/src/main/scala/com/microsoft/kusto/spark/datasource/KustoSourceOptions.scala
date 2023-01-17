@@ -32,7 +32,8 @@ object KustoSourceOptions extends KustoOptions {
   val KUSTO_QUERY_FILTER_PUSH_DOWN: String = newOption("queryFilterPushDown")
   // When a large dataset has to be exported with Kusto as a source (or) when forcing a distributed mode read (or) when
   // query limits are hit the connector uses the export option to export data (.export data).With newer options being
-  // rolled-out for export, this additional parameter can be used as options for the export
+  // rolled-out for export, this additional parameter can be used as options for the export.
+  // Setting useNativeParquetWriter=true will fail for Spark versions < 3.3.0
   val KUSTO_EXPORT_OPTIONS_JSON: String = newOption("kustoExportOptionsJson")
 }
 
