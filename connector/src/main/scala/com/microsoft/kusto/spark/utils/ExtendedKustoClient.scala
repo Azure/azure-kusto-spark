@@ -3,7 +3,6 @@ package com.microsoft.kusto.spark.utils
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.exceptions.KustoDataExceptionBase
 import com.microsoft.azure.kusto.data._
-import com.microsoft.azure.kusto.ingest.exceptions.IngestionServiceException
 import com.microsoft.azure.kusto.ingest.{IngestClientFactory, QueuedIngestClient}
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.KustoWriter.DelayPeriodBetweenCalls
@@ -372,6 +371,7 @@ class ExtendedKustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcs
   }
 
   def executeEngine(database: String, command: String, crp: ClientRequestProperties, retryConfig: Option[RetryConfig] = None): KustoOperationResult = {
+    // TODO - CID should reflect retries
     KDSU.retryApplyFunction(() => engineClient.execute(database, command, crp), retryConfig.getOrElse(this.retryConfig),
       "Execute engine command with retries")
   }

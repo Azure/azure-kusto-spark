@@ -11,7 +11,7 @@ import com.microsoft.kusto.spark.utils.CslCommandsGenerator.{generateExtentTagsD
 import com.microsoft.kusto.spark.utils.KustoConstants.IngestSkippedTrace
 import org.apache.commons.lang3.exception.ExceptionUtils
 import shaded.parquet.org.codehaus.jackson.map.ObjectMapper
-import com.microsoft.kusto.spark.utils.{ExtendedKustoClient, KustoClientCache, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.{ExtendedKustoClient, KustoClientCache, KustoConstants, KustoDataSourceUtils => KDSU}
 import org.apache.spark.SparkContext
 import org.apache.spark.util.CollectionAccumulator
 
@@ -78,7 +78,12 @@ object FinalizeHelper {
             // Drop dedup tags
             if (writeOptions.ensureNoDupBlobs){
               val pref = KDSU.getDedupTagsPrefix(writeOptions.requestId, batchIdIfExists)
-              kustoClient.executeEngine(coordinates.database, generateExtentTagsDropByPrefixCommand(tmpTableName, pref), crp)
+              val operation = kustoClient.executeEngine(coordinates.database, generateExtentTagsDropByPrefixCommand(tmpTableName, pref), crp).getPrimaryResults
+              KDSU.verifyAsyncCommandCompletion(kustoClient.engineClient, coordinates.database, operation, samplePeriod =
+                KustoConstants
+                  .DefaultPeriodicSamplePeriod, writeOptions.timeout, s"drops extents from temp table '$tmpTableName' ",
+                myName,
+                writeOptions.requestId)
             }
 
             if (writeOptions.pollingOnDriver) {
