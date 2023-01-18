@@ -25,6 +25,7 @@ import org.joda.time.{DateTime, DateTimeZone}
 import org.json.JSONObject
 
 import java.io.BufferedWriter
+import java.util
 import java.net.URI
 import java.security.InvalidParameterException
 import java.util.UUID
@@ -126,7 +127,6 @@ class KustoParquetWriter {
     val blobNamePath = s"/$blobName"
     // write data to blob with snappy compression
     data.write.option("parquet.block.size", writeParams.writeOptions.batchLimit * KustoConstants.OneMegaByte).parquet(s"$blobRoot$blobNamePath")
-    KustoDataSourceUtils.logInfo("KustoParquetWriter", s" Time take to write parquet to blob with Snappy: ${timeNow-timeThen}ms")
 
     // Enumerate the list of files
     val listOfFiles = getListOfFileFromDirectory(blobRoot, blobNamePath, hadoopConfig)
