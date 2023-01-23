@@ -49,6 +49,9 @@ trait KustoOptions {
   // The provider will be called for every request to the kusto service
   val KUSTO_TOKEN_PROVIDER_CALLBACK_CLASSPATH: String = newOption("tokenProviderCallbackClasspath")
 
+  val KUSTO_MANAGED_IDENTITY_AUTH : String = newOption("managedIdentityAuth")
+  val KUSTO_MANAGED_CLIENT_ID : String = newOption("managedClientId")
+
   /** Optional parameters */
   // it merge origin/aKusto ingestion cluster URL for reading data - provide this if ingestion URL cannot be deduced
   // from adding

@@ -171,6 +171,9 @@ object KustoDataSourceUtils {
     var authentication: KustoAuthentication = null
     var keyVaultAuthentication: Option[KeyVaultAuthentication] = None
 
+    val managedIdentityAuth : Boolean = parameters.getOrElse(KustoSourceOptions.KUSTO_MANAGED_IDENTITY_AUTH,"false").toBoolean
+    val maybeManagedClientId : Option[String] = parameters.get(KustoSourceOptions.KUSTO_MANAGED_CLIENT_ID)
+
     val authorityId: String = parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID, DefaultMicrosoftTenant)
 
     // Check KeyVault Authentication
@@ -206,7 +209,10 @@ object KustoDataSourceUtils {
       } else if (applicationCertPath.nonEmpty) {
         authentication = AadApplicationCertificateAuthentication(applicationId, applicationCertPath, applicationCertPassword, authorityId)
       }
-    } else if (accessToken.nonEmpty) {
+    }else if( managedIdentityAuth){
+      // Authentication for managed Identity
+      authentication = ManagedIdentityAuthentication(maybeManagedClientId)
+    }else if (accessToken.nonEmpty) {
       // Authentication by token
       authentication = KustoAccessTokenAuthentication(accessToken)
     } else if (tokenProviderCoordinates.nonEmpty) {
