@@ -66,6 +66,17 @@ object FinalizeHelper {
               client.executeEngine(coordinates.database, generateTableAlterMergePolicyCommand(tmpTableName,
                 allowMerge = false,
                 allowRebuild = false), crp)
+              // Drop dedup tags
+              if (writeOptions.ensureNoDupBlobs) {
+                val pref = KDSU.getDedupTagsPrefix(writeOptions.requestId, batchIdIfExists)
+                kustoClient.retryAsyncOp(coordinates.database,
+                  generateExtentTagsDropByPrefixCommand(tmpTableName, pref),
+                  crp,
+                  writeOptions.timeout,
+                  s"drops extents from temp table '$tmpTableName' ",
+                  writeOptions.requestId
+                )
+              }
               client.moveExtents(coordinates.database, tmpTableName, coordinates.table.get, crp, writeOptions)
             }
             // Move data to real table
@@ -74,13 +85,6 @@ object FinalizeHelper {
             // several flows started together only one of them would ingest
             KDSU.logInfo(myName, s"Final ingestion step: Moving extents from '$tmpTableName, requestId: ${writeOptions.requestId}," +
               s"$batchIdIfExists")
-
-            // Drop dedup tags
-            if (writeOptions.ensureNoDupBlobs){
-              val pref = KDSU.getDedupTagsPrefix(writeOptions.requestId, batchIdIfExists)
-              kustoClient.retryAsyncOp(coordinates.database, generateExtentTagsDropByPrefixCommand(tmpTableName, pref), crp, writeOptions.timeout,
-                s"drops extents from temp table '$tmpTableName'", requestId)
-            }
 
             if (writeOptions.pollingOnDriver) {
               moveOperation(0)
@@ -175,12 +179,12 @@ object FinalizeHelper {
         case otherStatus: Any =>
           // TODO error code should be added to java client
           if (finalRes.get.errorCodeString != "Skipped_IngestByTagAlreadyExists"){
-              throw new RuntimeException(s"Ingestion to Kusto failed with status '$otherStatus'." +
-                s" $ingestionInfoString, partition: '${partitionResult.partitionId}'. Ingestion info: '${
-                  new ObjectMapper()
-                    .writerWithDefaultPrettyPrinter
-                    .writeValueAsString(finalRes.get)
-                }'")
+            throw new RuntimeException(s"Ingestion to Kusto failed with status '$otherStatus'." +
+              s" $ingestionInfoString, partition: '${partitionResult.partitionId}'. Ingestion info: '${
+                new ObjectMapper()
+                  .writerWithDefaultPrettyPrinter
+                  .writeValueAsString(finalRes.get)
+              }'")
           } else if (shouldThrowOnTagsAlreadyExists) {
             // TODO - think about this logic and other cases that should not throw all (maybe everything that starts with skip? this actualy
             //  seems like a bug in engine that the operation status is not Skipped)
