@@ -60,6 +60,7 @@ object FinalizeHelper {
           }
 
           if (partitionsResults.value.size > 0) {
+            val pref = KDSU.getDedupTagsPrefix(writeOptions.requestId, batchIdIfExists)
             val moveOperation = (_: Int) => {
               val client = KustoClientCache.getClient(coordinates.clusterUrl, authentication, coordinates.ingestionUrl,
                 coordinates.clusterAlias)
@@ -68,8 +69,7 @@ object FinalizeHelper {
                 allowRebuild = false), crp)
               // Drop dedup tags
               if (writeOptions.ensureNoDupBlobs) {
-                val pref = KDSU.getDedupTagsPrefix(writeOptions.requestId, batchIdIfExists)
-                kustoClient.retryAsyncOp(coordinates.database,
+                client.retryAsyncOp(coordinates.database,
                   generateExtentTagsDropByPrefixCommand(tmpTableName, pref),
                   crp,
                   writeOptions.timeout,
