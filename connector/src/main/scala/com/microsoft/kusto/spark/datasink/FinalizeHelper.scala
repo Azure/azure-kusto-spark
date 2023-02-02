@@ -60,12 +60,23 @@ object FinalizeHelper {
           }
 
           if (partitionsResults.value.size > 0) {
+            val pref = KDSU.getDedupTagsPrefix(writeOptions.requestId, batchIdIfExists)
             val moveOperation = (_: Int) => {
               val client = KustoClientCache.getClient(coordinates.clusterUrl, authentication, coordinates.ingestionUrl,
                 coordinates.clusterAlias)
               client.executeEngine(coordinates.database, generateTableAlterMergePolicyCommand(tmpTableName,
                 allowMerge = false,
                 allowRebuild = false), crp)
+              // Drop dedup tags
+              if (writeOptions.ensureNoDupBlobs) {
+                client.retryAsyncOp(coordinates.database,
+                  generateExtentTagsDropByPrefixCommand(tmpTableName, pref),
+                  crp,
+                  writeOptions.timeout,
+                  s"drops extents from temp table '$tmpTableName' ",
+                  writeOptions.requestId
+                )
+              }
               client.moveExtents(coordinates.database, tmpTableName, coordinates.table.get, crp, writeOptions)
             }
             // Move data to real table
@@ -74,17 +85,6 @@ object FinalizeHelper {
             // several flows started together only one of them would ingest
             KDSU.logInfo(myName, s"Final ingestion step: Moving extents from '$tmpTableName, requestId: ${writeOptions.requestId}," +
               s"$batchIdIfExists")
-
-            // Drop dedup tags
-            if (writeOptions.ensureNoDupBlobs){
-              val pref = KDSU.getDedupTagsPrefix(writeOptions.requestId, batchIdIfExists)
-              val operation = kustoClient.executeEngine(coordinates.database, generateExtentTagsDropByPrefixCommand(tmpTableName, pref), crp).getPrimaryResults
-              KDSU.verifyAsyncCommandCompletion(kustoClient.engineClient, coordinates.database, operation, samplePeriod =
-                KustoConstants
-                  .DefaultPeriodicSamplePeriod, writeOptions.timeout, s"drops extents from temp table '$tmpTableName' ",
-                myName,
-                writeOptions.requestId)
-            }
 
             if (writeOptions.pollingOnDriver) {
               moveOperation(0)
@@ -144,7 +144,7 @@ object FinalizeHelper {
             KDSU.logWarn(loggerName, "Failed to fetch operation status transiently - will keep polling. " +
               s"RequestId: $requestId. Error: ${ExceptionUtils.getStackTrace(e)}")
             None
-          case e: Exception => KDSU.reportExceptionAndThrow(loggerName, e, s"Failed to fetch operation status. RequestId: $requestId");
+          case e: Exception => KDSU.reportExceptionAndThrow(loggerName, e, s"Failed to fetch operation status. RequestId: $requestId")
             None
         }
       },
@@ -179,12 +179,12 @@ object FinalizeHelper {
         case otherStatus: Any =>
           // TODO error code should be added to java client
           if (finalRes.get.errorCodeString != "Skipped_IngestByTagAlreadyExists"){
-              throw new RuntimeException(s"Ingestion to Kusto failed with status '$otherStatus'." +
-                s" $ingestionInfoString, partition: '${partitionResult.partitionId}'. Ingestion info: '${
-                  new ObjectMapper()
-                    .writerWithDefaultPrettyPrinter
-                    .writeValueAsString(finalRes.get)
-                }'")
+            throw new RuntimeException(s"Ingestion to Kusto failed with status '$otherStatus'." +
+              s" $ingestionInfoString, partition: '${partitionResult.partitionId}'. Ingestion info: '${
+                new ObjectMapper()
+                  .writerWithDefaultPrettyPrinter
+                  .writeValueAsString(finalRes.get)
+              }'")
           } else if (shouldThrowOnTagsAlreadyExists) {
             // TODO - think about this logic and other cases that should not throw all (maybe everything that starts with skip? this actualy
             //  seems like a bug in engine that the operation status is not Skipped)
