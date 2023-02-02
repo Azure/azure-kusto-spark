@@ -95,29 +95,6 @@ All the options that can be used in the Kusto Source can be found in KustoSource
     'requestId' - A unique identifier UUID for this reading operation. Setting this will override the ClientRequestId on the
     ClientRequestProperties object if set.
     
-#### Transient Storage Parameters
-When reading data from Kusto in 'distributed' mode, the data is exported from Kusto into a blob storage every time the corresponding RDD is materialized. 
-If the user doesn't specify storage parameters and a 'Distributed' read mode is chosen - the storage used will be provided by Kusto ingest service. 
-
->Note: If the user provides the blob storage - the blobs created are the caller's responsibility. This includes provisioning the storage, rotating access keys, 
-deleting transient artifacts etc. KustoBlobStorageUtils module contains helper functions for deleting blobs based on either account and container 
-coordinates and account credentials, or a full SAS URL with write, read and list permissions once the corresponding RDD is no longer needed. Each transaction stores transient blob 
-artifacts in a separate directory. This directory is captured as part of read-transaction information logs reported on the Spark Driver node. 
-
-* **KUSTO_BLOB_STORAGE_ACCOUNT_NAME**
-'blobStorageAccountName' - Transient storage account name. Either this, or a SAS URL, must be provided to access the storage account
-
-* **KUSTO_BLOB_STORAGE_ACCOUNT_KEY**
-'blobStorageAccountKey' - Storage account key. Either this, or a SAS URL, must be provided to access the storage account
-
-* **KUSTO_BLOB_STORAGE_SAS_URL**
-'sasUrl' - SAS URL: a complete SAS URL to access the container. Either this, or a storage account name and key, must be provided
-  to access the storage account
-  
-* **KUSTO_BLOB_CONTAINER**
-'blobContainer' - Blob container name. This container will be used to store all transient artifacts created every time the corresponding RDD is materialized. 
-Once the RDD is no longer required by the caller application, the container and/or all its contents can be deleted by the caller.
-
 * **KUSTO_READ_MODE**
 'readMode' - Override the connector heuristic to choose between 'Single' and 'Distributed' mode.
 Options are - 'ForceSingleMode', 'ForceDistributedMode'.
@@ -130,9 +107,37 @@ When 'Distributed' read mode is used and this is set to 'true', the request quer
 If set to 'true', query executed on kusto cluster will include the filters.
   'false' by default if KUSTO_DISTRIBUTED_READ_MODE_TRANSIENT_CACHE=true, and
   'true' by default if KUSTO_DISTRIBUTED_READ_MODE_TRANSIENT_CACHE=false
-  
-  
- ### Examples
+
+* **KUSTO_EXPORT_OPTIONS_JSON**:
+  'kustoExportOptionsJson' - JSON that provides the list of [export options](https://learn.microsoft.com/azure/data-explorer/kusto/management/data-export/export-data-to-storage) in case of distributed read (either because of query limits getting hit or user request for ForceDistributed mode). 
+  The export options do not support the _OutputDataFormat_ which is defaulted to _parquet_, _namePrefix_ which is a new directory specifically for the current read,
+   _compressionType_ is defaulted to snappy and the command also specifies _compressed_ (to create .snappy.gz files), to turn extra compression off - it can be set to _none_ (**not recommended**)
+  i.e .option("kustoExportOptionsJson", "{\"distribution\":\"per_node\"}")
+>Note: Connector versions >= 3.1.10 will automatically set useNativeParquetWriter=false if Spark version < 3.3.0 as Kusto service uses now vectorized parquet writer introduced in this version. Do not set to true for lower versions as it will fail. Users are advised to move to Spark 3.3.0 to leverage this new great performance enhancement on both Spark side and Kusto service side.
+ 
+#### Transient Storage Parameters
+When reading data from Kusto in 'distributed' mode, the data is exported from Kusto into a blob storage every time the corresponding RDD is materialized.
+If the user doesn't specify storage parameters and a 'Distributed' read mode is chosen - the storage used will be provided by Kusto ingest service.
+
+>Note: If the user provides the blob storage - the blobs created are the caller's responsibility. This includes provisioning the storage, rotating access keys,
+deleting transient artifacts etc. KustoBlobStorageUtils module contains helper functions for deleting blobs based on either account and container
+coordinates and account credentials, or a full SAS URL with write, read and list permissions once the corresponding RDD is no longer needed. Each transaction stores transient blob
+artifacts in a separate directory. This directory is captured as part of read-transaction information logs reported on the Spark Driver node.
+
+* ** KUSTO_TRANSIENT_STORAGE **:
+ 'transientStorage' KustoSourceOptions.KUSTO_TRANSIENT_STORAGE -> new TransientStorageParameters(Array(new TransientStorageCredentials(blobSas)))
+ ```python
+transientStorage = "{ \"storageCredentials\" : [ { \
+    \"storageAccountName\": \"1jdldsdke2etestcluster01\",\
+    \"blobContainer\": \"20221225-exportresults-0\",\
+    \"sasUrl\" : \"https://1jdldsdke2etestcluster01.blob.core.windows.net/20221225-exportresults-0\", \
+  \"sasKey\" : \"?sas\"\,
+  } ],"endpointSuffix" : "core.windows.net" }"
+  ...
+  option("transientStorage", transientStorage). \
+ ```
+
+### Examples
  
  **Using simplified syntax**
  

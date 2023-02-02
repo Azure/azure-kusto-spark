@@ -4,6 +4,7 @@ import java.time.Instant
 import com.microsoft.kusto.spark.datasource.{TransientStorageCredentials, TransientStorageParameters}
 
 private[kusto] object CslCommandsGenerator {
+  private final val defaultKeySet = Set("compressionType","namePrefix","sizeLimit","compressed","async")
   def generateFetchTableIngestByTagsCommand(table: String): String = {
     s""".show table $table  extents;
        $$command_results
@@ -119,34 +120,42 @@ private[kusto] object CslCommandsGenerator {
     s".show operations $operationId"
   }
 
-  // Export data to blob
+  // Export data to blob container
+  // We want to process these export options on a case to case basis. We want a default of snappy for compression
+  // and also want to ignore namePrefix because the files get exported with this name and then we need to read
+  // them with the same name in downstream processing.
   def generateExportDataCommand(
                                  query: String,
                                  directory: String,
                                  partitionId: Int,
                                  storageParameters: TransientStorageParameters,
                                  partitionPredicate: Option[String] = None,
-                                 sizeLimit: Option[Long],
-                                 isAsync: Boolean = true,
-                                 isCompressed: Boolean = false): String = {
+                                 additionalExportOptions: Map[String,String] = Map.empty[String,String],
+                                 supportNewParquetWriter: Boolean = true
+                               ): String = {
     val getFullUrlFromParams = (storage: TransientStorageCredentials) => {
       val secretString = if (!storage.sasDefined) s""";" h@"${storage.storageAccountKey}"""" else if
       (storage.sasKey(0) == '?') s"""" h@"${storage.sasKey}"""" else s"""?" h@"${storage.sasKey}""""
       val blobUri = s"https://${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}"
       s"$blobUri/${storage.blobContainer}$secretString"
     }
-
-    val async = if (isAsync) "async " else ""
-    val compress = if (isCompressed) "compressed " else ""
-    val sizeLimitIfDefined = if (sizeLimit.isDefined) s"sizeLimit=${sizeLimit.get * 1024 * 1024}, " else ""
+    // if we pass in compress as 'none' explicitly then do not compress, else compress
+    val compress =  if (additionalExportOptions.get("compressed").exists(compressed=>"none".equalsIgnoreCase(compressed))) "" else "compressed"
+    val additionalOptionsString = additionalExportOptions.filterKeys(key=> !defaultKeySet.contains(key)).map {
+      case (k,v) => s"""$k="$v""""
+    }.mkString(",",",","")
+    // Values in the map will override,We could have chosen sizeLimit option as the default.
+    // Chosen the one in the map for consistency
+    val compressionFormat = additionalExportOptions.getOrElse("compressionType", "snappy")
+    val namePrefix = s"${directory}part$partitionId"
+    val sizeLimitOverride = additionalExportOptions.get("sizeLimit").map(size => s"sizeLimit=${size.toLong * 1024 * 1024} ,").getOrElse("")
+    val nativeParquetString = additionalExportOptions.get("useNativeParquetWriter")
+      .map(b => s"useNativeParquetWriter=$b, ").getOrElse(if (!supportNewParquetWriter) "useNativeParquetWriter=false, " else "")
 
     var command =
-      s""".export $async${compress}to parquet ("${storageParameters.storageCredentials.map(getFullUrlFromParams).reduce((s, s1) => s + ",\"" + s1)})""" +
-        s""" with (${sizeLimitIfDefined}namePrefix="${directory}part$partitionId", compressionType=snappy) <| $query"""
+      s""".export async $compress to parquet ("${storageParameters.storageCredentials.map(getFullUrlFromParams).reduce((s, s1) => s + ",\"" + s1)})""" +
+        s""" with ($sizeLimitOverride$nativeParquetString namePrefix="$namePrefix", compressionType="$compressionFormat"$additionalOptionsString) <| $query"""
 
-    if (partitionPredicate.nonEmpty) {
-      command += s" | where ${partitionPredicate.get}"
-    }
     command
   }
 
@@ -179,7 +188,7 @@ private[kusto] object CslCommandsGenerator {
   }
 
   def generateExtentTagsDropByPrefixCommand(tableName:String , prefix: String): String = {
-    s""".drop extent tags <|
+    s""".drop async extent tags <|
          .show table $tableName extents
          | where isnotempty(Tags)
          | extend Tags = split(Tags, '\\r\\n')

@@ -1,18 +1,16 @@
 package com.microsoft.kusto.spark.datasource
 
-import java.sql.Timestamp
-import java.util
-
-import com.microsoft.azure.kusto.data.{KustoResultColumn, KustoResultSetTable, Results}
+import com.microsoft.azure.kusto.data.KustoResultSetTable
 import com.microsoft.kusto.spark.utils.DataTypeMapping
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.types.{StructType, _}
-import java.time.Instant
 
+import java.sql.Timestamp
+import java.time.Instant
+import java.util
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
 
 object KustoResponseDeserializer {
   def apply(kustoResult: KustoResultSetTable): KustoResponseDeserializer = new KustoResponseDeserializer(kustoResult)
@@ -34,9 +32,9 @@ class KustoResponseDeserializer(val kustoResult: KustoResultSetTable) {
       case "datetime" => value: Any => Timestamp.from(Instant.parse(value.toString))
       case "timespan" => value: Any => value
       case "sbyte" => value: Any => value
-      case "long" => value: Any => value match {
+      case "long" => {
         case i: Int => i.toLong
-        case _ => value.asInstanceOf[Long]
+        case value => value.asInstanceOf[Long]
       }
       case "double" => value: Any => value
       case "decimal" => value: Any => BigDecimal(value.asInstanceOf[String])
@@ -46,6 +44,7 @@ class KustoResponseDeserializer(val kustoResult: KustoResultSetTable) {
       case "real" => {
         case v: Int => v.toDouble
         case v: Long => v.toDouble
+        case v: java.math.BigDecimal => v.doubleValue()
         case v => v.asInstanceOf[Double]
       }
       case _ => value: Any => value.toString

@@ -1,5 +1,8 @@
 package com.microsoft.kusto.spark.utils
 
+import com.fasterxml.jackson.core.`type`.TypeReference
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import com.microsoft.azure.kusto.data.exceptions.{DataClientException, DataServiceException}
 import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties, KustoResultSetTable}
 import com.microsoft.kusto.spark.authentication._
@@ -32,9 +35,13 @@ import java.util.{NoSuchElementException, Properties, StringJoiner, Timer, Timer
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
+import scala.util.{Failure, Success, Try}
 
 object KustoDataSourceUtils {
-  def getDedupTagsPrefix(requestId: String, batchId: String) = s"${requestId}_$batchId"
+
+  private final val className = this.getClass.getSimpleName
+  private final val objectMapper = new ObjectMapper().registerModule(DefaultScalaModule)
+  def getDedupTagsPrefix(requestId: String, batchId: String):String = s"${requestId}_$batchId"
 
   def generateTempTableName(appName: String, destinationTableName: String, requestId:String,
 
@@ -51,10 +58,7 @@ object KustoDataSourceUtils {
     val requestedPartitions = parameters.get(KustoDebugOptions.KUSTO_NUM_PARTITIONS)
     val partitioningMode = parameters.get(KustoDebugOptions.KUSTO_READ_PARTITION_MODE)
     val numPartitions = setNumPartitions(sqlContext, requestedPartitions, partitioningMode)
-    val shouldCompressOnExport = parameters.getOrElse(KustoDebugOptions.KUSTO_DBG_BLOB_COMPRESS_ON_EXPORT, "true").trim.toBoolean
     // Set default export split limit as 1GB, maximal allowed
-    val exportSplitLimitMb = parameters.getOrElse(KustoDebugOptions.KUSTO_DBG_BLOB_FILE_SIZE_LIMIT_MB, "1024").trim.toInt
-
     val readModeOption = parameters.get(KustoSourceOptions.KUSTO_READ_MODE)
     val readMode: Option[ReadMode] = if (readModeOption.isDefined) {
       Some(ReadMode.withName(readModeOption.get))
@@ -65,7 +69,25 @@ object KustoDataSourceUtils {
     val queryFilterPushDown = parameters.get(KustoSourceOptions.KUSTO_QUERY_FILTER_PUSH_DOWN).map(s => s.trim.toBoolean)
     val partitionColumn = parameters.get(KustoDebugOptions.KUSTO_PARTITION_COLUMN)
     val partitionOptions = PartitionOptions(numPartitions, partitionColumn, partitioningMode)
-    KustoReadOptions(readMode, shouldCompressOnExport, exportSplitLimitMb, partitionOptions, distributedReadModeTransientCacheEnabled, queryFilterPushDown)
+    // Parse upfront and throw back an error if there is a wrongly formatted JSON
+    val additionalExportOptions = parameters.get(KustoSourceOptions.KUSTO_EXPORT_OPTIONS_JSON) match {
+      case Some(exportOptionsJsonString) => Try(objectMapper.readValue(exportOptionsJsonString, new TypeReference[Map[String, String]] {})) match {
+        case Success(exportConfigMap) => exportConfigMap
+        case Failure(exception) =>
+          val errorMessage = s"The configuration for ${KustoSourceOptions.KUSTO_EXPORT_OPTIONS_JSON} has a value " +
+            s"$exportOptionsJsonString that cannot be parsed as Map"
+          logError(className, errorMessage)
+          throw new IllegalArgumentException(errorMessage)
+      }
+      case None => Map.empty[String,String]
+    }
+    val userNamePrefix = additionalExportOptions.get("namePrefix")
+    if (userNamePrefix.isDefined) {
+      logWarn(className, "User cannot specify namePrefix for additionalExportOptions as it can lead to unexpected behavior in reading output")
+    }
+
+    KustoReadOptions(readMode, partitionOptions,
+      distributedReadModeTransientCacheEnabled, queryFilterPushDown,additionalExportOptions)
   }
 
 
@@ -513,6 +535,7 @@ object KustoDataSourceUtils {
     latch
   }
 
+  // Throws on Failure or timeout
   def verifyAsyncCommandCompletion(client: Client,
                                    database: String,
                                    commandResult: KustoResultSetTable,

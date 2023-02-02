@@ -95,9 +95,6 @@ private[kusto] object KustoDebugOptions {
   // This feature is experimental, to measure performance impact w/wo compression
   // Default: 'true'
   val KUSTO_DBG_BLOB_COMPRESS_ON_EXPORT: String = newOption("dbgBlobCompressOnExport")
-  // The size limit in MB (uncompressed) after which the export to blob command will create another file (split)
-  // Setting negative or zero value results in applying export command default
-  val KUSTO_DBG_BLOB_FILE_SIZE_LIMIT_MB: String = newOption("dbgBlobFileSizeLimitMb")
 
   // Partitioning parameters, CURRENTLY NOT USED
   // CURRENTLY NOT USED
