@@ -181,13 +181,14 @@ The provider will be called for every request to the kusto service
     'tokenProviderCallbackClasspath' - The classpath to the class
 ## Managed Identity Authentication
 This authentication method can use [managed identities](https://learn.microsoft.com/azure/active-directory/managed-identities-azure-resources/overview) to obtain Azure AD tokens without having to manage any credentials.
-Supports System-assigned as well as User-assigned managed identities 
+Supports System-assigned as well as User-assigned managed identities. 
+>Read about configuring managed identities for ADX [here](https://learn.microsoft.com/azure/data-explorer/configure-managed-identities-cluster?tabs=portal).
 
 * **KUSTO_MANAGED_IDENTITY_AUTH**:
   'managedIdentityAuth' - Can be set to "true" or "false" if managed identity authentication is required or not.
 
-* **KUSTO_MANAGED_CLIENT_ID**:
-  'managedClientId' - ClientId for user assigned managed identity. In case it is not provided, System-assigned will be considered as default.
+* **KUSTO_MANAGED_IDENTITY_CLIENT_ID**:
+  'managedIdentityClientId' - ClientId for user assigned managed identity. In case it is not provided, System-assigned will be considered as default.
 
 
 #### Example
@@ -199,7 +200,7 @@ df.write
       .option(KustoSinkOptions.KUSTO_DATABASE, "MyDatabase")
       .option(KustoSinkOptions.KUSTO_TABLE, "MyTable")
       .option(KustoSinkOptions.KUSTO_MANAGED_IDENTITY_AUTH, true.toString)
-      .option(KustoSinkOptions.KUSTO_MANAGED_CLIENT_ID, "xxxx-xxxx-xxxxx-xxxx")
+      .option(KustoSinkOptions.KUSTO_MANAGED_IDENTITY_CLIENT_ID, "xxxx-xxxx-xxxxx-xxxx")
       .mode(SaveMode.Append)
       .save()
 ```
