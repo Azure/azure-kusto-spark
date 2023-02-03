@@ -3,7 +3,6 @@ package com.microsoft.kusto.spark.utils
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.exceptions.KustoDataExceptionBase
 import com.microsoft.azure.kusto.data._
-import com.microsoft.azure.kusto.ingest.exceptions.IngestionServiceException
 import com.microsoft.azure.kusto.ingest.{IngestClientFactory, QueuedIngestClient}
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.KustoWriter.DelayPeriodBetweenCalls
@@ -26,6 +25,7 @@ import org.json.{JSONArray, JSONObject}
 import java.time.Instant
 import java.util.StringJoiner
 import scala.collection.JavaConverters._
+import scala.concurrent.duration.FiniteDuration
 
 class ExtendedKustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcsb: ConnectionStringBuilder, val clusterAlias: String) {
   lazy val engineClient: Client = ClientFactory.createClient(engineKcsb)
@@ -42,6 +42,7 @@ class ExtendedKustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcs
   RetryConfig.ofDefaults()
 
   private val retryConfig = buildRetryConfig
+  private val retryConfigAsyncOp = buildRetryConfigForAsyncOp
 
   private val myName = this.getClass.getSimpleName
   private val durationFormat = "dd:HH:mm:ss"
@@ -54,6 +55,15 @@ class ExtendedKustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcs
       .intervalFunction(sleepConfig)
       .retryOnException(JavaConverter.asJavaPredicate((e: Throwable) =>
         e.isInstanceOf[KustoDataExceptionBase] && !e.asInstanceOf[KustoDataExceptionBase].isPermanent)).build
+  }
+
+  private def buildRetryConfigForAsyncOp = {
+    val sleepConfig = IntervalFunction.ofExponentialRandomBackoff(
+      ExtendedKustoClient.BaseIntervalMs, IntervalFunction.DEFAULT_MULTIPLIER, IntervalFunction.DEFAULT_RANDOMIZATION_FACTOR, ExtendedKustoClient.MaxRetryIntervalMs)
+    RetryConfig.custom
+      .maxAttempts(MaxCommandsRetryAttempts)
+      .intervalFunction(sleepConfig)
+      .retryExceptions(classOf[FailedOperationException]).build
   }
 
   def initializeTablesBySchema(tableCoordinates: KustoCoordinates,
@@ -372,6 +382,7 @@ class ExtendedKustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcs
   }
 
   def executeEngine(database: String, command: String, crp: ClientRequestProperties, retryConfig: Option[RetryConfig] = None): KustoOperationResult = {
+    // TODO - CID should reflect retries
     KDSU.retryApplyFunction(() => engineClient.execute(database, command, crp), retryConfig.getOrElse(this.retryConfig),
       "Execute engine command with retries")
   }
@@ -379,6 +390,14 @@ class ExtendedKustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcs
   def executeDM(command: String, crp: ClientRequestProperties, retryConfig: Option[RetryConfig] = None): KustoOperationResult = {
     KDSU.retryApplyFunction(() => dmClient.execute(ExtendedKustoClient.DefaultDb, command, crp), retryConfig.getOrElse(this.retryConfig),
       "Execute DM command with retries")
+  }
+
+  def retryAsyncOp(database: String, cmd: String, crp: ClientRequestProperties, timeout: FiniteDuration, cmdName: String, requestId: String): Option[KustoResultSetTable] = {
+    KDSU.retryApplyFunction(() => {
+      val operation = executeEngine(database, cmd, crp).getPrimaryResults
+      KDSU.verifyAsyncCommandCompletion(engineClient, database, operation, samplePeriod =
+        KustoConstants.DefaultPeriodicSamplePeriod, timeout, cmdName, myName, requestId)
+    }, retryConfigAsyncOp, cmdName)
   }
 }
 

@@ -6,7 +6,8 @@ import com.microsoft.azure.storage.blob.CloudBlobContainer
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasource.ReadMode.ReadMode
-import com.microsoft.kusto.spark.utils.{CslCommandsGenerator, KustoAzureFsSetupCache, KustoBlobStorageUtils, ExtendedKustoClient, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.{CslCommandsGenerator, ExtendedKustoClient, KustoAzureFsSetupCache, KustoBlobStorageUtils, KustoDataSourceUtils => KDSU}
+import org.apache.hadoop.util.ComparableVersion
 import org.apache.spark.Partition
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.sources.Filter
@@ -35,11 +36,11 @@ private[kusto] case class KustoReadRequest(sparkSession: SparkSession,
                                            requestId: String)
 
 private[kusto] case class KustoReadOptions(readMode: Option[ReadMode] = None,
-                                           shouldCompressOnExport: Boolean = true,
-                                           exportSplitLimitMb: Long = 1024,
                                            partitionOptions: PartitionOptions,
                                            distributedReadModeTransientCacheEnabled: Boolean = false,
-                                           queryFilterPushDown: Option[Boolean])
+                                           queryFilterPushDown: Option[Boolean],
+                                           additionalExportOptions:Map[String,String] = Map.empty
+                                          )
 
 private[kusto] case class PartitionOptions(amount: Int, var column: Option[String], var mode: Option[String])
 
@@ -50,7 +51,12 @@ private[kusto] object KustoReader {
   private val myName = this.getClass.getSimpleName
   private val distributedReadModeTransientCache: concurrent.Map[DistributedReadModeTransientCacheKey,Seq[String]] =
     new concurrent.TrieMap()
-
+  /*
+  A new native implementation of Parquet writer that uses new encoding schemes was rolled out on the ADX side. This uses delta byte array for strings and other byte array-based Parquet types (default in Parquet V2 which most modern parquet readers support by default).
+  To avoid breaking changes for applications, if the runtime is on a lower version than 3.3.0 of spark runtime we explicitly set the ADX export to not use the useNativeIngestion
+  TODO - add test
+  */
+  private val minimalParquetWriterVersion = "3.3.0"
   private[kusto] def singleBuildScan(kustoClient: ExtendedKustoClient,
                                      request: KustoReadRequest,
                                      filtering: KustoFiltering): RDD[Row] = {
@@ -146,7 +152,8 @@ private[kusto] object KustoReader {
 
     val directoryExists = (params: TransientStorageCredentials) => {
       val container = if (params.sasDefined) {
-        new CloudBlobContainer(new URI(s"https://${params.storageAccountName}.blob.${storage.endpointSuffix}/${params.blobContainer}${params.sasKey}"))
+        val sas = if (params.sasKey(0) == '?') params.sasKey else s"?${params.sasKey}"
+        new CloudBlobContainer(new URI(s"https://${params.storageAccountName}.blob.${storage.endpointSuffix}/${params.blobContainer}$sas"))
       } else {
         new CloudBlobContainer(new URI(s"https://${params.storageAccountName}.blob.${storage.endpointSuffix}/${params.blobContainer}"),
           new StorageCredentialsAccountAndKey(params.storageAccountName, params.storageAccountKey))
@@ -202,12 +209,16 @@ private[kusto] object KustoReader {
 
   private def calculateHashPartitions(partitionInfo: PartitionOptions): Array[Partition] = {
     // Single partition
-    if (partitionInfo.amount <= 1) return Array[Partition](KustoPartition(None, 0))
+    if (partitionInfo.amount <= 1)  Array[Partition](KustoPartition(None, 0))
 
     val partitions = new Array[Partition](partitionInfo.amount)
     for (partitionId <- 0 until partitionInfo.amount) {
-      val partitionPredicate = s" hash(${partitionInfo.column}, ${partitionInfo.amount}) == $partitionId"
-      partitions(partitionId) = KustoPartition(Some(partitionPredicate), partitionId)
+      partitionInfo.column match {
+        case Some(columnName) =>
+          val partitionPredicate = s" hash($columnName, ${partitionInfo.amount}) == $partitionId"
+          partitions(partitionId) = KustoPartition(Some(partitionPredicate), partitionId)
+        case None => KDSU.logWarn(myName,"Column name is empty when requesting for export")
+      }
     }
     partitions
   }
@@ -224,17 +235,21 @@ private[kusto] class KustoReader(client: ExtendedKustoClient) {
                                            directory: String,
                                            options: KustoReadOptions,
                                            filtering: KustoFiltering): Unit = {
-
-    val limit = if (options.exportSplitLimitMb <= 0) None else Some(options.exportSplitLimitMb)
-
+    val supportNewParquetWriter = new ComparableVersion(request.sparkSession.version)
+      .compareTo(new ComparableVersion(KustoReader.minimalParquetWriterVersion)) > 0
+    if (!supportNewParquetWriter) {
+      KDSU.logWarn(myName,
+        "Setting useNativeParquetWriter=false. Users are advised to move to Spark versions >= 3.3.0 to leverage the performance and cost improvements of" +
+          "new encoding schemes introduced in both Kusto parquet files write and Spark parquet read")
+    }
     val exportCommand = CslCommandsGenerator.generateExportDataCommand(
-      KustoFilter.pruneAndFilter(request.schema, request.query, filtering),
-      directory,
-      partition.idx,
-      storage,
-      partition.predicate,
-      limit,
-      isCompressed = options.shouldCompressOnExport
+      query=KustoFilter.pruneAndFilter(request.schema, request.query, filtering),
+      directory=directory,
+      partitionId=partition.idx,
+      storageParameters=storage,
+      partitionPredicate=partition.predicate,
+      additionalExportOptions=options.additionalExportOptions,
+      supportNewParquetWriter=supportNewParquetWriter
     )
 
     val commandResult: KustoResultSetTable = client.executeEngine(request.kustoCoordinates.database,

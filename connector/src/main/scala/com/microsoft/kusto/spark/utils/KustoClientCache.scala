@@ -33,6 +33,19 @@ object KustoClientCache {
           ConnectionStringBuilder.createWithAadApplicationCertificate(clusterAndAuth.engineUri, app.appId, keyCert.cert, keyCert.key, app.authority),
           ConnectionStringBuilder.createWithAadApplicationCertificate(clusterAndAuth.ingestUri, app.appId, keyCert.cert, keyCert.key, app.authority)
         )
+      case app: ManagedIdentityAuthentication =>
+        app.clientId match {
+          case Some(clientId) =>
+            (
+              ConnectionStringBuilder.createWithAadManagedIdentity(clusterAndAuth.engineUri, clientId),
+              ConnectionStringBuilder.createWithAadManagedIdentity(clusterAndAuth.ingestUri, clientId)
+            )
+          case None =>
+            (
+              ConnectionStringBuilder.createWithAadManagedIdentity(clusterAndAuth.engineUri),
+              ConnectionStringBuilder.createWithAadManagedIdentity(clusterAndAuth.ingestUri)
+            )
+        }
       case keyVaultParams: KeyVaultAuthentication =>
         val app = KeyVaultUtils.getAadAppParametersFromKeyVault(keyVaultParams)
         (

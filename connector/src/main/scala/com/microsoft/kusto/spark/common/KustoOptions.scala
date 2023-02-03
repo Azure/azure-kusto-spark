@@ -49,6 +49,9 @@ trait KustoOptions {
   // The provider will be called for every request to the kusto service
   val KUSTO_TOKEN_PROVIDER_CALLBACK_CLASSPATH: String = newOption("tokenProviderCallbackClasspath")
 
+  val KUSTO_MANAGED_IDENTITY_AUTH : String = newOption("managedIdentityAuth")
+  val KUSTO_MANAGED_IDENTITY_CLIENT_ID : String = newOption("managedIdentityClientId")
+
   /** Optional parameters */
   // it merge origin/aKusto ingestion cluster URL for reading data - provide this if ingestion URL cannot be deduced
   // from adding
@@ -92,9 +95,6 @@ private[kusto] object KustoDebugOptions {
   // This feature is experimental, to measure performance impact w/wo compression
   // Default: 'true'
   val KUSTO_DBG_BLOB_COMPRESS_ON_EXPORT: String = newOption("dbgBlobCompressOnExport")
-  // The size limit in MB (uncompressed) after which the export to blob command will create another file (split)
-  // Setting negative or zero value results in applying export command default
-  val KUSTO_DBG_BLOB_FILE_SIZE_LIMIT_MB: String = newOption("dbgBlobFileSizeLimitMb")
 
   // Partitioning parameters, CURRENTLY NOT USED
   // CURRENTLY NOT USED

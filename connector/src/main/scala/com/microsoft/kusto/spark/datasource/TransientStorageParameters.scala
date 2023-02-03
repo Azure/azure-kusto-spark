@@ -8,8 +8,7 @@ import org.codehaus.jackson.map.ObjectMapper
 
 import java.security.InvalidParameterException
 import scala.util.matching.Regex
-
-class TransientStorageParameters(val storageCredentials: Array[TransientStorageCredentials],
+class TransientStorageParameters(val storageCredentials: scala.Array[TransientStorageCredentials],
                                  var endpointSuffix: String = KustoDataSourceUtils.DefaultDomainPostfix){
 
   // C'tor for serialization
