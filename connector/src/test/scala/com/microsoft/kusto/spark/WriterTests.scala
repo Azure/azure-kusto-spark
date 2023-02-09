@@ -1,21 +1,20 @@
 package com.microsoft.kusto.spark
 
+import com.fasterxml.jackson.databind.ObjectMapper
+
 import java.io.{BufferedWriter, ByteArrayOutputStream, OutputStreamWriter}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
-import java.util
 import java.util.TimeZone
 import java.util.zip.GZIPOutputStream
-
 import com.microsoft.kusto.spark.datasink._
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
-import org.json.JSONObject
 import org.junit.runner.RunWith
 import org.mockito.Mockito._
 import org.scalatest.junit.JUnitRunner
@@ -24,6 +23,8 @@ import org.scalatest.{FlatSpec, Matchers}
 
 @RunWith(classOf[JUnitRunner])
 class WriterTests extends FlatSpec with Matchers {
+
+  val objectMapper = new ObjectMapper
 
   val lineSep: String = java.security.AccessController.doPrivileged(new sun.security.action.GetPropertyAction("line.separator"))
   val sparkConf: SparkConf = new SparkConf().set("spark.testing", "true")
@@ -101,28 +102,28 @@ class WriterTests extends FlatSpec with Matchers {
   "getColumnsSchema" should "parse table schema correctly" in {
     //Verify part of the following schema:
     // "{\"Name\":\"Subscriptions\",\"OrderedColumns\":[{\"Name\":\"SubscriptionGuid\",\"Type\":\"System.String\",\"CslType\":\"string\"},{\"Name\":\"Identifier\",\"Type\":\"System.String\",\"CslType\":\"string\"},{\"Name\":\"SomeNumber\",\"Type\":\"System.Int64\",\"CslType\":\"long\"},{\"Name\":\"IsCurrent\",\"Type\":\"System.SByte\",\"CslType\":\"bool\"},{\"Name\":\"LastModifiedOn\",\"Type\":\"System.DateTime\",\"CslType\":\"datetime\"},{\"Name\":\"IntegerValue\",\"Type\":\"System.Int32\",\"CslType\":\"int\"}]}"
-    val element1 = new JSONObject()
+    val element1 = objectMapper.createObjectNode
     element1.put("CslType","string")
     element1.put("Name","SubscriptionGuid")
     element1.put("Type","System.String")
 
-    val element2 = new JSONObject()
+    val element2 = objectMapper.createObjectNode
     element2.put("Name","Identifier")
     element2.put("CslType","string")
     element2.put("Type","System.String")
 
-    val element3 = new JSONObject()
+    val element3 = objectMapper.createObjectNode
     element3.put("Type","System.Int64")
     element3.put("CslType","long")
     element3.put("Name","SomeNumber")
 
-    val resultTable = new util.ArrayList[JSONObject]
+    val resultTable = objectMapper.createArrayNode()
     resultTable.add(element1)
     resultTable.add(element2)
     resultTable.add(element3)
     import scala.collection.JavaConverters._
 
-    val parsedSchema = KDSU.extractSchemaFromResultTable(resultTable.asScala)
+    val parsedSchema = KDSU.extractSchemaFromResultTable(resultTable)
     // We could add new elements for IsCurrent:bool,LastModifiedOn:datetime,IntegerValue:int
     parsedSchema shouldEqual "['SubscriptionGuid']:string,['Identifier']:string,['SomeNumber']:long"
   }

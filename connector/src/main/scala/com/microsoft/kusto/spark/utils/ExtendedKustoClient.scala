@@ -1,5 +1,7 @@
 package com.microsoft.kusto.spark.utils
 
+import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
+import com.fasterxml.jackson.databind.node.{ArrayNode}
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.exceptions.KustoDataExceptionBase
 import com.microsoft.azure.kusto.data._
@@ -20,7 +22,6 @@ import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.commons.lang3.time.DurationFormatUtils
 import org.apache.log4j.Level
 import org.apache.spark.sql.types.StructType
-import org.json.{JSONArray, JSONObject}
 
 import java.time.Instant
 import java.util.StringJoiner
@@ -58,7 +59,7 @@ class ExtendedKustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcs
   def initializeTablesBySchema(tableCoordinates: KustoCoordinates,
                                tmpTableName: String,
                                sourceSchema: StructType,
-                               targetSchema: Iterable[JSONObject],
+                               targetSchema: Iterable[JsonNode],
                                writeOptions: WriteOptions,
                                crp: ClientRequestProperties,
                                configureRetentionPolicy: Boolean): Unit = {
@@ -83,7 +84,13 @@ class ExtendedKustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcs
       }
     } else {
       // Table exists. Parse kusto table schema and check if it matches the dataframes schema
-      tmpTableSchema = extractSchemaFromResultTable(targetSchema)
+      val transformedTargetSchema = new ObjectMapper().createArrayNode()
+         targetSchema.foreach {
+           case (value) => {
+             transformedTargetSchema.add(value)
+           }
+         }
+      tmpTableSchema = extractSchemaFromResultTable(transformedTargetSchema)
     }
 
     if (writeOptions.isTransactionalMode) {
@@ -357,9 +364,9 @@ class ExtendedKustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcs
 
         val res = fetchTableExtentsTags(tableCoordinates.database, tableCoordinates.table.get, crp)
         if (res.next()) {
-          val tagsArray = res.getObject(0).asInstanceOf[JSONArray]
-          for (i <- 0 until tagsArray.length) {
-            if (ingestIfNotExistsTagsSet.contains(tagsArray.getString(i))) {
+          val tagsArray = res.getObject(0).asInstanceOf[ArrayNode]
+          for (i <- 0 until tagsArray.size()) {
+            if (ingestIfNotExistsTagsSet.contains(tagsArray.get(i).asText())) {
               shouldIngest = false
             }
           }
