@@ -17,7 +17,7 @@
         <spark.version.minor>1</spark.version.minor>
 
         <!-- other dependencies -->
-        <kusto-sdk.version>4.0.1</kusto-sdk.version>
+        <kusto-sdk.version>4.0.2</kusto-sdk.version>
         <specs2.version>3.6.5</specs2.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven-source-plugin.version>3.0.1</maven-source-plugin.version>
