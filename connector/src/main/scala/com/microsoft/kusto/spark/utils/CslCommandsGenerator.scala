@@ -82,11 +82,11 @@ private[kusto] object CslCommandsGenerator {
     s""".show table ${tableName} details | project todynamic(ShardingPolicy).UseShardEngine"""
   }
 
-  def generateTableMoveExtentsCommand(sourceTableName: String, destinationTableName: String, batchSize: Int,
+  def generateTableMoveExtentsCommand(sourceTableName: String, destinationTableName: String, timerange: Array[Instant], batchSize: Int,
                                       isDestinationTableMaterializedViewSource: Boolean = false): String = {
     val setNewIngestionTime: String = if (isDestinationTableMaterializedViewSource) "with(SetNewIngestionTime=true)" else ""
     s""".move extents to table $destinationTableName $setNewIngestionTime <|
-       .show table $sourceTableName extents with(extentsShowFilteringRuntimePolicy='{"MaximumResultsCount":$batchSize}');
+       .show table $sourceTableName extents with(extentsShowFilteringRuntimePolicy='{"MaximumResultsCount":$batchSize}') with(extentCreatedOnFrom='${timerange(0)}', extentCreatedOnTo='${timerange(1)}');
         $$command_results
        |  distinct ExtentId"""
   }
