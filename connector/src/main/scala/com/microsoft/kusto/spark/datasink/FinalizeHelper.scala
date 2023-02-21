@@ -15,6 +15,7 @@ import com.microsoft.kusto.spark.utils.{ExtendedKustoClient, KustoClientCache, K
 import org.apache.spark.SparkContext
 import org.apache.spark.util.CollectionAccumulator
 
+import java.time.Instant
 import scala.collection.JavaConverters._
 import scala.concurrent.{Await, Future, TimeoutException}
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -31,7 +32,8 @@ object FinalizeHelper {
                                                            tableExists: Boolean,
                                                            sparkContext: SparkContext,
                                                            authentication: KustoAuthentication,
-                                                           kustoClient: ExtendedKustoClient
+                                                           kustoClient: ExtendedKustoClient,
+                                                           sinkStartTime: Instant
                                                           ): Unit = {
     if (!kustoClient.shouldIngestData(coordinates, writeOptions.ingestionProperties, tableExists, crp)) {
       KDSU.logInfo(myName, s"$IngestSkippedTrace '${coordinates.table}'")
@@ -77,7 +79,7 @@ object FinalizeHelper {
                   writeOptions.requestId
                 )
               }
-              client.moveExtents(coordinates.database, tmpTableName, coordinates.table.get, crp, writeOptions)
+              client.moveExtents(coordinates.database, tmpTableName, coordinates.table.get, crp, writeOptions, sinkStartTime)
             }
             // Move data to real table
             // Protect tmp table from merge/rebuild and move data to the table requested by customer. This operation is atomic.

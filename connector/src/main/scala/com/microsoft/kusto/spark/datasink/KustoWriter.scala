@@ -128,6 +128,7 @@ object KustoWriter {
       val partitionsResults = rdd.sparkContext.collectionAccumulator[PartitionResult]
       val parameters = KustoWriteResource(authentication = authentication, coordinates = tableCoordinates,
         schema = data.schema, writeOptions = rebuiltOptions, tmpTableName = tmpTableName)
+      val sinkStartTime = Instant.now()
       if (writeOptions.isAsync) {
         val asyncWork = rdd.foreachPartitionAsync { rows => ingestRowsIntoTempTbl(rows, batchIdIfExists,
           partitionsResults,parameters) }
@@ -138,7 +139,7 @@ object KustoWriter {
           asyncWork.onSuccess {
             case _ => finalizeIngestionWhenWorkersSucceeded(
               tableCoordinates, batchIdIfExists, tmpTableName, partitionsResults,
-              writeOptions, crp, tableExists, rdd.sparkContext, authentication, kustoClient)
+              writeOptions, crp, tableExists, rdd.sparkContext, authentication, kustoClient, sinkStartTime)
           }
           asyncWork.onFailure {
             case exception: Exception =>
@@ -166,7 +167,7 @@ object KustoWriter {
         if (writeOptions.isTransactionalMode) {
           finalizeIngestionWhenWorkersSucceeded(
           tableCoordinates, batchIdIfExists, tmpTableName, partitionsResults, writeOptions,
-          crp, tableExists, rdd.sparkContext, authentication, kustoClient)
+          crp, tableExists, rdd.sparkContext, authentication, kustoClient, sinkStartTime)
         }
       }
     }

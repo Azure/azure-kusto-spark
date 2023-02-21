@@ -2,6 +2,7 @@ package com.microsoft.kusto.spark.utils
 
 import java.time.Instant
 import com.microsoft.kusto.spark.datasource.{TransientStorageCredentials, TransientStorageParameters}
+import java.util
 
 private[kusto] object CslCommandsGenerator {
   private final val defaultKeySet = Set("compressionType","namePrefix","sizeLimit","compressed","async")
@@ -90,13 +91,14 @@ private[kusto] object CslCommandsGenerator {
        |  distinct ExtentId"""
   }
 
-  def generateTableMoveExtentsAsyncCommand(sourceTableName: String, destinationTableName: String, batchSize: Option[Int],
+  def generateTableMoveExtentsAsyncCommand(sourceTableName: String, destinationTableName: String, timerange: Array[Instant], batchSize: Option[Int],
                                            isDestinationTableMaterializedViewSource: Boolean = false): String
   = {
     val withClause = if (batchSize.isDefined) s"""with(extentsShowFilteringRuntimePolicy='{"MaximumResultsCount":${batchSize.get}}')""" else ""
     val setNewIngestionTime: String = if (isDestinationTableMaterializedViewSource) "with(SetNewIngestionTime=true)" else ""
     s""".move async extents to table $destinationTableName $setNewIngestionTime <|
-       .show table $sourceTableName extents $withClause;
+       .show table $sourceTableName extents $withClause
+       with(extentCreatedOnFrom='${timerange(0)}', extentCreatedOnTo='${timerange(1)}');
        """
   }
 
