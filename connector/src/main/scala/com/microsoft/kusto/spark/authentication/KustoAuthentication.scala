@@ -26,6 +26,17 @@ case class AadApplicationAuthentication(ID: String, password: String, authority:
   override def hashCode(): Int = ID.hashCode + (if (authority == null) 0 else (authority.hashCode))
 }
 
+case class ManagedIdentityAuthentication(clientId : Option[String]) extends KustoAuthentication {
+  def canEqual(that: Any): Boolean = that.isInstanceOf[ManagedIdentityAuthentication]
+
+  override def equals(that: Any): Boolean = that match {
+    case auth: ManagedIdentityAuthentication => clientId == auth.clientId
+    case _ => false
+  }
+
+  override def hashCode(): Int = if (clientId.isDefined) clientId.hashCode() else 0
+}
+
 case class AadApplicationCertificateAuthentication(appId: String, certFilePath: String, certPassword: String, authority: String) extends KustoAuthentication {
   def canEqual(that: Any): Boolean = that.isInstanceOf[AadApplicationCertificateAuthentication]
 
