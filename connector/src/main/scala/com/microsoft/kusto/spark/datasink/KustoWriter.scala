@@ -32,7 +32,7 @@ import java.util.zip.GZIPOutputStream
 import java.util.{TimeZone, UUID}
 import com.microsoft.kusto.spark.datasink.FinalizeHelper.finalizeIngestionWhenWorkersSucceeded
 
-import java.time.Instant
+import java.time.{Clock, Instant}
 import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.{Failure, Success, Try}
@@ -177,7 +177,7 @@ object KustoWriter {
     val creationTime = Option(ingestionProperties.toIngestionProperties(tableCoordinates.database, tableCoordinates.table.get).getAdditionalProperties.get("creationTime"))
     creationTime match {
       case Some(creationTimeVal) => Instant.parse(creationTimeVal)
-      case None => Instant.now()
+      case None => Instant.now(Clock.systemUTC())
     }
   }
 
