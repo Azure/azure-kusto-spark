@@ -165,7 +165,7 @@ object KustoDataSourceUtils {
     val tableSchemaBuilder = new StringJoiner(",")
     for (i <- 0 until result.size()) {
       // Each row contains {Name, CslType, Type}, converted to (Name:CslType) pairs
-      tableSchemaBuilder.add(s"['${result.get(i).get("Name").asText()}']:${result.get(i).get("CslType").asText()}")
+      tableSchemaBuilder.add(s"['${result.get(i).get(KustoConstants.Schema.NAME).asText()}']:${result.get(i).get(KustoConstants.Schema.CSLTYPE).asText()}")
     }
 
     tableSchemaBuilder.toString

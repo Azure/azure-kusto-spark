@@ -42,7 +42,7 @@ object KustoIngestionUtils {
     require(ingestionProperties.csvMappingNameReference == null || ingestionProperties.csvMappingNameReference.isEmpty,
       "Sink options SparkIngestionProperties.csvMappingNameReference and adjustSchema.GenerateDynamicCsvMapping are not compatible. Use only one.")
 
-    val targetSchemaColumns = targetSchema.map(c => (c.get("Name").asText(),c.get("CslType").asText())).toMap
+    val targetSchemaColumns = targetSchema.map(c => (c.get(KustoConstants.Schema.NAME).asText(),c.get(KustoConstants.Schema.CSLTYPE).asText())).toMap
     val sourceSchemaColumns = sourceSchema.fields.zipWithIndex.map(c => (c._1.name, c._2)).toMap
     /* This was created for the case where CreateTable is used along with Create CSV mapping. There are 2 options
     either to not have a mapping or create an explicit identity mapping. Since GenerateCSVMapping is requested explicitly

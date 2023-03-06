@@ -10,7 +10,7 @@ import java.time.format.DateTimeFormatter
 import java.util.TimeZone
 import java.util.zip.GZIPOutputStream
 import com.microsoft.kusto.spark.datasink._
-import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.{KustoConstants, KustoDataSourceUtils => KDSU}
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
@@ -34,7 +34,7 @@ class WriterTests extends FlatSpec with Matchers {
   val sparkSession: SparkSession = SparkSession.builder().config(sparkConf).getOrCreate()
 
   def getDF(isNestedSchema: Boolean): DataFrame = {
-    val customSchema = if (isNestedSchema) StructType(Array(StructField("Name", StringType, nullable = true), StructField("Number", IntegerType, nullable = true))) else null
+    val customSchema = if (isNestedSchema) StructType(Array(StructField(KustoConstants.Schema.NAME, StringType, nullable = true), StructField("Number", IntegerType, nullable = true))) else null
     if (isNestedSchema) sparkSession.read.format("csv").option("header", "false").schema(customSchema).load("src/test/resources/ShortTestData/ShortTestData.csv")
     else sparkSession.read.format("json").option("header", "true").load("src/test/resources/TestData/json/TestDynamicFields.json")
   }
@@ -103,19 +103,19 @@ class WriterTests extends FlatSpec with Matchers {
     //Verify part of the following schema:
     // "{\"Name\":\"Subscriptions\",\"OrderedColumns\":[{\"Name\":\"SubscriptionGuid\",\"Type\":\"System.String\",\"CslType\":\"string\"},{\"Name\":\"Identifier\",\"Type\":\"System.String\",\"CslType\":\"string\"},{\"Name\":\"SomeNumber\",\"Type\":\"System.Int64\",\"CslType\":\"long\"},{\"Name\":\"IsCurrent\",\"Type\":\"System.SByte\",\"CslType\":\"bool\"},{\"Name\":\"LastModifiedOn\",\"Type\":\"System.DateTime\",\"CslType\":\"datetime\"},{\"Name\":\"IntegerValue\",\"Type\":\"System.Int32\",\"CslType\":\"int\"}]}"
     val element1 = objectMapper.createObjectNode
-    element1.put("CslType","string")
-    element1.put("Name","SubscriptionGuid")
-    element1.put("Type","System.String")
+    element1.put(KustoConstants.Schema.CSLTYPE,"string")
+    element1.put(KustoConstants.Schema.NAME,"SubscriptionGuid")
+    element1.put(KustoConstants.Schema.TYPE,"System.String")
 
     val element2 = objectMapper.createObjectNode
-    element2.put("Name","Identifier")
-    element2.put("CslType","string")
-    element2.put("Type","System.String")
+    element2.put(KustoConstants.Schema.NAME,"Identifier")
+    element2.put(KustoConstants.Schema.CSLTYPE,"string")
+    element2.put(KustoConstants.Schema.TYPE,"System.String")
 
     val element3 = objectMapper.createObjectNode
-    element3.put("Type","System.Int64")
-    element3.put("CslType","long")
-    element3.put("Name","SomeNumber")
+    element3.put(KustoConstants.Schema.TYPE,"System.Int64")
+    element3.put(KustoConstants.Schema.CSLTYPE,"long")
+    element3.put(KustoConstants.Schema.NAME,"SomeNumber")
 
     val resultTable = objectMapper.createArrayNode()
     resultTable.add(element1)

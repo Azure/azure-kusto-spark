@@ -31,4 +31,11 @@ object KustoConstants {
   val MaxCommandsRetryAttempts = 4
   val DefaultMaximumIngestionTime: FiniteDuration = FiniteDuration.apply(
     MaxIngestRetryAttempts * (DefaultExecutionQueueing + DefaultTimeoutQueueing) + 2000,"millis")
+
+  object Schema {
+    val NAME: String = "Name"
+    val CSLTYPE: String = "CslType"
+    val TYPE: String = "Type"
+  }
 }
+
