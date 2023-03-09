@@ -85,8 +85,8 @@ private[kusto] object CslCommandsGenerator {
   def generateTableMoveExtentsCommand(sourceTableName: String, destinationTableName: String, timerange: Array[Instant], batchSize: Int,
                                       isDestinationTableMaterializedViewSource: Boolean = false): String = {
     val setNewIngestionTime: String = if (isDestinationTableMaterializedViewSource) "with(SetNewIngestionTime=true)" else ""
-    s""".move extents to table $destinationTableName $setNewIngestionTime <|
-       .show table $sourceTableName extents with(extentsShowFilteringRuntimePolicy='{"MaximumResultsCount":$batchSize}') with(extentCreatedOnFrom='${timerange(0)}', extentCreatedOnTo='${timerange(1)}');
+    s""".move extents to table $destinationTableName $setNewIngestionTime  with(extentCreatedOnFrom='${timerange(0)}', extentCreatedOnTo='${timerange(1)}') <|
+       .show table $sourceTableName extents with(extentsShowFilteringRuntimePolicy='{"MaximumResultsCount":$batchSize}');
         $$command_results
        |  distinct ExtentId"""
   }
@@ -96,9 +96,8 @@ private[kusto] object CslCommandsGenerator {
   = {
     val withClause = if (batchSize.isDefined) s"""with(extentsShowFilteringRuntimePolicy='{"MaximumResultsCount":${batchSize.get}}')""" else ""
     val setNewIngestionTime: String = if (isDestinationTableMaterializedViewSource) "with(SetNewIngestionTime=true)" else ""
-    s""".move async extents to table $destinationTableName $setNewIngestionTime <|
-       .show table $sourceTableName extents $withClause
-       with(extentCreatedOnFrom='${timerange(0)}', extentCreatedOnTo='${timerange(1)}');
+    s""".move async extents to table $destinationTableName $setNewIngestionTime with(extentCreatedOnFrom='${timerange(0)}', extentCreatedOnTo='${timerange(1)}') <|
+       .show table $sourceTableName extents $withClause;
        """
   }
 

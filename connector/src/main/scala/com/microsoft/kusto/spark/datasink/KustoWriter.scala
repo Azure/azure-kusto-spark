@@ -174,8 +174,9 @@ object KustoWriter {
   }
 
   def getCreationTime(ingestionProperties: SparkIngestionProperties, tableCoordinates: KustoCoordinates): Instant = {
-    val creationTime = Option(ingestionProperties.toIngestionProperties(tableCoordinates.database, tableCoordinates.table.get).getAdditionalProperties.get("creationTime"))
-    creationTime match {
+    val startTime = Option(ingestionProperties.toIngestionProperties(tableCoordinates.database, tableCoordinates.table.get).getAdditionalProperties.get("startTime"))
+
+    startTime match {
       case Some(creationTimeVal) => Instant.parse(creationTimeVal)
       case None => Instant.now(Clock.systemUTC())
     }
