@@ -13,7 +13,6 @@ import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode, SparkSession}
-import org.joda.time.DateTime
 import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
 import org.scalatest.{BeforeAndAfterAll, FlatSpec}
@@ -102,7 +101,7 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
 
   "KustoConnector" should "write to a kusto table and read it back in default mode"  in {
     // Create a new table.
-    KDSU.logInfo("e2e","running KustoConnector");
+    KDSU.logInfo("e2e","running KustoConnector")
     val crp = new ClientRequestProperties
     crp.setTimeoutInMilliSec(2000)
     val ingestByTags = new java.util.ArrayList[String]
@@ -199,17 +198,17 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
 
     val df = spark.read.kusto(kustoConnectionOptions.cluster, kustoConnectionOptions.database, table, conf)
 
-    val time = new DateTime()
+    val time = Instant.now()
     assert(df.count() == expectedNumberOfRows)
     assert(df.count() == expectedNumberOfRows)
 
-    val df2 = df.where(($"value").cast("Int") > 50)
+    val df2 = df.where($"value".cast("Int") > 50)
     assert(df2.collect().length == 50)
 
     // Should take up to another 10 seconds for .show commands to come up
     Thread.sleep(5000 * 60)
     val res3 = kustoAdminClient.get.execute(
-      s""".show commands | where StartedOn > datetime(${time.toString()})  | where
+      s""".show commands | where StartedOn > datetime(${time.toString})  | where
                                         CommandType ==
       "DataExportToFile" | where Text has "$table"""")
     if (res3.getPrimaryResults.count() == 0){

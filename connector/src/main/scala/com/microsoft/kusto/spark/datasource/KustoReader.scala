@@ -12,10 +12,10 @@ import org.apache.spark.Partition
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.{Row, SparkSession}
-import org.joda.time.{DateTime, DateTimeZone}
 
 import java.net.URI
 import java.security.InvalidParameterException
+import java.time.{Clock, Instant}
 import java.util.UUID
 import scala.collection.concurrent
 import scala.concurrent.duration.FiniteDuration
@@ -86,12 +86,12 @@ private[kusto] object KustoReader {
         paths = distributedReadModeTransientCache(key)
       } else {
         KDSU.logInfo(myName, "distributedReadModeTransientCache: miss, exporting to cache paths")
-        val filter = determineFilterPushDown(options.queryFilterPushDown, false, filtering)
+        val filter = determineFilterPushDown(options.queryFilterPushDown, queryFilterPushDownDefault = false, filtering)
         paths = exportToStorage(kustoClient, request, storage, options, filter)
         distributedReadModeTransientCache(key) = paths
       }
     } else{
-      val filter = determineFilterPushDown(options.queryFilterPushDown, true, filtering)
+      val filter = determineFilterPushDown(options.queryFilterPushDown, queryFilterPushDownDefault = true, filtering)
       paths = exportToStorage(kustoClient, request, storage, options, filter)
     }
 
@@ -108,7 +108,7 @@ private[kusto] object KustoReader {
     val rdd = try {
       request.sparkSession.read.parquet(paths: _*).rdd
     } catch {
-      case ex: Exception => {
+      case ex: Exception =>
         // Check whether the result is empty, causing an IO exception on reading empty parquet file
         // We don't mind generating the filtered query again - it only happens upon exception
         val filteredQuery = KustoFilter.pruneAndFilter(request.schema, request.query, filtering)
@@ -120,7 +120,6 @@ private[kusto] object KustoReader {
         } else {
           throw ex
         }
-      }
     }
 
     KDSU.logInfo(myName, "Transaction data read from blob storage, paths:" + paths)
@@ -179,7 +178,7 @@ private[kusto] object KustoReader {
 
   private[kusto] def setupBlobAccess(request: KustoReadRequest, storageParameters: TransientStorageParameters): Unit = {
     val config = request.sparkSession.sparkContext.hadoopConfiguration
-    val now = new DateTime(DateTimeZone.UTC)
+    val now = Instant.now(Clock.systemUTC())
     for(storage <- storageParameters.storageCredentials) {
       if (!storage.sasDefined) {
         if (!KustoAzureFsSetupCache.updateAndGetPrevStorageAccountAccess(storage.storageAccountName

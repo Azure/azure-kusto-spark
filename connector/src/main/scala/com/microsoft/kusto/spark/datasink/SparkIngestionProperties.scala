@@ -7,14 +7,15 @@ import com.microsoft.azure.kusto.ingest.{IngestionMapping, IngestionProperties}
 import org.codehaus.jackson.annotate.JsonAutoDetect.Visibility
 import org.codehaus.jackson.annotate.JsonMethod
 import org.codehaus.jackson.map.ObjectMapper
-import org.joda.time.DateTime
+
+import java.time.Instant
 
 class SparkIngestionProperties(var flushImmediately: Boolean = false,
                                var dropByTags: util.ArrayList[String] = null,
                                var ingestByTags: util.ArrayList[String] = null,
                                var additionalTags: util.ArrayList[String] = null,
                                var ingestIfNotExists: util.ArrayList[String] = null,
-                               var creationTime: DateTime = null,
+                               var creationTime: Instant = null,
                                var csvMapping: String = null,
                                var csvMappingNameReference: String = null){
   // C'tor for serialization
@@ -53,7 +54,7 @@ class SparkIngestionProperties(var flushImmediately: Boolean = false,
     }
 
     if (this.creationTime != null) {
-      additionalProperties.put("creationTime", this.creationTime.toString())
+      additionalProperties.put("creationTime", this.creationTime.toString)
     }
 
     if (this.csvMapping != null) {
