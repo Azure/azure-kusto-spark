@@ -11,10 +11,11 @@ trait Writer {
 }
 
 case class CountingWriter(out: java.io.Writer) extends Writer {
-  val newLineSep: String = java.security.AccessController.doPrivileged(
-    new sun.security.action.GetPropertyAction("line.separator"))
-  val newLineSepLength: Int = newLineSep.length
-  var bytesCounter: Long = 0L
+  private val newLineSep: String = System.lineSeparator()
+//    java.security.AccessController.doPrivileged(
+//    new sun.security.action.GetPropertyAction("line.separator"))
+  private val newLineSepLength: Int = newLineSep.length
+  private var bytesCounter: Long = 0L
 
   def newLine(): Unit = {
     out.write(newLineSep)
@@ -30,19 +31,18 @@ case class CountingWriter(out: java.io.Writer) extends Writer {
     bytesCounter += str.length
   }
 
-  def writeStringField(str: String) {
-    if (str.length > 0) {
+  def writeStringField(str: String): Unit = {
+    if (str.nonEmpty) {
       out.write('"')
       bytesCounter += 2
-        for (c <- str) {
-          if (c == '"') {
-            out.write("\"\"")
-            bytesCounter += 1
-          } else {
-            out.write(c)
-          }
+      for (c <- str) {
+        if (c == '"') {
+          out.write("\"\"")
+          bytesCounter += 1
+        } else {
+          out.write(c)
         }
-
+      }
       out.write('"')
       bytesCounter += str.length
     }

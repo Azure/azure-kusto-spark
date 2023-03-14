@@ -219,6 +219,13 @@ object KustoWriter {
     }'$batchIdForTracing")
     val ingestClient = KustoClientCache.getClient(parameters.coordinates.clusterUrl,
       parameters.authentication, parameters.coordinates.ingestionUrl, parameters.coordinates.clusterAlias).ingestClient
+    // TODO Retry policies
+    /*
+    val queueRequestOptions = new QueueRequestOptions
+    queueRequestOptions.setMaximumExecutionTimeInMs(KCONST.DefaultExecutionQueueing)
+    queueRequestOptions.setTimeoutIntervalInMs(KCONST.DefaultTimeoutQueueing)
+    queueRequestOptions.setRetryPolicyFactory(new RetryNoRetry)
+    */
     val reqRetryOpts = new RequestRetryOptions(RetryPolicyType.EXPONENTIAL, Integer(KCONST.MaxIngestRetryAttempts),
       Duration.ofSeconds(KCONST.DefaultMaximumIngestionTime.toSeconds),
       null, null, null)
@@ -245,6 +252,7 @@ object KustoWriter {
       .sasToken(containerAndSas.sas)
       .buildClient().getBlobClient(blobName)
     // TODO Parallel thread uploads needs to be checked
+    // Check : https://learn.microsoft.com/en-us/azure/storage/blobs/storage-blob-upload-java
     val currentSas = containerAndSas.sas
     val gzip: GZIPOutputStream = new GZIPOutputStream(currentBlob.getBlockBlobClient.getBlobOutputStream(true))
     val writer = new OutputStreamWriter(gzip, StandardCharsets.UTF_8)
