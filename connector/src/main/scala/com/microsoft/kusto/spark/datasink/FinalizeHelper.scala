@@ -2,8 +2,7 @@ package com.microsoft.kusto.spark.datasink
 
 import java.util.concurrent.TimeUnit
 import com.microsoft.azure.kusto.data.ClientRequestProperties
-import com.microsoft.azure.kusto.ingest.result.{IngestionErrorCode, IngestionStatus, OperationStatus}
-import com.microsoft.azure.storage.StorageException
+import com.microsoft.azure.kusto.ingest.result.{IngestionStatus, OperationStatus}
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.KustoWriter.DelayPeriodBetweenCalls
@@ -140,10 +139,10 @@ object FinalizeHelper {
           finalRes = Some(partitionResult.ingestionResult.getIngestionStatusCollection.get(0))
           finalRes
         } catch {
-          case e: StorageException =>
-            KDSU.logWarn(loggerName, "Failed to fetch operation status transiently - will keep polling. " +
-              s"RequestId: $requestId. Error: ${ExceptionUtils.getStackTrace(e)}")
-            None
+//          case e: RequestFailedException =>
+//            KDSU.logWarn(loggerName, "Failed to fetch operation status transiently - will keep polling. " +
+//              s"RequestId: $requestId. Error: ${ExceptionUtils.getStackTrace(e)}")
+//            None
           case e: Exception => KDSU.reportExceptionAndThrow(loggerName, e, s"Failed to fetch operation status. RequestId: $requestId")
             None
         }

@@ -29,7 +29,7 @@ object RowCSVWriterUtils {
     writer.newLine()
   }
 
-  def writeJsonField(json: String, writer: Writer, nested: Boolean): Unit = {
+  private def writeJsonField(json: String, writer: Writer, nested: Boolean): Unit = {
     if (nested) {
       writer.writeUnescaped(json)
     } else {
