@@ -1,5 +1,7 @@
 package com.microsoft.kusto.spark.authentication
 
+import com.microsoft.kusto.spark.utils.KustoConstants
+
 import java.util.concurrent.Callable
 
 trait KustoAuthentication {
@@ -9,6 +11,8 @@ trait KustoAuthentication {
     case auth: KustoAuthentication => auth.canEqual(this) && auth == this
     case _ => false
   }
+
+  override def toString: String = KustoConstants.EmptyString
 
   override def hashCode(): Int = this.hashCode
 }
