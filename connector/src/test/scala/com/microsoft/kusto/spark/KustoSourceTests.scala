@@ -82,11 +82,13 @@ class KustoSourceTests extends FlatSpec with MockFactory with Matchers with Befo
       KDSU.getReadParameters(Map[String, String](), null),
       Duration(20, TimeUnit.SECONDS),
       Option(""),
-      Option(new TransientStorageParameters(Array(new TransientStorageCredentials("https://xxxxxx.blob.core.windows.net/xxxxxx-0?sp=r&st=2023-03-15T17:05:53Z&se=2023-03-16T01:05:53Z&spr=https&sv=2021-12-02&sr=c&sig=xxxxxxxxx")))),
+      Option(new TransientStorageParameters(Array(new TransientStorageCredentials("https://storage.blob.core.windows.net/someplace-0?sp=r&st=2023-03-15T17:05:53Z&se=2023-03-16T01:05:53Z&spr=https&sv=2021-12-02&sr=c&sig=123456789")))),
       Option(new ClientRequestProperties),
       "reqid"
     )(sqlContext.sparkSession)
     assert(!ksr.toString.contains("token1"))
+    assert(ksr.toString.contains("\"sasKey\" : ****"))
+    assert(ksr.toString.contains("\"storageAccountKey\" : *****"))
   }
 
   "KustoDataSource" should "parse sas" in {

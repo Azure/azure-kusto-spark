@@ -17,9 +17,21 @@ class TransientStorageParameters(val storageCredentials: scala.Array[TransientSt
   }
 
   override def toString: String = {
-    new ObjectMapper().setVisibility(JsonMethod.FIELD, Visibility.ANY)
-      .writerWithDefaultPrettyPrinter
-      .writeValueAsString(this)
+    val finalString = new StringBuilder(s"""{\n"endpointSuffix" : "${endpointSuffix}",\n""");
+    finalString.append(s"""""storageCredentials" : [ {\n""");
+    storageCredentials.foreach((credential) => {
+      finalString.append(" " +
+        s"""    "blobContainer" : "someplace-0",\n""" +
+        s"""    "storageAccountName" : "${credential.storageAccountName}",\n""" +
+        s"""    "storageAccountKey" : *****,\n""" +
+        s"""    "sasKey" : ****,\n""" +
+        s"""    "sasUrl" : "https://${credential.storageAccountName}.${credential.domainSuffix}/${credential.blobContainer}?*****",\n""" +
+        s"""    "domainSuffix" : "${credential.domainSuffix}",\n""" +
+        s"""    "storageAccountKey" : ****\n""" +
+        "  },\n ")
+    })
+
+    finalString.append("]").toString()
   }
 }
 
