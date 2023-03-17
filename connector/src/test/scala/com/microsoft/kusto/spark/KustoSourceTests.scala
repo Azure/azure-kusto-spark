@@ -80,9 +80,16 @@ class KustoSourceTests extends FlatSpec with MockFactory with Matchers with Befo
     assert(params.sasDefined.equals(true))
   }
 
-  "KustoDataSource" should "fail in parsing sas" in {
-    val sas = "http://storage.blob.core.customDom/upload/"
+  "KustoDataSource" should "fail in parsing with no sas key" in {
+    val sas = "https://storage.blob.core.customDom/upload/"
     assertThrows[InvalidParameterException] {    new TransientStorageCredentials(sas)  }
+  }
+
+  "KustoDataSource" should "fail in parsing with wrong sas url format" in {
+    val sas = "https://storage.blob.core.customDom/?<secret>"
+    assertThrows[InvalidParameterException] {
+      new TransientStorageCredentials(sas)
+    }
   }
 
   "KustoDataSource" should "match cluster default url pattern" in {
