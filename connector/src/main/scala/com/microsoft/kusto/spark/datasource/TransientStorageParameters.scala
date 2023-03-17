@@ -17,7 +17,7 @@ class TransientStorageParameters(val storageCredentials: scala.Array[TransientSt
   }
 
   override def toString: String = {
-    storageCredentials.map(tsc => tsc.toString).mkString("[",System.lineSeparator(),"]")
+    storageCredentials.map(tsc => tsc.toString).mkString("[",System.lineSeparator(),s"domain: $endpointSuffix]")
   }
 }
 
