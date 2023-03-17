@@ -1,6 +1,9 @@
 package com.microsoft.kusto.spark
 
-import com.microsoft.kusto.spark.datasource.{KustoSourceOptions, TransientStorageCredentials}
+import com.microsoft.azure.kusto.data.ClientRequestProperties
+import com.microsoft.kusto.spark.authentication.KustoAccessTokenAuthentication
+import com.microsoft.kusto.spark.common.KustoCoordinates
+import com.microsoft.kusto.spark.datasource.{KustoRelation, KustoSourceOptions, TransientStorageCredentials, TransientStorageParameters}
 import com.microsoft.kusto.spark.utils.KustoClientCache.ClusterAndAuth
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import org.apache.spark.SparkContext
@@ -10,6 +13,9 @@ import org.junit.runner.RunWith
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.junit.JUnitRunner
 import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
+
+import java.util.concurrent.TimeUnit
+import scala.concurrent.duration.Duration
 
 @RunWith(classOf[JUnitRunner])
 class KustoSourceTests extends FlatSpec with MockFactory with Matchers with BeforeAndAfterAll {
@@ -66,6 +72,22 @@ class KustoSourceTests extends FlatSpec with MockFactory with Matchers with Befo
 
     val expected = StructType(Array(StructField("colA", StringType, nullable = true),StructField("colB", IntegerType, nullable = true)))
     assert(df.schema.equals(expected))
+  }
+
+  "KustoDataSource" should "fail with credentials in plain text" in {
+    val ksr = KustoRelation(
+      KustoCoordinates(cluster, "", database, table = Option("tablename"), ingestionUrl = Option("")),
+      KustoAccessTokenAuthentication("token1"),
+      "",
+      KDSU.getReadParameters(Map[String, String](), null),
+      Duration(20, TimeUnit.SECONDS),
+      Option(""),
+      Option(new TransientStorageParameters(Array(new TransientStorageCredentials("https://storage.blob.core.windows.net/someplace-0?sp=r&st=2023-03-15T17:05:53Z&se=2023-03-16T01:05:53Z&spr=https&sv=2021-12-02&sr=c&sig=123456789")))),
+      Option(new ClientRequestProperties),
+      "reqid"
+    )(sqlContext.sparkSession)
+    assert(!ksr.toString.contains("token1"))
+    assert(ksr.toString.contains("[BlobContainer: someplace-0 ,Storage: storage , IsSasKeyDefined: true, domain: core.windows.net]"))
   }
 
   "KustoDataSource" should "parse sas" in {
