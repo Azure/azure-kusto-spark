@@ -60,6 +60,30 @@ class KustoAuthenticationTestE2E extends FlatSpec {
     assert(result.diff(orig).isEmpty)
   }
 
+  "managedIdentityAuthentication" should "use managed resource for authentication" taggedAs KustoE2E in {
+    import spark.implicits._
+    val expectedNumberOfRows = 1000
+
+    val rows: immutable.IndexedSeq[(String, Int)] = (1 to expectedNumberOfRows).map(v => (s"row-$v", v))
+    val prefix = "managedIdentityAuth"
+    val table = KustoQueryUtils.simplifyName(s"${prefix}_${UUID.randomUUID()}")
+    val engineKcsb = ConnectionStringBuilder.createWithAadManagedIdentity(s"https://$cluster.kusto.windows.net")
+    val kustoAdminClient = ClientFactory.createClient(engineKcsb)
+
+    val df = rows.toDF("name", "value")
+    val conf: Map[String, String] = Map(
+      KustoSinkOptions.KUSTO_MANAGED_IDENTITY_AUTH -> true.toString
+    )
+
+    df.write.kusto(cluster, database, table, conf)
+
+    val dfResult = spark.read.kusto(cluster, database, table, conf)
+    val result = dfResult.select("name", "value").rdd.collect().sortBy(x => x.getInt(1))
+    val orig = df.select("name", "value").rdd.collect().sortBy(x => x.getInt(1))
+
+    assert(result.diff(orig).isEmpty)
+  }
+
   "deviceAuthentication" should "use aad device authentication" taggedAs KustoE2E in {
     import spark.implicits._
     val expectedNumberOfRows = 1000

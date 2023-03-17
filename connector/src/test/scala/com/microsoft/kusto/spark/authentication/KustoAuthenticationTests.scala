@@ -57,6 +57,16 @@ class kustoAuthenticationTests extends FlatSpec {
     assert(kata1 != kata2)
   }
 
+  "KustoAuthentication Equals" should "Check token not getting printed" in {
+    val kata1 = KustoAccessTokenAuthentication("token1")
+    val kvaa11 = KeyVaultAppAuthentication("uri1", "appId1", "pass1", null)
+    val kvca11 = KeyVaultCertificateAuthentication("uri1", "path1", "pass1", null)
+
+    assert(kata1.toString == "")
+    assert(kvaa11.toString == "")
+    assert(kvca11.toString == "")
+  }
+
   "KustoAccessTokenAuthentication Equals" should "Verify that different types of authentication won't equal" in {
     val kvaa11 = KeyVaultAppAuthentication("uri1", "appId1", "pass1", null)
     val kvca11 = KeyVaultCertificateAuthentication("uri1", "path1", "pass1", null)

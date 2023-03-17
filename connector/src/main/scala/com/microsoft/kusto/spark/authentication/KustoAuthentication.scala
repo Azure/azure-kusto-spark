@@ -1,5 +1,7 @@
 package com.microsoft.kusto.spark.authentication
 
+import com.microsoft.kusto.spark.utils.KustoConstants
+
 import java.util.concurrent.Callable
 
 trait KustoAuthentication {
@@ -10,7 +12,9 @@ trait KustoAuthentication {
     case _ => false
   }
 
-  override def hashCode(): Int = this.hashCode
+  override def toString: String = KustoConstants.EmptyString
+
+  override def hashCode(): Int = this.hashCode()
 }
 
 abstract class KeyVaultAuthentication(uri: String, authority: String) extends KustoAuthentication
@@ -23,7 +27,18 @@ case class AadApplicationAuthentication(ID: String, password: String, authority:
     case _ => false
   }
 
-  override def hashCode(): Int = ID.hashCode + (if (authority == null) 0 else (authority.hashCode))
+  override def hashCode(): Int = ID.hashCode + (if (authority == null) 0 else authority.hashCode)
+}
+
+case class ManagedIdentityAuthentication(clientId : Option[String]) extends KustoAuthentication {
+  def canEqual(that: Any): Boolean = that.isInstanceOf[ManagedIdentityAuthentication]
+
+  override def equals(that: Any): Boolean = that match {
+    case auth: ManagedIdentityAuthentication => clientId == auth.clientId
+    case _ => false
+  }
+
+  override def hashCode(): Int = if (clientId.isDefined) clientId.hashCode() else 0
 }
 
 case class AadApplicationCertificateAuthentication(appId: String, certFilePath: String, certPassword: String, authority: String) extends KustoAuthentication {
@@ -38,7 +53,8 @@ case class AadApplicationCertificateAuthentication(appId: String, certFilePath: 
   override def hashCode(): Int = appId.hashCode + certFilePath.hashCode + certPassword.hashCode()
 }
 
-case class KeyVaultAppAuthentication(uri: String, keyVaultAppID: String, keyVaultAppKey: String, authority: String) extends KeyVaultAuthentication(uri, authority) {
+final case class KeyVaultAppAuthentication(uri: String, keyVaultAppID: String, keyVaultAppKey: String, authority: String)
+  extends KeyVaultAuthentication(uri, authority) {
   def canEqual(that: Any): Boolean = that.isInstanceOf[KeyVaultAppAuthentication]
 
   override def equals(that: Any): Boolean = that match {
@@ -49,7 +65,8 @@ case class KeyVaultAppAuthentication(uri: String, keyVaultAppID: String, keyVaul
   override def hashCode(): Int = uri.hashCode + keyVaultAppID.hashCode
 }
 
-case class KeyVaultCertificateAuthentication(uri: String, pemFilePath: String, pemFilePassword: String, authority: String) extends KeyVaultAuthentication(uri, authority) {
+final case class KeyVaultCertificateAuthentication(uri: String, pemFilePath: String, pemFilePassword: String, authority: String)
+  extends KeyVaultAuthentication(uri, authority) {
   def canEqual(that: Any): Boolean = that.isInstanceOf[KeyVaultCertificateAuthentication]
 
   override def equals(that: Any): Boolean = that match {

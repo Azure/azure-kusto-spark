@@ -25,6 +25,7 @@ import org.json.{JSONArray, JSONObject}
 import java.time.Instant
 import java.util.StringJoiner
 import scala.collection.JavaConverters._
+import scala.concurrent.duration.FiniteDuration
 
 class ExtendedKustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcsb: ConnectionStringBuilder, val clusterAlias: String) {
   lazy val engineClient: Client = ClientFactory.createClient(engineKcsb)
@@ -41,6 +42,7 @@ class ExtendedKustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcs
   RetryConfig.ofDefaults()
 
   private val retryConfig = buildRetryConfig
+  private val retryConfigAsyncOp = buildRetryConfigForAsyncOp
 
   private val myName = this.getClass.getSimpleName
   private val durationFormat = "dd:HH:mm:ss"
@@ -53,6 +55,15 @@ class ExtendedKustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcs
       .intervalFunction(sleepConfig)
       .retryOnException((e: Throwable) =>
         e.isInstanceOf[KustoDataExceptionBase] && !e.asInstanceOf[KustoDataExceptionBase].isPermanent).build
+  }
+
+  private def buildRetryConfigForAsyncOp = {
+    val sleepConfig = IntervalFunction.ofExponentialRandomBackoff(
+      ExtendedKustoClient.BaseIntervalMs, IntervalFunction.DEFAULT_MULTIPLIER, IntervalFunction.DEFAULT_RANDOMIZATION_FACTOR, ExtendedKustoClient.MaxRetryIntervalMs)
+    RetryConfig.custom
+      .maxAttempts(MaxCommandsRetryAttempts)
+      .intervalFunction(sleepConfig)
+      .retryExceptions(classOf[FailedOperationException]).build
   }
 
   def initializeTablesBySchema(tableCoordinates: KustoCoordinates,
@@ -195,7 +206,7 @@ class ExtendedKustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcs
     }
   }
 
-  def moveExtentsWithRetries(batchSize: Option[Int], totalAmount: Int, database: String, tmpTableName: String, targetTable: String,
+  def moveExtentsWithRetries(batchSize: Option[Int], totalAmount: Int, database: String, tmpTableName: String, targetTable: String, ingestionStartTime: Instant,
                              crp: ClientRequestProperties, writeOptions: WriteOptions): Unit = {
     var extentsProcessed = 0
     var retry = 0
@@ -211,8 +222,9 @@ class ExtendedKustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcs
       var failed = false
       // Execute move batch and keep any transient error for handling
       try {
+        val timeRange = Array[Instant](ingestionStartTime, Instant.now())
         val operation = executeEngine(database, generateTableMoveExtentsAsyncCommand(tmpTableName,
-          targetTable, if (batchSize.isEmpty) None else Some(curBatchSize), useMaterializedViewFlag), crp).getPrimaryResults
+          targetTable, timeRange ,  if (batchSize.isEmpty) None else Some(curBatchSize), useMaterializedViewFlag), crp).getPrimaryResults
         val operationResult = KDSU.verifyAsyncCommandCompletion(engineClient, database, operation, samplePeriod =
           KustoConstants
             .DefaultPeriodicSamplePeriod, writeOptions.timeout, s"move extents to destination table '$targetTable' ",
@@ -286,7 +298,7 @@ class ExtendedKustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcs
   }
 
   def moveExtents(database: String, tmpTableName: String, targetTable: String, crp: ClientRequestProperties,
-                  writeOptions: WriteOptions): Unit = {
+                  writeOptions: WriteOptions, sinkStartTime: Instant): Unit = {
     val extentsCountQuery = executeEngine(database, generateExtentsCountCommand(tmpTableName), crp).getPrimaryResults
     extentsCountQuery.next()
     val extentsCount = extentsCountQuery.getInt(0)
@@ -295,10 +307,10 @@ class ExtendedKustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcs
       nodeCountQuery.next()
       val nodeCount = nodeCountQuery.getInt(0)
       moveExtentsWithRetries(Some(nodeCount * writeOptions.minimalExtentsCountForSplitMerge), extentsCount, database,
-        tmpTableName, targetTable, crp, writeOptions)
+        tmpTableName, targetTable, sinkStartTime, crp, writeOptions)
     } else {
       moveExtentsWithRetries(None, extentsCount, database,
-        tmpTableName, targetTable, crp, writeOptions)
+        tmpTableName, targetTable, sinkStartTime, crp, writeOptions)
     }
   }
 
@@ -379,6 +391,14 @@ class ExtendedKustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcs
   def executeDM(command: String, crp: ClientRequestProperties, retryConfig: Option[RetryConfig] = None): KustoOperationResult = {
     KDSU.retryApplyFunction(() => dmClient.execute(ExtendedKustoClient.DefaultDb, command, crp), retryConfig.getOrElse(this.retryConfig),
       "Execute DM command with retries")
+  }
+
+  def retryAsyncOp(database: String, cmd: String, crp: ClientRequestProperties, timeout: FiniteDuration, cmdName: String, requestId: String): Option[KustoResultSetTable] = {
+    KDSU.retryApplyFunction(() => {
+      val operation = executeEngine(database, cmd, crp).getPrimaryResults
+      KDSU.verifyAsyncCommandCompletion(engineClient, database, operation, samplePeriod =
+        KustoConstants.DefaultPeriodicSamplePeriod, timeout, cmdName, myName, requestId)
+    }, retryConfigAsyncOp, cmdName)
   }
 }
 

@@ -18,7 +18,7 @@ import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
 import org.scalatest.{BeforeAndAfterAll, FlatSpec}
 
-import java.time.Instant
+import java.time.{Instant}
 import java.time.temporal.ChronoUnit
 import scala.collection.immutable
 import scala.util.{Failure, Success, Try}
@@ -53,7 +53,7 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
     Try(kustoAdminClient.get.execute(kustoConnectionOptions.database, generateAlterIngestionBatchingPolicyCommand(
       "database",
       kustoConnectionOptions.database,
-      "@'{\"MaximumBatchingTimeSpan\":\"00:00:10\", \"MaximumNumberOfItems\": 500, \"MaximumRawDataSizeMB\": 1024}'"))) match {
+      "{\"MaximumBatchingTimeSpan\":\"00:00:10\", \"MaximumNumberOfItems\": 500, \"MaximumRawDataSizeMB\": 1024}"))) match {
       case Success(_) => KDSU.logDebug(myName,"Ingestion policy applied")
       case Failure(exception:Throwable) => KDSU.reportExceptionAndThrow(myName, exception,"Updating database batching policy", shouldNotThrow = true)
     }
@@ -110,6 +110,7 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
     ingestByTags.add(tag)
     val sp = new SparkIngestionProperties()
     sp.ingestByTags = ingestByTags
+    sp.creationTime = DateTime.now()
 
     dfOrig.write
       .format("com.microsoft.kusto.spark.datasource")
