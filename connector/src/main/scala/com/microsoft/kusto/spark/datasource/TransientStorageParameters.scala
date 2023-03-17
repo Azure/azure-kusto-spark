@@ -17,25 +17,11 @@ class TransientStorageParameters(val storageCredentials: scala.Array[TransientSt
   }
 
   override def toString: String = {
-    val finalString = new StringBuilder(s"""{\n"endpointSuffix" : "${endpointSuffix}",\n""");
-    finalString.append(s"""""storageCredentials" : [ {\n""");
-    storageCredentials.foreach((credential) => {
-      finalString.append(" " +
-        s"""    "blobContainer" : "someplace-0",\n""" +
-        s"""    "storageAccountName" : "${credential.storageAccountName}",\n""" +
-        s"""    "storageAccountKey" : *****,\n""" +
-        s"""    "sasKey" : ****,\n""" +
-        s"""    "sasUrl" : "https://${credential.storageAccountName}.${credential.domainSuffix}/${credential.blobContainer}?*****",\n""" +
-        s"""    "domainSuffix" : "${credential.domainSuffix}",\n""" +
-        s"""    "storageAccountKey" : ****\n""" +
-        "  },\n ")
-    })
-
-    finalString.append("]").toString()
+    storageCredentials.map(tsc => tsc.toString).mkString("[",System.lineSeparator(),"]")
   }
 }
 
-case class TransientStorageCredentials() {
+final case class TransientStorageCredentials() {
   var blobContainer: String = _
   var storageAccountName: String = _
   var storageAccountKey: String = _
@@ -91,6 +77,10 @@ case class TransientStorageCredentials() {
       )
     }
   }
+
+  override def toString: String = {
+      s"BlobContainer: $blobContainer ,Storage: $storageAccountName , IsSasKeyDefined: $sasDefined"
+  }
 }
 
 object TransientStorageParameters {
@@ -100,5 +90,5 @@ object TransientStorageParameters {
 }
 
 object TransientStorageCredentials {
-  val SasPattern: Regex = raw"(?:https://)?([^.]+).blob.([^/]+)/([^?]+)?(.+)".r
+  private val SasPattern: Regex = raw"(?:https://)?([^.]+).blob.([^/]+)/([^?]+)?(.+)".r
 }
