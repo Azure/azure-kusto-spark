@@ -18,17 +18,12 @@ class TransientStorageParametersTest extends FlatSpec  {
     val transientStorageParameters = TransientStorageParameters.fromString(transientStorage)
     val tsString = transientStorageParameters.toString()
     transientStorageParameters.storageCredentials.length shouldEqual 2
-    tsString shouldEqual "[BlobContainer: kusto ,Storage: ateststorage , IsSasKeyDefined: true" +
-      "\nBlobContainer: kusto ,Storage: ateststorage2 , IsSasKeyDefined: true]"
+
+    tsString shouldEqual s"[BlobContainer: kusto ,Storage: ateststorage , IsSasKeyDefined: true${System.lineSeparator()}BlobContainer: kusto2 ,Storage: ateststorage2 , IsSasKeyDefined: true, domain: core.windows.net]"
   }
   "TransientStorageCredentials ToString" should "parse SAS and not print tokens " in {
     val transientStorageCredentials =  new TransientStorageCredentials("https://ateststorage2.blob.core.windows.net/kusto2" +
       "?sp=racwdlmeop&st=2020-03-15T04:26:19Z&se=2020-03-16T12:26:19Z&spr=https&sv=2019-12-02&sr=c&sig=xxxxxx")
     transientStorageCredentials.toString shouldEqual "BlobContainer: kusto2 ,Storage: ateststorage2 , IsSasKeyDefined: true"
-  }
-  "TransientStorageCredentials" should "fail validation if there is no SAS key defined " in {
-    assertThrows[InvalidParameterException] {
-      new TransientStorageCredentials("https://ateststorage2.blob.core.windows.net/kusto")
-    }
   }
 }

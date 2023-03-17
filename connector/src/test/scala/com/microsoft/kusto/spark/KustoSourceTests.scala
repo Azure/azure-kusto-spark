@@ -87,8 +87,7 @@ class KustoSourceTests extends FlatSpec with MockFactory with Matchers with Befo
       "reqid"
     )(sqlContext.sparkSession)
     assert(!ksr.toString.contains("token1"))
-    assert(ksr.toString.contains("\"sasKey\" : ****"))
-    assert(ksr.toString.contains("\"storageAccountKey\" : *****"))
+    assert(ksr.toString.contains("[BlobContainer: someplace-0 ,Storage: storage , IsSasKeyDefined: true, domain: core.windows.net]"))
   }
 
   "KustoDataSource" should "parse sas" in {
