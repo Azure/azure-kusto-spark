@@ -17,13 +17,11 @@ class TransientStorageParameters(val storageCredentials: scala.Array[TransientSt
   }
 
   override def toString: String = {
-    new ObjectMapper().setVisibility(JsonMethod.FIELD, Visibility.ANY)
-      .writerWithDefaultPrettyPrinter
-      .writeValueAsString(this)
+    storageCredentials.map(tsc => tsc.toString).mkString("[",System.lineSeparator(),s", domain: $endpointSuffix]")
   }
 }
 
-case class TransientStorageCredentials() {
+final case class TransientStorageCredentials() {
   var blobContainer: String = _
   var storageAccountName: String = _
   var storageAccountKey: String = _
@@ -79,6 +77,10 @@ case class TransientStorageCredentials() {
       )
     }
   }
+
+  override def toString: String = {
+      s"BlobContainer: $blobContainer ,Storage: $storageAccountName , IsSasKeyDefined: $sasDefined"
+  }
 }
 
 object TransientStorageParameters {
@@ -88,5 +90,5 @@ object TransientStorageParameters {
 }
 
 object TransientStorageCredentials {
-  val SasPattern: Regex = raw"https:\/\/([^.]+).blob.([^\/]+)\/([^?]+)(\?.+)".r
+  private val SasPattern: Regex = raw"https:\/\/([^.]+).blob.([^\/]+)\/([^?]+)(\?.+)".r
 }
