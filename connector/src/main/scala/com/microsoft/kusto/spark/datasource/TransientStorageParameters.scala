@@ -19,6 +19,13 @@ class TransientStorageParameters(val storageCredentials: scala.Array[TransientSt
   override def toString: String = {
     storageCredentials.map(tsc => tsc.toString).mkString("[",System.lineSeparator(),s", domain: $endpointSuffix]")
   }
+
+  def toInsecureString: String = {
+    new ObjectMapper().setVisibility(JsonMethod.FIELD, Visibility.ANY)
+      .writerWithDefaultPrettyPrinter
+      .writeValueAsString(this)
+  }
+
 }
 
 final case class TransientStorageCredentials() {
@@ -81,6 +88,7 @@ final case class TransientStorageCredentials() {
   override def toString: String = {
       s"BlobContainer: $blobContainer ,Storage: $storageAccountName , IsSasKeyDefined: $sasDefined"
   }
+
 }
 
 object TransientStorageParameters {
