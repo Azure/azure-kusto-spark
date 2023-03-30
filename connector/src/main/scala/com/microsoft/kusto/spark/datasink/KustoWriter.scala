@@ -1,5 +1,7 @@
 package com.microsoft.kusto.spark.datasink
 
+import com.azure.storage.common.policy.{RequestRetryOptions, RetryPolicyType}
+import com.fasterxml.jackson.databind.JsonNode
 import com.microsoft.azure.kusto.data.ClientRequestProperties
 import com.microsoft.azure.kusto.ingest.IngestionProperties.DataFormat
 import com.microsoft.azure.kusto.ingest.exceptions.IngestionServiceException
@@ -20,8 +22,7 @@ import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.CollectionAccumulator
-import org.json.JSONObject
-import io.github.resilience4j.retry.{Retry, RetryConfig}
+import io.github.resilience4j.retry.RetryConfig
 
 import java.io._
 import java.net.URI
@@ -32,7 +33,7 @@ import java.util.zip.GZIPOutputStream
 import java.util.{TimeZone, UUID}
 import com.microsoft.kusto.spark.datasink.FinalizeHelper.finalizeIngestionWhenWorkersSucceeded
 
-import java.time.{Clock, Instant}
+import java.time.{Clock, Duration, Instant}
 import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.{Failure, Success, Try}
@@ -66,7 +67,7 @@ object KustoWriter {
     val schemaShowCommandResult = kustoClient.executeEngine(tableCoordinates.database,
       generateTableGetSchemaAsRowsCommand(tableCoordinates.table.get), crp).getPrimaryResults
 
-    val targetSchema = schemaShowCommandResult.getData.asScala.map(c => c.get(0).asInstanceOf[JSONObject]).toArray
+    val targetSchema = schemaShowCommandResult.getData.asScala.map(c => c.get(0).asInstanceOf[JsonNode]).toArray
     KustoIngestionUtils.adjustSchema(writeOptions.adjustSchema, data.schema, targetSchema, stagingTableIngestionProperties , writeOptions.tableCreateOptions)
 
     val rebuiltOptions = WriteOptions(
@@ -252,7 +253,9 @@ object KustoWriter {
     queueRequestOptions.setMaximumExecutionTimeInMs(KCONST.DefaultExecutionQueueing)
     queueRequestOptions.setTimeoutIntervalInMs(KCONST.DefaultTimeoutQueueing)
     queueRequestOptions.setRetryPolicyFactory(new RetryNoRetry)
-    ingestClient.setQueueRequestOptions(queueRequestOptions)
+    val reqRetryOpts = new RequestRetryOptions(RetryPolicyType.EXPONENTIAL, KCONST.MaxIngestRetryAttempts,
+      Duration.ofSeconds(KCONST.DefaultMaximumIngestionTime.toSeconds), null, null, null)
+    ingestClient.setQueueRequestOptions(reqRetryOpts)
     // We force blocking here, since the driver can only complete the ingestion process
     // once all partitions are ingested into the temporary table
     ingestRowsIntoKusto(rows, ingestClient, partitionsResults, batchIdForTracing,parameters)

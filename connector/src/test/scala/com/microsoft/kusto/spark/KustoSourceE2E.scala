@@ -17,7 +17,7 @@ import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
 import org.scalatest.{BeforeAndAfterAll, FlatSpec}
 
-import java.time.{Instant}
+import java.time.{Clock, Instant}
 import java.time.temporal.ChronoUnit
 import scala.collection.immutable
 import scala.util.{Failure, Success, Try}
@@ -109,7 +109,7 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
     ingestByTags.add(tag)
     val sp = new SparkIngestionProperties()
     sp.ingestByTags = ingestByTags
-    sp.creationTime = DateTime.now()
+    sp.creationTime = Instant.now(Clock.systemUTC())
 
     dfOrig.write
       .format("com.microsoft.kusto.spark.datasource")
@@ -119,8 +119,6 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
       .option(KustoSinkOptions.KUSTO_AAD_APP_ID, kustoConnectionOptions.appId)
       .option(KustoSinkOptions.KUSTO_AAD_APP_SECRET, kustoConnectionOptions.appKey)
       .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, kustoConnectionOptions.authority)
-      //.option(KustoSinkOptions.KUSTO_WRITE_MODE, "Queued")
-//      .option(KustoSinkOptions.KUSTO_REQUEST_ID, "04ec0408-3cc3_.asd")
       .option(KustoSinkOptions.KUSTO_CLIENT_REQUEST_PROPERTIES_JSON, crp.toString)
       .option(KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS, SinkTableCreationMode.CreateIfNotExist.toString)
       .option(KustoDebugOptions.KUSTO_ENSURE_NO_DUPLICATED_BLOBS, true.toString)

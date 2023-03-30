@@ -9,7 +9,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types.DataTypes._
 import org.apache.spark.sql.types.StructType
-import org.codehaus.jackson.JsonNode
 
 private[kusto] class KustoCsvSerializationUtils (val schema: StructType, timeZone: String){
   private[kusto] val DateFormat = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone(timeZone))

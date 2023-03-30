@@ -1,12 +1,10 @@
 package com.microsoft.kusto.spark.datasink
 
+import com.fasterxml.jackson.databind.ObjectMapper
 import com.microsoft.azure.kusto.ingest.IngestionMapping.IngestionMappingKind
 
 import java.util
 import com.microsoft.azure.kusto.ingest.{IngestionMapping, IngestionProperties}
-import org.codehaus.jackson.annotate.JsonAutoDetect.Visibility
-import org.codehaus.jackson.annotate.JsonMethod
-import org.codehaus.jackson.map.ObjectMapper
 
 import java.time.Instant
 
@@ -24,7 +22,7 @@ class SparkIngestionProperties(var flushImmediately: Boolean = false,
   }
 
   override def toString: String = {
-    new ObjectMapper().setVisibility(JsonMethod.FIELD, Visibility.ANY)
+    new ObjectMapper()
       .writerWithDefaultPrettyPrinter
       .writeValueAsString(this)
   }
@@ -87,6 +85,6 @@ object SparkIngestionProperties {
   }
 
   private[kusto] def fromString(json: String): SparkIngestionProperties = {
-    new ObjectMapper().setVisibility(JsonMethod.FIELD, Visibility.ANY).readValue(json, classOf[SparkIngestionProperties])
+    new ObjectMapper().readValue(json, classOf[SparkIngestionProperties])
   }
 }

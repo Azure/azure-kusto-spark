@@ -1,10 +1,8 @@
 package com.microsoft.kusto.spark.datasource
 
+import com.fasterxml.jackson.databind.ObjectMapper
 import com.microsoft.kusto.spark.utils.KustoDataSourceUtils
 import org.apache.commons.lang3.StringUtils
-import org.codehaus.jackson.annotate.JsonAutoDetect.Visibility
-import org.codehaus.jackson.annotate.JsonMethod
-import org.codehaus.jackson.map.ObjectMapper
 
 import java.security.InvalidParameterException
 import scala.util.matching.Regex
@@ -85,7 +83,7 @@ final case class TransientStorageCredentials() {
 
 object TransientStorageParameters {
   private[kusto] def fromString(json: String): TransientStorageParameters = {
-    new ObjectMapper().setVisibility(JsonMethod.FIELD, Visibility.ANY).readValue(json, classOf[TransientStorageParameters])
+    new ObjectMapper().readValue(json, classOf[TransientStorageParameters])
   }
 }
 

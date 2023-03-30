@@ -1,5 +1,7 @@
 package com.microsoft.kusto.spark.datasink
 
+import com.fasterxml.jackson.databind.ObjectMapper
+
 import java.util.concurrent.TimeUnit
 import com.microsoft.azure.kusto.data.ClientRequestProperties
 import com.microsoft.azure.kusto.ingest.result.{IngestionStatus, OperationStatus}
@@ -8,8 +10,6 @@ import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.KustoWriter.DelayPeriodBetweenCalls
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator.{generateExtentTagsDropByPrefixCommand, generateTableAlterMergePolicyCommand}
 import com.microsoft.kusto.spark.utils.KustoConstants.IngestSkippedTrace
-import org.apache.commons.lang3.exception.ExceptionUtils
-import shaded.parquet.org.codehaus.jackson.map.ObjectMapper
 import com.microsoft.kusto.spark.utils.{ExtendedKustoClient, KustoClientCache, KustoConstants, KustoDataSourceUtils => KDSU}
 import org.apache.spark.SparkContext
 import org.apache.spark.util.CollectionAccumulator
