@@ -29,6 +29,7 @@ object KustoConstants {
   val DefaultTimeoutQueueing: Int = TimeUnit.SECONDS.toMillis(40).toInt
   val MaxIngestRetryAttempts = 2
   val MaxCommandsRetryAttempts = 4
+  val EmptyString = ""
   val DefaultMaximumIngestionTime: FiniteDuration = FiniteDuration.apply(
     MaxIngestRetryAttempts * (DefaultExecutionQueueing + DefaultTimeoutQueueing) + 2000,"millis")
 

@@ -17,7 +17,7 @@ import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
 import org.scalatest.{BeforeAndAfterAll, FlatSpec}
 
-import java.time.Instant
+import java.time.{Instant}
 import java.time.temporal.ChronoUnit
 import scala.collection.immutable
 import scala.util.{Failure, Success, Try}
@@ -109,6 +109,7 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
     ingestByTags.add(tag)
     val sp = new SparkIngestionProperties()
     sp.ingestByTags = ingestByTags
+    sp.creationTime = DateTime.now()
 
     dfOrig.write
       .format("com.microsoft.kusto.spark.datasource")
