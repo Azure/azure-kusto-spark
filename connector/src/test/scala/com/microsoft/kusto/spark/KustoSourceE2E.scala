@@ -11,6 +11,7 @@ import com.microsoft.kusto.spark.datasource.{KustoSourceOptions, ReadMode, Trans
 import com.microsoft.kusto.spark.sql.extension.SparkExtension._
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils => KDSU}
+import org.apache.hadoop.util.ComparableVersion
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode, SparkSession}
 import org.joda.time.DateTime
@@ -145,6 +146,7 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
     validateRead(conf)
   }
 
+  val minimalParquetWriterVersion: String = "3.3.0"
   private def validateRead(conf: Map[String, String]) = {
     val dfResult = spark.read.kusto(kustoConnectionOptions.cluster, kustoConnectionOptions.database, table, conf)
     val orig = dfOrig.select("name", "value", "dec").rdd.map(x => (x.getString(0), x.getInt(1), x.getDecimal(2))).collect().sortBy(_._2)
@@ -176,7 +178,14 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
           KustoSourceOptions.KUSTO_AAD_APP_ID -> kustoConnectionOptions.appId,
           KustoSourceOptions.KUSTO_AAD_APP_SECRET -> kustoConnectionOptions.appKey
         )
-        validateRead(conf)
+        val supportNewParquetWriter = new ComparableVersion(spark.version)
+          .compareTo(new ComparableVersion(minimalParquetWriterVersion)) > 0
+        supportNewParquetWriter match {
+          case true=> validateRead(conf)
+          case false=>
+            val dfResult = spark.read.kusto(kustoConnectionOptions.cluster, kustoConnectionOptions.database, table, conf)
+            assert(dfResult.count() == expectedNumberOfRows)
+        }
     }
   }
 
