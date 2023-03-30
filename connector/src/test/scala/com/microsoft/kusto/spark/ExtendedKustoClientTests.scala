@@ -24,7 +24,7 @@ class ExtendedKustoClientTests extends FlatSpec with Matchers {
                                 override val clusterAlias: String,
                                 var tagsToReturn: util.ArrayList[String]) extends ExtendedKustoClient(engineKcsb, ingestKcsb,
     clusterAlias) {
-    override lazy val engineClient = mock(classOf[Client])
+    override lazy val engineClient: Client = mock(classOf[Client])
     override def fetchTableExtentsTags(database: String, table: String, crp: ClientRequestProperties)
     : KustoResultSetTable = {
       val response =
