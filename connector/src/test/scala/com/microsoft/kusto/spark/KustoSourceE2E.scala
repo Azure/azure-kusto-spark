@@ -1,9 +1,7 @@
 package com.microsoft.kusto.spark
 
-import java.util.UUID
-import java.util.concurrent.atomic.AtomicInteger
-import com.microsoft.azure.kusto.data.{Client, ClientFactory, ClientRequestProperties}
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
+import com.microsoft.azure.kusto.data.{Client, ClientFactory, ClientRequestProperties}
 import com.microsoft.kusto.spark.KustoTestUtils.KustoConnectionOptions
 import com.microsoft.kusto.spark.common.KustoDebugOptions
 import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode, SparkIngestionProperties}
@@ -13,18 +11,18 @@ import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode, SparkSession}
-import org.junit.runner.RunWith
-import org.scalatest.junit.JUnitRunner
-import org.scalatest.{BeforeAndAfterAll, FlatSpec}
+import org.scalatest.BeforeAndAfterAll
+import org.scalatest.flatspec.AnyFlatSpec
 
-import java.time.{Clock, Instant}
 import java.time.temporal.ChronoUnit
+import java.time.{Clock, Instant}
+import java.util.UUID
+import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.immutable
-import scala.util.{Failure, Success, Try}
-import scala.util.Random
+import scala.util.{Failure, Random, Success, Try}
 
-@RunWith(classOf[JUnitRunner])
-class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
+
+class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
   private val nofExecutors = 4
   private val spark: SparkSession = SparkSession.builder()
     .appName("KustoSink")

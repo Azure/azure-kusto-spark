@@ -1,6 +1,15 @@
 package com.microsoft.kusto.spark
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.microsoft.kusto.spark.datasink._
+import com.microsoft.kusto.spark.utils.{KustoConstants, KustoDataSourceUtils => KDSU}
+import org.apache.spark.SparkConf
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.types._
+import org.apache.spark.sql.{DataFrame, Row, SparkSession}
+import org.mockito.Mockito._
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 
 import java.io.{BufferedWriter, ByteArrayOutputStream, OutputStreamWriter}
 import java.nio.charset.StandardCharsets
@@ -9,24 +18,14 @@ import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.TimeZone
 import java.util.zip.GZIPOutputStream
-import com.microsoft.kusto.spark.datasink._
-import com.microsoft.kusto.spark.utils.{KustoConstants, KustoDataSourceUtils => KDSU}
-import org.apache.spark.SparkConf
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.types._
-import org.apache.spark.sql.{DataFrame, Row, SparkSession}
-import org.junit.runner.RunWith
-import org.mockito.Mockito._
-import org.scalatest.junit.JUnitRunner
-import org.scalatest.{FlatSpec, Matchers}
 
 
-@RunWith(classOf[JUnitRunner])
-class WriterTests extends FlatSpec with Matchers {
+
+class WriterTests extends AnyFlatSpec with Matchers {
 
   val objectMapper = new ObjectMapper
 
-  val lineSep: String = java.security.AccessController.doPrivileged(new sun.security.action.GetPropertyAction("line.separator"))
+  val lineSep: String = System.lineSeparator()
   val sparkConf: SparkConf = new SparkConf().set("spark.testing", "true")
     .set("spark.ui.enabled", "false")
     .setAppName("SimpleKustoDataSink")
@@ -121,7 +120,6 @@ class WriterTests extends FlatSpec with Matchers {
     resultTable.add(element1)
     resultTable.add(element2)
     resultTable.add(element3)
-    import scala.collection.JavaConverters._
 
     val parsedSchema = KDSU.extractSchemaFromResultTable(resultTable)
     // We could add new elements for IsCurrent:bool,LastModifiedOn:datetime,IntegerValue:int

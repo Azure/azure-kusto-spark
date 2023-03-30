@@ -7,17 +7,16 @@ import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.{SparkIngestionProperties, WriteOptions}
 import com.microsoft.kusto.spark.utils.ExtendedKustoClient
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
-import org.junit.runner.RunWith
 import org.mockito.Matchers.any
 import org.mockito.Mockito.{mock, times, verify}
-import org.scalatest.junit.JUnitRunner
-import org.scalatest.{FlatSpec, Matchers}
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 
 import java.util
 import scala.collection.JavaConverters._
 
-@RunWith(classOf[JUnitRunner])
-class ExtendedKustoClientTests extends FlatSpec with Matchers {
+
+class ExtendedKustoClientTests extends AnyFlatSpec with Matchers {
   private val kustoCoordinates = KustoCoordinates("", "", "database", Some("table"))
   class ExtendedKustoClientStub(override val engineKcsb: ConnectionStringBuilder,
                                 override val ingestKcsb: ConnectionStringBuilder,

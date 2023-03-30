@@ -1,6 +1,5 @@
 package com.microsoft.kusto.spark
 
-import java.util.UUID
 import com.microsoft.azure.kusto.data.ClientFactory
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.kusto.spark.KustoTestUtils.KustoConnectionOptions
@@ -12,12 +11,13 @@ import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.sql.types.DataTypes.IntegerType
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.sql.{SQLContext, SparkSession}
-import org.junit.runner.RunWith
-import org.scalatest.junit.JUnitRunner
-import org.scalatest.{BeforeAndAfterAll, FlatSpec}
+import org.scalatest.BeforeAndAfterAll
+import org.scalatest.flatspec.AnyFlatSpec
 
-@RunWith(classOf[JUnitRunner])
-class KustoSinkStreamingE2E extends FlatSpec with BeforeAndAfterAll {
+import java.util.UUID
+
+
+class KustoSinkStreamingE2E extends AnyFlatSpec with BeforeAndAfterAll {
   val expectedNumberOfRows: Int = 300
   val timeoutMs: Int = 8 * 60 * 1000 // 8 minutes
   val sleepTimeTillTableCreate: Int = 3 * 60 * 1000 // 2 minutes

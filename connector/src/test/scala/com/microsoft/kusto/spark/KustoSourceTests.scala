@@ -9,16 +9,16 @@ import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.sql.{SQLContext, SparkSession}
-import org.junit.runner.RunWith
 import org.scalamock.scalatest.MockFactory
-import org.scalatest.junit.JUnitRunner
-import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
+import org.scalatest.BeforeAndAfterAll
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration.Duration
 
-@RunWith(classOf[JUnitRunner])
-class KustoSourceTests extends FlatSpec with MockFactory with Matchers with BeforeAndAfterAll {
+
+class KustoSourceTests extends AnyFlatSpec with MockFactory with Matchers with BeforeAndAfterAll {
   private val loggingLevel: Option[String] = Option(System.getProperty("logLevel"))
   if (loggingLevel.isDefined) KDSU.setLoggingLevel(loggingLevel.get)
 

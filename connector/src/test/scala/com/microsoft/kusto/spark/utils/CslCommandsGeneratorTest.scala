@@ -1,14 +1,12 @@
 package com.microsoft.kusto.spark.utils
 
 import com.microsoft.kusto.spark.datasource.{TransientStorageCredentials, TransientStorageParameters}
-import org.junit.runner.RunWith
-import org.scalatest.FlatSpec
-import org.scalatest.junit.JUnitRunner
+import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.prop.TableDrivenPropertyChecks.forAll
 import org.scalatest.prop.Tables.Table
 
-@RunWith(classOf[JUnitRunner])
-class CslCommandsGeneratorTest extends FlatSpec {
+
+class CslCommandsGeneratorTest extends AnyFlatSpec {
   private val dataCombinations =
     Table(
       ("additionalExportOptions", "expectedOptions", "compressed", "iteration"),

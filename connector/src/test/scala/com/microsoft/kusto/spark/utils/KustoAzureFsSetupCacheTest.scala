@@ -1,12 +1,12 @@
 package com.microsoft.kusto.spark.utils
 
-import org.scalatest.FunSuite
-import org.scalatest.Matchers.convertToAnyShouldWrapper
+import org.scalatest.funsuite.AnyFunSuite
+import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
 import org.scalatest.prop.TableDrivenPropertyChecks._
 
 import java.time.temporal.ChronoUnit
 import java.time.{Clock, Instant}
-class KustoAzureFsSetupCacheTest extends FunSuite {
+class KustoAzureFsSetupCacheTest extends AnyFunSuite {
 
   test("testUpdateAndGetPrevStorageAccountAccess") {
     val dataToTest = Table(

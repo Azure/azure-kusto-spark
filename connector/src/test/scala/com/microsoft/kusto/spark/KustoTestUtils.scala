@@ -7,14 +7,13 @@ import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMo
 import com.microsoft.kusto.spark.datasource.KustoSourceOptions
 import com.microsoft.kusto.spark.sql.extension.SparkExtension.DataFrameReaderExtension
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
-import com.microsoft.kusto.spark.utils.{ KustoQueryUtils, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils => KDSU}
+import org.apache.commons.lang3.StringUtils
 import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
 
 import java.nio.file.{Files, Paths}
 import java.security.InvalidParameterException
 import java.util.UUID
-import org.apache.commons.lang3.StringUtils
-
 import scala.collection.JavaConverters._
 import scala.concurrent.TimeoutException
 

@@ -9,22 +9,29 @@
     <version>${revision}</version>
     <properties>
         <revision>4.0.0</revision>
-        <azure-bom-version>1.2.4</azure-bom-version>
-        <!-- Spark dependencies -->
+        <azure.bom.version>1.2.4</azure.bom.version>
+        <commons.lang3.version>3.9</commons.lang3.version>
+        <fasterxml.jackson.version>[2.11.0,2.13.0)</fasterxml.jackson.version>
+        <hadoop.version>3.3.5</hadoop.version>
+        <keyvault.secrets.version>4.1.5</keyvault.secrets.version>
+        <kusto.sdk.version>4.0.4</kusto.sdk.version>
+        <maven.flatten.version>1.4.1</maven.flatten.version>
+        <maven.jar.plugin.version>3.3.0</maven.jar.plugin.version>
+        <maven.source.plugin.version>3.0.1</maven.source.plugin.version>
+        <maven.surefire.plugin.version>3.0.0</maven.surefire.plugin.version>
+        <mockito.version>1.10.19</mockito.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <scala.maven.plugin.version>4.8.1</scala.maven.plugin.version>
         <scala.version.major>2.12</scala.version.major>
-        <scala.version.minor>11</scala.version.minor>
+        <scala.version.minor>17</scala.version.minor>
+        <scalamock.version>5.2.0</scalamock.version>
+        <scalastyle.maven.plugin.version>1.0.0</scalastyle.maven.plugin.version>
+        <scalatest.maven.version>2.2.0</scalatest.maven.version>
+        <scalatest.version>3.2.15</scalatest.version>
+        <slf4j.version>1.8.0-beta4</slf4j.version>
         <spark.version.major>3.0</spark.version.major>
         <spark.version.minor>1</spark.version.minor>
-        <!-- other dependencies -->
-        <kusto-sdk.version>4.0.3</kusto-sdk.version>
         <specs2.version>3.6.5</specs2.version>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <maven-source-plugin.version>3.0.1</maven-source-plugin.version>
-        <keyvault-secrets.version>4.1.5</keyvault-secrets.version>
-        <commons-lang3.version>3.9</commons-lang3.version>
-        <fasterxml.jackson.version>[2.11.0,2.13.0)</fasterxml.jackson.version>
-        <slf4j.version>1.8.0-beta4</slf4j.version>
-        <hadoop.version>3.3.5</hadoop.version>
     </properties>
 
     <inceptionYear>2018</inceptionYear>
@@ -57,7 +64,7 @@
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>flatten-maven-plugin</artifactId>
-                <version>1.1.0</version>
+                <version>${maven.flatten.version}</version>
                 <configuration>
                     <flattenMode>oss</flattenMode>
                 </configuration>
@@ -87,7 +94,7 @@
             <dependency>
                 <groupId>com.azure</groupId>
                 <artifactId>azure-sdk-bom</artifactId>
-                <version>${azure-bom-version}</version>
+                <version>${azure.bom.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>

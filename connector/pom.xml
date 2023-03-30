@@ -42,7 +42,7 @@
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-lang3</artifactId>
-            <version>${commons-lang3.version}</version>
+            <version>${commons.lang3.version}</version>
         </dependency>
         <dependency>
             <groupId>org.scala-lang</groupId>
@@ -57,7 +57,7 @@
         <dependency>
             <groupId>com.microsoft.azure.kusto</groupId>
             <artifactId>kusto-data</artifactId>
-            <version>${kusto-sdk.version}</version>
+            <version>${kusto.sdk.version}</version>
             <exclusions>
                 <exclusion>
                     <artifactId>jackson-databind</artifactId>
@@ -80,7 +80,7 @@
         <dependency>
             <groupId>com.microsoft.azure.kusto</groupId>
             <artifactId>kusto-ingest</artifactId>
-            <version>${kusto-sdk.version}</version>
+            <version>${kusto.sdk.version}</version>
             <exclusions>
                 <exclusion>
                     <groupId>com.fasterxml.jackson.core</groupId>
@@ -125,7 +125,7 @@
         <dependency>
             <groupId>com.azure</groupId>
             <artifactId>azure-security-keyvault-secrets</artifactId>
-            <version>${keyvault-secrets.version}</version>
+            <version>${keyvault.secrets.version}</version>
             <exclusions>
                 <exclusion>
                     <artifactId>azure-core-http-netty</artifactId>
@@ -228,7 +228,7 @@
         <dependency>
             <groupId>org.scalatest</groupId>
             <artifactId>scalatest_${scala.version.major}</artifactId>
-            <version>3.0.0</version>
+            <version>${scalatest.version}</version>
             <scope>test</scope>
             <exclusions>
                 <exclusion>
@@ -240,7 +240,7 @@
         <dependency>
             <groupId>org.scalamock</groupId>
             <artifactId>scalamock_${scala.version.major}</artifactId>
-            <version>4.1.0</version>
+            <version>${scalamock.version}</version>
             <scope>test</scope>
             <exclusions>
                 <exclusion>
@@ -252,7 +252,7 @@
         <dependency>
             <groupId>org.mockito</groupId>
             <artifactId>mockito-all</artifactId>
-            <version>1.9.5</version>
+            <version>${mockito.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
@@ -273,7 +273,7 @@
                 <!-- see http://davidb.github.com/scala-maven-plugin -->
                 <groupId>net.alchim31.maven</groupId>
                 <artifactId>scala-maven-plugin</artifactId>
-                <version>3.2.2</version>
+                <version>${scala.maven.plugin.version}</version>
                 <executions>
                     <execution>
                         <goals>
@@ -289,13 +289,18 @@
                     </execution>
                 </executions>
                 <configuration>
-                    <addScalacArgs>-target:jvm-1.8</addScalacArgs>
+                    <addScalacArgs>-target:jvm-11</addScalacArgs>
+                    <args>
+<!--                        <arg>-feature</arg>-->
+                        <arg>-unchecked</arg>
+                        <arg>-deprecation</arg>
+                    </args>
                 </configuration>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
-                <version>2.21.0</version>
+                <version>${maven.surefire.plugin.version}</version>
                 <configuration>
                     <!-- When 'true': Tests will be run with scalatest-maven-plugin  -->
                     <skipTests>true</skipTests>
@@ -308,7 +313,7 @@
             <plugin>
                 <groupId>org.scalatest</groupId>
                 <artifactId>scalatest-maven-plugin</artifactId>
-                <version>2.0.0</version>
+                <version>${scalatest.maven.version}</version>
                 <configuration>
                     <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
                     <junitxml>.</junitxml>
@@ -330,7 +335,7 @@
             <plugin>
                 <groupId>org.scalastyle</groupId>
                 <artifactId>scalastyle-maven-plugin</artifactId>
-                <version>1.0.0</version>
+                <version>${scalastyle.maven.plugin.version}</version>
                 <configuration>
                     <verbose>false</verbose>
                     <failOnViolation>false</failOnViolation>
@@ -353,7 +358,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-source-plugin</artifactId>
-                <version>${maven-source-plugin.version}</version>
+                <version>${maven.source.plugin.version}</version>
                 <executions>
                     <execution>
                         <id>attach-sources</id>
@@ -367,7 +372,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-jar-plugin</artifactId>
-                <version>3.2.0</version>
+                <version>${maven.jar.plugin.version}</version>
                 <executions>
                     <execution>
                         <id>empty-javadoc-jar</id>
