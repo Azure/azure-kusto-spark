@@ -2,14 +2,14 @@ package com.microsoft.kusto.spark
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
-import com.microsoft.azure.kusto.data.{ClientRequestProperties, KustoOperationResult, KustoResultSetTable}
+import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties, KustoOperationResult, KustoResultSetTable}
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.{SparkIngestionProperties, WriteOptions}
 import com.microsoft.kusto.spark.utils.ExtendedKustoClient
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.junit.runner.RunWith
 import org.mockito.Matchers.any
-import org.mockito.Mockito.{times, verify}
+import org.mockito.Mockito.{mock, times, verify}
 import org.scalatest.junit.JUnitRunner
 import org.scalatest.{FlatSpec, Matchers}
 
@@ -24,6 +24,7 @@ class ExtendedKustoClientTests extends FlatSpec with Matchers {
                                 override val clusterAlias: String,
                                 var tagsToReturn: util.ArrayList[String]) extends ExtendedKustoClient(engineKcsb, ingestKcsb,
     clusterAlias) {
+    override lazy val engineClient = mock(classOf[Client])
     override def fetchTableExtentsTags(database: String, table: String, crp: ClientRequestProperties)
     : KustoResultSetTable = {
       val response =
@@ -45,7 +46,7 @@ class ExtendedKustoClientTests extends FlatSpec with Matchers {
     val tags = new util.ArrayList[String]
     tags.add("tag")
     stubbedClient.tagsToReturn = tags
-    props.ingestIfNotExists = new util.ArrayList[String](){{add("otherTag")}}
+    props.ingestIfNotExists = util.Collections.singletonList("otherTag")
     val shouldIngestWhenNoOverlap = stubbedClient.shouldIngestData(kustoCoordinates,
       Some(props.toString), tableExists = true, null)
     shouldIngestWhenNoOverlap shouldEqual true

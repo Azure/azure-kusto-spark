@@ -1,6 +1,9 @@
 package com.microsoft.kusto.spark.datasink
 
+import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility
+import com.fasterxml.jackson.annotation.PropertyAccessor
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
 import com.microsoft.azure.kusto.ingest.IngestionMapping.IngestionMappingKind
 
 import java.util
@@ -12,7 +15,7 @@ class SparkIngestionProperties(var flushImmediately: Boolean = false,
                                var dropByTags: util.ArrayList[String] = null,
                                var ingestByTags: util.ArrayList[String] = null,
                                var additionalTags: util.ArrayList[String] = null,
-                               var ingestIfNotExists: util.ArrayList[String] = null,
+                               var ingestIfNotExists: util.List[String] = null,
                                var creationTime: Instant = null,
                                var csvMapping: String = null,
                                var csvMappingNameReference: String = null){
@@ -22,7 +25,8 @@ class SparkIngestionProperties(var flushImmediately: Boolean = false,
   }
 
   override def toString: String = {
-    new ObjectMapper()
+    new ObjectMapper().registerModule(new JavaTimeModule()).
+      setVisibility(PropertyAccessor.FIELD, Visibility.ANY).setVisibility(PropertyAccessor.FIELD, Visibility.ANY)
       .writerWithDefaultPrettyPrinter
       .writeValueAsString(this)
   }
@@ -85,6 +89,7 @@ object SparkIngestionProperties {
   }
 
   private[kusto] def fromString(json: String): SparkIngestionProperties = {
-    new ObjectMapper().readValue(json, classOf[SparkIngestionProperties])
+    new ObjectMapper().registerModule(new JavaTimeModule()).
+      setVisibility(PropertyAccessor.FIELD, Visibility.ANY).readValue(json, classOf[SparkIngestionProperties])
   }
 }

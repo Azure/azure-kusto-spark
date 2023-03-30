@@ -24,6 +24,7 @@
         <commons-lang3.version>3.9</commons-lang3.version>
         <fasterxml.jackson.version>[2.11.0,2.13.0)</fasterxml.jackson.version>
         <slf4j.version>1.8.0-beta4</slf4j.version>
+        <hadoop.version>3.3.5</hadoop.version>
     </properties>
 
     <inceptionYear>2018</inceptionYear>
