@@ -7,10 +7,11 @@ import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.kusto.spark.KustoTestUtils.KustoConnectionOptions
 import com.microsoft.kusto.spark.common.KustoDebugOptions
 import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode, SparkIngestionProperties}
-import com.microsoft.kusto.spark.datasource.{KustoSourceOptions, ReadMode}
+import com.microsoft.kusto.spark.datasource.{KustoSourceOptions, ReadMode, TransientStorageCredentials, TransientStorageParameters}
 import com.microsoft.kusto.spark.sql.extension.SparkExtension._
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils => KDSU}
+import org.apache.hadoop.util.ComparableVersion
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode, SparkSession}
 import org.joda.time.DateTime
@@ -18,8 +19,9 @@ import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
 import org.scalatest.{BeforeAndAfterAll, FlatSpec}
 
-import java.time.{Instant}
+import java.time.Instant
 import java.time.temporal.ChronoUnit
+import java.util
 import scala.collection.immutable
 import scala.util.{Failure, Success, Try}
 import scala.util.Random
@@ -41,6 +43,7 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
 
   private val loggingLevel = Option(System.getProperty("logLevel"))
   private var kustoAdminClient: Option[Client] = None
+  private var maybeKustoIngestClient: Option[Client] = None
   if (loggingLevel.isDefined) KDSU.setLoggingLevel(loggingLevel.get)
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -49,7 +52,11 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
     val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(KDSU.getEngineUrlFromAliasIfNeeded(kustoConnectionOptions.cluster),
       kustoConnectionOptions.appId, kustoConnectionOptions.appKey, kustoConnectionOptions.authority)
     kustoAdminClient = Some(ClientFactory.createClient(engineKcsb))
-
+    val ingestUrl = new StringBuffer(KDSU.getEngineUrlFromAliasIfNeeded(kustoConnectionOptions.cluster)).insert(8, "ingest-").toString
+    val ingestKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(
+      ingestUrl,
+      kustoConnectionOptions.appId, kustoConnectionOptions.appKey, kustoConnectionOptions.authority)
+      maybeKustoIngestClient = Some(ClientFactory.createClient(ingestKcsb))
     Try(kustoAdminClient.get.execute(kustoConnectionOptions.database, generateAlterIngestionBatchingPolicyCommand(
       "database",
       kustoConnectionOptions.database,
@@ -105,7 +112,7 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
     KDSU.logInfo("e2e","running KustoConnector");
     val crp = new ClientRequestProperties
     crp.setTimeoutInMilliSec(2000)
-    val ingestByTags = new java.util.ArrayList[String]
+    val ingestByTags = new util.ArrayList[String]
     val tag = "dammyTag"
     ingestByTags.add(tag)
     val sp = new SparkIngestionProperties()
@@ -136,39 +143,50 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
       KustoSinkOptions.KUSTO_AAD_APP_ID -> kustoConnectionOptions.appId,
       KustoSinkOptions.KUSTO_AAD_APP_SECRET -> kustoConnectionOptions.appKey
     )
+    validateRead(conf)
+  }
+
+  val minimalParquetWriterVersion: String = "3.3.0"
+  private def validateRead(conf: Map[String, String]) = {
     val dfResult = spark.read.kusto(kustoConnectionOptions.cluster, kustoConnectionOptions.database, table, conf)
-    val orig = dfOrig.select("name", "value","dec").rdd.map(x => (x.getString(0), x.getInt(1), x.getDecimal(2))).collect().sortBy(_._2)
-    val result = dfResult.select("name", "value","dec").rdd.map(x => (x.getString(0), x.getInt(1),x.getDecimal(2))).collect().sortBy(_._2)
+    val orig = dfOrig.select("name", "value", "dec").rdd.map(x => (x.getString(0), x.getInt(1), x.getDecimal(2))).collect().sortBy(_._2)
+    val result = dfResult.select("name", "value", "dec").rdd.map(x => (x.getString(0), x.getInt(1), x.getDecimal(2))).collect().sortBy(_._2)
     assert(orig.deep == result.deep)
   }
 
   "KustoSource" should "execute a read query on Kusto cluster in single mode"  in {
-    val query: String = System.getProperty(KustoSourceOptions.KUSTO_QUERY, table)
-
     val conf: Map[String, String] = Map(
       KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceSingleMode.toString,
       KustoSourceOptions.KUSTO_AAD_APP_ID -> kustoConnectionOptions.appId,
       KustoSourceOptions.KUSTO_AAD_APP_SECRET -> kustoConnectionOptions.appKey
     )
-
-    val df = spark.read.kusto(kustoConnectionOptions.cluster, kustoConnectionOptions.database, query, conf)
-    df.show()
+    validateRead(conf)
   }
 
   "KustoSource" should "execute a read query on Kusto cluster in distributed mode" in {
-    val query: String = System.getProperty(KustoSourceOptions.KUSTO_QUERY, table)
-    //    val blobSas: String = System.getProperty("blobSas")
-    //  TODO - get sas from DM and set it yourself
-    //    val storage = new TransientStorageParameters(Array(new TransientStorageCredentials(blobSas)))
+    maybeKustoIngestClient match {
+      case Some(kustoIngestClient) =>
+        val storageWithKey = kustoIngestClient.execute(kustoConnectionOptions.database,
+          generateGetExportContainersCommand()).getPrimaryResults.getData.get(0).get(0).toString
+        KDSU.logError(myName, s"storageWithKey: $storageWithKey")
 
-    val conf: Map[String, String] = Map(
-      KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceDistributedMode.toString,
-      //        KustoSourceOptions.KUSTO_TRANSIENT_STORAGE -> storage.toString,
-      KustoSourceOptions.KUSTO_AAD_APP_ID -> kustoConnectionOptions.appId,
-      KustoSourceOptions.KUSTO_AAD_APP_SECRET -> kustoConnectionOptions.appKey
-    )
+        val storage = new TransientStorageParameters(Array(new TransientStorageCredentials(storageWithKey)))
 
-    spark.read.kusto(kustoConnectionOptions.cluster, kustoConnectionOptions.database, query, conf).show(20)
+        val conf: Map[String, String] = Map(
+          KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceDistributedMode.toString,
+          KustoSourceOptions.KUSTO_TRANSIENT_STORAGE -> storage.toInsecureString,
+          KustoSourceOptions.KUSTO_AAD_APP_ID -> kustoConnectionOptions.appId,
+          KustoSourceOptions.KUSTO_AAD_APP_SECRET -> kustoConnectionOptions.appKey
+        )
+        val supportNewParquetWriter = new ComparableVersion(spark.version)
+          .compareTo(new ComparableVersion(minimalParquetWriterVersion)) > 0
+        supportNewParquetWriter match {
+          case true=> validateRead(conf)
+          case false=>
+            val dfResult = spark.read.kusto(kustoConnectionOptions.cluster, kustoConnectionOptions.database, table, conf)
+            assert(dfResult.count() == expectedNumberOfRows)
+        }
+    }
   }
 
   // TODO make this UT
