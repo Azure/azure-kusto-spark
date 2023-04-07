@@ -12,7 +12,7 @@ import com.microsoft.azure.kusto.data.{
   KustoResultSetTable
 }
 import com.microsoft.kusto.spark.common.KustoCoordinates
-import com.microsoft.kusto.spark.datasink.{SparkIngestionProperties, WriteOptions}
+import com.microsoft.kusto.spark.datasink.{SparkIngestionProperties, WriteMode, WriteOptions}
 import com.microsoft.kusto.spark.utils.ExtendedKustoClient
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.mockito.ArgumentMatchers.any
@@ -86,7 +86,7 @@ class ExtendedKustoClientTests extends AnyFlatSpec with Matchers {
       struct,
       Array(new ObjectMapper().readTree("""{"Type":"System.String",
       "CslType":"string", "Name":"name"}""")),
-      WriteOptions(isTransactionalMode = false),
+      WriteOptions(writeMode = WriteMode.Queued),
       null,
       true)
     verify(stubbedClient.engineClient, times(0)).execute(any(), any(), any())

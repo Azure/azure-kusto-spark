@@ -13,6 +13,7 @@ import com.microsoft.kusto.spark.authentication._
 import com.microsoft.kusto.spark.common.{KustoCoordinates, KustoDebugOptions}
 import com.microsoft.kusto.spark.datasink.KustoWriter.TempIngestionTablePrefix
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
+import com.microsoft.kusto.spark.datasink.WriteMode.WriteMode
 import com.microsoft.kusto.spark.datasink._
 import com.microsoft.kusto.spark.datasource.ReadMode.ReadMode
 import com.microsoft.kusto.spark.datasource._
@@ -385,7 +386,7 @@ object KustoDataSourceUtils {
     var tableCreation: SinkTableCreationMode = SinkTableCreationMode.FailIfNotExist
     var tableCreationParam: Option[String] = None
     var isAsync: Boolean = false
-    var isTransactionalMode: Boolean = false
+    var writeMode: WriteMode = WriteMode.Transactional
     var writeModeParam: Option[String] = None
     var batchLimit: Int = 0
     var minimalExtentsCountForSplitMergePerNode: Int = 0
@@ -402,17 +403,16 @@ object KustoDataSourceUtils {
     }
     try {
       writeModeParam = parameters.get(KustoSinkOptions.KUSTO_WRITE_MODE)
-      isTransactionalMode =
-        if (writeModeParam.isEmpty) true
-        else WriteMode.withName(writeModeParam.get) == WriteMode.Transactional
+      writeMode =
+        if (writeModeParam.isEmpty) WriteMode.Transactional else WriteMode.withName(writeModeParam.get)
     } catch {
       case _: NoSuchElementException =>
         throw new InvalidParameterException(s"No such WriteMode option: '${writeModeParam.get}'")
     }
     val userTempTableName = parameters.get(KustoSinkOptions.KUSTO_TEMP_TABLE_NAME)
-    if (userTempTableName.isDefined && (tableCreation == SinkTableCreationMode.CreateIfNotExist || !isTransactionalMode)) {
+    if (userTempTableName.isDefined && (tableCreation == SinkTableCreationMode.CreateIfNotExist || writeMode != WriteMode.Transactional)) {
       throw new InvalidParameterException(
-        "tempTableName can't be used with CreateIfNotExist or Queued write mode.")
+        "tempTableName can only be used with FailIfNotExists table create mode and Transactional write mode.")
     }
     isAsync =
       parameters.getOrElse(KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC, "false").trim.toBoolean
@@ -478,7 +478,7 @@ object KustoDataSourceUtils {
       maxRetriesOnMoveExtents,
       minimalExtentsCountForSplitMergePerNode,
       adjustSchema,
-      isTransactionalMode,
+      writeMode,
       userTempTableName,
       disableFlushImmediately,
       ensureNoDupBlobs)
@@ -490,7 +490,7 @@ object KustoDataSourceUtils {
 
     logInfo(
       "parseSinkParameters",
-      s"Parsed write options for sink: {'table': '${sourceParameters.kustoCoordinates.table}', 'timeout': '${writeOptions.timeout}, 'async': ${writeOptions.isAsync}, " +
+      s"Parsed write options for sink: {'table': '${sourceParameters.kustoCoordinates.table}', 'timeout': '${writeOptions.timeout}, 'async': ${writeOptions.isAsync}, 'writeMode': ${writeOptions.writeMode}, " +
         s"'tableCreationMode': ${writeOptions.tableCreateOptions}, 'writeLimit': ${writeOptions.writeResultLimit}, 'batchLimit': ${writeOptions.batchLimit}" +
         s", 'timeout': ${writeOptions.timeout}, 'timezone': ${writeOptions.timeZone}, " +
         s"'ingestionProperties': $ingestionPropertiesAsJson, 'requestId': '${sourceParameters.requestId}', 'pollingOnDriver': ${writeOptions.pollingOnDriver}," +

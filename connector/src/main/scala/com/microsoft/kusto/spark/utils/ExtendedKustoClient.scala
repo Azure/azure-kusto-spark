@@ -9,13 +9,10 @@ import com.microsoft.azure.kusto.data._
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.exceptions.KustoDataExceptionBase
 import com.microsoft.azure.kusto.ingest.resources.ResourceWithSas
-import com.microsoft.azure.kusto.ingest.{IngestClientFactory, QueuedIngestClient}
+import com.microsoft.azure.kusto.ingest.{IngestClientFactory, QueuedIngestClient, StreamingIngestClient}
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.KustoWriter.DelayPeriodBetweenCalls
-import com.microsoft.kusto.spark.datasink.{
-  SinkTableCreationMode,
-  SparkIngestionProperties,
-  WriteOptions
+import com.microsoft.kusto.spark.datasink.{SinkTableCreationMode, SparkIngestionProperties, WriteMode, WriteOptions
 }
 import com.microsoft.kusto.spark.datasource.{
   TransientStorageCredentials,
@@ -51,6 +48,7 @@ class ExtendedKustoClient(
   // Reading process does not require ingest client to start working
   lazy val dmClient: Client = ClientFactory.createClient(ingestKcsb)
   lazy val ingestClient: QueuedIngestClient = IngestClientFactory.createClient(ingestKcsb)
+  lazy val streamingClient: StreamingIngestClient = IngestClientFactory.createStreamingIngestClient(ingestKcsb)
   private lazy val ingestContainersContainerProvider =
     new ContainerProvider(this, clusterAlias, generateCreateTmpStorageCommand())
   private lazy val exportContainersContainerProvider =
@@ -101,7 +99,7 @@ class ExtendedKustoClient(
       tmpTableSchema = extractSchemaFromResultTable(transformedTargetSchema)
     }
 
-    if (writeOptions.isTransactionalMode) {
+    if (writeOptions.writeMode == WriteMode.Transactional) {
       // Create a temporary table with the kusto or dataframe parsed schema with retention and delete set to after the
       // write operation times out. Engine recommended keeping the retention although we use auto delete.
       executeEngine(database, generateTempTableCreateCommand(tmpTableName, tmpTableSchema), crp)
