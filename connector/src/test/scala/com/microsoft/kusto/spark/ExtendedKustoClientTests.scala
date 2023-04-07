@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties, KustoOperationResult, KustoResultSetTable}
 import com.microsoft.kusto.spark.common.KustoCoordinates
-import com.microsoft.kusto.spark.datasink.{SparkIngestionProperties, WriteOptions}
+import com.microsoft.kusto.spark.datasink.{SparkIngestionProperties, WriteMode, WriteOptions}
 import com.microsoft.kusto.spark.utils.ExtendedKustoClient
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.mockito.Matchers.any
@@ -61,7 +61,7 @@ class ExtendedKustoClientTests extends AnyFlatSpec with Matchers {
     val stubbedClient = new ExtendedKustoClientStub(null, null, "", null)
     val struct = StructType(Array(StructField("colA", StringType, nullable = true)))
     stubbedClient.initializeTablesBySchema(kustoCoordinates, tempTable, struct,  Array(new ObjectMapper().readTree("""{"Type":"System.String",
-      "CslType":"string", "Name":"name"}""")), WriteOptions(isTransactionalMode = false), null, true)
+      "CslType":"string", "Name":"name"}""")), WriteOptions(writeMode = WriteMode.Queued), null, true)
     verify(stubbedClient.engineClient, times(0)).execute(any(), any(), any())
   }
 }

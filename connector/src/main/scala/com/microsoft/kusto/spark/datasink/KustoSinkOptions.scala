@@ -57,6 +57,8 @@ object KustoSinkOptions extends KustoOptions{
   // after which it will move the data to the destination table (the last part is a metadata operation only)
   // If set to 'Queued', the write operation finishes after data is processed by the workers, the data may not be completely
   // available up until the service finishes loading it and failures on the service side will not propagate to Spark.
+  // If set to 'Stream', Kusto streaming ingestion will be used. Streaming ingestion should be used if latency of less than a few seconds is required
+  // or To optimize operational processing of many tables where the stream of data into each table is relatively small (a few records per second).
   val KUSTO_WRITE_MODE: String = newOption("writeMode")
 
   // Provide a temporary table name that will be used for this write operation to achieve transactional write and move
@@ -82,7 +84,7 @@ object SchemaAdjustmentMode extends Enumeration {
 
 object WriteMode extends Enumeration {
   type WriteMode = Value
-  val Transactional, Queued = Value
+  val Transactional, Queued, Stream = Value
 }
 
 case class WriteOptions(pollingOnDriver:Boolean = false,
@@ -100,7 +102,7 @@ case class WriteOptions(pollingOnDriver:Boolean = false,
                         maxRetriesOnMoveExtents: Int = 10,
                         minimalExtentsCountForSplitMerge: Int = 400,
                         adjustSchema: SchemaAdjustmentMode.SchemaAdjustmentMode = SchemaAdjustmentMode.NoAdjustment,
-                        isTransactionalMode: Boolean = true,
+                        writeMode: WriteMode.WriteMode = WriteMode.Transactional,
                         userTempTableName: Option[String] = None,
                         disableFlushImmediately:Boolean = false,
                         ensureNoDupBlobs: Boolean = false)
