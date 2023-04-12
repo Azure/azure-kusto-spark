@@ -72,7 +72,12 @@ All the options that can be used in the Kusto Sink can be found in KustoSinkOpti
   available up until the service finishes loading it, failures on the service side will not propagate to Spark but can still be seen.
   'Queued' mode scales better than the Transactional mode as it doesn't need to do track each individual ingestion created by the workers.
   This can also solve many problems faced when using Transactional mode intermediate table and better work with Materialized views.
-  *Note - Both modes are using Kusto native queued ingestion as described [here](https://learn.microsoft.com/azure/data-explorer/kusto/api/netfx/about-kusto-ingest#queued-ingestion).
+  *Note - Both modes are using Kusto native queued ingestion as described [here](https://learn.microsoft.com/azure/data-explorer/kusto/api/netfx/about-kusto-ingest#queued-ingestion).  
+  'Stream' mode - uses [stream ingestion](https://learn.microsoft.com/en-us/azure/data-explorer/ingest-data-streaming?tabs=azure-portal%2Cjava) 
+  to load data into Kusto. Streaming ingestion is useful for loading data when you need low latency between ingestion and query.
+  *Note - Stream ingestion must be enabled on the destination table or cluster (see [here](https://learn.microsoft.com/en-us/azure/data-explorer/ingest-data-streaming?tabs=azure-portal%2Cjava) for details).
+  Stream ingestion has a [data size limit](https://learn.microsoft.com/en-us/azure/data-explorer/kusto/management/streamingingestionpolicy) of 4 MB. 
+  If a micro-batch exceeds this size, the connector will fall back to the `Queued` write mode.
 
 * **KUSTO_POLLING_ON_DRIVER**:
   'pollingOnDriver' - If set to false (default) Kusto Spark will create a new job for the final two ingestion steps done after processing the data, so that the write operation doesn't seem to 'hang' on the Spark UI.
