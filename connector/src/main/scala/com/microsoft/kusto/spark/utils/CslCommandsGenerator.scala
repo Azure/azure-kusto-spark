@@ -180,6 +180,10 @@ private[kusto] object CslCommandsGenerator {
     s""".alter table ${KustoQueryUtils.normalizeTableName(tmpTableName)} policy auto_delete @'{"ExpiryDate": "${expiryDate.toString}","DeleteIfNotEmpty": true }' """
   }
 
+  def generateTableAlterStreamIngestionCommand(tmpTableName: String): String = {
+    s""".alter table ${KustoQueryUtils.normalizeTableName(tmpTableName)} policy streamingingestion enable"""
+  }
+
   def generateShowTableMappingsCommand(tableName: String, kind: String): String = {
     s""".show table ${KustoQueryUtils.normalizeTableName(tableName)} ingestion ${kind.toLowerCase()} mappings"""
   }
