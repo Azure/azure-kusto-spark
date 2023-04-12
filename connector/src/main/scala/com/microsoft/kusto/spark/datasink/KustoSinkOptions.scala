@@ -64,6 +64,7 @@ object KustoSinkOptions extends KustoOptions {
   // available up until the service finishes loading it and failures on the service side will not propagate to Spark.
   // If set to 'Stream', Kusto streaming ingestion will be used. Streaming ingestion should be used if latency of less than a few seconds is required
   // or To optimize operational processing of many tables where the stream of data into each table is relatively small (a few records per second).
+  // If batch size exceeds the maximum allowed size for stream ingestion (4 mb) queued ingestion will be used.
   val KUSTO_WRITE_MODE: String = newOption("writeMode")
 
   // Provide a temporary table name that will be used for this write operation to achieve transactional write and move
