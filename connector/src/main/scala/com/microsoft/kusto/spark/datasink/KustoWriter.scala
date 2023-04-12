@@ -251,7 +251,7 @@ object KustoWriter {
     KDSU.logInfo(myName, s"Streaming batch $batchIdForTracing of ${bytes.length} bytes (max allowed is ${KCONST.MaxStreamingBytes} bytes)")
     if (bytes.length > KCONST.MaxStreamingBytes) {
       KDSU.logWarn(myName, s"Streaming micro-batch '$batchIdForTracing' exceeds streaming threshold '${KCONST.MaxStreamingBytes}' bytes. " +
-        "Falling back to batch ingestion.")
+        "Falling back to queued ingestion.")
       ingestToTemporaryTableByWorkers(batchIdForTracing, rows, partitionsResults, parameters)
     }
     else {
