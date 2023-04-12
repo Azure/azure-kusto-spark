@@ -8,7 +8,7 @@ import com.microsoft.azure.kusto.data.ClientFactory
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.kusto.spark.KustoTestUtils.{KustoConnectionOptions, getSystemTestOptions}
 import com.microsoft.kusto.spark.common.KustoDebugOptions
-import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode, SparkIngestionProperties}
+import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode, SparkIngestionProperties, WriteMode}
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.streaming.Trigger
@@ -142,5 +142,40 @@ class KustoSinkStreamingE2E extends AnyFlatSpec with BeforeAndAfterAll {
       expectedNumberOfRows,
       timeoutMs,
       tableCleanupPrefix = prefix)
+  }
+
+  "KustoStreamingSinkStreamingIngestion" should "ingest structured data to a Kusto cluster using stream ingestion" taggedAs KustoE2E in {
+    val prefix = "KustoStreamingSparkE2E_StreamIngest"
+    val table = s"${prefix}_${UUID.randomUUID().toString.replace("-", "_")}"
+    val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://${kustoConnectionOptions.cluster}.kusto.windows.net",
+      kustoConnectionOptions.appId, kustoConnectionOptions.appKey, kustoConnectionOptions.authority)
+    val kustoAdminClient = ClientFactory.createClient(engineKcsb)
+    kustoAdminClient.execute(kustoConnectionOptions.database, generateTempTableCreateCommand(table, columnsTypesAndNames = "ColA:string, ColB:int"))
+    kustoAdminClient.execute(kustoConnectionOptions.database, generateTableAlterStreamIngestionCommand(table))
+    Thread.sleep(sleepTimeTillTableCreate)
+
+    val csvDf = spark
+      .readStream
+      .schema(customSchema)
+      .csv(csvPath)
+
+    spark.conf.set("spark.sql.streaming.checkpointLocation", "target/temp/checkpoint")
+
+    val kustoQ = csvDf
+      .writeStream
+      .format("com.microsoft.kusto.spark.datasink.KustoSinkProvider")
+      .options(Map(
+        KustoSinkOptions.KUSTO_CLUSTER -> kustoConnectionOptions.cluster,
+        KustoSinkOptions.KUSTO_TABLE -> table,
+        KustoSinkOptions.KUSTO_DATABASE -> kustoConnectionOptions.database,
+        KustoSinkOptions.KUSTO_AAD_APP_ID -> kustoConnectionOptions.appId,
+        KustoSinkOptions.KUSTO_AAD_APP_SECRET -> kustoConnectionOptions.appKey,
+        KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID -> kustoConnectionOptions.authority,
+        KustoSinkOptions.KUSTO_WRITE_MODE -> WriteMode.Stream.toString))
+      .trigger(Trigger.Once)
+
+    kustoQ.start().awaitTermination()
+
+    KustoTestUtils.validateResultsAndCleanup(kustoAdminClient, table, kustoConnectionOptions.database, expectedNumberOfRows, timeoutMs - sleepTimeTillTableCreate, tableCleanupPrefix = prefix)
   }
 }

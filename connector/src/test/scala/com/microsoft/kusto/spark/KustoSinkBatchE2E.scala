@@ -29,6 +29,8 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
   private val className = this.getClass.getSimpleName
   private val rowId = new AtomicInteger(1)
   private val rowId2 = new AtomicInteger(1)
+  private val timeoutMs: Int = 8 * 60 * 1000 // 8 minutes
+  private val sleepTimeTillTableCreate: Int = 3 * 60 * 1000 // 2 minutes
 
   private def newRow(): String = s"row-${rowId.getAndIncrement()}"
   private def newAllDataTypesRow(v: Int): (
@@ -357,8 +359,6 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
       .mode(SaveMode.Append)
       .save()
 
-    val timeoutMs: Int = 8 * 60 * 1000 // 8 minutes
-
     KustoTestUtils.validateResultsAndCleanup(
       kustoAdminClient,
       table,
@@ -391,7 +391,32 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
       .mode(SaveMode.Append)
       .save()
 
-    val timeoutMs: Int = 8 * 60 * 1000 // 8 minutes
+    KustoTestUtils.validateResultsAndCleanup(kustoAdminClient, table, database, expectedNumberOfRows, timeoutMs, tableCleanupPrefix = prefix)
+  }
+
+  "KustoBatchSinkStreaming" should "ingest structured data to a Kusto cluster in stream ingestion mode" taggedAs KustoE2E in {
+    import spark.implicits._
+    val df = rows.toDF("name", "value")
+    val prefix = "KustoBatchSinkE2EIngestStreamIngestion"
+    val table = KustoQueryUtils.simplifyName(s"${prefix}_${UUID.randomUUID()}")
+    val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://$cluster.kusto.windows.net", appId, appKey, authority)
+    val kustoAdminClient = ClientFactory.createClient(engineKcsb)
+    kustoAdminClient.execute(database, generateTempTableCreateCommand(table, columnsTypesAndNames = "ColA:string, ColB:int"))
+    kustoAdminClient.execute(database, generateTableAlterStreamIngestionCommand(table))
+
+    Thread.sleep(sleepTimeTillTableCreate)
+
+    df.write
+      .format("com.microsoft.kusto.spark.datasource")
+      .option(KustoSinkOptions.KUSTO_CLUSTER, cluster)
+      .option(KustoSinkOptions.KUSTO_DATABASE, database)
+      .option(KustoSinkOptions.KUSTO_TABLE, table)
+      .option(KustoSinkOptions.KUSTO_AAD_APP_ID, appId)
+      .option(KustoSinkOptions.KUSTO_AAD_APP_SECRET, appKey)
+      .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, authority)
+      .option(KustoSinkOptions.KUSTO_WRITE_MODE, "Stream")
+      .mode(SaveMode.Append)
+      .save()
 
     KustoTestUtils.validateResultsAndCleanup(
       kustoAdminClient,
