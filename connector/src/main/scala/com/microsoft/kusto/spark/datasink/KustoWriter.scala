@@ -232,12 +232,8 @@ object KustoWriter {
       requestId}'$batchIdForTracing")
     val ingestClient = KustoClientCache.getClient(parameters.coordinates.clusterUrl,
       parameters.authentication, parameters.coordinates.ingestionUrl, parameters.coordinates.clusterAlias).ingestClient
-    val queueRequestOptions = new QueueRequestOptions
-    queueRequestOptions.setMaximumExecutionTimeInMs(KCONST.DefaultExecutionQueueing)
-    queueRequestOptions.setTimeoutIntervalInMs(KCONST.DefaultTimeoutQueueing)
-    queueRequestOptions.setRetryPolicyFactory(new RetryNoRetry)
-    val reqRetryOpts = new RequestRetryOptions(RetryPolicyType.EXPONENTIAL, KCONST.MaxIngestRetryAttempts,
-      Duration.ofSeconds(KCONST.DefaultMaximumIngestionTime.toSeconds), null, null, null)
+    val reqRetryOpts = new RequestRetryOptions(RetryPolicyType.FIXED, KCONST.MaxIngestionRetryAttempts,
+      Duration.ofSeconds(KCONST.DefaultTimeoutQueueing), null, null, null)
     ingestClient.setQueueRequestOptions(reqRetryOpts)
     // We force blocking here, since the driver can only complete the ingestion process
     // once all partitions are ingested into the temporary table

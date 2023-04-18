@@ -32,6 +32,7 @@ object KustoConstants {
   val EmptyString = ""
   val DefaultMaximumIngestionTime: FiniteDuration = FiniteDuration.apply(
     MaxIngestRetryAttempts * (DefaultExecutionQueueing + DefaultTimeoutQueueing) + 2000,"millis")
+  val MaxIngestionRetryAttempts = 1
 
   object Schema {
     val NAME: String = "Name"
