@@ -124,8 +124,9 @@ deleting transient artifacts etc. KustoBlobStorageUtils module contains helper f
 coordinates and account credentials, or a full SAS URL with write, read and list permissions once the corresponding RDD is no longer needed. Each transaction stores transient blob
 artifacts in a separate directory. This directory is captured as part of read-transaction information logs reported on the Spark Driver node.
 
-* ** KUSTO_TRANSIENT_STORAGE **:
+* **KUSTO_TRANSIENT_STORAGE**:
  'transientStorage' KustoSourceOptions.KUSTO_TRANSIENT_STORAGE -> new TransientStorageParameters(Array(new TransientStorageCredentials(blobSas)))
+
  ```python
 transientStorage = "{ \"storageCredentials\" : [ { \
     \"storageAccountName\": \"1jdldsdke2etestcluster01\",\
@@ -136,6 +137,8 @@ transientStorage = "{ \"storageCredentials\" : [ { \
   ...
   option("transientStorage", transientStorage). \
  ```
+>Note:
+Creating `transientStorage` string by using `TransientStorageParameters.toString` will not work. Either it can be created manually or by using `TransientStorageParameters.toInsecureString`.
 
 ### Examples
  
