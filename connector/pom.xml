@@ -125,7 +125,6 @@
         <dependency>
             <groupId>com.azure</groupId>
             <artifactId>azure-security-keyvault-secrets</artifactId>
-            <version>${keyvault.secrets.version}</version>
             <exclusions>
                 <exclusion>
                     <artifactId>azure-core-http-netty</artifactId>

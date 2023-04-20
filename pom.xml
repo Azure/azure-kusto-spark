@@ -14,7 +14,6 @@
         <commons.lang3.version>3.9</commons.lang3.version>
         <fasterxml.jackson.version>[2.11.0,2.13.0)</fasterxml.jackson.version>
         <hadoop.version>3.3.5</hadoop.version>
-        <keyvault.secrets.version>4.1.5</keyvault.secrets.version>
         <kusto.sdk.version>4.0.4</kusto.sdk.version>
         <maven.flatten.version>1.4.1</maven.flatten.version>
         <maven.jar.plugin.version>3.3.0</maven.jar.plugin.version>
