@@ -56,7 +56,8 @@ class ContainerProvider[A](val client: ExtendedKustoClient, val clusterAlias: St
       })
 
       if (storage.isEmpty) {
-        KDSU.reportExceptionAndThrow(myName, new RuntimeException("Failed to allocate temporary storage"), "writing to Kusto", clusterAlias)
+        KDSU.reportExceptionAndThrow(myName, new RuntimeException("Failed to allocate temporary storage"), "writing to Kusto", clusterAlias, "", "", "", true)
+        storage(roundRobinIdx)
       }
 
       KDSU.logInfo(myName, s"Got ${storage.length} storage SAS with command :'$command'. from service 'ingest-$clusterAlias'")
