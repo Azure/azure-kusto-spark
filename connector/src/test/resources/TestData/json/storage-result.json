@@ -1,0 +1,49 @@
+{
+  "Tables": [
+    {
+      "TableName": "Table_0",
+      "Columns": [
+        {
+          "ColumnName": "StorageRoot",
+          "ColumnType": "string",
+          "ColumnOrdinal": 0
+        }
+      ],
+      "Rows": [
+        [
+          "https://sacc1.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0?sv=2018-03-28&sr=c&sig=8RIPEM5Ks%3D&st=2023-04-30T15%3A17%3A21Z&se=2023-05-04T16%3A17%3A21Z&sp=rw"
+        ],
+        [
+          "https://sacc2.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0?sv=2018-03-28&sr=c&sig=Bl%2Bvx5Sym0%2BABQvyARcjurzKanl6c%2FgJNntt1YymptQ%3D&st=2023-04-30T15%3A17%3A21Z&se=2023-05-04T16%3A17%3A21Z&sp=rw"
+        ]
+      ],
+      "last": false,
+      "afterLast": false,
+      "beforeFirst": true
+    }
+  ],
+  "primaryResults": {
+    "tableName": "Table_0",
+    "tableId": "0",
+    "tableKind": "PrimaryResult",
+    "columns": [
+      {
+        "columnName": "StorageRoot",
+        "columnType": "string",
+        "ordinal": 0
+      }
+    ],
+    "currentRow": null,
+    "data": [
+      [
+        "https://sacc1.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0?sv=2018-03-28&sr=c&sig=8RIPE%3D&st=2023-04-30T15%3A17%3A21Z&se=2023-05-04T16%3A17%3A21Z&sp=rw"
+      ],
+      [
+        "https://sacc2.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0?sv=2018-03-28&sr=c&sig=Bl%2Bvx5Sym0%2BABQvyARcjurzKanl6c%2FgJNntt1YymptQ%3D&st=2023-04-30T15%3A17%3A21Z&se=2023-05-04T16%3A17%3A21Z&sp=rw"
+      ]
+    ],
+    "last": false,
+    "afterLast": false,
+    "beforeFirst": true
+  }
+}
