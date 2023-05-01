@@ -8,7 +8,7 @@
     <packaging>pom</packaging>
     <version>${revision}</version>
     <properties>
-        <revision>3.1.13</revision>
+        <revision>3.1.15</revision>
 
         <!-- Spark dependencies -->
         <scala.version.major>2.11</scala.version.major>
@@ -28,7 +28,7 @@
         <fasterxml.jackson.version>[2.11.0,2.12.0)</fasterxml.jackson.version>
         <slf4j.version>1.8.0-beta4</slf4j.version>
         <joda-time.version>2.10.2</joda-time.version>
-        <json.version>20201115</json.version>
+        <json.version>20230227</json.version>
     </properties>
 
     <inceptionYear>2018</inceptionYear>

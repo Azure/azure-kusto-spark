@@ -17,6 +17,8 @@ import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration.Duration
 
+import java.security.InvalidParameterException
+
 @RunWith(classOf[JUnitRunner])
 class KustoSourceTests extends FlatSpec with MockFactory with Matchers with BeforeAndAfterAll {
   private val loggingLevel: Option[String] = Option(System.getProperty("logLevel"))
@@ -98,6 +100,18 @@ class KustoSourceTests extends FlatSpec with MockFactory with Matchers with Befo
     assert(params.sasKey.equals("?<secret>"))
     assert(params.blobContainer.equals("upload/"))
     assert(params.sasDefined.equals(true))
+  }
+
+  "KustoDataSource" should "fail in parsing with no sas key" in {
+    val sas = "https://storage.blob.core.customDom/upload/"
+    assertThrows[InvalidParameterException] {    new TransientStorageCredentials(sas)  }
+  }
+
+  "KustoDataSource" should "fail in parsing with wrong sas url format" in {
+    val sas = "https://storage.blob.core.customDom/?<secret>"
+    assertThrows[InvalidParameterException] {
+      new TransientStorageCredentials(sas)
+    }
   }
 
   "KustoDataSource" should "match cluster default url pattern" in {

@@ -1,0 +1,37 @@
+{
+  "Tables": [
+    {
+      "TableName": "Table_0",
+      "Columns": [
+        {
+          "ColumnName": "StorageRoot",
+          "ColumnType": "string",
+          "ColumnOrdinal": 0
+        }
+      ],
+      "Rows": [
+      ],
+      "last": false,
+      "afterLast": false,
+      "beforeFirst": true
+    }
+  ],
+  "primaryResults": {
+    "tableName": "Table_0",
+    "tableId": "0",
+    "tableKind": "PrimaryResult",
+    "columns": [
+      {
+        "columnName": "StorageRoot",
+        "columnType": "string",
+        "ordinal": 0
+      }
+    ],
+    "currentRow": null,
+    "data": [
+    ],
+    "last": false,
+    "afterLast": false,
+    "beforeFirst": true
+  }
+}

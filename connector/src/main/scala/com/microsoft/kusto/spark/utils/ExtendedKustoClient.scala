@@ -106,7 +106,7 @@ class ExtendedKustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcs
       val targetTableBatchingPolicy = targetTableBatchingPolicyRes.getString(2).replace("\r\n", "").replace("\"", "\"\"")
       if (targetTableBatchingPolicy != null && targetTableBatchingPolicy != "null") {
         executeEngine(database, generateTableAlterIngestionBatchingPolicyCommand(tmpTableName, targetTableBatchingPolicy), crp)
-        executeDM(generateRefreshBatchingPolicyCommand(database, tmpTableName), crp)
+        executeDM(generateRefreshBatchingPolicyCommand(database, tmpTableName), Some(crp))
       }
       if (configureRetentionPolicy) {
         executeEngine(database, generateTableAlterRetentionPolicy(tmpTableName,
@@ -388,8 +388,8 @@ class ExtendedKustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcs
       "Execute engine command with retries")
   }
 
-  def executeDM(command: String, crp: ClientRequestProperties, retryConfig: Option[RetryConfig] = None): KustoOperationResult = {
-    KDSU.retryApplyFunction(() => dmClient.execute(ExtendedKustoClient.DefaultDb, command, crp), retryConfig.getOrElse(this.retryConfig),
+  def executeDM(command: String, maybeCrp: Option[ClientRequestProperties], retryConfig: Option[RetryConfig] = None): KustoOperationResult = {
+    KDSU.retryApplyFunction(() => dmClient.execute(ExtendedKustoClient.DefaultDb, command, maybeCrp.orNull), retryConfig.getOrElse(this.retryConfig),
       "Execute DM command with retries")
   }
 
