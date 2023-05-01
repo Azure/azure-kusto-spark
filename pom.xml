@@ -10,6 +10,12 @@
     <properties>
         <revision>4.0.0</revision>
         <!-- Spark dependencies -->
+        <scala.version.major>2.12</scala.version.major>
+        <scala.version.minor>17</scala.version.minor>
+        <spark.version.major>3.0</spark.version.major>
+        <spark.version.minor>1</spark.version.minor>
+
+        <!-- other dependencies -->
         <azure.bom.version>1.2.4</azure.bom.version>
         <commons.lang3.version>3.9</commons.lang3.version>
         <fasterxml.jackson.version>[2.11.0,2.13.0)</fasterxml.jackson.version>
@@ -22,15 +28,11 @@
         <mockito.version>1.10.19</mockito.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <scala.maven.plugin.version>4.8.1</scala.maven.plugin.version>
-        <scala.version.major>2.12</scala.version.major>
-        <scala.version.minor>17</scala.version.minor>
         <scalamock.version>5.2.0</scalamock.version>
         <scalastyle.maven.plugin.version>1.0.0</scalastyle.maven.plugin.version>
         <scalatest.maven.version>2.2.0</scalatest.maven.version>
         <scalatest.version>3.2.15</scalatest.version>
         <slf4j.version>1.8.0-beta4</slf4j.version>
-        <spark.version.major>3.0</spark.version.major>
-        <spark.version.minor>1</spark.version.minor>
         <specs2.version>3.6.5</specs2.version>
     </properties>
 
