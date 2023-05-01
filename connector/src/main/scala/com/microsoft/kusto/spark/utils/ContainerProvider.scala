@@ -26,8 +26,9 @@ class ContainerProvider[A](val client: ExtendedKustoClient, val clusterAlias: St
     RetryConfig.custom
       .maxAttempts(MaxCommandsRetryAttempts)
       .intervalFunction(sleepConfig)
-      .retryOnException((e: Throwable) =>
-        e.isInstanceOf[IngestionServiceException] && !e.asInstanceOf[KustoDataExceptionBase].isPermanent).build
+      .retryOnException(JavaConverter.asJavaPredicate((e: Throwable) =>
+        e.isInstanceOf[IngestionServiceException] && !e.asInstanceOf[KustoDataExceptionBase].isPermanent)
+      ).build
   }
 
   def getContainer: A = {
