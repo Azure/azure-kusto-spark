@@ -389,12 +389,8 @@ class ExtendedKustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcs
   }
 
   def executeDM(command: String, maybeCrp: Option[ClientRequestProperties], retryConfig: Option[RetryConfig] = None): KustoOperationResult = {
-    maybeCrp match {
-      case Some(crp) => KDSU.retryApplyFunction(() => dmClient.execute(ExtendedKustoClient.DefaultDb, command, crp), retryConfig.getOrElse(this.retryConfig),
-        "Execute DM command with retries")
-      case None => KDSU.retryApplyFunction(() => dmClient.execute(ExtendedKustoClient.DefaultDb, command), retryConfig.getOrElse(this.retryConfig),
-        "Execute DM command with retries (no crp)")
-    }
+    KDSU.retryApplyFunction(() => dmClient.execute(ExtendedKustoClient.DefaultDb, command, maybeCrp.orNull), retryConfig.getOrElse(this.retryConfig),
+      "Execute DM command with retries")
   }
 
   def retryAsyncOp(database: String, cmd: String, crp: ClientRequestProperties, timeout: FiniteDuration, cmdName: String, requestId: String): Option[KustoResultSetTable] = {

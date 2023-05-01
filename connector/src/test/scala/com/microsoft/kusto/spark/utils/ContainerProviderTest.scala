@@ -47,7 +47,7 @@ class ContainerProviderTest extends FlatSpec with Matchers with MockFactory {
     containerProvider.getContainer.sas should (not be "")
   }
 
-  "ContainerProvider" should "should fail in the case when call succeeds but returns no storage" in {
+  "ContainerProvider" should "fail in the case when call succeeds but returns no storage" in {
     val extendedMockClient = mock[ExtendedKustoClient]
     val kustoOperationResult = new KustoOperationResult(readTestSource("storage-result-empty.json"), "v1")
     val clusterAlias = "ingest-cluster"
