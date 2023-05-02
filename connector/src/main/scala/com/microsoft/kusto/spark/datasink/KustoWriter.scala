@@ -232,7 +232,7 @@ object KustoWriter {
       requestId}'$batchIdForTracing")
     val ingestClient = KustoClientCache.getClient(parameters.coordinates.clusterUrl,
       parameters.authentication, parameters.coordinates.ingestionUrl, parameters.coordinates.clusterAlias).ingestClient
-    val reqRetryOpts = new RequestRetryOptions(RetryPolicyType.FIXED, KCONST.MaxIngestionRetryAttempts,
+    val reqRetryOpts = new RequestRetryOptions(RetryPolicyType.FIXED, KCONST.QueueRetryAttempts,
       Duration.ofSeconds(KCONST.DefaultTimeoutQueueing), null, null, null)
     ingestClient.setQueueRequestOptions(reqRetryOpts)
     // We force blocking here, since the driver can only complete the ingestion process

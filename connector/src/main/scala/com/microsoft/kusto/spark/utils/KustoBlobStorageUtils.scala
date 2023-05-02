@@ -37,7 +37,6 @@ object KustoBlobStorageUtils {
       .connectionString(storageConnectionString)
       .containerName(container)
       .buildClient()
-    // TODO confirm this delete
     blobClient.listBlobsByHierarchy(directory).stream().forEach(blob=>blobClient.getBlobClient(blob.getName).deleteIfExists())
   }
 }

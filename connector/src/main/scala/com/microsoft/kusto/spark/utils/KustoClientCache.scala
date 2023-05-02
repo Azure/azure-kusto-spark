@@ -3,11 +3,12 @@ package com.microsoft.kusto.spark.utils
 import java.net.URI
 import java.util.concurrent.ConcurrentHashMap
 import java.util.function
-
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.kusto.spark.authentication._
 import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
 import org.apache.http.client.utils.URIBuilder
+import org.apache.commons.lang3.tuple.Pair
+import org.apache.spark.sql.SparkSession
 
 object KustoClientCache {
   var clientCache = new ConcurrentHashMap[ClusterAndAuth, ExtendedKustoClient]
@@ -66,8 +67,9 @@ object KustoClientCache {
       )
     }
 
-    engineKcsb.setClientVersionForTracing(KCONST.ClientName)
-    ingestKcsb.setClientVersionForTracing(KCONST.ClientName)
+    val sparkVersion = SparkSession.builder().getOrCreate().version
+    engineKcsb.setConnectorDetails(KCONST.ClientName, KustoDataSourceUtils.Version ,null, null, false, null,  Pair.of("spark.version", sparkVersion))
+    ingestKcsb.setConnectorDetails(KCONST.ClientName, KustoDataSourceUtils.Version ,null, null, false, null, Pair.of("spark.version",sparkVersion))
 
     new ExtendedKustoClient(engineKcsb, ingestKcsb, clusterAndAuth.clusterAlias)
   }

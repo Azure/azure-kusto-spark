@@ -143,6 +143,7 @@
             <version>${hadoop.version}</version>
             <scope>provided</scope>
         </dependency>
+        <!--might need 3.2.0 here for local run query-->
         <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-azure</artifactId>
