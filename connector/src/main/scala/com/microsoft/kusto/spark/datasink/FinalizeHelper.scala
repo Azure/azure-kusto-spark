@@ -146,7 +146,7 @@ object FinalizeHelper {
 //            KDSU.logWarn(loggerName, "Failed to fetch operation status transiently - will keep polling. " +
 //              s"RequestId: $requestId. Error: ${ExceptionUtils.getStackTrace(e)}")
 //            None
-          case e: TableServiceErrorException => KDSU.reportExceptionAndThrow(loggerName, e, s"TableServiceErrorException : RequestId: $requestId")
+          case e: TableServiceErrorException => KDSU.reportExceptionAndThrow(loggerName, e, s"TableServiceErrorException : RequestId: $requestId", shouldNotThrow = true)
             None
           case e: Exception => KDSU.reportExceptionAndThrow(loggerName, e, s"Failed to fetch operation status. RequestId: $requestId")
             None

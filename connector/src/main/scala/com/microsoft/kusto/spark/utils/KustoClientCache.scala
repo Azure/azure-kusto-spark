@@ -67,9 +67,9 @@ object KustoClientCache {
       )
     }
 
-    val sparkVersion = SparkSession.builder().getOrCreate().version
-    engineKcsb.setConnectorDetails(KCONST.ClientName, KustoDataSourceUtils.Version ,null, null, false, null,  Pair.of("spark.version", sparkVersion))
-    ingestKcsb.setConnectorDetails(KCONST.ClientName, KustoDataSourceUtils.Version ,null, null, false, null, Pair.of("spark.version",sparkVersion))
+    val sparkSession = SparkSession.builder().getOrCreate()
+    engineKcsb.setConnectorDetails(KCONST.ClientName, KustoDataSourceUtils.Version , sparkSession.sparkContext.appName, null, false, null,  Pair.of("spark.version", sparkSession.version))
+    ingestKcsb.setConnectorDetails(KCONST.ClientName, KustoDataSourceUtils.Version , sparkSession.sparkContext.appName, null, false, null, Pair.of("spark.version",sparkSession.version))
 
     new ExtendedKustoClient(engineKcsb, ingestKcsb, clusterAndAuth.clusterAlias)
   }
