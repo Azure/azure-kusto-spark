@@ -2,6 +2,7 @@ package com.microsoft.kusto.spark.utils
 
 
 import com.azure.storage.blob.BlobContainerClientBuilder
+import com.azure.storage.blob.models.BlobItem
 import com.microsoft.kusto.spark.datasource.TransientStorageCredentials
 
 
@@ -37,6 +38,6 @@ object KustoBlobStorageUtils {
       .connectionString(storageConnectionString)
       .containerName(container)
       .buildClient()
-    blobClient.listBlobsByHierarchy(directory).stream().forEach(blob=>blobClient.getBlobClient(blob.getName).deleteIfExists())
+    blobClient.listBlobsByHierarchy(directory).forEach(blob=>blobClient.getBlobClient(blob.getName).deleteIfExists())
   }
 }

@@ -289,12 +289,18 @@
                     </execution>
                 </executions>
                 <configuration>
-                    <addScalacArgs>-target:jvm-11</addScalacArgs>
+                    <javacArgs>
+                        <javacArg>-Xlint:unchecked</javacArg>
+                        <javacArg>-Xlint:deprecation</javacArg>
+                        <javacArg>-target</javacArg>
+                        <javacArg>11</javacArg>
+                    </javacArgs>
                     <args>
 <!--                        <arg>-feature</arg>-->
                         <arg>-unchecked</arg>
                         <arg>-deprecation</arg>
                     </args>
+
                 </configuration>
             </plugin>
             <plugin>
