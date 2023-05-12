@@ -87,6 +87,10 @@ class ExtendedKustoClient(
         }
         tmpTableSchema = tableSchemaBuilder.toString
         executeEngine(database, generateTableCreateCommand(table, tmpTableSchema), crp)
+        if (writeOptions.writeMode == WriteMode.Stream) {
+          executeEngine(database, generateTableAlterStreamIngestionCommand(table), crp)
+          executeEngine(database, generateClearStreamingIngestionCacheCommand(table), crp)
+        }
       }
     } else {
       // Table exists. Parse kusto table schema and check if it matches the dataframes schema
