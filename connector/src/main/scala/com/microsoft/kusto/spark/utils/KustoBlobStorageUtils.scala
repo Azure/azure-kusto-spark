@@ -38,6 +38,10 @@ object KustoBlobStorageUtils {
       .connectionString(storageConnectionString)
       .containerName(container)
       .buildClient()
-    blobClient.listBlobsByHierarchy(directory).forEach(blob=>blobClient.getBlobClient(blob.getName).deleteIfExists())
+    val blobsToDelete = blobClient.listBlobsByHierarchy(directory).iterator()
+    while (blobsToDelete.hasNext) {
+      val blob: BlobItem = blobsToDelete.next()
+      blobClient.getBlobClient(blob.getName).delete()
+    }
   }
 }
