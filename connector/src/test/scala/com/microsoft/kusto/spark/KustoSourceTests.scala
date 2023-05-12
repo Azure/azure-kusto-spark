@@ -14,6 +14,7 @@ import org.scalatest.BeforeAndAfterAll
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
+import java.security.InvalidParameterException
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration.Duration
 
@@ -98,6 +99,18 @@ class KustoSourceTests extends AnyFlatSpec with MockFactory with Matchers with B
     assert(params.sasKey.equals("?<secret>"))
     assert(params.blobContainer.equals("upload/"))
     assert(params.sasDefined.equals(true))
+  }
+
+  "KustoDataSource" should "fail in parsing with no sas key" in {
+    val sas = "https://storage.blob.core.customDom/upload/"
+    assertThrows[InvalidParameterException] {    new TransientStorageCredentials(sas)  }
+  }
+
+  "KustoDataSource" should "fail in parsing with wrong sas url format" in {
+    val sas = "https://storage.blob.core.customDom/?<secret>"
+    assertThrows[InvalidParameterException] {
+      new TransientStorageCredentials(sas)
+    }
   }
 
   "KustoDataSource" should "match cluster default url pattern" in {

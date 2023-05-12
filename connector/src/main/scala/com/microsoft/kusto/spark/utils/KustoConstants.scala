@@ -11,7 +11,7 @@ object KustoConstants {
   val NoTimeout: String = (-1 seconds).toSeconds.toString
   val ClientName: String = KustoDataSourceUtils.clientName
   val DefaultBufferSize: Int = 16 * 1024
-  val StorageExpiryMinutes: Int = 120
+  val StorageExpirySeconds: Int = 2 * 60 * 60 // 2 hours of delay in seconds. Refactored for seconds
   val SparkSettingsRefreshMinutes: Int = 120
   val OneKiloByte: Int = 1024
   val OneMegaByte: Int = OneKiloByte * OneKiloByte
