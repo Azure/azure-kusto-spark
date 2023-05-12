@@ -77,7 +77,7 @@ All the options that can be used in the Kusto Sink can be found in KustoSinkOpti
   to load data into Kusto. Streaming ingestion is useful for loading data when you need low latency between ingestion and query.
   *Note - Stream ingestion must be enabled on the destination table or cluster (see [here](https://learn.microsoft.com/en-us/azure/data-explorer/ingest-data-streaming?tabs=azure-portal%2Cjava) for details).
   Stream ingestion has a [data size limit](https://learn.microsoft.com/en-us/azure/data-explorer/kusto/management/streamingingestionpolicy) of 4 MB. 
-  If a micro-batch exceeds this size, the connector will fall back to the `Queued` write mode.
+  If a request exceeds this size, it will be broken into multiple appropriately sized chunks.
 
 * **KUSTO_POLLING_ON_DRIVER**:
   'pollingOnDriver' - If set to false (default) Kusto Spark will create a new job for the final two ingestion steps done after processing the data, so that the write operation doesn't seem to 'hang' on the Spark UI.
