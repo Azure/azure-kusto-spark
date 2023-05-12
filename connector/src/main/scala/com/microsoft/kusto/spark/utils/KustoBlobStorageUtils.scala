@@ -1,10 +1,10 @@
 package com.microsoft.kusto.spark.utils
 
-import com.microsoft.azure.storage.CloudStorageAccount
-import com.microsoft.azure.storage.blob.CloudBlockBlob
+
+import com.azure.storage.blob.BlobContainerClientBuilder
+import com.azure.storage.blob.models.BlobItem
 import com.microsoft.kusto.spark.datasource.TransientStorageCredentials
 
-import scala.collection.JavaConverters._
 
 
 object KustoBlobStorageUtils {
@@ -34,15 +34,14 @@ object KustoBlobStorageUtils {
   }
 
   private[kusto] def performBlobDelete(directory: String, container: String, storageConnectionString: String): Unit = {
-    val cloudStorageAccount = CloudStorageAccount.parse(storageConnectionString)
-
-    val blobClient = cloudStorageAccount.createCloudBlobClient()
-    val blobContainer = blobClient.getContainerReference(container)
-    val blobsWithPrefix = blobContainer.listBlobs(directory)
-
-    for (blob <- blobsWithPrefix.asScala) {
-      val cloudBlob = blobContainer.getBlockBlobReference(new CloudBlockBlob(blob.getUri).getName)
-      cloudBlob.deleteIfExists()
+    val blobClient = new BlobContainerClientBuilder()
+      .connectionString(storageConnectionString)
+      .containerName(container)
+      .buildClient()
+    val blobsToDelete = blobClient.listBlobsByHierarchy(directory).iterator()
+    while (blobsToDelete.hasNext) {
+      val blob: BlobItem = blobsToDelete.next()
+      blobClient.getBlobClient(blob.getName).delete()
     }
   }
 }

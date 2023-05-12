@@ -8,27 +8,32 @@
     <packaging>pom</packaging>
     <version>${revision}</version>
     <properties>
-        <revision>3.1.15</revision>
-
+        <revision>4.0.0</revision>
         <!-- Spark dependencies -->
-        <scala.version.major>2.11</scala.version.major>
-        <scala.version.minor>12</scala.version.minor>
-        <spark.version.major>2.4</spark.version.major>
-        <spark.version.minor>0</spark.version.minor>
+        <scala.version.major>2.12</scala.version.major>
+        <scala.version.minor>11</scala.version.minor>
+        <spark.version.major>3.0</spark.version.major>
+        <spark.version.minor>1</spark.version.minor>
 
         <!-- other dependencies -->
-        <kusto-sdk.version>3.2.1</kusto-sdk.version>
-        <specs2.version>3.6.5</specs2.version>
+        <azure.bom.version>1.2.4</azure.bom.version>
+        <commons.lang3.version>3.9</commons.lang3.version>
+        <fasterxml.jackson.version>[2.11.0,2.13.0)</fasterxml.jackson.version>
+        <hadoop.version>3.3.5</hadoop.version>
+        <kusto.sdk.version>4.0.4</kusto.sdk.version>
+        <maven.flatten.version>1.4.1</maven.flatten.version>
+        <maven.jar.plugin.version>3.3.0</maven.jar.plugin.version>
+        <maven.source.plugin.version>3.0.1</maven.source.plugin.version>
+        <maven.surefire.plugin.version>3.0.0</maven.surefire.plugin.version>
+        <mockito.version>1.10.19</mockito.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <maven-source-plugin.version>3.0.1</maven-source-plugin.version>
-        <azure-storage.version>8.6.5</azure-storage.version>
-        <keyvault-secrets.version>4.1.5</keyvault-secrets.version>
-        <azure-identity.version>1.2.4</azure-identity.version>
-        <commons-lang3.version>3.9</commons-lang3.version>
-        <fasterxml.jackson.version>[2.11.0,2.12.0)</fasterxml.jackson.version>
+        <scala.maven.plugin.version>4.8.1</scala.maven.plugin.version>
+        <scalamock.version>5.2.0</scalamock.version>
+        <scalastyle.maven.plugin.version>1.0.0</scalastyle.maven.plugin.version>
+        <scalatest.maven.version>2.2.0</scalatest.maven.version>
+        <scalatest.version>3.2.15</scalatest.version>
         <slf4j.version>1.8.0-beta4</slf4j.version>
-        <joda-time.version>2.10.2</joda-time.version>
-        <json.version>20230227</json.version>
+        <specs2.version>3.6.5</specs2.version>
     </properties>
 
     <inceptionYear>2018</inceptionYear>
@@ -61,7 +66,7 @@
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>flatten-maven-plugin</artifactId>
-                <version>1.4.0</version>
+                <version>${maven.flatten.version}</version>
                 <configuration>
                     <flattenMode>oss</flattenMode>
                 </configuration>
@@ -86,5 +91,15 @@
             </plugin>
         </plugins>
     </build>
-
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>com.azure</groupId>
+                <artifactId>azure-sdk-bom</artifactId>
+                <version>${azure.bom.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 </project>

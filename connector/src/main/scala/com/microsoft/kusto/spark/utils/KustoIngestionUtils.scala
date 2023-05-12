@@ -2,7 +2,7 @@ package com.microsoft.kusto.spark.utils
 
 import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility
 import com.fasterxml.jackson.annotation.PropertyAccessor
-import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import com.microsoft.azure.kusto.ingest.ColumnMapping
 import com.microsoft.kusto.spark.datasink.{SchemaAdjustmentMode, SinkTableCreationMode, SparkIngestionProperties}
 import com.microsoft.kusto.spark.datasink.SchemaAdjustmentMode.SchemaAdjustmentMode
@@ -10,13 +10,12 @@ import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreatio
 import com.microsoft.kusto.spark.exceptions.SchemaMatchException
 import com.microsoft.kusto.spark.utils.DataTypeMapping.{SparkTypeToKustoTypeMap, getSparkTypeToKustoTypeMap}
 import org.apache.spark.sql.types.StructType
-import org.json.JSONObject
 
 object KustoIngestionUtils {
   private[kusto] def adjustSchema(mode: SchemaAdjustmentMode,
                                   sourceSchema: StructType,
-                                  targetSchema: Array[JSONObject],
-                                  ingestionProperties: SparkIngestionProperties , tableCreationMode: SinkTableCreationMode) : Unit = {
+                                  targetSchema: Array[JsonNode],
+                                  ingestionProperties: SparkIngestionProperties, tableCreationMode: SinkTableCreationMode) : Unit = {
 
     mode match {
       case SchemaAdjustmentMode.NoAdjustment =>
@@ -26,9 +25,9 @@ object KustoIngestionUtils {
 
   }
 
-  private[kusto] def forceAdjustSchema(sourceSchema: StructType, targetSchema: Array[JSONObject]) : Unit ={
+  private[kusto] def forceAdjustSchema(sourceSchema: StructType, targetSchema: Array[JsonNode]) : Unit ={
 
-    val targetSchemaColumns = targetSchema.map(c=> c.getString("Name")).toSeq
+    val targetSchemaColumns = targetSchema.map(c=> c.get("Name").asText()).toSeq
     val sourceSchemaColumns = sourceSchema.map(c=> c.name)
 
     if (targetSchemaColumns != sourceSchemaColumns) {
@@ -38,12 +37,12 @@ object KustoIngestionUtils {
   }
 
   private[kusto] def setCsvMapping(sourceSchema: StructType,
-                                   targetSchema: Array[JSONObject],
+                                   targetSchema: Array[JsonNode],
                                    ingestionProperties: SparkIngestionProperties,tableCreationMode: SinkTableCreationMode): Unit = {
     require(ingestionProperties.csvMappingNameReference == null || ingestionProperties.csvMappingNameReference.isEmpty,
       "Sink options SparkIngestionProperties.csvMappingNameReference and adjustSchema.GenerateDynamicCsvMapping are not compatible. Use only one.")
 
-    val targetSchemaColumns = targetSchema.map(c => (c.getString("Name"),c.getString("CslType"))).toMap
+    val targetSchemaColumns = targetSchema.map(c => (c.get(KustoConstants.Schema.NAME).asText(),c.get(KustoConstants.Schema.CSLTYPE).asText())).toMap
     val sourceSchemaColumns = sourceSchema.fields.zipWithIndex.map(c => (c._1.name, c._2)).toMap
     /* This was created for the case where CreateTable is used along with Create CSV mapping. There are 2 options
     either to not have a mapping or create an explicit identity mapping. Since GenerateCSVMapping is requested explicitly

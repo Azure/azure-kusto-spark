@@ -1,10 +1,11 @@
 package com.microsoft.kusto.spark.datasource
 
+import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility
+import com.fasterxml.jackson.annotation.PropertyAccessor
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
 import com.microsoft.kusto.spark.utils.KustoDataSourceUtils
 import org.apache.commons.lang3.StringUtils
-import org.codehaus.jackson.annotate.JsonAutoDetect.Visibility
-import org.codehaus.jackson.annotate.JsonMethod
-import org.codehaus.jackson.map.ObjectMapper
 
 import java.security.InvalidParameterException
 import scala.util.matching.Regex
@@ -21,7 +22,7 @@ class TransientStorageParameters(val storageCredentials: scala.Array[TransientSt
   }
 
   def toInsecureString: String = {
-    new ObjectMapper().setVisibility(JsonMethod.FIELD, Visibility.ANY)
+    new ObjectMapper().setVisibility(PropertyAccessor.FIELD, Visibility.ANY)
       .writerWithDefaultPrettyPrinter
       .writeValueAsString(this)
   }
@@ -93,7 +94,9 @@ final case class TransientStorageCredentials() {
 
 object TransientStorageParameters {
   private[kusto] def fromString(json: String): TransientStorageParameters = {
-    new ObjectMapper().setVisibility(JsonMethod.FIELD, Visibility.ANY).readValue(json, classOf[TransientStorageParameters])
+    new ObjectMapper().registerModule(new JavaTimeModule()).
+      setVisibility(PropertyAccessor.FIELD, Visibility.ANY).setVisibility(PropertyAccessor.FIELD, Visibility.ANY).
+      readValue(json, classOf[TransientStorageParameters])
   }
 }
 

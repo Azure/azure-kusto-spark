@@ -2,6 +2,7 @@ package com.microsoft.kusto.spark.utils
 
 import com.fasterxml.jackson.core.`type`.TypeReference
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.databind.node.ArrayNode
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import com.microsoft.azure.kusto.data.exceptions.{DataClientException, DataServiceException}
 import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties, KustoResultSetTable}
@@ -24,7 +25,6 @@ import org.apache.http.client.utils.URIBuilder
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.{SQLContext, SaveMode}
-import org.json.JSONObject
 
 import java.io.InputStream
 import java.net.URI
@@ -160,13 +160,12 @@ object KustoDataSourceUtils {
     klog.debug(s"$reporter: $message")
   }
 
-  private[kusto] def extractSchemaFromResultTable(result: Iterable[JSONObject]): String = {
+  private[kusto] def extractSchemaFromResultTable(result: ArrayNode): String = {
 
     val tableSchemaBuilder = new StringJoiner(",")
-
-    for (row <- result) {
+    for (i <- 0 until result.size()) {
       // Each row contains {Name, CslType, Type}, converted to (Name:CslType) pairs
-      tableSchemaBuilder.add(s"['${row.getString("Name")}']:${row.getString("CslType")}")
+      tableSchemaBuilder.add(s"['${result.get(i).get(KustoConstants.Schema.NAME).asText()}']:${result.get(i).get(KustoConstants.Schema.CSLTYPE).asText()}")
     }
 
     tableSchemaBuilder.toString

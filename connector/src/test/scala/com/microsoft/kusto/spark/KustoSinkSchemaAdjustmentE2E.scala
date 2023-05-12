@@ -6,15 +6,14 @@ import com.microsoft.kusto.spark.exceptions.SchemaMatchException
 import com.microsoft.kusto.spark.utils.KustoQueryUtils
 import org.apache.spark.sql._
 import org.apache.spark.sql.types.StringType
-import org.junit.runner.RunWith
-import org.scalatest.junit.JUnitRunner
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FlatSpec}
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
 import java.util.UUID
 
 
-@RunWith(classOf[JUnitRunner])
-class KustoSinkSchemaAdjustmentE2E extends FlatSpec
+
+class KustoSinkSchemaAdjustmentE2E extends AnyFlatSpec
   with BeforeAndAfterEach with BeforeAndAfterAll {
 
   private val nofExecutors = 4

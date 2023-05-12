@@ -1,11 +1,9 @@
 package com.microsoft.kusto.spark.datasource
 
-import org.scalatest.Matchers.convertToAnyShouldWrapper
-import org.scalatest.FlatSpec
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
 
-import java.security.InvalidParameterException
-
-class TransientStorageParametersTest extends FlatSpec  {
+class TransientStorageParametersTest extends AnyFlatSpec  {
 
   "TransientStorageParameters ToString" should "check token not getting printed" in {
     val transientStorage = "{\"storageCredentials\":[{\"storageAccountName\":\"ateststorage\"," +

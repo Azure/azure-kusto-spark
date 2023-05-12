@@ -1,20 +1,22 @@
 package com.microsoft.kusto.spark.datasink
 
+import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility
+import com.fasterxml.jackson.annotation.PropertyAccessor
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
 import com.microsoft.azure.kusto.ingest.IngestionMapping.IngestionMappingKind
 
 import java.util
 import com.microsoft.azure.kusto.ingest.{IngestionMapping, IngestionProperties}
-import org.codehaus.jackson.annotate.JsonAutoDetect.Visibility
-import org.codehaus.jackson.annotate.JsonMethod
-import org.codehaus.jackson.map.ObjectMapper
-import org.joda.time.DateTime
+
+import java.time.Instant
 
 class SparkIngestionProperties(var flushImmediately: Boolean = false,
                                var dropByTags: util.ArrayList[String] = null,
                                var ingestByTags: util.ArrayList[String] = null,
                                var additionalTags: util.ArrayList[String] = null,
-                               var ingestIfNotExists: util.ArrayList[String] = null,
-                               var creationTime: DateTime = null,
+                               var ingestIfNotExists: util.List[String] = null,
+                               var creationTime: Instant = null,
                                var csvMapping: String = null,
                                var csvMappingNameReference: String = null){
   // C'tor for serialization
@@ -23,7 +25,8 @@ class SparkIngestionProperties(var flushImmediately: Boolean = false,
   }
 
   override def toString: String = {
-    new ObjectMapper().setVisibility(JsonMethod.FIELD, Visibility.ANY)
+    new ObjectMapper().registerModule(new JavaTimeModule()).
+      setVisibility(PropertyAccessor.FIELD, Visibility.ANY).setVisibility(PropertyAccessor.FIELD, Visibility.ANY)
       .writerWithDefaultPrettyPrinter
       .writeValueAsString(this)
   }
@@ -53,7 +56,7 @@ class SparkIngestionProperties(var flushImmediately: Boolean = false,
     }
 
     if (this.creationTime != null) {
-      additionalProperties.put("creationTime", this.creationTime.toString())
+      additionalProperties.put("creationTime", this.creationTime.toString)
     }
 
     if (this.csvMapping != null) {
@@ -86,6 +89,7 @@ object SparkIngestionProperties {
   }
 
   private[kusto] def fromString(json: String): SparkIngestionProperties = {
-    new ObjectMapper().setVisibility(JsonMethod.FIELD, Visibility.ANY).readValue(json, classOf[SparkIngestionProperties])
+    new ObjectMapper().registerModule(new JavaTimeModule()).
+      setVisibility(PropertyAccessor.FIELD, Visibility.ANY).readValue(json, classOf[SparkIngestionProperties])
   }
 }
