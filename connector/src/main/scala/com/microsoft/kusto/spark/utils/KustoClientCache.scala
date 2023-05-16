@@ -8,7 +8,7 @@ import com.microsoft.kusto.spark.authentication._
 import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
 import org.apache.http.client.utils.URIBuilder
 import org.apache.commons.lang3.tuple.Pair
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.SPARK_VERSION
 
 object KustoClientCache {
   var clientCache = new ConcurrentHashMap[ClusterAndAuth, ExtendedKustoClient]
@@ -67,9 +67,8 @@ object KustoClientCache {
       )
     }
 
-    val sparkSession = SparkSession.builder().getOrCreate()
-    engineKcsb.setConnectorDetails(KCONST.ClientName, KustoDataSourceUtils.Version , sparkSession.sparkContext.appName, null, false, null,  Pair.of("spark.version", sparkSession.version))
-    ingestKcsb.setConnectorDetails(KCONST.ClientName, KustoDataSourceUtils.Version , sparkSession.sparkContext.appName, null, false, null, Pair.of("spark.version",sparkSession.version))
+    engineKcsb.setConnectorDetails(KCONST.ClientName, KustoDataSourceUtils.Version , null, null, false, null,  Pair.of("spark.version", SPARK_VERSION))
+    ingestKcsb.setConnectorDetails(KCONST.ClientName, KustoDataSourceUtils.Version , null, null, false, null, Pair.of("spark.version", SPARK_VERSION))
 
     new ExtendedKustoClient(engineKcsb, ingestKcsb, clusterAndAuth.clusterAlias)
   }
