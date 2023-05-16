@@ -68,7 +68,7 @@ object KustoClientCache {
     }
 
     engineKcsb.setConnectorDetails(KCONST.ClientName, KustoDataSourceUtils.Version , null, null, false, null,  Pair.of("spark.version", SPARK_VERSION))
-    ingestKcsb.setConnectorDetails(KCONST.ClientName, KustoDataSourceUtils.Version , null, null, false, null, Pair.of("spark.version", SPARK_BRANCH))
+    ingestKcsb.setConnectorDetails(KCONST.ClientName, KustoDataSourceUtils.Version , null, null, false, null, Pair.of("spark.version", SPARK_VERSION))
 
     new ExtendedKustoClient(engineKcsb, ingestKcsb, clusterAndAuth.clusterAlias)
   }
