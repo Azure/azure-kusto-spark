@@ -1,10 +1,5 @@
 package com.microsoft.kusto.spark
 
-import java.math.{BigDecimal, RoundingMode}
-import java.sql.{Date, Timestamp}
-import java.text.SimpleDateFormat
-import java.util.UUID
-import java.util.concurrent.atomic.AtomicInteger
 import com.microsoft.azure.kusto.data.ClientFactory
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode}
@@ -13,16 +8,20 @@ import com.microsoft.kusto.spark.sql.extension.SparkExtension._
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql._
-import org.junit.runner.RunWith
-import org.scalatest.junit.JUnitRunner
-import org.scalatest.{BeforeAndAfterAll, FlatSpec}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.scalatest.BeforeAndAfterAll
+import org.scalatest.flatspec.AnyFlatSpec
 
+import java.math.{BigDecimal, RoundingMode}
+import java.sql.{Date, Timestamp}
+import java.text.SimpleDateFormat
+import java.util.UUID
+import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.immutable
 
-@RunWith(classOf[JUnitRunner])
-class KustoSinkBatchE2E extends FlatSpec with BeforeAndAfterAll{
+
+class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll{
   private val myName = this.getClass.getSimpleName
   private val rowId = new AtomicInteger(1)
   private val rowId2 = new AtomicInteger(1)

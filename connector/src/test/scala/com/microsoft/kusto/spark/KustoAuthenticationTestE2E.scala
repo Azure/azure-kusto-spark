@@ -1,21 +1,18 @@
 package com.microsoft.kusto.spark
 
-import java.util.UUID
-
 import com.microsoft.azure.kusto.data.ClientFactory
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode}
 import com.microsoft.kusto.spark.sql.extension.SparkExtension._
 import com.microsoft.kusto.spark.utils.KustoQueryUtils
 import org.apache.spark.sql.SparkSession
-import org.junit.runner.RunWith
-import org.scalatest.FlatSpec
-import org.scalatest.junit.JUnitRunner
+import org.scalatest.flatspec.AnyFlatSpec
 
+import java.util.UUID
 import scala.collection.immutable
 
-@RunWith(classOf[JUnitRunner])
-class KustoAuthenticationTestE2E extends FlatSpec {
+
+class KustoAuthenticationTestE2E extends AnyFlatSpec {
   private val spark: SparkSession = SparkSession.builder()
     .appName("KustoSink")
     .master(f"local[2]")

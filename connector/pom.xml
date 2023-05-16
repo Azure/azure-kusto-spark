@@ -8,12 +8,21 @@
     <parent>
         <artifactId>azure-kusto-spark</artifactId>
         <groupId>com.microsoft.azure.kusto</groupId>
-        <!--suppress MavenPropertyInParent -->
         <version>${revision}</version>
     </parent>
-
     <dependencies>
         <!-- Compile Scope -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>2.13.0</version>
+            <exclusions>
+                <exclusion>
+                    <artifactId>scala-library</artifactId>
+                    <groupId>org.scala-lang</groupId>
+                </exclusion>
+            </exclusions>
+        </dependency>
         <dependency>
             <groupId>com.fasterxml.jackson.module</groupId>
             <artifactId>jackson-module-scala_${scala.version.major}</artifactId>
@@ -26,9 +35,14 @@
             </exclusions>
         </dependency>
         <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jsr310</artifactId>
+            <version>${fasterxml.jackson.version}</version>
+        </dependency>
+        <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-lang3</artifactId>
-            <version>${commons-lang3.version}</version>
+            <version>${commons.lang3.version}</version>
         </dependency>
         <dependency>
             <groupId>org.scala-lang</groupId>
@@ -43,7 +57,7 @@
         <dependency>
             <groupId>com.microsoft.azure.kusto</groupId>
             <artifactId>kusto-data</artifactId>
-            <version>${kusto-sdk.version}</version>
+            <version>${kusto.sdk.version}</version>
             <exclusions>
                 <exclusion>
                     <artifactId>jackson-databind</artifactId>
@@ -66,7 +80,7 @@
         <dependency>
             <groupId>com.microsoft.azure.kusto</groupId>
             <artifactId>kusto-ingest</artifactId>
-            <version>${kusto-sdk.version}</version>
+            <version>${kusto.sdk.version}</version>
             <exclusions>
                 <exclusion>
                     <groupId>com.fasterxml.jackson.core</groupId>
@@ -84,12 +98,15 @@
                     <artifactId>commons-lang3</artifactId>
                     <groupId>org.apache.commons</groupId>
                 </exclusion>
+                <exclusion>
+                    <groupId>com.azure</groupId>
+                    <artifactId>azure-storage-blob</artifactId>
+                </exclusion>
             </exclusions>
         </dependency>
         <dependency>
-            <groupId>com.microsoft.azure</groupId>
-            <artifactId>azure-storage</artifactId>
-            <version>${azure-storage.version}</version>
+            <groupId>com.azure</groupId>
+            <artifactId>azure-storage-blob</artifactId>
             <exclusions>
                 <exclusion>
                     <artifactId>commons-lang3</artifactId>
@@ -108,7 +125,6 @@
         <dependency>
             <groupId>com.azure</groupId>
             <artifactId>azure-security-keyvault-secrets</artifactId>
-            <version>${keyvault-secrets.version}</version>
             <exclusions>
                 <exclusion>
                     <artifactId>azure-core-http-netty</artifactId>
@@ -120,50 +136,18 @@
                 </exclusion>
             </exclusions>
         </dependency>
+        <!--might need 3.2.0 here for local run query-->
         <dependency>
-            <groupId>com.azure</groupId>
-            <artifactId>azure-identity</artifactId>
-            <version>${azure-identity.version}</version>
-            <exclusions>
-                <exclusion>
-                    <artifactId>jackson-annotations</artifactId>
-                    <groupId>com.fasterxml.jackson.core</groupId>
-                </exclusion>
-                <exclusion>
-                    <artifactId>jackson-core</artifactId>
-                    <groupId>com.fasterxml.jackson.core</groupId>
-                </exclusion>
-                <exclusion>
-                    <artifactId>jackson-databind</artifactId>
-                    <groupId>com.fasterxml.jackson.core</groupId>
-                </exclusion>
-                <exclusion>
-                    <artifactId>guava</artifactId>
-                    <groupId>com.google.guava</groupId>
-                </exclusion>
-                <exclusion>
-                    <artifactId>msal4j</artifactId>
-                    <groupId>com.microsoft.azure</groupId>
-                </exclusion>
-                <exclusion>
-                    <artifactId>httpcore</artifactId>
-                    <groupId>org.apache.httpcomponents</groupId>
-                </exclusion>
-                <exclusion>
-                    <artifactId>annotations</artifactId>
-                    <groupId>org.jetbrains</groupId>
-                </exclusion>
-                <exclusion>
-                    <artifactId>oauth2-oidc-sdk</artifactId>
-                    <groupId>com.nimbusds</groupId>
-                </exclusion>
-            </exclusions>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-common</artifactId>
+            <version>${hadoop.version}</version>
+            <scope>provided</scope>
         </dependency>
         <!--might need 3.2.0 here for local run query-->
         <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-azure</artifactId>
-            <version>2.7.2</version>
+            <version>${hadoop.version}</version>
             <scope>provided</scope>
             <exclusions>
                 <exclusion>
@@ -178,21 +162,7 @@
                     <artifactId>guava</artifactId>
                     <groupId>com.google.guava</groupId>
                 </exclusion>
-                <exclusion>
-                    <artifactId>azure-storage</artifactId>
-                    <groupId>com.microsoft.azure</groupId>
-                </exclusion>
             </exclusions>
-        </dependency>
-        <dependency>
-            <groupId>org.json</groupId>
-            <artifactId>json</artifactId>
-            <version>${json.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>joda-time</groupId>
-            <artifactId>joda-time</artifactId>
-            <version>${joda-time.version}</version>
         </dependency>
         <!-- Provided Scope -->
         <dependency>
@@ -248,13 +218,6 @@
             <artifactId>slf4j-api</artifactId>
             <version>${slf4j.version}</version>
         </dependency>
-        <!-- TODO Remove maven-artifact when moving to java 11 and use java.lang.module.ModuleDescriptor.Version -->
-        <dependency>
-            <groupId>org.apache.maven</groupId>
-            <artifactId>maven-artifact</artifactId>
-            <version>3.8.7</version>
-        </dependency>
-
         <!-- Test Scope -->
         <dependency>
             <groupId>junit</groupId>
@@ -265,7 +228,7 @@
         <dependency>
             <groupId>org.scalatest</groupId>
             <artifactId>scalatest_${scala.version.major}</artifactId>
-            <version>3.0.0</version>
+            <version>${scalatest.version}</version>
             <scope>test</scope>
             <exclusions>
                 <exclusion>
@@ -277,7 +240,7 @@
         <dependency>
             <groupId>org.scalamock</groupId>
             <artifactId>scalamock_${scala.version.major}</artifactId>
-            <version>4.1.0</version>
+            <version>${scalamock.version}</version>
             <scope>test</scope>
             <exclusions>
                 <exclusion>
@@ -289,7 +252,7 @@
         <dependency>
             <groupId>org.mockito</groupId>
             <artifactId>mockito-all</artifactId>
-            <version>1.9.5</version>
+            <version>${mockito.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
@@ -310,7 +273,7 @@
                 <!-- see http://davidb.github.com/scala-maven-plugin -->
                 <groupId>net.alchim31.maven</groupId>
                 <artifactId>scala-maven-plugin</artifactId>
-                <version>3.2.2</version>
+                <version>${scala.maven.plugin.version}</version>
                 <executions>
                     <execution>
                         <goals>
@@ -326,13 +289,24 @@
                     </execution>
                 </executions>
                 <configuration>
-                    <addScalacArgs>-target:jvm-1.8</addScalacArgs>
+                    <javacArgs>
+                        <javacArg>-Xlint:unchecked</javacArg>
+                        <javacArg>-Xlint:deprecation</javacArg>
+                        <javacArg>-target</javacArg>
+                        <javacArg>11</javacArg>
+                    </javacArgs>
+                    <args>
+<!--                        <arg>-feature</arg>-->
+                        <arg>-unchecked</arg>
+                        <arg>-deprecation</arg>
+                    </args>
+
                 </configuration>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
-                <version>2.21.0</version>
+                <version>${maven.surefire.plugin.version}</version>
                 <configuration>
                     <!-- When 'true': Tests will be run with scalatest-maven-plugin  -->
                     <skipTests>true</skipTests>
@@ -345,7 +319,7 @@
             <plugin>
                 <groupId>org.scalatest</groupId>
                 <artifactId>scalatest-maven-plugin</artifactId>
-                <version>2.0.0</version>
+                <version>${scalatest.maven.version}</version>
                 <configuration>
                     <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
                     <junitxml>.</junitxml>
@@ -367,7 +341,7 @@
             <plugin>
                 <groupId>org.scalastyle</groupId>
                 <artifactId>scalastyle-maven-plugin</artifactId>
-                <version>1.0.0</version>
+                <version>${scalastyle.maven.plugin.version}</version>
                 <configuration>
                     <verbose>false</verbose>
                     <failOnViolation>false</failOnViolation>
@@ -390,7 +364,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-source-plugin</artifactId>
-                <version>${maven-source-plugin.version}</version>
+                <version>${maven.source.plugin.version}</version>
                 <executions>
                     <execution>
                         <id>attach-sources</id>
@@ -404,7 +378,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-jar-plugin</artifactId>
-                <version>3.2.0</version>
+                <version>${maven.jar.plugin.version}</version>
                 <executions>
                     <execution>
                         <id>empty-javadoc-jar</id>
@@ -445,10 +419,9 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.8.0</version>
+                <version>3.10.1</version>
                 <configuration>
-                    <source>1.8</source>
-                    <target>1.8</target>
+                    <release>11</release>
                 </configuration>
             </plugin>
         </plugins>

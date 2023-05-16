@@ -3,11 +3,12 @@ package com.microsoft.kusto.spark.utils
 import com.microsoft.azure.kusto.data.KustoOperationResult
 import com.microsoft.azure.kusto.data.exceptions.DataServiceException
 import org.scalamock.scalatest.MockFactory
-import org.scalatest.{FlatSpec, Matchers}
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 
 import scala.io.Source
 
-class ContainerProviderTest extends FlatSpec with Matchers with MockFactory {
+class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
   val CACHE_EXPIRY_SEC = 2
   val SLEEP_TIME_SEC = 10
   // happy path

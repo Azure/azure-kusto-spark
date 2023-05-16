@@ -1,30 +1,29 @@
 package com.microsoft.kusto.spark
 
+import com.fasterxml.jackson.databind.ObjectMapper
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties, KustoOperationResult, KustoResultSetTable}
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.{SparkIngestionProperties, WriteOptions}
 import com.microsoft.kusto.spark.utils.ExtendedKustoClient
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
-import org.json.JSONObject
-import org.junit.runner.RunWith
 import org.mockito.Matchers.any
 import org.mockito.Mockito.{mock, times, verify}
-import org.scalatest.junit.JUnitRunner
-import org.scalatest.{FlatSpec, Matchers}
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 
 import java.util
 import scala.collection.JavaConverters._
 
-@RunWith(classOf[JUnitRunner])
-class ExtendedKustoClientTests extends FlatSpec with Matchers {
-  val coords = KustoCoordinates("", "", "database", Some("table"))
+
+class ExtendedKustoClientTests extends AnyFlatSpec with Matchers {
+  private val kustoCoordinates = KustoCoordinates("", "", "database", Some("table"))
   class ExtendedKustoClientStub(override val engineKcsb: ConnectionStringBuilder,
                                 override val ingestKcsb: ConnectionStringBuilder,
                                 override val clusterAlias: String,
                                 var tagsToReturn: util.ArrayList[String]) extends ExtendedKustoClient(engineKcsb, ingestKcsb,
     clusterAlias) {
-    override lazy val engineClient = mock(classOf[Client])
+    override lazy val engineClient: Client = mock(classOf[Client])
     override def fetchTableExtentsTags(database: String, table: String, crp: ClientRequestProperties)
     : KustoResultSetTable = {
       val response =
@@ -39,20 +38,20 @@ class ExtendedKustoClientTests extends FlatSpec with Matchers {
     val stubbedClient = new ExtendedKustoClientStub(null, null, "", null)
     stubbedClient.tagsToReturn = emptyTags
     val props = new SparkIngestionProperties
-    val shouldIngestWhenNoTags = stubbedClient.shouldIngestData(coords,
+    val shouldIngestWhenNoTags = stubbedClient.shouldIngestData(kustoCoordinates,
       Some(props.toString), tableExists = true, null)
     shouldIngestWhenNoTags shouldEqual true
 
     val tags = new util.ArrayList[String]
     tags.add("tag")
     stubbedClient.tagsToReturn = tags
-    props.ingestIfNotExists = new util.ArrayList[String](){{add("otherTag")}}
-    val shouldIngestWhenNoOverlap = stubbedClient.shouldIngestData(coords,
+    props.ingestIfNotExists = util.Collections.singletonList("otherTag")
+    val shouldIngestWhenNoOverlap = stubbedClient.shouldIngestData(kustoCoordinates,
       Some(props.toString), tableExists = true, null)
     shouldIngestWhenNoOverlap shouldEqual true
 
     tags.add("otherTag")
-    val shouldIngestWhenOverlap = stubbedClient.shouldIngestData(coords,
+    val shouldIngestWhenOverlap = stubbedClient.shouldIngestData(kustoCoordinates,
       Some(props.toString), tableExists = true, null)
     shouldIngestWhenOverlap shouldEqual false
   }
@@ -61,7 +60,7 @@ class ExtendedKustoClientTests extends FlatSpec with Matchers {
     val tempTable = "temp"
     val stubbedClient = new ExtendedKustoClientStub(null, null, "", null)
     val struct = StructType(Array(StructField("colA", StringType, nullable = true)))
-    stubbedClient.initializeTablesBySchema(coords, tempTable, struct,  Array(new JSONObject("""{"Type":"System.String",
+    stubbedClient.initializeTablesBySchema(kustoCoordinates, tempTable, struct,  Array(new ObjectMapper().readTree("""{"Type":"System.String",
       "CslType":"string", "Name":"name"}""")), WriteOptions(isTransactionalMode = false), null, true)
     verify(stubbedClient.engineClient, times(0)).execute(any(), any(), any())
   }
