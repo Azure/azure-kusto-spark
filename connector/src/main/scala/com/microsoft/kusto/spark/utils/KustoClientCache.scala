@@ -8,7 +8,7 @@ import com.microsoft.kusto.spark.authentication._
 import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
 import org.apache.http.client.utils.URIBuilder
 import org.apache.commons.lang3.tuple.Pair
-import org.apache.spark.{SPARK_BRANCH, SPARK_VERSION}
+import org.apache.spark.SPARK_VERSION
 
 object KustoClientCache {
   var clientCache = new ConcurrentHashMap[ClusterAndAuth, ExtendedKustoClient]
