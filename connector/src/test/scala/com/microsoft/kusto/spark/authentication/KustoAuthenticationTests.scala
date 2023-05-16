@@ -1,11 +1,9 @@
 package com.microsoft.kusto.spark.authentication
 
-import java.util.concurrent.Callable
-
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.junit.runner.RunWith
-import org.scalatest.FlatSpec
-import org.scalatest.junit.JUnitRunner
+import org.scalatest.flatspec.AnyFlatSpec
+
+import java.util.concurrent.Callable
 
 class TokenProvider1(map: CaseInsensitiveMap[String]) extends Callable[String] with Serializable {
   override def call(): String = map("token")
@@ -15,8 +13,8 @@ class TokenProvider2(map: CaseInsensitiveMap[String]) extends Callable[String] w
   override def call(): String = map("token")
 }
 
-@RunWith(classOf[JUnitRunner])
-class kustoAuthenticationTests extends FlatSpec {
+
+class kustoAuthenticationTests extends AnyFlatSpec {
   "KeyVaultAppAuthentication Equals" should "Check equality and inequality between different KeyVaultAppAuthentication" in {
     val kvaa11 = KeyVaultAppAuthentication("uri1", "appId1", "pass1", null)
     val kvaa11Duplicate = KeyVaultAppAuthentication("uri1", "appId1", "pass2", null)

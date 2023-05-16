@@ -1,13 +1,12 @@
 package com.microsoft.kusto.spark.utils
 
+
+import org.scalatest.flatspec.AnyFlatSpec
+
 import java.security.UnrecoverableKeyException
 
-import org.junit.runner.RunWith
-import org.scalatest.FlatSpec
-import org.scalatest.junit.JUnitRunner
 
-@RunWith(classOf[JUnitRunner])
-class CertUtilsTest extends FlatSpec{
+class CertUtilsTest extends AnyFlatSpec{
 
   "pfx cert" should "be read from file into KeyCert type" in {
     val certPath = this.getClass.getResource("/certs/cert.pfx").getPath

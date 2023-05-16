@@ -1,17 +1,16 @@
 package com.microsoft.kusto.spark
 
+import com.microsoft.kusto.spark.datasource.{KustoFilter, KustoFiltering, KustoSchema}
+import org.apache.spark.sql.sources._
+import org.apache.spark.sql.types._
+import org.scalamock.scalatest.MockFactory
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
+
 import java.sql.{Date, Timestamp}
 
-import com.microsoft.kusto.spark.datasource.{KustoFilter, KustoFiltering, KustoSchema}
-import org.apache.spark.sql.sources.{Filter, _}
-import org.apache.spark.sql.types._
-import org.junit.runner.RunWith
-import org.scalamock.scalatest.MockFactory
-import org.scalatest.junit.JUnitRunner
-import org.scalatest.{FlatSpec, Matchers}
 
-@RunWith(classOf[JUnitRunner])
-class KustoFilterTests extends FlatSpec with MockFactory with Matchers{
+class KustoFilterTests extends AnyFlatSpec with MockFactory with Matchers{
 
   private val schema: StructType = StructType(Seq(
     StructField("string", StringType),

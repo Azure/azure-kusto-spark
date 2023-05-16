@@ -3,9 +3,10 @@ package com.microsoft.kusto.spark.utils
 import com.microsoft.kusto.spark.datasource.ReadMode.ForceDistributedMode
 import com.microsoft.kusto.spark.datasource.{KustoReadOptions, KustoSourceOptions, PartitionOptions, ReadMode}
 import org.scalamock.scalatest.MockFactory
-import org.scalatest.FlatSpec
+import org.scalatest.flatspec.AnyFlatSpec
 
-class KustoDataSourceUtilsTest extends FlatSpec with MockFactory {
+
+class KustoDataSourceUtilsTest extends AnyFlatSpec with MockFactory {
   "ReadParameters" should "KustoReadOptions with passed in options" in {
     val conf: Map[String, String] = Map(
       KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceDistributedMode.toString,

@@ -1,5 +1,7 @@
 package com.microsoft.kusto.spark.datasink
 
+import com.azure.storage.common.policy.{RequestRetryOptions, RetryPolicyType}
+import com.fasterxml.jackson.databind.JsonNode
 import com.microsoft.azure.kusto.data.ClientRequestProperties
 import com.microsoft.azure.kusto.ingest.IngestionProperties.DataFormat
 import com.microsoft.azure.kusto.ingest.exceptions.IngestionServiceException
@@ -11,17 +13,16 @@ import com.microsoft.azure.storage.blob.{BlobRequestOptions, CloudBlockBlob}
 import com.microsoft.azure.storage.queue.QueueRequestOptions
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
-import com.microsoft.kusto.spark.exceptions.TimeoutAwaitingPendingOperationException
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator.generateTableGetSchemaAsRowsCommand
 import com.microsoft.kusto.spark.utils.KustoConstants.{IngestSkippedTrace, MaxIngestRetryAttempts}
-import com.microsoft.kusto.spark.utils.{ExtendedKustoClient, KustoClientCache, KustoIngestionUtils, KustoQueryUtils, KustoConstants => KCONST, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.{ExtendedKustoClient, KustoClientCache, KustoIngestionUtils,
+  KustoQueryUtils, KustoConstants => KCONST, KustoDataSourceUtils => KDSU}
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.CollectionAccumulator
-import org.json.JSONObject
-import io.github.resilience4j.retry.{Retry, RetryConfig}
+import io.github.resilience4j.retry.RetryConfig
 
 import java.io._
 import java.net.URI
@@ -32,17 +33,17 @@ import java.util.zip.GZIPOutputStream
 import java.util.{TimeZone, UUID}
 import com.microsoft.kusto.spark.datasink.FinalizeHelper.finalizeIngestionWhenWorkersSucceeded
 
-import java.time.{Clock, Instant}
+import java.time.{Clock, Duration, Instant}
 import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.{Failure, Success, Try}
 
 object KustoWriter {
-  private val myName = this.getClass.getSimpleName
+  private val className = this.getClass.getSimpleName
   val LegacyTempIngestionTablePrefix = "_tmpTable"
   val TempIngestionTablePrefix = "sparkTempTable_"
   val DelayPeriodBetweenCalls: Int = KCONST.DefaultPeriodicSamplePeriod.toMillis.toInt
-  val GzipBufferSize: Int = 1000 * KCONST.DefaultBufferSize
+  private val GzipBufferSize: Int = 1000 * KCONST.DefaultBufferSize
   private val retryConfig = RetryConfig.custom.maxAttempts(MaxIngestRetryAttempts).retryExceptions(classOf[IngestionServiceException]).build
   import java.time.ZoneId
   import java.time.format.DateTimeFormatter
@@ -66,28 +67,10 @@ object KustoWriter {
     val schemaShowCommandResult = kustoClient.executeEngine(tableCoordinates.database,
       generateTableGetSchemaAsRowsCommand(tableCoordinates.table.get), crp).getPrimaryResults
 
-    val targetSchema = schemaShowCommandResult.getData.asScala.map(c => c.get(0).asInstanceOf[JSONObject]).toArray
+    val targetSchema = schemaShowCommandResult.getData.asScala.map(c => c.get(0).asInstanceOf[JsonNode]).toArray
     KustoIngestionUtils.adjustSchema(writeOptions.adjustSchema, data.schema, targetSchema, stagingTableIngestionProperties , writeOptions.tableCreateOptions)
 
-    val rebuiltOptions = WriteOptions(
-      writeOptions.pollingOnDriver,
-      writeOptions.tableCreateOptions,
-      writeOptions.isAsync,
-      writeOptions.writeResultLimit,
-      writeOptions.timeZone,
-      writeOptions.timeout,
-      Some(stagingTableIngestionProperties.toString()),
-      writeOptions.batchLimit,
-      writeOptions.requestId,
-      writeOptions.autoCleanupTime,
-      writeOptions.maxRetriesOnMoveExtents,
-      writeOptions.minimalExtentsCountForSplitMerge,
-      writeOptions.adjustSchema,
-      writeOptions.isTransactionalMode,
-      writeOptions.userTempTableName,
-      writeOptions.disableFlushImmediately,
-      writeOptions.ensureNoDupBlobs
-    )
+    val rebuiltOptions = writeOptions.copy(ingestionProperties=Some(stagingTableIngestionProperties.toString()))
 
 //    implicit val parameters: KustoWriteResource = KustoWriteResource(authentication, tableCoordinates, data.schema,
 //      rebuiltOptions, tmpTableName)
@@ -97,7 +80,7 @@ object KustoWriter {
       crp)
 
     if (!shouldIngest) {
-      KDSU.logInfo(myName, s"$IngestSkippedTrace '$table'")
+      KDSU.logInfo(className, s"$IngestSkippedTrace '$table'")
     } else {
       if (writeOptions.userTempTableName.isDefined) {
         if (kustoClient.executeEngine(tableCoordinates.database,
@@ -116,7 +99,7 @@ object KustoWriter {
       kustoClient.setMappingOnStagingTableIfNeeded(stagingTableIngestionProperties, tableCoordinates.database,
         tmpTableName, table, crp)
       if (stagingTableIngestionProperties.flushImmediately) {
-        KDSU.logWarn(myName, "It's not recommended to set flushImmediately to true")
+        KDSU.logWarn(className, "It's not recommended to set flushImmediately to true")
       }
 
       //    TODO remove until batching policy problem is good
@@ -132,7 +115,7 @@ object KustoWriter {
       if (writeOptions.isAsync) {
         val asyncWork = rdd.foreachPartitionAsync { rows => ingestRowsIntoTempTbl(rows, batchIdIfExists,
           partitionsResults,parameters) }
-        KDSU.logInfo(myName, s"asynchronous write to Kusto table '$table' in progress")
+        KDSU.logInfo(className, s"asynchronous write to Kusto table '$table' in progress")
         // This part runs back on the driver
 
         if (writeOptions.isTransactionalMode) {
@@ -147,9 +130,9 @@ object KustoWriter {
                 kustoClient.cleanupIngestionByProducts(
                   tableCoordinates.database, tmpTableName, crp)
               }
-              KDSU.reportExceptionAndThrow(myName, exception, "writing data", tableCoordinates.clusterUrl,
+              KDSU.reportExceptionAndThrow(className, exception, "writing data", tableCoordinates.clusterUrl,
                 tableCoordinates.database, table, shouldNotThrow = true)
-              KDSU.logError(myName, "The exception is not visible in the driver since we're in async mode")
+              KDSU.logError(className, "The exception is not visible in the driver since we're in async mode")
           }
         }
       } else {
@@ -174,7 +157,8 @@ object KustoWriter {
   }
 
   def getCreationTime(ingestionProperties: SparkIngestionProperties, tableCoordinates: KustoCoordinates): Instant = {
-    val startTime = Option(ingestionProperties.toIngestionProperties(tableCoordinates.database, tableCoordinates.table.get).getAdditionalProperties.get("startTime"))
+    val startTime = Option(ingestionProperties.toIngestionProperties(tableCoordinates.database,
+      tableCoordinates.table.get).getAdditionalProperties.get("startTime"))
 
     startTime match {
       case Some(creationTimeVal) => Instant.parse(creationTimeVal)
@@ -186,7 +170,7 @@ object KustoWriter {
                             partitionsResults: CollectionAccumulator[PartitionResult],parameters: KustoWriteResource)
                            : Unit = {
     if (rows.isEmpty) {
-      KDSU.logWarn(myName, s"sink to Kusto table '${parameters.coordinates.table.get}' with no rows to write " +
+      KDSU.logWarn(className, s"sink to Kusto table '${parameters.coordinates.table.get}' with no rows to write " +
         s"on partition ${TaskContext.getPartitionId} $batchIdForTracing")
     } else {
       ingestToTemporaryTableByWorkers(batchIdForTracing, rows, partitionsResults,parameters)
@@ -209,7 +193,7 @@ object KustoWriter {
     ingestionProperties.setDataFormat(DataFormat.CSV.name)
     try {
       ingestRows(rows, parameters, ingestClient, ingestionProperties, partitionsResults, batchIdForTracing)
-      KDSU.logInfo(myName, s"Ingesting from blob(s) partition: ${TaskContext.getPartitionId()} requestId: " +
+      KDSU.logInfo(className, s"Ingesting from blob(s) partition: ${TaskContext.getPartitionId()} requestId: " +
         s"'${parameters.writeOptions.requestId}' batch$batchIdForTracing")
     } catch {
       case e: Exception => if(parameters.writeOptions.isTransactionalMode) throw e
@@ -244,15 +228,13 @@ object KustoWriter {
                                                parameters:KustoWriteResource): Unit = {
 
     val partitionId = TaskContext.getPartitionId
-    KDSU.logInfo(myName, s"Processing partition: '$partitionId' in requestId: '${parameters.writeOptions.
+    KDSU.logInfo(className, s"Processing partition: '$partitionId' in requestId: '${parameters.writeOptions.
       requestId}'$batchIdForTracing")
     val ingestClient = KustoClientCache.getClient(parameters.coordinates.clusterUrl,
       parameters.authentication, parameters.coordinates.ingestionUrl, parameters.coordinates.clusterAlias).ingestClient
-    val queueRequestOptions = new QueueRequestOptions
-    queueRequestOptions.setMaximumExecutionTimeInMs(KCONST.DefaultExecutionQueueing)
-    queueRequestOptions.setTimeoutIntervalInMs(KCONST.DefaultTimeoutQueueing)
-    queueRequestOptions.setRetryPolicyFactory(new RetryNoRetry)
-    ingestClient.setQueueRequestOptions(queueRequestOptions)
+    val reqRetryOpts = new RequestRetryOptions(RetryPolicyType.FIXED, KCONST.QueueRetryAttempts,
+      Duration.ofSeconds(KCONST.DefaultTimeoutQueueing), null, null, null)
+    ingestClient.setQueueRequestOptions(reqRetryOpts)
     // We force blocking here, since the driver can only complete the ingestion process
     // once all partitions are ingested into the temporary table
     ingestRowsIntoKusto(rows, ingestClient, partitionsResults, batchIdForTracing,parameters)
@@ -324,7 +306,7 @@ object KustoWriter {
           ) match {
             case Success(x) => x
             case Failure(e: Throwable) =>
-              KDSU.reportExceptionAndThrow(myName, e, "Queueing blob for ingestion in partition " +
+              KDSU.reportExceptionAndThrow(className, e, "Queueing blob for ingestion in partition " +
                 s"$partitionIdString for requestId: '${parameters.writeOptions.requestId}")
               null
           }
@@ -333,7 +315,7 @@ object KustoWriter {
           partitionsResults.add(
             PartitionResult(partitionsResult, partitionId))
         }
-      KDSU.logInfo(myName, s"Queued blob for ingestion in partition $partitionIdString " +
+      KDSU.logInfo(className, s"Queued blob for ingestion in partition $partitionIdString " +
         s"for requestId: '${parameters.writeOptions.requestId}")
     }
     val kustoClient = KustoClientCache.getClient(parameters.coordinates.clusterUrl, parameters.authentication,
@@ -354,7 +336,7 @@ object KustoWriter {
         if (shouldNotCommitBlockBlob) {
           blobWriter
         } else {
-          KDSU.logInfo(myName, s"Sealing blob in partition $partitionIdString for requestId: '${parameters.writeOptions.requestId}', " +
+          KDSU.logInfo(className, s"Sealing blob in partition $partitionIdString for requestId: '${parameters.writeOptions.requestId}', " +
             s"blob number ${row._2}, with size $count")
           finalizeBlobWrite(blobWriter)
           ingest(blobWriter.blob, blobWriter.csvWriter.getCounter, blobWriter.sas, flushImmediately =
@@ -364,7 +346,7 @@ object KustoWriter {
         }
     }
 
-    KDSU.logInfo(myName, s"Finished serializing rows in partition $partitionIdString for " +
+    KDSU.logInfo(className, s"Finished serializing rows in partition $partitionIdString for " +
       s"requestId: '${parameters.writeOptions.requestId}' ")
     finalizeBlobWrite(lastBlobWriter)
     if (lastBlobWriter.csvWriter.getCounter > 0) {

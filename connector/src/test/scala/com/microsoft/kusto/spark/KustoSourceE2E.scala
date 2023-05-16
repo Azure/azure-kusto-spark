@@ -1,9 +1,7 @@
 package com.microsoft.kusto.spark
 
-import java.util.UUID
-import java.util.concurrent.atomic.AtomicInteger
-import com.microsoft.azure.kusto.data.{Client, ClientFactory, ClientRequestProperties}
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
+import com.microsoft.azure.kusto.data.{Client, ClientFactory, ClientRequestProperties}
 import com.microsoft.kusto.spark.KustoTestUtils.KustoConnectionOptions
 import com.microsoft.kusto.spark.common.KustoDebugOptions
 import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode, SparkIngestionProperties}
@@ -14,20 +12,18 @@ import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils =>
 import org.apache.hadoop.util.ComparableVersion
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode, SparkSession}
-import org.joda.time.DateTime
-import org.junit.runner.RunWith
-import org.scalatest.junit.JUnitRunner
-import org.scalatest.{BeforeAndAfterAll, FlatSpec}
+import org.scalatest.BeforeAndAfterAll
+import org.scalatest.flatspec.AnyFlatSpec
 
-import java.time.Instant
 import java.time.temporal.ChronoUnit
-import java.util
+import java.time.{Clock, Instant}
+import java.util.UUID
+import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.immutable
-import scala.util.{Failure, Success, Try}
-import scala.util.Random
+import scala.util.{Failure, Random, Success, Try}
 
-@RunWith(classOf[JUnitRunner])
-class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
+
+class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
   private val nofExecutors = 4
   private val spark: SparkSession = SparkSession.builder()
     .appName("KustoSink")
@@ -109,15 +105,15 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
 
   "KustoConnector" should "write to a kusto table and read it back in default mode"  in {
     // Create a new table.
-    KDSU.logInfo("e2e","running KustoConnector");
+    KDSU.logInfo("e2e","running KustoConnector")
     val crp = new ClientRequestProperties
     crp.setTimeoutInMilliSec(2000)
-    val ingestByTags = new util.ArrayList[String]
+    val ingestByTags = new java.util.ArrayList[String]
     val tag = "dammyTag"
     ingestByTags.add(tag)
     val sp = new SparkIngestionProperties()
     sp.ingestByTags = ingestByTags
-    sp.creationTime = DateTime.now()
+    sp.creationTime = Instant.now(Clock.systemUTC())
 
     dfOrig.write
       .format("com.microsoft.kusto.spark.datasource")
@@ -127,7 +123,6 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
       .option(KustoSinkOptions.KUSTO_AAD_APP_ID, kustoConnectionOptions.appId)
       .option(KustoSinkOptions.KUSTO_AAD_APP_SECRET, kustoConnectionOptions.appKey)
       .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, kustoConnectionOptions.authority)
-//      .option(KustoSinkOptions.KUSTO_REQUEST_ID, "04ec0408-3cc3_.asd")
       .option(KustoSinkOptions.KUSTO_CLIENT_REQUEST_PROPERTIES_JSON, crp.toString)
       .option(KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS, SinkTableCreationMode.CreateIfNotExist.toString)
       .option(KustoDebugOptions.KUSTO_ENSURE_NO_DUPLICATED_BLOBS, true.toString)
@@ -217,17 +212,17 @@ class KustoSourceE2E extends FlatSpec with BeforeAndAfterAll {
 
     val df = spark.read.kusto(kustoConnectionOptions.cluster, kustoConnectionOptions.database, table, conf)
 
-    val time = new DateTime()
+    val time = Instant.now()
     assert(df.count() == expectedNumberOfRows)
     assert(df.count() == expectedNumberOfRows)
 
-    val df2 = df.where(($"value").cast("Int") > 50)
+    val df2 = df.where($"value".cast("Int") > 50)
     assert(df2.collect().length == 50)
 
     // Should take up to another 10 seconds for .show commands to come up
     Thread.sleep(5000 * 60)
     val res3 = kustoAdminClient.get.execute(
-      s""".show commands | where StartedOn > datetime(${time.toString()})  | where
+      s""".show commands | where StartedOn > datetime(${time.toString})  | where
                                         CommandType ==
       "DataExportToFile" | where Text has "$table"""")
     if (res3.getPrimaryResults.count() == 0){

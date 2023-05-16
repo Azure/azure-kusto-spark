@@ -1,23 +1,22 @@
 package com.microsoft.kusto.spark
 
-import java.security.InvalidParameterException
-import java.util.UUID
 import com.microsoft.azure.kusto.data.ClientFactory
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.kusto.spark.datasink.KustoSinkOptions
 import com.microsoft.kusto.spark.datasource.{KustoResponseDeserializer, KustoSourceOptions, TransientStorageCredentials, TransientStorageParameters}
-import com.microsoft.kusto.spark.utils.{CslCommandsGenerator, KustoBlobStorageUtils, KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import com.microsoft.kusto.spark.sql.extension.SparkExtension._
+import com.microsoft.kusto.spark.utils.{CslCommandsGenerator, KustoBlobStorageUtils, KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{SQLContext, SparkSession}
-import org.junit.runner.RunWith
-import org.scalatest.junit.JUnitRunner
-import org.scalatest.{BeforeAndAfterAll, FlatSpec}
+import org.scalatest.BeforeAndAfterAll
+import org.scalatest.flatspec.AnyFlatSpec
 
+import java.security.InvalidParameterException
+import java.util.UUID
 import scala.collection.JavaConverters._
 
-@RunWith(classOf[JUnitRunner])
-class KustoBlobAccessE2E extends FlatSpec with BeforeAndAfterAll {
+
+class KustoBlobAccessE2E extends AnyFlatSpec with BeforeAndAfterAll {
   private val myName = this.getClass.getSimpleName
 
   private val nofExecutors = 4
