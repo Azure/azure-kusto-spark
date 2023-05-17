@@ -75,8 +75,8 @@ final case class TransientStorageCredentials() {
 
   private[kusto] def parseSas(url: String): Unit = {
     url match {
-      case TransientStorageCredentials.SasPattern(storageAccountName, cloud, container, sasKey) =>
-        this.storageAccountName = storageAccountName
+      case TransientStorageCredentials.SasPattern(storageAccountName, maybeZone, cloud, container, sasKey) =>
+        this.storageAccountName = storageAccountName + (if (maybeZone == null) "" else maybeZone)
         this.blobContainer = container
         this.sasKey = sasKey
         domainSuffix = cloud
@@ -101,5 +101,7 @@ object TransientStorageParameters {
 }
 
 object TransientStorageCredentials {
-  private val SasPattern: Regex = raw"https:\/\/([^.]+).blob.([^\/]+)\/([^?]+)(\?.+)".r
+  private val SasPattern: Regex = raw"https:\/\/([^.]+)(\.[^.]+)?\.blob\.([^\/]+)\/([^?]+)(\?.+)".r
+//  private val SasPattern2: Regex = raw"https:\/\/([^.]+)\.blob\.([^\/]+)\/([^?]+)(\?.+)".r
+//  private val SasPattern3: Regex = raw"https:\/\/([^.]+)\.z40.blob\.([^\/]+)\/([^?]+)(\?.+)".r
 }
