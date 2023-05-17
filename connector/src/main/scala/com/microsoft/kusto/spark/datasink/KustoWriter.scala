@@ -8,9 +8,7 @@ import com.microsoft.azure.kusto.ingest.exceptions.IngestionServiceException
 import com.microsoft.azure.kusto.ingest.result.IngestionResult
 import com.microsoft.azure.kusto.ingest.source.{BlobSourceInfo, StreamSourceInfo}
 import com.microsoft.azure.kusto.ingest.{IngestClient, IngestionProperties, StreamingIngestClient}
-import com.microsoft.azure.storage.RetryNoRetry
 import com.microsoft.azure.storage.blob.{BlobRequestOptions, CloudBlockBlob}
-import com.microsoft.azure.storage.queue.QueueRequestOptions
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator.generateTableGetSchemaAsRowsCommand
@@ -28,13 +26,12 @@ import java.io._
 import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.security.InvalidParameterException
-import java.time.{Clock, Instant}
+import java.time.{Clock, Duration, Instant}
 import java.util
 import java.util.zip.GZIPOutputStream
 import java.util.{TimeZone, UUID}
 import com.microsoft.kusto.spark.datasink.FinalizeHelper.finalizeIngestionWhenWorkersSucceeded
 
-import java.time.{Clock, Duration, Instant}
 import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.{Failure, Success, Try}
@@ -244,9 +241,9 @@ object KustoWriter {
 
     for (row <- rows) {
       RowCSVWriterUtils.writeRowAsCSV(row, parameters.schema, timeZone, csvWriter)
-      if (csvWriter.bytesCounter >= KCONST.MaxStreamingBytes) {
-        KDSU.logWarn(myName, s"Batch $batchIdForTracing exceeds the max streaming size (${KCONST.MaxStreamingBytes} bytes)! " +
-          s"Streaming ${csvWriter.bytesCounter} bytes from batch $batchIdForTracing ($count).")
+      if (csvWriter.getCounter >= KCONST.MaxStreamingBytes) {
+        KDSU.logWarn(className, s"Batch $batchIdForTracing exceeds the max streaming size (${KCONST.MaxStreamingBytes} bytes)! " +
+          s"Streaming ${csvWriter.getCounter} bytes from batch $batchIdForTracing ($count).")
         writer.flush()
         streamBytesIntoKusto(batchIdForTracing, byteArrayOutputStream.toByteArray, streamingClient, parameters)
         csvWriter.resetCounter()
@@ -257,8 +254,8 @@ object KustoWriter {
 
     writer.flush()
     writer.close()
-    if (csvWriter.bytesCounter > 0) {
-      KDSU.logInfo(myName, s"Streaming ${csvWriter.bytesCounter} bytes from batch $batchIdForTracing ($count).")
+    if (csvWriter.getCounter > 0) {
+      KDSU.logInfo(className, s"Streaming ${csvWriter.getCounter} bytes from batch $batchIdForTracing ($count).")
       streamBytesIntoKusto(batchIdForTracing, byteArrayOutputStream.toByteArray, streamingClient, parameters)
     }
   }
@@ -273,7 +270,7 @@ object KustoWriter {
     status.getIngestionStatusCollection.forEach(
       item => {
         KDSU.logInfo(
-          myName, s"BatchId $batchIdForTracing IngestionStatus { " +
+          className, s"BatchId $batchIdForTracing IngestionStatus { " +
             s"status: '${item.status.toString}', " +
             s"details: ${item.details}, " +
             s"activityId: ${item.activityId}, " +
