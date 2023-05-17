@@ -36,7 +36,7 @@ class KustoAzureFsSetupCacheTest extends AnyFunSuite {
       // The cache is expired, so it will be re-set.The checkIfRefreshNeeded will return false, but the state is already true.
       (Instant.now(Clock.systemUTC()).minus(3 * KustoConstants.SparkSettingsRefreshMinutes, ChronoUnit.MINUTES), true),
       // This will be within the cache interval and also the flag is set to true
-      (Instant.now(Clock.systemUTC()).minus(KustoConstants.SparkSettingsRefreshMinutes / 2, ChronoUnit.MINUTES) , true),
+      (Instant.now(Clock.systemUTC()).minus(KustoConstants.SparkSettingsRefreshMinutes / 2, ChronoUnit.MINUTES) , true)
     )
 
     forAll(dataToTest) { (now: Instant, expectedResult: Boolean) =>
@@ -51,7 +51,7 @@ class KustoAzureFsSetupCacheTest extends AnyFunSuite {
       // The cache is expired, so it will be re-set.The checkIfRefreshNeeded will return false, but the state is already true.
       (Instant.now(Clock.systemUTC()).minus(3 * KustoConstants.SparkSettingsRefreshMinutes, ChronoUnit.MINUTES), true),
       // This will be within the cache interval and also the flag is set to true
-      (Instant.now(Clock.systemUTC()).minus(KustoConstants.SparkSettingsRefreshMinutes / 2, ChronoUnit.MINUTES), false),
+      (Instant.now(Clock.systemUTC()).minus(KustoConstants.SparkSettingsRefreshMinutes / 2, ChronoUnit.MINUTES), false)
     )
 
     forAll(dataToTest) { (now: Instant, expectedResult: Boolean) =>
@@ -75,7 +75,7 @@ class KustoAzureFsSetupCacheTest extends AnyFunSuite {
       // Container name changes. This should get set
       ("container2","account1", "secret2", Instant.now(Clock.systemUTC()), false),
       // Since the key exists, this should return true
-      ("container2","account1", "secret2", Instant.now(), true),
+      ("container2","account1", "secret2", Instant.now(), true)
     )
 
     forAll(dataToTest) { (container:String, account: String, secret: String, now: Instant, expectedResult: Boolean) =>

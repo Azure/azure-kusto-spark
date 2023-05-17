@@ -10,10 +10,10 @@
     <properties>
         <revision>4.0.0</revision>
         <!-- Spark dependencies -->
-        <scala.version.major>2.12</scala.version.major>
-        <scala.version.minor>17</scala.version.minor>
-        <spark.version.major>3.0</spark.version.major>
-        <spark.version.minor>1</spark.version.minor>
+        <scala.version.major>2.11</scala.version.major>
+        <scala.version.minor>12</scala.version.minor>
+        <spark.version.major>2.4</spark.version.major>
+        <spark.version.minor>0</spark.version.minor>
 
         <!-- other dependencies -->
         <azure.bom.version>1.2.4</azure.bom.version>
