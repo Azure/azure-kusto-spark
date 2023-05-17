@@ -281,7 +281,6 @@
                             <goal>testCompile</goal>
                         </goals>
                         <configuration>
-                            <addScalacArgs>-target:jvm-1.8</addScalacArgs>
                             <args>
                                 <arg>-dependencyfile</arg>
                                 <arg>${project.build.directory}/.scala_dependencies</arg>
