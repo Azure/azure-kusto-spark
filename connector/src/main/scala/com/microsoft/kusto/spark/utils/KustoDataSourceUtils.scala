@@ -386,7 +386,7 @@ object KustoDataSourceUtils {
     var tableCreation: SinkTableCreationMode = SinkTableCreationMode.FailIfNotExist
     var tableCreationParam: Option[String] = None
     var isAsync: Boolean = false
-    var writeMode: WriteMode = WriteMode.Transactional
+    var writeMode: WriteMode = WriteMode.Queued
     var writeModeParam: Option[String] = None
     var batchLimit: Int = 0
     var minimalExtentsCountForSplitMergePerNode: Int = 0
