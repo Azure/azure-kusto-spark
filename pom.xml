@@ -19,6 +19,8 @@
         <azure.bom.version>1.2.4</azure.bom.version>
         <commons.lang3.version>3.9</commons.lang3.version>
         <fasterxml.jackson.version>[2.11.0,2.13.0)</fasterxml.jackson.version>
+        <fasterxml.jackson.databind.version>2.13.4.2</fasterxml.jackson.databind.version>
+        <jsonsmart.version>2.4.10</jsonsmart.version>
         <hadoop.version>3.3.5</hadoop.version>
         <kusto.sdk.version>4.0.4</kusto.sdk.version>
         <maven.flatten.version>1.4.1</maven.flatten.version>
