@@ -140,6 +140,7 @@
                 </exclusion>
             </exclusions>
         </dependency>
+        <!-- Added to avoid ADB issue, ClassNotFoundException: net.minidev.json.JSONAware -->
         <dependency>
             <groupId>net.minidev</groupId>
             <artifactId>json-smart</artifactId>
