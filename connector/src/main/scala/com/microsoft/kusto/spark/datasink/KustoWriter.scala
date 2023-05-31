@@ -6,11 +6,9 @@ import com.microsoft.azure.kusto.data.ClientRequestProperties
 import com.microsoft.azure.kusto.ingest.IngestionProperties.DataFormat
 import com.microsoft.azure.kusto.ingest.exceptions.IngestionServiceException
 import com.microsoft.azure.kusto.ingest.result.IngestionResult
-import com.microsoft.azure.kusto.ingest.source.BlobSourceInfo
-import com.microsoft.azure.kusto.ingest.{IngestClient, IngestionProperties}
-import com.microsoft.azure.storage.RetryNoRetry
+import com.microsoft.azure.kusto.ingest.source.{BlobSourceInfo, StreamSourceInfo}
+import com.microsoft.azure.kusto.ingest.{IngestClient, IngestionProperties, StreamingIngestClient}
 import com.microsoft.azure.storage.blob.{BlobRequestOptions, CloudBlockBlob}
-import com.microsoft.azure.storage.queue.QueueRequestOptions
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator.generateTableGetSchemaAsRowsCommand
@@ -28,12 +26,12 @@ import java.io._
 import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.security.InvalidParameterException
+import java.time.{Clock, Duration, Instant}
 import java.util
 import java.util.zip.GZIPOutputStream
 import java.util.{TimeZone, UUID}
 import com.microsoft.kusto.spark.datasink.FinalizeHelper.finalizeIngestionWhenWorkersSucceeded
 
-import java.time.{Clock, Duration, Instant}
 import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.{Failure, Success, Try}
@@ -118,7 +116,7 @@ object KustoWriter {
         KDSU.logInfo(className, s"asynchronous write to Kusto table '$table' in progress")
         // This part runs back on the driver
 
-        if (writeOptions.isTransactionalMode) {
+        if (writeOptions.writeMode == WriteMode.Transactional) {
           asyncWork.onSuccess {
             case _ => finalizeIngestionWhenWorkersSucceeded(
               tableCoordinates, batchIdIfExists, tmpTableName, partitionsResults,
@@ -139,7 +137,7 @@ object KustoWriter {
         try
           rdd.foreachPartition { rows => ingestRowsIntoTempTbl(rows, batchIdIfExists, partitionsResults,parameters) }
         catch {
-          case exception: Exception => if (writeOptions.isTransactionalMode) {
+          case exception: Exception => if (writeOptions.writeMode == WriteMode.Transactional) {
             if (writeOptions.userTempTableName.isEmpty) {
               kustoClient.cleanupIngestionByProducts(
                 tableCoordinates.database, tmpTableName, crp)
@@ -147,7 +145,7 @@ object KustoWriter {
             throw exception
           }
         }
-        if (writeOptions.isTransactionalMode) {
+        if (writeOptions.writeMode == WriteMode.Transactional) {
           finalizeIngestionWhenWorkersSucceeded(
           tableCoordinates, batchIdIfExists, tmpTableName, partitionsResults, writeOptions,
           crp, tableExists, rdd.sparkContext, authentication, kustoClient, sinkStartTime)
@@ -172,7 +170,11 @@ object KustoWriter {
     if (rows.isEmpty) {
       KDSU.logWarn(className, s"sink to Kusto table '${parameters.coordinates.table.get}' with no rows to write " +
         s"on partition ${TaskContext.getPartitionId} $batchIdForTracing")
-    } else {
+    }
+    else if (parameters.writeOptions.writeMode == WriteMode.Stream) {
+      streamRowsIntoKusto(batchIdForTracing, rows, parameters)
+    }
+    else {
       ingestToTemporaryTableByWorkers(batchIdForTracing, rows, partitionsResults,parameters)
     }
   }
@@ -184,9 +186,9 @@ object KustoWriter {
    // Transactional mode write into the temp table instead of the destination table
    val ingestionProperties = getIngestionProperties(parameters.writeOptions,
       parameters.coordinates.database,
-      if (parameters.writeOptions.isTransactionalMode) parameters.tmpTableName else parameters.coordinates.table.get)
+      if (parameters.writeOptions.writeMode == WriteMode.Transactional) parameters.tmpTableName else parameters.coordinates.table.get)
 
-    if (parameters.writeOptions.isTransactionalMode) {
+    if (parameters.writeOptions.writeMode == WriteMode.Transactional) {
       ingestionProperties.setReportMethod(IngestionProperties.IngestionReportMethod.TABLE)
       ingestionProperties.setReportLevel(IngestionProperties.IngestionReportLevel.FAILURES_AND_SUCCESSES)
     }
@@ -196,7 +198,7 @@ object KustoWriter {
       KDSU.logInfo(className, s"Ingesting from blob(s) partition: ${TaskContext.getPartitionId()} requestId: " +
         s"'${parameters.writeOptions.requestId}' batch$batchIdForTracing")
     } catch {
-      case e: Exception => if(parameters.writeOptions.isTransactionalMode) throw e
+      case e: Exception => if(parameters.writeOptions.writeMode == WriteMode.Transactional) throw e
     }
   }
 
@@ -219,6 +221,63 @@ object KustoWriter {
     ingestionProperties.ingestIfNotExists = new util.ArrayList()
 
     ingestionProperties
+  }
+
+  private def streamRowsIntoKusto(batchIdForTracing: String,
+                              rows: Iterator[InternalRow],
+                              parameters: KustoWriteResource): Unit = {
+    val streamingClient = KustoClientCache.getClient(
+      parameters.coordinates.clusterUrl,
+      parameters.authentication,
+      parameters.coordinates.ingestionUrl,
+      parameters.coordinates.clusterAlias).streamingClient
+
+    val timeZone = TimeZone.getTimeZone(parameters.writeOptions.timeZone).toZoneId
+    val byteArrayOutputStream = new ByteArrayOutputStream()
+    val streamWriter = new OutputStreamWriter(byteArrayOutputStream)
+    val writer = new BufferedWriter(streamWriter)
+    val csvWriter = CountingWriter(writer)
+    var count = 1
+
+    for (row <- rows) {
+      RowCSVWriterUtils.writeRowAsCSV(row, parameters.schema, timeZone, csvWriter)
+      if (csvWriter.getCounter >= KCONST.MaxStreamingBytes) {
+        KDSU.logWarn(className, s"Batch $batchIdForTracing exceeds the max streaming size (${KCONST.MaxStreamingBytes} bytes)! " +
+          s"Streaming ${csvWriter.getCounter} bytes from batch $batchIdForTracing ($count).")
+        writer.flush()
+        streamBytesIntoKusto(batchIdForTracing, byteArrayOutputStream.toByteArray, streamingClient, parameters)
+        csvWriter.resetCounter()
+        byteArrayOutputStream.reset()
+        count = count + 1
+      }
+    }
+
+    writer.flush()
+    writer.close()
+    if (csvWriter.getCounter > 0) {
+      KDSU.logInfo(className, s"Streaming ${csvWriter.getCounter} bytes from batch $batchIdForTracing ($count).")
+      streamBytesIntoKusto(batchIdForTracing, byteArrayOutputStream.toByteArray, streamingClient, parameters)
+    }
+  }
+
+  private def streamBytesIntoKusto(batchIdForTracing: String,
+                              bytes: Array[Byte],
+                              streamingClient: StreamingIngestClient,
+                              parameters: KustoWriteResource): Unit = {
+    val streamSourceInfo = new StreamSourceInfo(new ByteArrayInputStream(bytes))
+    val ingestionProperties = getIngestionProperties(parameters.writeOptions, parameters.coordinates.database, parameters.coordinates.table.get)
+    val status = streamingClient.ingestFromStream(streamSourceInfo, ingestionProperties)
+    status.getIngestionStatusCollection.forEach(
+      item => {
+        KDSU.logInfo(
+          className, s"BatchId $batchIdForTracing IngestionStatus { " +
+            s"status: '${item.status.toString}', " +
+            s"details: ${item.details}, " +
+            s"activityId: ${item.activityId}, " +
+            s"errorCode: ${item.errorCode}, " +
+            s"errorCodeString: ${item.errorCodeString}" +
+            "}")
+      })
   }
 
   private def ingestToTemporaryTableByWorkers(
@@ -311,7 +370,7 @@ object KustoWriter {
               null
           }
         }, this.retryConfig, "Ingest into Kusto")
-        if (parameters.writeOptions.isTransactionalMode) {
+        if (parameters.writeOptions.writeMode == WriteMode.Transactional) {
           partitionsResults.add(
             PartitionResult(partitionsResult, partitionId))
         }
