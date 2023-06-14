@@ -161,8 +161,9 @@ object KustoWriter {
               kustoClient.cleanupIngestionByProducts(
                 tableCoordinates.database, tmpTableName, crp)
             }
-            throw exception
           }
+          /* Throwing the exception will abort the job (explicitly on the driver) */
+          throw exception
         }
         if (writeOptions.isTransactionalMode) {
           finalizeIngestionWhenWorkersSucceeded(
