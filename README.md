@@ -18,6 +18,7 @@ Making Azure Data Explorer and Spark work together enables building fast and sca
 
 For major changes from previous releases, please refer to [Releases](https://github.com/Azure/azure-kusto-spark/releases).
 For known or new issues, please refer to the [issues](https://github.com/Azure/azure-kusto-spark/issues) section.
+> Note: Use the 4.x series only if you are using JDK 11 and 3.x in JDK 8
 
 ## Usage
 
