@@ -1,5 +1,6 @@
 package com.microsoft.kusto.spark.utils
 
+import com.google.common.annotations.VisibleForTesting
 import com.microsoft.azure.kusto.data.exceptions.KustoDataExceptionBase
 import com.microsoft.azure.kusto.ingest.exceptions.IngestionServiceException
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
@@ -13,6 +14,7 @@ import scala.util.{Failure, Success, Try}
 class ContainerProvider[A](val client: ExtendedKustoClient, val clusterAlias: String, val command: String, cacheEntryCreator: ContainerAndSas => A,
                            cacheExpirySeconds:Int=KustoConstants.StorageExpirySeconds) { // Refactored for tests with short cache
   private var roundRobinIdx = 0
+  @VisibleForTesting
   private var storageUris: Seq[A] = Seq.empty
   private var lastRefresh: Instant = Instant.now(Clock.systemUTC())
   private val className = this.getClass.getSimpleName
@@ -54,14 +56,14 @@ class ContainerProvider[A](val client: ExtendedKustoClient, val clusterAlias: St
 
   private def refresh = {
     Try(client.executeDM(command, None , Some(retryConfig))) match {
-      case Success(res) => val storage = res.getPrimaryResults.getData.asScala.map(row => {
-        val parts = row.get(0).toString.split('?')
-        cacheEntryCreator(ContainerAndSas(parts(0), s"?${parts(1)}"))
-      })
+      case Success(res) =>
+          val storage = res.getPrimaryResults.getData.asScala.map(row => {
+          val parts = row.get(0).toString.split('?')
+          cacheEntryCreator(ContainerAndSas(parts(0), s"?${parts(1)}"))
+        })
         if (storage.isEmpty) {
           KDSU.reportExceptionAndThrow(className, new RuntimeException("Failed to allocate temporary storage"), "writing to Kusto", clusterAlias)
         }
-
         KDSU.logInfo(className, s"Got ${storage.length} storage SAS with command :'$command'. from service 'ingest-$clusterAlias'")
         lastRefresh = Instant.now(Clock.systemUTC())
         storageUris = scala.util.Random.shuffle(storage)
@@ -69,7 +71,7 @@ class ContainerProvider[A](val client: ExtendedKustoClient, val clusterAlias: St
         storage(roundRobinIdx)
       case Failure(exception) =>
         KDSU.reportExceptionAndThrow(className, exception,
-          "Error querying for create tempstorage", clusterAlias, shouldNotThrow = true)
+          "Error querying for create tempstorage", clusterAlias, shouldNotThrow = storageUris.nonEmpty)
         storageUris(roundRobinIdx)
     }
   }
