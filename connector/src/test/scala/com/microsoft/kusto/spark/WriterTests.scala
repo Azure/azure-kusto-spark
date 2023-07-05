@@ -88,7 +88,7 @@ class WriterTests extends AnyFlatSpec with Matchers {
     val buffer = mock(classOf[BufferedWriter])
     val csvWriter = CountingWriter(buffer)
 
-    val fileWriteResource = BlobWriteResource(buffer, gzip, csvWriter, null, null,null)
+    val fileWriteResource = BlobWriteResource(buffer, gzip, csvWriter, null, null)
     KustoWriter.finalizeBlobWrite(fileWriteResource)
 
     verify(gzip, times(1)).flush()

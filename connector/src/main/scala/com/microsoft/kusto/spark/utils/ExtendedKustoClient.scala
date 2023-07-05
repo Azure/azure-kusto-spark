@@ -36,7 +36,6 @@ class ExtendedKustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcs
   // Reading process does not require ingest client to start working
   lazy val dmClient: Client = ClientFactory.createClient(ingestKcsb)
   lazy val ingestClient: QueuedIngestClient = IngestClientFactory.createClient(ingestKcsb)
-  lazy val manager: ResourceHelper = ingestClient.getResourceManager
   private val exportProviderEntryCreator = (c: ContainerAndSas) => new TransientStorageCredentials(c.containerUrl + c.sas)
   private val ingestProviderEntryCreator = (c: ContainerAndSas) => c
   private lazy val ingestContainersContainerProvider = new ContainerProvider[ContainerAndSas](this, clusterAlias,
@@ -133,14 +132,8 @@ class ExtendedKustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcs
     ingestContainersContainerProvider.getContainer
   }
 
-  def getContainerForIngestion: ContainerWithSas = {
-    val containersList = manager.getContainers
-    val containerCount = containersList.size()
-    containersList.get(Random.nextInt(containerCount))
-  }
-
   def reportIngestionResult(resource: ResourceWithSas[_], success: Boolean): Unit = {
-    manager.reportIngestionResult(resource,success)
+    ingestClient.getResourceManager.reportIngestionResult(resource,success)
   }
 
   def getTempBlobsForExport: TransientStorageParameters = {

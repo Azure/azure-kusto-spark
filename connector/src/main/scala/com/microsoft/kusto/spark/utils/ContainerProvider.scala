@@ -55,11 +55,10 @@ class ContainerProvider[A](val client: ExtendedKustoClient, val clusterAlias: St
   }
 
   private def refresh = {
-    Try(client.executeDM(command, None , Some(retryConfig))) match {
+    Try(client.ingestClient.getResourceManager.getContainers) match {
       case Success(res) =>
-          val storage = res.getPrimaryResults.getData.asScala.map(row => {
-          val parts = row.get(0).toString.split('?')
-          cacheEntryCreator(ContainerAndSas(parts(0), s"?${parts(1)}"))
+          val storage = res.asScala.map(row => {
+            cacheEntryCreator(ContainerAndSas(row.getContainer.getBlobContainerUrl, s"${row.getSas}"))
         })
         if (storage.isEmpty) {
           KDSU.reportExceptionAndThrow(className, new RuntimeException("Failed to allocate temporary storage"), "writing to Kusto", clusterAlias)

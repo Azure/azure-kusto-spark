@@ -244,9 +244,9 @@ object KustoWriter {
 
     val blobName = s"${KustoQueryUtils.simplifyName(tableCoordinates.database)}_${tmpTableName}_${blobUUID}_${partitionId}_${blobNumber}_${formatter.format(now)}_spark.csv.gz"
 
-    val containerWithSas = client.getContainerForIngestion
-    val currentBlob = new CloudBlockBlob(new URI(s"${containerWithSas.getEndpointWithoutSas}/$blobName${containerWithSas.getSas}"))
-    val currentSas = containerWithSas.getSas
+    val containerAndSas = client.getTempBlobForIngestion
+    val currentBlob = new CloudBlockBlob(new URI(s"${containerAndSas.containerUrl}/$blobName${containerAndSas.sas}"))
+    val currentSas = containerAndSas.sas
     val options = new BlobRequestOptions()
     options.setConcurrentRequestCount(4) // Should be configured from outside
     val gzip: GZIPOutputStream = new GZIPOutputStream(currentBlob.openOutputStream(null, options, null))
@@ -255,7 +255,7 @@ object KustoWriter {
 
     val buffer: BufferedWriter = new BufferedWriter(writer, GzipBufferSize)
     val csvWriter = CountingWriter(buffer)
-    BlobWriteResource(buffer, gzip, csvWriter, currentBlob, currentSas, containerWithSas)
+    BlobWriteResource(buffer, gzip, csvWriter, currentBlob, currentSas)
   }
 
   @throws[IOException]
@@ -299,13 +299,14 @@ object KustoWriter {
             ingestClient.ingestFromBlob(new BlobSourceInfo(blobUri + sas, size, UUID.randomUUID()), props)
           ) match {
             case Success(x) =>
-              kustoClient.reportIngestionResult(blobResource.containerWithSas,success = true)
+              val containerWithSas = new ContainerWithSas(blobResource.blob.getStorageUri.getPrimaryUri.toString+blobResource.sas, null)
+              kustoClient.reportIngestionResult(containerWithSas,success = true)
               x
             case Failure(e: Throwable) =>
               KDSU.reportExceptionAndThrow(className, e, "Queueing blob for ingestion in partition " +
                 s"$partitionIdString for requestId: '${parameters.writeOptions.requestId}")
-              kustoClient.reportIngestionResult(blobResource.containerWithSas,success = false)
-
+              val containerWithSas = new ContainerWithSas(blobResource.blob.getStorageUri.getPrimaryUri.toString+blobResource.sas, null)
+              kustoClient.reportIngestionResult(containerWithSas ,success = false)
               null
           }
         }, this.retryConfig, "Ingest into Kusto")
@@ -362,7 +363,7 @@ object KustoWriter {
 }
 
 final case class BlobWriteResource(writer: BufferedWriter, gzip: GZIPOutputStream, csvWriter: CountingWriter,
-                             blob: CloudBlockBlob, sas: String, containerWithSas: ContainerWithSas)
+                             blob: CloudBlockBlob, sas: String)
 final case class KustoWriteResource(authentication: KustoAuthentication,
                               coordinates: KustoCoordinates,
                               schema: StructType,
