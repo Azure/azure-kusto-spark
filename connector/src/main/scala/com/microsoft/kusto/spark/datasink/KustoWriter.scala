@@ -7,6 +7,7 @@ import com.microsoft.azure.kusto.ingest.IngestionProperties.DataFormat
 import com.microsoft.azure.kusto.ingest.exceptions.IngestionServiceException
 import com.microsoft.azure.kusto.ingest.result.IngestionResult
 import com.microsoft.azure.kusto.ingest.source.BlobSourceInfo
+import com.microsoft.azure.kusto.ingest.utils.ContainerWithSas
 import com.microsoft.azure.kusto.ingest.{IngestClient, IngestionProperties}
 import com.microsoft.azure.storage.RetryNoRetry
 import com.microsoft.azure.storage.blob.{BlobRequestOptions, CloudBlockBlob}
@@ -15,8 +16,7 @@ import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator.generateTableGetSchemaAsRowsCommand
 import com.microsoft.kusto.spark.utils.KustoConstants.{IngestSkippedTrace, MaxIngestRetryAttempts}
-import com.microsoft.kusto.spark.utils.{ExtendedKustoClient, KustoClientCache, KustoIngestionUtils,
-  KustoQueryUtils, KustoConstants => KCONST, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.{ExtendedKustoClient, KustoClientCache, KustoIngestionUtils, KustoQueryUtils, KustoConstants => KCONST, KustoDataSourceUtils => KDSU}
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.InternalRow
@@ -244,9 +244,9 @@ object KustoWriter {
 
     val blobName = s"${KustoQueryUtils.simplifyName(tableCoordinates.database)}_${tmpTableName}_${blobUUID}_${partitionId}_${blobNumber}_${formatter.format(now)}_spark.csv.gz"
 
-    val containerAndSas = client.getTempBlobForIngestion
-    val currentBlob = new CloudBlockBlob(new URI(s"${containerAndSas.containerUrl}/$blobName${containerAndSas.sas}"))
-    val currentSas = containerAndSas.sas
+    val containerWithSas = client.getContainerForIngestion
+    val currentBlob = new CloudBlockBlob(new URI(s"${containerWithSas.getEndpointWithoutSas}/$blobName${containerWithSas.getSas}"))
+    val currentSas = containerWithSas.getSas
     val options = new BlobRequestOptions()
     options.setConcurrentRequestCount(4) // Should be configured from outside
     val gzip: GZIPOutputStream = new GZIPOutputStream(currentBlob.openOutputStream(null, options, null))
@@ -255,7 +255,7 @@ object KustoWriter {
 
     val buffer: BufferedWriter = new BufferedWriter(writer, GzipBufferSize)
     val csvWriter = CountingWriter(buffer)
-    BlobWriteResource(buffer, gzip, csvWriter, currentBlob, currentSas)
+    BlobWriteResource(buffer, gzip, csvWriter, currentBlob, currentSas, containerWithSas)
   }
 
   @throws[IOException]
@@ -268,9 +268,9 @@ object KustoWriter {
   = {
     val partitionId = TaskContext.getPartitionId
     val partitionIdString = TaskContext.getPartitionId.toString
-    def ingest(blob: CloudBlockBlob, size: Long, sas: String, flushImmediately: Boolean = false, blobUUID: String): Unit = {
+    def ingest(blobResource: BlobWriteResource, size: Long, sas: String, flushImmediately: Boolean = false, blobUUID: String, kustoClient: ExtendedKustoClient): Unit = {
         var props = ingestionProperties
-        val blobUri = blob.getStorageUri.getPrimaryUri.toString
+        val blobUri = blobResource.blob.getStorageUri.getPrimaryUri.toString
         if (parameters.writeOptions.ensureNoDupBlobs || (!props.getFlushImmediately && flushImmediately)) {
           // Need to copy the ingestionProperties so that only this blob ingestion will be effected
           props = SparkIngestionProperties.cloneIngestionProperties(ingestionProperties)
@@ -298,10 +298,14 @@ object KustoWriter {
           Try(
             ingestClient.ingestFromBlob(new BlobSourceInfo(blobUri + sas, size, UUID.randomUUID()), props)
           ) match {
-            case Success(x) => x
+            case Success(x) =>
+              kustoClient.reportIngestionResult(blobResource.containerWithSas,success = true)
+              x
             case Failure(e: Throwable) =>
               KDSU.reportExceptionAndThrow(className, e, "Queueing blob for ingestion in partition " +
                 s"$partitionIdString for requestId: '${parameters.writeOptions.requestId}")
+              kustoClient.reportIngestionResult(blobResource.containerWithSas,success = false)
+
               null
           }
         }, this.retryConfig, "Ingest into Kusto")
@@ -333,10 +337,10 @@ object KustoWriter {
           KDSU.logInfo(className, s"Sealing blob in partition $partitionIdString for requestId: '${parameters.writeOptions.requestId}', " +
             s"blob number ${row._2}, with size $count")
           finalizeBlobWrite(blobWriter)
-          ingest(blobWriter.blob, blobWriter.csvWriter.getCounter, blobWriter.sas, flushImmediately =
-            !parameters.writeOptions.disableFlushImmediately, curBlobUUID)
+          ingest(blobWriter, blobWriter.csvWriter.getCounter, blobWriter.sas, flushImmediately =
+            !parameters.writeOptions.disableFlushImmediately, curBlobUUID, kustoClient)
           curBlobUUID = UUID.randomUUID().toString
-          createBlobWriter(parameters.coordinates, parameters.tmpTableName, kustoClient, partitionIdString, row._2, curBlobUUID)
+          createBlobWriter(parameters.coordinates, parameters.tmpTableName, kustoClient, partitionIdString, row._2, curBlobUUID )
         }
     }
 
@@ -344,8 +348,8 @@ object KustoWriter {
       s"requestId: '${parameters.writeOptions.requestId}' ")
     finalizeBlobWrite(lastBlobWriter)
     if (lastBlobWriter.csvWriter.getCounter > 0) {
-      ingest(lastBlobWriter.blob, lastBlobWriter.csvWriter.getCounter, lastBlobWriter.sas,
-        flushImmediately = false, curBlobUUID)
+      ingest(lastBlobWriter, lastBlobWriter.csvWriter.getCounter, lastBlobWriter.sas,
+        flushImmediately = false, curBlobUUID, kustoClient)
     }
   }
 
@@ -358,7 +362,7 @@ object KustoWriter {
 }
 
 final case class BlobWriteResource(writer: BufferedWriter, gzip: GZIPOutputStream, csvWriter: CountingWriter,
-                             blob: CloudBlockBlob, sas: String)
+                             blob: CloudBlockBlob, sas: String, containerWithSas: ContainerWithSas)
 final case class KustoWriteResource(authentication: KustoAuthentication,
                               coordinates: KustoCoordinates,
                               schema: StructType,

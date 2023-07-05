@@ -5,7 +5,8 @@ import com.fasterxml.jackson.databind.node.ArrayNode
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.exceptions.KustoDataExceptionBase
 import com.microsoft.azure.kusto.data._
-import com.microsoft.azure.kusto.ingest.{IngestClientFactory, QueuedIngestClient}
+import com.microsoft.azure.kusto.ingest.utils.{ContainerWithSas, ResourceWithSas}
+import com.microsoft.azure.kusto.ingest.{IngestClientFactory, QueuedIngestClient, ResourceHelper}
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.KustoWriter.DelayPeriodBetweenCalls
 import com.microsoft.kusto.spark.datasink.{SinkTableCreationMode, SparkIngestionProperties, WriteOptions}
@@ -27,6 +28,7 @@ import java.time.Instant
 import java.util.StringJoiner
 import scala.collection.JavaConverters._
 import scala.concurrent.duration.FiniteDuration
+import scala.util.Random
 
 class ExtendedKustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcsb: ConnectionStringBuilder, val clusterAlias: String) {
   lazy val engineClient: Client = ClientFactory.createClient(engineKcsb)
@@ -34,6 +36,7 @@ class ExtendedKustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcs
   // Reading process does not require ingest client to start working
   lazy val dmClient: Client = ClientFactory.createClient(ingestKcsb)
   lazy val ingestClient: QueuedIngestClient = IngestClientFactory.createClient(ingestKcsb)
+  lazy val manager: ResourceHelper = ingestClient.getResourceManager
   private val exportProviderEntryCreator = (c: ContainerAndSas) => new TransientStorageCredentials(c.containerUrl + c.sas)
   private val ingestProviderEntryCreator = (c: ContainerAndSas) => c
   private lazy val ingestContainersContainerProvider = new ContainerProvider[ContainerAndSas](this, clusterAlias,
@@ -128,6 +131,16 @@ class ExtendedKustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcs
 
   def getTempBlobForIngestion: ContainerAndSas = {
     ingestContainersContainerProvider.getContainer
+  }
+
+  def getContainerForIngestion: ContainerWithSas = {
+    val containersList = manager.getContainers
+    val containerCount = containersList.size()
+    containersList.get(Random.nextInt(containerCount))
+  }
+
+  def reportIngestionResult(resource: ResourceWithSas[_], success: Boolean): Unit = {
+    manager.reportIngestionResult(resource,success)
   }
 
   def getTempBlobsForExport: TransientStorageParameters = {
