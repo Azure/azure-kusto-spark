@@ -21,7 +21,7 @@
         <fasterxml.jackson.databind.version>2.13.4.2</fasterxml.jackson.databind.version>
         <jsonsmart.version>2.4.10</jsonsmart.version>
         <hadoop.version>3.3.5</hadoop.version>
-        <kusto.sdk.version>4.0.4</kusto.sdk.version>
+        <kusto.sdk.version>5.0.0</kusto.sdk.version>
         <maven.flatten.version>1.4.1</maven.flatten.version>
         <maven.jar.plugin.version>3.3.0</maven.jar.plugin.version>
         <maven.source.plugin.version>3.0.1</maven.source.plugin.version>
