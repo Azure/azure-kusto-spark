@@ -228,6 +228,13 @@
             <artifactId>slf4j-api</artifactId>
             <version>${slf4j.version}</version>
         </dependency>
+        <!-- TODO Remove maven-artifact when moving to java 11 and use java.lang.module.ModuleDescriptor.Version -->
+        <dependency>
+            <groupId>org.apache.maven</groupId>
+            <artifactId>maven-artifact</artifactId>
+            <version>3.8.7</version>
+        </dependency>
+
         <!-- Test Scope -->
         <dependency>
             <groupId>junit</groupId>
@@ -299,18 +306,7 @@
                     </execution>
                 </executions>
                 <configuration>
-                    <javacArgs>
-                        <javacArg>-Xlint:unchecked</javacArg>
-                        <javacArg>-Xlint:deprecation</javacArg>
-                        <javacArg>-target</javacArg>
-                        <javacArg>11</javacArg>
-                    </javacArgs>
-                    <args>
-<!--                        <arg>-feature</arg>-->
-                        <arg>-unchecked</arg>
-                        <arg>-deprecation</arg>
-                    </args>
-
+                    <addScalacArgs>-target:jvm-1.8</addScalacArgs>
                 </configuration>
             </plugin>
             <plugin>
@@ -431,7 +427,8 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.10.1</version>
                 <configuration>
-                    <release>11</release>
+                    <source>1.8</source>
+                    <target>1.8</target>
                 </configuration>
             </plugin>
         </plugins>
