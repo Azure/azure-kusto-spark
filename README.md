@@ -18,6 +18,7 @@ Making Azure Data Explorer and Spark work together enables building fast and sca
 
 For major changes from previous releases, please refer to [Releases](https://github.com/Azure/azure-kusto-spark/releases).
 For known or new issues, please refer to the [issues](https://github.com/Azure/azure-kusto-spark/issues) section.
+> Note: Use the 4.x series only if you are using JDK 11. Versions 3.x and 5.x will work with JDK8 and all versions up
 
 ## Usage
 
@@ -32,14 +33,14 @@ link your application with the artifact below to use the Azure Data Explorer Con
 ```
 groupId = com.microsoft.azure.kusto
 artifactId = kusto-spark_3.0_2.12
-version = 4.0.1
+version = 5.0.0
 ```
 
 **In Maven**:
 
 Look for the following coordinates: 
 ```
-com.microsoft.azure.kusto:kusto-spark_3.0_2.12:4.0.1
+com.microsoft.azure.kusto:kusto-spark_3.0_2.12:5.0.0
 ```
 
 Or clone this repository and build it locally to add it to your local maven repository,.
@@ -49,7 +50,7 @@ The jar can also be found under the [released package](https://github.com/Azure/
     <dependency>
         <groupId>com.microsoft.azure.kusto</groupId>
         <artifactId>kusto-spark_3.0_2.12</artifactId>
-        <version>4.0.1</version>
+        <version>5.0.0</version>
     </dependency>
 ```
 
@@ -57,7 +58,7 @@ The jar can also be found under the [released package](https://github.com/Azure/
 
 ```scala
 libraryDependencies ++= Seq(
-  "com.microsoft.azure.kusto" %% "kusto-spark_3.0" % "4.0.1"
+  "com.microsoft.azure.kusto" %% "kusto-spark_3.0" % "5.0.0"
 )
 ```
 
@@ -66,7 +67,7 @@ libraryDependencies ++= Seq(
 Libraries -> Install New -> Maven -> copy the following coordinates:
 
 ```
-com.microsoft.azure.kusto:kusto-spark_3.0_2.12:4.0.1
+com.microsoft.azure.kusto:kusto-spark_3.0_2.12:5.0.0
 ```
 
 #### Building Samples Module
