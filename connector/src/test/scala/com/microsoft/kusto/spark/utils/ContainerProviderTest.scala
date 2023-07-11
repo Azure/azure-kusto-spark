@@ -14,6 +14,7 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
   // happy path
   "ContainerProvider" should "return a container" in {
     val extendedMockClient = mock[ExtendedKustoClient]
+    val extendedMockClientEmptyFail = mock[ExtendedKustoClient]
     val kustoOperationResult = new KustoOperationResult(readTestSource("storage-result.json"), "v1")
     val clusterAlias = "ingest-cluster"
     val command = ".create tempstorage"
@@ -46,6 +47,17 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
       ("https://sacc1.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0",
         "https://sacc2.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0")
     containerProvider.getContainer.sas should (not be "")
+    // The case where storageUris.nonEmpty is false. This will throw the exception as there is nothing to give from the cache
+    Thread.sleep(SLEEP_TIME_SEC * 1000) // Milliseconds
+
+    extendedMockClientEmptyFail.executeDM _ expects(command, None, *) throws new DataServiceException(clusterAlias, "Cannot create temp storage", false)
+    val emptyStorageContainerProvider = new ContainerProvider(extendedMockClientEmptyFail, clusterAlias, command,
+      ingestProviderEntryCreator, CACHE_EXPIRY_SEC)
+    val caught =
+      intercept[DataServiceException] { // Result type: Assertion
+        emptyStorageContainerProvider.getContainer
+    }
+    assert(caught.getMessage.indexOf("Cannot create temp storage") != -1)
   }
 
   "ContainerProvider" should "fail in the case when call succeeds but returns no storage" in {
@@ -62,7 +74,6 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
     extendedMockClient.executeDM _ expects(command, None, *) noMoreThanOnce() returning kustoOperationResult
     the[RuntimeException] thrownBy containerProvider.getContainer should have message "Failed to allocate temporary storage"
   }
-
 
   private def readTestSource(fileName: String): String = {
     val queryResultsSource = Source.fromFile(this.getClass.getResource(s"/TestData/json/$fileName").getPath)
