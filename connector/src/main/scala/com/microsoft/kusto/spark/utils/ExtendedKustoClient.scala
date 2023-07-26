@@ -133,7 +133,11 @@ class ExtendedKustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcs
   }
 
   def reportIngestionResult(resource: ResourceWithSas[_], success: Boolean): Unit = {
-    ingestClient.getResourceManager.reportIngestionResult(resource,success)
+    try {
+      ingestClient.getResourceManager.reportIngestionResult(resource, success)
+    } catch {
+      case exception: Exception => KDSU.logDebug(myName, s"Exception in repoting ingestion result : ${exception.getMessage} ")
+    }
   }
 
   def getTempBlobsForExport: TransientStorageParameters = {
