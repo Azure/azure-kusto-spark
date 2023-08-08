@@ -16,6 +16,8 @@
         <spark.version.minor>1</spark.version.minor>
         <!-- other dependencies -->
         <azure.bom.version>1.2.4</azure.bom.version>
+        <!-- Deprecate only after full migration to azure storage 12-->
+        <azure-storage.version>8.6.6</azure-storage.version>
         <commons.lang3.version>3.9</commons.lang3.version>
         <fasterxml.jackson.version>[2.11.0,2.13.0)</fasterxml.jackson.version>
         <fasterxml.jackson.databind.version>2.13.4.2</fasterxml.jackson.databind.version>
