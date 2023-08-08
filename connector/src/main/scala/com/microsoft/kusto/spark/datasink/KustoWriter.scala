@@ -111,7 +111,7 @@ object KustoWriter {
       val partitionsResults = rdd.sparkContext.collectionAccumulator[PartitionResult]
       val parameters = KustoWriteResource(authentication = authentication, coordinates = tableCoordinates,
         schema = data.schema, writeOptions = rebuiltOptions, tmpTableName = tmpTableName)
-      val sinkStartTime = getCreationTime(stagingTableIngestionProperties, tableCoordinates)
+      val sinkStartTime = getCreationTime(stagingTableIngestionProperties)
       if (writeOptions.isAsync) {
         val asyncWork = rdd.foreachPartitionAsync { rows => ingestRowsIntoTempTbl(rows, batchIdIfExists,
           partitionsResults,parameters) }
@@ -157,12 +157,9 @@ object KustoWriter {
     }
   }
 
-  private def getCreationTime(ingestionProperties: SparkIngestionProperties, tableCoordinates: KustoCoordinates): Instant = {
-    val startTime = Option(ingestionProperties.toIngestionProperties(tableCoordinates.database,
-      tableCoordinates.table.get).getAdditionalProperties.get("startTime"))
-
-    startTime match {
-      case Some(creationTimeVal) => Instant.parse(creationTimeVal)
+  private def getCreationTime(ingestionProperties: SparkIngestionProperties): Instant = {
+    Option(ingestionProperties.creationTime) match {
+      case Some(creationTimeVal) => creationTimeVal
       case None => Instant.now(Clock.systemUTC())
     }
   }
