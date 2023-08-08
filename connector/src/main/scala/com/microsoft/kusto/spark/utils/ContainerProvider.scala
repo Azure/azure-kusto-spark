@@ -7,12 +7,12 @@ import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import io.github.resilience4j.core.IntervalFunction
 import io.github.resilience4j.retry.RetryConfig
 
-import java.time.{Clock, Duration, Instant}
-import scala.collection.JavaConverters._
+import java.time.{Clock, Instant}
+import scala.collection.JavaConverters.asScalaBufferConverter
 import scala.util.{Failure, Success, Try}
 
 class ContainerProvider[A](val client: ExtendedKustoClient, val clusterAlias: String, val command: String, cacheEntryCreator: ContainerAndSas => A,
-                           cacheExpirySeconds:Int=KustoConstants.StorageExpirySeconds) { // Refactored for tests with short cache
+                           cacheExpirySeconds: Int = KustoConstants.StorageExpirySeconds) { // Refactored for tests with short cache
   private var roundRobinIdx = 0
   @VisibleForTesting
   private var storageUris: Seq[A] = Seq.empty
@@ -48,17 +48,17 @@ class ContainerProvider[A](val client: ExtendedKustoClient, val clusterAlias: St
   def getAllContainers: Seq[A] = {
     val now = Instant.now(Clock.systemUTC())
     val secondsElapsed = now.getEpochSecond - lastRefresh.getEpochSecond // get the seconds between now and last refresh
-    if (storageUris.isEmpty || secondsElapsed > cacheExpirySeconds){
+    if (storageUris.isEmpty || secondsElapsed > cacheExpirySeconds) {
       refresh
     }
     storageUris
   }
 
   private def refresh = {
-    Try(client.ingestClient.getResourceManager.getContainers) match {
+    Try(client.ingestClient.getResourceManager.getShuffledContainers) match {
       case Success(res) =>
-          val storage = res.asScala.map(row => {
-            cacheEntryCreator(ContainerAndSas(row.getContainer.getBlobContainerUrl, s"${row.getSas}"))
+        val storage = res.asScala.map(row => {
+          cacheEntryCreator(ContainerAndSas(row.getContainer.getBlobContainerUrl, s"${row.getSas}"))
         })
         if (storage.isEmpty) {
           KDSU.reportExceptionAndThrow(className, new RuntimeException("Failed to allocate temporary storage"), "writing to Kusto", clusterAlias)
