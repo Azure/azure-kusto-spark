@@ -85,6 +85,8 @@ object SparkIngestionProperties {
     cloned.setIngestIfNotExists(ingestionProperties.getIngestIfNotExists)
     cloned.setDataFormat(ingestionProperties.getDataFormat)
     cloned.setIngestionMapping(ingestionProperties.getIngestionMapping)
+    cloned.setAdditionalProperties(ingestionProperties.getAdditionalProperties)
+    cloned.setFlushImmediately(ingestionProperties.getFlushImmediately)
     cloned
   }
 

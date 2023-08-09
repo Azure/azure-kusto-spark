@@ -8,7 +8,7 @@
     <packaging>pom</packaging>
     <version>${revision}</version>
     <properties>
-        <revision>5.0.0</revision>
+        <revision>5.0.1</revision>
         <!-- Spark dependencies -->
         <scala.version.major>2.11</scala.version.major>
         <scala.version.minor>12</scala.version.minor>
@@ -17,6 +17,8 @@
 
         <!-- other dependencies -->
         <azure.bom.version>1.2.4</azure.bom.version>
+        <!-- Deprecate only after full migration to azure storage 12-->
+        <azure-storage.version>8.6.6</azure-storage.version>
         <commons.lang3.version>3.9</commons.lang3.version>
         <fasterxml.jackson.version>[2.11.0,2.13.0)</fasterxml.jackson.version>
         <fasterxml.jackson.databind.version>2.13.4.2</fasterxml.jackson.databind.version>
