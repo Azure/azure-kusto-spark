@@ -33,14 +33,14 @@ link your application with the artifact below to use the Azure Data Explorer Con
 ```
 groupId = com.microsoft.azure.kusto
 artifactId = kusto-spark_3.0_2.12
-version = 5.0.1
+version = 5.0.2
 ```
 
 **In Maven**:
 
 Look for the following coordinates: 
 ```
-com.microsoft.azure.kusto:kusto-spark_3.0_2.12:5.0.1
+com.microsoft.azure.kusto:kusto-spark_3.0_2.12:5.0.2
 ```
 
 Or clone this repository and build it locally to add it to your local maven repository,.
@@ -50,7 +50,7 @@ The jar can also be found under the [released package](https://github.com/Azure/
     <dependency>
         <groupId>com.microsoft.azure.kusto</groupId>
         <artifactId>kusto-spark_3.0_2.12</artifactId>
-        <version>5.0.1</version>
+        <version>5.0.2</version>
     </dependency>
 ```
 
@@ -58,7 +58,7 @@ The jar can also be found under the [released package](https://github.com/Azure/
 
 ```scala
 libraryDependencies ++= Seq(
-  "com.microsoft.azure.kusto" %% "kusto-spark_3.0" % "5.0.1"
+  "com.microsoft.azure.kusto" %% "kusto-spark_3.0" % "5.0.2"
 )
 ```
 
@@ -67,7 +67,7 @@ libraryDependencies ++= Seq(
 Libraries -> Install New -> Maven -> copy the following coordinates:
 
 ```
-com.microsoft.azure.kusto:kusto-spark_3.0_2.12:5.0.1
+com.microsoft.azure.kusto:kusto-spark_3.0_2.12:5.0.2
 ```
 
 #### Building Samples Module
