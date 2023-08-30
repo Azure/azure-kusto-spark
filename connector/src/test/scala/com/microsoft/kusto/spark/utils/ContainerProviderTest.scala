@@ -24,8 +24,7 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
     /*
       Invoke and test
      */
-    val containerProvider = new ContainerProvider(extendedMockClient, clusterAlias, command,
-      ingestProviderEntryCreator, CACHE_EXPIRY_SEC)
+    val containerProvider = new ContainerProvider(extendedMockClient, clusterAlias, command,CACHE_EXPIRY_SEC)
     extendedMockClient.executeDM _ expects(command, None, *) noMoreThanOnce() returning kustoOperationResult
     containerProvider.getContainer.containerUrl should(not be "")
     Some(containerProvider.getContainer.containerUrl) should contain oneOf
@@ -53,8 +52,7 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
     Thread.sleep(SLEEP_TIME_SEC * 1000) // Milliseconds
 
     extendedMockClientEmptyFail.executeDM _ expects(command, None, *) throws new DataServiceException(clusterAlias, "Cannot create temp storage", false)
-    val emptyStorageContainerProvider = new ContainerProvider(extendedMockClientEmptyFail, clusterAlias, command,
-      ingestProviderEntryCreator, CACHE_EXPIRY_SEC)
+    val emptyStorageContainerProvider = new ContainerProvider(extendedMockClientEmptyFail, clusterAlias, command,CACHE_EXPIRY_SEC)
     val caught =
       intercept[DataServiceException] { // Result type: Assertion
         emptyStorageContainerProvider.getContainer
@@ -71,8 +69,7 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
     /*
       Invoke and test. In this case the call succeeds but returns no storage. This will hit the empty storage block
      */
-    val containerProvider = new ContainerProvider(extendedMockClient, clusterAlias, command,
-      ingestProviderEntryCreator, CACHE_EXPIRY_SEC)
+    val containerProvider = new ContainerProvider(extendedMockClient, clusterAlias, command, CACHE_EXPIRY_SEC)
     extendedMockClient.executeDM _ expects(command, None, *) noMoreThanOnce() returning kustoOperationResult
     the[RuntimeException] thrownBy containerProvider.getContainer should have message "Failed to allocate temporary storage"
   }
