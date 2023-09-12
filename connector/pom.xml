@@ -37,7 +37,7 @@
         <dependency>
             <groupId>com.fasterxml.jackson.datatype</groupId>
             <artifactId>jackson-datatype-jsr310</artifactId>
-            <version>${fasterxml.jackson.jsr.version}</version>
+            <version>${fasterxml.jackson.jar.version}</version>
         </dependency>
         <dependency>
             <groupId>org.apache.commons</groupId>
@@ -91,6 +91,14 @@
                     <artifactId>jackson-databind</artifactId>
                 </exclusion>
                 <exclusion>
+                    <groupId>com.azure</groupId>
+                    <artifactId>azure-storage-queue</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.azure</groupId>
+                    <artifactId>azure-storage-common</artifactId>
+                </exclusion>
+                <exclusion>
                     <groupId>com.univocity</groupId>
                     <artifactId>univocity-parsers</artifactId>
                 </exclusion>
@@ -125,6 +133,16 @@
                     <groupId>com.google.guava</groupId>
                 </exclusion>
             </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>com.azure</groupId>
+            <artifactId>azure-storage-queue</artifactId>
+            <version>${azure-storage.queue.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.azure</groupId>
+            <artifactId>azure-storage-common</artifactId>
+            <version>${azure-storage.storage.common}</version>
         </dependency>
         <dependency>
             <groupId>com.microsoft.azure</groupId>
