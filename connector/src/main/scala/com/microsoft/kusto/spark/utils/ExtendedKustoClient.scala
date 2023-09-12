@@ -35,12 +35,10 @@ class ExtendedKustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcs
   // Reading process does not require ingest client to start working
   lazy val dmClient: Client = ClientFactory.createClient(ingestKcsb)
   lazy val ingestClient: QueuedIngestClient = IngestClientFactory.createClient(ingestKcsb)
-  private lazy val ingestContainersContainerProvider = new ContainerProvider[ContainerAndSas](this, clusterAlias,
-    generateCreateTmpStorageCommand(), ingestProviderEntryCreator)
+  private lazy val ingestContainersContainerProvider = new ContainerProvider(this, clusterAlias,
+    generateCreateTmpStorageCommand())
   private lazy val exportContainersContainerProvider = new ContainerProvider(this, clusterAlias,
-    generateGetExportContainersCommand(), exportProviderEntryCreator)
-  private val exportProviderEntryCreator = (c: ContainerAndSas) => new TransientStorageCredentials(c.containerUrl + c.sas)
-  private val ingestProviderEntryCreator = (c: ContainerAndSas) => c
+    generateGetExportContainersCommand())
   RetryConfig.ofDefaults()
   private val retryConfig = buildRetryConfig
   private val retryConfigAsyncOp = buildRetryConfigForAsyncOp
@@ -125,12 +123,13 @@ class ExtendedKustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcs
   }
 
   def getTempBlobsForExport: TransientStorageParameters = {
-    val storage = exportContainersContainerProvider.getAllContainers
-    val endpointSuffix = storage.head.domainSuffix
+    val storage = exportContainersContainerProvider.getExportContainers
+    val transientStorage = storage.map(c=>new TransientStorageCredentials(c.containerUrl + c.sas))
+    val endpointSuffix = transientStorage.head.domainSuffix
     if (StringUtils.isNoneBlank(endpointSuffix)) {
-      new TransientStorageParameters(storage.toArray, endpointSuffix)
+      new TransientStorageParameters(transientStorage.toArray, endpointSuffix)
     } else {
-      new TransientStorageParameters(storage.toArray)
+      new TransientStorageParameters(transientStorage.toArray)
     }
   }
 
