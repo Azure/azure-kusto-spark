@@ -60,10 +60,6 @@
             <version>${kusto.sdk.version}</version>
             <exclusions>
                 <exclusion>
-                    <groupId>com.microsoft.azure.kusto</groupId>
-                    <artifactId>kusto-ingest</artifactId>
-                </exclusion>
-                <exclusion>
                     <artifactId>jackson-databind</artifactId>
                     <groupId>com.fasterxml.jackson.core</groupId>
                 </exclusion>
