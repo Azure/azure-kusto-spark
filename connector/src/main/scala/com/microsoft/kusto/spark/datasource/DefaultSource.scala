@@ -31,7 +31,7 @@ class DefaultSource extends CreatableRelationProvider
     clientRequestProperties = Some(sourceParams.clientRequestProperties)
   }
 
-  override def createRelation(sqlContext: SQLContext, mode: SaveMode, parameters: Map[String, String], data: DataFrame): BaseRelation = {
+    override def createRelation(sqlContext: SQLContext, mode: SaveMode, parameters: Map[String, String], data: DataFrame): BaseRelation = {
     val sinkParameters = KDSU.parseSinkParameters(parameters, mode)
     initCommonParams(sinkParameters.sourceParametersResults)
 

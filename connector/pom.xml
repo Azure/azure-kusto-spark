@@ -60,6 +60,10 @@
             <version>${kusto.sdk.version}</version>
             <exclusions>
                 <exclusion>
+                    <groupId>com.microsoft.azure.kusto</groupId>
+                    <artifactId>kusto-ingest</artifactId>
+                </exclusion>
+                <exclusion>
                     <artifactId>jackson-databind</artifactId>
                     <groupId>com.fasterxml.jackson.core</groupId>
                 </exclusion>
@@ -106,7 +110,25 @@
                     <groupId>com.azure</groupId>
                     <artifactId>azure-storage-blob</artifactId>
                 </exclusion>
+                <exclusion>
+                    <groupId>com.azure</groupId>
+                    <artifactId>azure-storage-queue</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.azure</groupId>
+                    <artifactId>azure-storage-common</artifactId>
+                </exclusion>
             </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>com.azure</groupId>
+            <artifactId>azure-storage-common</artifactId>
+            <version>12.21.0</version>
+        </dependency>
+        <dependency>
+            <groupId>com.azure</groupId>
+            <artifactId>azure-storage-queue</artifactId>
+            <version>12.17.0</version>
         </dependency>
         <dependency>
             <groupId>com.azure</groupId>
