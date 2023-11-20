@@ -296,13 +296,16 @@ object KustoWriter {
             ingestClient.ingestFromBlob(new BlobSourceInfo(blobUri + sas, size, UUID.randomUUID()), props)
           ) match {
             case Success(x) =>
-              val containerWithSas = new ContainerWithSas(blobResource.blob.getStorageUri.getPrimaryUri.toString+blobResource.sas, null)
+              <!-- The statuses of the ingestion operations are now set in the ingestion result -->
+              val blobUrlWithSas = s"${blobResource.blob.getStorageUri.getPrimaryUri.toString}${blobResource.sas}"
+              val containerWithSas = new ContainerWithSas(blobUrlWithSas, null)
               kustoClient.reportIngestionResult(containerWithSas,success = true)
               x
             case Failure(e: Throwable) =>
               KDSU.reportExceptionAndThrow(className, e, "Queueing blob for ingestion in partition " +
                 s"$partitionIdString for requestId: '${parameters.writeOptions.requestId}")
-              val containerWithSas = new ContainerWithSas(blobResource.blob.getStorageUri.getPrimaryUri.toString+blobResource.sas, null)
+              val blobUrlWithSas = s"${blobResource.blob.getStorageUri.getPrimaryUri.toString}${blobResource.sas}"
+              val containerWithSas = new ContainerWithSas(blobUrlWithSas, null)
               kustoClient.reportIngestionResult(containerWithSas ,success = false)
               null
           }

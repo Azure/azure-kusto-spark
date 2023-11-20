@@ -23,16 +23,23 @@
         <!-- Deprecate only after full migration to azure storage 12-->
         <azure-storage.version>8.6.6</azure-storage.version>
         <jsonsmart.version>2.4.10</jsonsmart.version>
+        <junit4.version>4.13.2</junit4.version>
         <commons.lang3.version>3.12.0</commons.lang3.version>
         <hadoop.version>3.3.6</hadoop.version>
         <kusto.sdk.version>5.0.2</kusto.sdk.version>
+        <java.source.version>1.8</java.source.version>
+        <java.target.version>1.8</java.target.version>
         <!-- test dependencies -->
+        <maven.compile.plugin.version>3.10.1</maven.compile.plugin.version>
         <maven.flatten.version>1.4.1</maven.flatten.version>
         <maven.jar.plugin.version>3.3.0</maven.jar.plugin.version>
+        <maven.shade.plugin.version>3.5.1</maven.shade.plugin.version>
         <maven.source.plugin.version>3.0.1</maven.source.plugin.version>
         <maven.surefire.plugin.version>3.0.0</maven.surefire.plugin.version>
         <mockito.version>1.10.19</mockito.version>
+        <netty.version>4.1.94.Final</netty.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <reactor.netty.version>1.0.39</reactor.netty.version>
         <scala.maven.plugin.version>4.8.1</scala.maven.plugin.version>
         <scalamock.version>5.2.0</scalamock.version>
         <scalastyle.maven.plugin.version>1.0.0</scalastyle.maven.plugin.version>

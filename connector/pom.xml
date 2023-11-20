@@ -106,7 +106,34 @@
                     <groupId>com.azure</groupId>
                     <artifactId>azure-storage-blob</artifactId>
                 </exclusion>
+                <exclusion>
+                    <groupId>io.netty</groupId>
+                    <artifactId>netty-codec</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>io.projectreactor.netty</groupId>
+                    <artifactId>reactor-netty-http</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>io.projectreactor.netty</groupId>
+                    <artifactId>reactor-netty-core</artifactId>
+                </exclusion>
             </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-codec</artifactId>
+            <version>${netty.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.projectreactor.netty</groupId>
+            <artifactId>reactor-netty-core</artifactId>
+            <version>${reactor.netty.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.projectreactor.netty</groupId>
+            <artifactId>reactor-netty-http</artifactId>
+            <version>${reactor.netty.version}</version>
         </dependency>
         <dependency>
             <groupId>com.azure</groupId>
@@ -199,7 +226,7 @@
                     <groupId>com.fasterxml.jackson.core</groupId>
                 </exclusion>
                 <exclusion>
-                    <artifactId>jackson-module-scala_2.12</artifactId>
+                    <artifactId>jackson-module-scala_${scala.version.major}</artifactId>
                     <groupId>com.fasterxml.jackson.module</groupId>
                 </exclusion>
                 <exclusion>
@@ -233,18 +260,11 @@
             <artifactId>slf4j-api</artifactId>
             <version>${slf4j.version}</version>
         </dependency>
-        <!-- TODO Remove maven-artifact when moving to java 11 and use java.lang.module.ModuleDescriptor.Version -->
-        <dependency>
-            <groupId>org.apache.maven</groupId>
-            <artifactId>maven-artifact</artifactId>
-            <version>3.8.7</version>
-        </dependency>
-
         <!-- Test Scope -->
         <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
-            <version>4.13.1</version>
+            <version>${junit4.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -278,7 +298,7 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
-
+    <!-- Build properties -->
     <build>
         <resources>
             <resource>
@@ -430,17 +450,16 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.10.1</version>
+                <version>${maven.compile.plugin.version}</version>
                 <configuration>
-                    <source>1.8</source>
-                    <target>1.8</target>
+                    <source>${java.source.version}</source>
+                    <target>${java.target.version}</target>
                 </configuration>
             </plugin>
-
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
-                <version>3.5.1</version> <!-- {x-version-update;org.apache.maven.plugins:maven-shade-plugin;external_dependency} -->
+                <version>${maven.shade.plugin.version}</version> <!-- {x-version-update;org.apache.maven.plugins:maven-shade-plugin;external_dependency} -->
                 <executions>
                     <execution>
                         <id>shade</id>
@@ -474,29 +493,10 @@
                                     <pattern>com.fasterxml</pattern>
                                     <shadedPattern>${shadingPrefix}.com.fasterxml</shadedPattern>
                                 </relocation>
-                                <relocation>
-                                    <pattern>com.ctc.wstx</pattern>
-                                    <shadedPattern>${shadingPrefix}.com.ctc.wstx</shadedPattern>
-                                </relocation>
-                                <relocation>
-                                    <pattern>com.codahale.metrics</pattern>
-                                    <shadedPattern>${shadingPrefix}.com.codahale.metrics</shadedPattern>
-                                </relocation>
+                                <!-- Used in Jackson -->
                                 <relocation>
                                     <pattern>com.thoughtworks.paranamer</pattern>
                                     <shadedPattern>${shadingPrefix}.com.thoughtworks.paranamer</shadedPattern>
-                                </relocation>
-                                <relocation>
-                                    <pattern>io.micrometer</pattern>
-                                    <shadedPattern>${shadingPrefix}.io.micrometer</shadedPattern>
-                                </relocation>
-                                <relocation>
-                                    <pattern>org.HdrHistogram</pattern>
-                                    <shadedPattern>${shadingPrefix}.org.HdrHistogram</shadedPattern>
-                                </relocation>
-                                <relocation>
-                                    <pattern>org.LatencyUtils</pattern>
-                                    <shadedPattern>${shadingPrefix}.org.LatencyUtils</shadedPattern>
                                 </relocation>
                                 <relocation>
                                     <pattern>org.reactivestreams</pattern>
@@ -506,10 +506,12 @@
                                     <pattern>reactor</pattern>
                                     <shadedPattern>${shadingPrefix}.reactor</shadedPattern>
                                 </relocation>
+                                <!-- Used in hadoop jars -->
                                 <relocation>
                                     <pattern>javax.activation</pattern>
                                     <shadedPattern>${shadingPrefix}.javax.activation</shadedPattern>
                                 </relocation>
+                                <!-- Do not relocate jar dependencies that form the core connector implementation -->
                                 <relocation>
                                     <pattern>com.microsoft.azure</pattern>
                                     <shadedPattern>${shadingPrefix}.com.microsoft.azure</shadedPattern>
@@ -540,22 +542,17 @@
                                     <pattern>com.microsoft.aad</pattern>
                                     <shadedPattern>${shadingPrefix}.com.microsoft.aad</shadedPattern>
                                 </relocation>
+                                <!-- Used in MSAL -->
                                 <relocation>
                                     <pattern>com.nimbusds</pattern>
                                     <shadedPattern>${shadingPrefix}.com.nimbusds</shadedPattern>
                                 </relocation>
-                                <relocation>
-                                    <pattern>com.sun.jna</pattern>
-                                    <shadedPattern>${shadingPrefix}.com.sun.jna</shadedPattern>
-                                </relocation>
+                                <!-- Used in KV -->
                                 <relocation>
                                     <pattern>net.minidev</pattern>
                                     <shadedPattern>${shadingPrefix}.net.minidev</shadedPattern>
                                 </relocation>
-                                <relocation>
-                                    <pattern>org.objectweb</pattern>
-                                    <shadedPattern>${shadingPrefix}.org.objectweb</shadedPattern>
-                                </relocation>
+                                <!-- Used in MSAL -->
                                 <relocation>
                                     <pattern>net.jcip</pattern>
                                     <shadedPattern>${shadingPrefix}.net.jcip</shadedPattern>
@@ -614,15 +611,12 @@
                                     <resource>META-INF/io.netty.versions.properties</resource>
                                     <ordinalKey>ordinal</ordinalKey>
                                     <!-- optional configuration -->
-
                                     <alreadyMergedKey>already_merged</alreadyMergedKey>
                                     <defaultOrdinal>0</defaultOrdinal>
                                     <reverseOrder>false</reverseOrder>
                                 </transformer>
-
                                 <!-- this handles and properly merges the content of META-INF/services in the dependencies -->
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
-
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
                                     <!-- once 3.3.0 shade plugin is release upgrade the maven plugin and remove AppendingTransformer
                                       https://issues.apache.org/jira/browse/MSHADE-371 -->
@@ -634,10 +628,7 @@
                                       https://issues.apache.org/jira/browse/MSHADE-371 -->
                                     <resource>META-INF/LICENSE.md</resource>
                                 </transformer>
-
-                                <!-- TODO moderakh validate that netty native libs e.g, boringssl actually is used. -->
                             </transformers>
-
                             <!-- When true, it will attempt to shade the contents of the java source files when creating the sources jar. -->
                             <shadeSourcesContent>true</shadeSourcesContent>
                             <createDependencyReducedPom>true</createDependencyReducedPom>
@@ -645,18 +636,6 @@
                     </execution>
                 </executions>
             </plugin>
-
-
-
-
-
-
-
-
-
-
-
-
         </plugins>
     </build>
 </project>
