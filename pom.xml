@@ -22,8 +22,6 @@
         <azure.bom.version>1.2.4</azure.bom.version>
         <!-- Deprecate only after full migration to azure storage 12-->
         <azure-storage.version>8.6.6</azure-storage.version>
-        <azure-storage.queue.version>12.17.1</azure-storage.queue.version>
-        <azure-storage.storage.common>12.21.1</azure-storage.storage.common>
         <jsonsmart.version>2.4.10</jsonsmart.version>
         <commons.lang3.version>3.12.0</commons.lang3.version>
         <hadoop.version>3.3.6</hadoop.version>
