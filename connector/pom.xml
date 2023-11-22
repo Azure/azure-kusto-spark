@@ -456,6 +456,9 @@
                     <target>${java.target.version}</target>
                 </configuration>
             </plugin>
+            <!--
+            Perform the maven shade to have all the specific dependencies used in the connector
+            -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
@@ -468,6 +471,11 @@
                             <goal>shade</goal>
                         </goals>
                         <configuration>
+                            <!--
+                            Shade the core dependencies internal dependencies of com.azure
+                            This will include the packages com.azure.core, com.azure.configuration etc. which are the
+                            dependencies used.
+                            -->
                             <relocations>
                                 <relocation>
                                     <pattern>com.azure</pattern>
@@ -481,6 +489,10 @@
                                     <pattern>scala.concurrent.java8</pattern>
                                     <shadedPattern>${shadingPrefix}.scala.concurrent.java8</shadedPattern>
                                 </relocation>
+                                <!--
+                                com.azure.netty uses a lot of dependencies from netty which is a transitive dependency
+                                used for the ASYNC HTTP clients used in the frameworks
+                                -->
                                 <relocation>
                                     <pattern>io.netty</pattern>
                                     <shadedPattern>${shadingPrefix}.io.netty</shadedPattern>
@@ -489,6 +501,11 @@
                                     <pattern>org.codehaus</pattern>
                                     <shadedPattern>${shadingPrefix}.org.codehaus</shadedPattern>
                                 </relocation>
+                                <!--
+                                Jackson versions used in the connector may be different from the ones used in the ADB and
+                                any external loaded libraries. This relocation will ensure that the connector will use the
+                                versions used in teh connector
+                                -->
                                 <relocation>
                                     <pattern>com.fasterxml</pattern>
                                     <shadedPattern>${shadingPrefix}.com.fasterxml</shadedPattern>
@@ -511,7 +528,11 @@
                                     <pattern>javax.activation</pattern>
                                     <shadedPattern>${shadingPrefix}.javax.activation</shadedPattern>
                                 </relocation>
-                                <!-- Do not relocate jar dependencies that form the core connector implementation -->
+                                <!--
+                                Relocate com.microsoft.azure.* libraries such as storage, queue and identity.
+                                However exclude the kusto libraries as they are referenced directly and are in this
+                                code base and hence will not have any conflicts of packages/versions
+                                -->
                                 <relocation>
                                     <pattern>com.microsoft.azure</pattern>
                                     <shadedPattern>${shadingPrefix}.com.microsoft.azure</shadedPattern>
@@ -530,14 +551,12 @@
                                     <pattern>com.microsoft.applicationinsights</pattern>
                                     <shadedPattern>${shadingPrefix}.com.microsoft.applicationinsights</shadedPattern>
                                 </relocation>
+                                <!-- Guava has transient dependencies -->
                                 <relocation>
                                     <pattern>com.google</pattern>
                                     <shadedPattern>${shadingPrefix}.com.google</shadedPattern>
                                 </relocation>
-                                <relocation>
-                                    <pattern>com.azure.resourcemanager</pattern>
-                                    <shadedPattern>${shadingPrefix}.com.azure.resourcemanager</shadedPattern>
-                                </relocation>
+                                <!-- ADAL/MSAL & Other transient dependency -->
                                 <relocation>
                                     <pattern>com.microsoft.aad</pattern>
                                     <shadedPattern>${shadingPrefix}.com.microsoft.aad</shadedPattern>
@@ -622,7 +641,6 @@
                                       https://issues.apache.org/jira/browse/MSHADE-371 -->
                                     <resource>META-INF/NOTICE.md</resource>
                                 </transformer>
-
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
                                     <!-- once 3.3.0 shade plugin is release upgrade the maven plugin and remove AppendingTransformer
                                       https://issues.apache.org/jira/browse/MSHADE-371 -->
