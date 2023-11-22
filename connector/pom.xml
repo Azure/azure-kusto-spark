@@ -458,7 +458,7 @@
             </plugin>
             <!--
             Perform the maven shade to have all the specific dependencies used in the connector
-            Use the most used libraries in the shade. This will ensure that the connector will not have any conflicts
+            Use the most (globally) used libraries in the shade. This will ensure that the connector will not have any conflicts
             with the libraries used in the spark cluster (or bundled libraries in ADB)
             The spark connector uses the JavaSDK, which takes in dependencies kusto-data and kusto-ingest. These use
             the azure-storage-blob/queue and azure-storage libraries & azure-sdk dependencies. These have transient dependencies
