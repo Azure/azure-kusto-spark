@@ -118,7 +118,23 @@
                     <groupId>io.projectreactor.netty</groupId>
                     <artifactId>reactor-netty-core</artifactId>
                 </exclusion>
+                <exclusion>
+                    <groupId>com.azure</groupId>
+                    <artifactId>azure-storage-queue</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.azure</groupId>
+                    <artifactId>azure-storage-common</artifactId>
+                </exclusion>
             </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>com.azure</groupId>
+            <artifactId>azure-storage-queue</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.azure</groupId>
+            <artifactId>azure-storage-common</artifactId>
         </dependency>
         <dependency>
             <groupId>io.netty</groupId>
@@ -455,209 +471,6 @@
                     <source>${java.source.version}</source>
                     <target>${java.target.version}</target>
                 </configuration>
-            </plugin>
-            <!--
-            Perform the maven shade to have all the specific dependencies used in the connector
-            Use the most (globally) used libraries in the shade. This will ensure that the connector will not have any conflicts
-            with the libraries used in the spark cluster (or bundled libraries in ADB)
-            The spark connector uses the JavaSDK, which takes in dependencies kusto-data and kusto-ingest. These use
-            the azure-storage-blob/queue and azure-storage libraries & azure-sdk dependencies. These have transient dependencies
-            on netty, jackson which are the popular libraries that cause conflicts.
-            -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-shade-plugin</artifactId>
-                <version>${maven.shade.plugin.version}</version> <!-- {x-version-update;org.apache.maven.plugins:maven-shade-plugin;external_dependency} -->
-                <executions>
-                    <execution>
-                        <id>shade</id>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>shade</goal>
-                        </goals>
-                        <configuration>
-                            <!--
-                            Shade the core dependencies internal dependencies of com.azure
-                            This will include the packages com.azure.core, com.azure.configuration etc. which are the
-                            dependencies used.
-                            -->
-                            <relocations>
-                                <relocation>
-                                    <pattern>com.azure</pattern>
-                                    <shadedPattern>${shadingPrefix}.com.azure</shadedPattern>
-                                </relocation>
-                                <relocation>
-                                    <pattern>scala.compat.java8</pattern>
-                                    <shadedPattern>${shadingPrefix}.scala.compat.java8</shadedPattern>
-                                </relocation>
-                                <relocation>
-                                    <pattern>scala.concurrent.java8</pattern>
-                                    <shadedPattern>${shadingPrefix}.scala.concurrent.java8</shadedPattern>
-                                </relocation>
-                                <!--
-                                com.azure.netty uses a lot of dependencies from netty which is a transitive dependency
-                                used for the ASYNC HTTP clients used in the frameworks
-                                -->
-                                <relocation>
-                                    <pattern>io.netty</pattern>
-                                    <shadedPattern>${shadingPrefix}.io.netty</shadedPattern>
-                                </relocation>
-                                <relocation>
-                                    <pattern>org.codehaus</pattern>
-                                    <shadedPattern>${shadingPrefix}.org.codehaus</shadedPattern>
-                                </relocation>
-                                <!--
-                                Jackson versions used in the connector may be different from the ones used in the ADB and
-                                any external loaded libraries. This relocation will ensure that the connector will use the
-                                versions used in teh connector
-                                -->
-                                <relocation>
-                                    <pattern>com.fasterxml</pattern>
-                                    <shadedPattern>${shadingPrefix}.com.fasterxml</shadedPattern>
-                                </relocation>
-                                <!-- Used in Jackson -->
-                                <relocation>
-                                    <pattern>com.thoughtworks.paranamer</pattern>
-                                    <shadedPattern>${shadingPrefix}.com.thoughtworks.paranamer</shadedPattern>
-                                </relocation>
-                                <relocation>
-                                    <pattern>org.reactivestreams</pattern>
-                                    <shadedPattern>${shadingPrefix}.org.reactivestreams</shadedPattern>
-                                </relocation>
-                                <relocation>
-                                    <pattern>reactor</pattern>
-                                    <shadedPattern>${shadingPrefix}.reactor</shadedPattern>
-                                </relocation>
-                                <!-- Used in hadoop jars -->
-                                <relocation>
-                                    <pattern>javax.activation</pattern>
-                                    <shadedPattern>${shadingPrefix}.javax.activation</shadedPattern>
-                                </relocation>
-                                <!--
-                                Relocate com.microsoft.azure.* libraries such as storage, queue and identity.
-                                However exclude the kusto libraries as they are referenced directly and are in this
-                                code base and hence will not have any conflicts of packages/versions
-                                -->
-                                <relocation>
-                                    <pattern>com.microsoft.azure</pattern>
-                                    <shadedPattern>${shadingPrefix}.com.microsoft.azure</shadedPattern>
-                                    <excludes>
-                                        <exclude>com.microsoft.kusto.spark.*</exclude>
-                                        <exclude>com.microsoft.kusto.spark.authentication</exclude>
-                                        <exclude>com.microsoft.kusto.spark.common</exclude>
-                                        <exclude>com.microsoft.kusto.spark.datasink</exclude>
-                                        <exclude>com.microsoft.kusto.spark.datasource</exclude>
-                                        <exclude>com.microsoft.kusto.spark.exceptions</exclude>
-                                        <exclude>com.microsoft.kusto.spark.utils</exclude>
-                                        <exclude>com.microsoft.kusto.spark.sql.extension</exclude>
-                                    </excludes>
-                                </relocation>
-                                <relocation>
-                                    <pattern>com.microsoft.applicationinsights</pattern>
-                                    <shadedPattern>${shadingPrefix}.com.microsoft.applicationinsights</shadedPattern>
-                                </relocation>
-                                <!-- Guava has transient dependencies -->
-                                <relocation>
-                                    <pattern>com.google</pattern>
-                                    <shadedPattern>${shadingPrefix}.com.google</shadedPattern>
-                                </relocation>
-                                <!-- ADAL/MSAL & Other transient dependency -->
-                                <relocation>
-                                    <pattern>com.microsoft.aad</pattern>
-                                    <shadedPattern>${shadingPrefix}.com.microsoft.aad</shadedPattern>
-                                </relocation>
-                                <!-- Used in MSAL -->
-                                <relocation>
-                                    <pattern>com.nimbusds</pattern>
-                                    <shadedPattern>${shadingPrefix}.com.nimbusds</shadedPattern>
-                                </relocation>
-                                <!-- Used in KV -->
-                                <relocation>
-                                    <pattern>net.minidev</pattern>
-                                    <shadedPattern>${shadingPrefix}.net.minidev</shadedPattern>
-                                </relocation>
-                                <!-- Used in MSAL -->
-                                <relocation>
-                                    <pattern>net.jcip</pattern>
-                                    <shadedPattern>${shadingPrefix}.net.jcip</shadedPattern>
-                                </relocation>
-                            </relocations>
-                            <filters>
-                                <filter>
-                                    <artifact>com.microsoft.azure:applicationinsights-core</artifact>
-                                    <includes>
-                                        <include>**</include>
-                                    </includes>
-                                </filter>
-                                <filter>
-                                    <artifact>*:*</artifact>
-                                    <excludes>
-                                        <!-- suppress warning: Discovered module-info.class. Shading will break its strong encapsulation. -->
-                                        <!-- https://stackoverflow.com/questions/56063566/maven-how-to-remove-module-info-class-warning-for-shaded-jar -->
-                                        <exclude>module-info.class</exclude>
-                                        <!-- remove the dependencies signature as not relevant-->
-                                        <exclude>META-INF/*.MF</exclude>
-                                        <exclude>META-INF/*.SF</exclude>
-                                        <exclude>META-INF/*.DSA</exclude>
-                                        <exclude>META-INF/*.RSA</exclude>
-                                    </excludes>
-                                </filter>
-                            </filters>
-                            <artifactSet>
-                                <excludes>
-                                    <exclude>org.slf4j</exclude>
-                                    <exclude>org.apache.hadoop:*</exclude>
-                                    <exclude>org.apache.spark:*</exclude>
-                                    <exclude>org.scala-lang:*</exclude>
-                                </excludes>
-                            </artifactSet>
-                            <minimizeJar>true</minimizeJar>
-                            <transformers>
-                                <!-- prevents apache license duplication -->
-                                <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheLicenseResourceTransformer">
-                                </transformer>
-
-                                <!-- Some licenses (including the Apache License, Version 2)
-                                 require that notices are preserved by downstream distributors.
-                                  ApacheNoticeResourceTransformer automates the assembly of an appropriate NOTICE. -->
-                                <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheNoticeResourceTransformer">
-                                    <addHeader>false</addHeader>
-                                </transformer>
-
-                                <!-- The PropertiesTransformer allows a set of properties files to be merged
-                                 and to resolve conflicts based on an ordinal giving the priority of each file.
-                                 An optional alreadyMergedKey enables to have a boolean flag in the file which,
-                                 if set to true, request to use the file as it as the result of the merge.
-                                 If two files are considered complete in the merge process then the shade will fail.-->
-                                <transformer implementation="org.apache.maven.plugins.shade.resource.properties.PropertiesTransformer">
-                                    <!-- required configuration -->
-                                    <!-- merges all netty lib version files into one file -->
-                                    <resource>META-INF/io.netty.versions.properties</resource>
-                                    <ordinalKey>ordinal</ordinalKey>
-                                    <!-- optional configuration -->
-                                    <alreadyMergedKey>already_merged</alreadyMergedKey>
-                                    <defaultOrdinal>0</defaultOrdinal>
-                                    <reverseOrder>false</reverseOrder>
-                                </transformer>
-                                <!-- this handles and properly merges the content of META-INF/services in the dependencies -->
-                                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
-                                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
-                                    <!-- once 3.3.0 shade plugin is release upgrade the maven plugin and remove AppendingTransformer
-                                      https://issues.apache.org/jira/browse/MSHADE-371 -->
-                                    <resource>META-INF/NOTICE.md</resource>
-                                </transformer>
-                                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
-                                    <!-- once 3.3.0 shade plugin is release upgrade the maven plugin and remove AppendingTransformer
-                                      https://issues.apache.org/jira/browse/MSHADE-371 -->
-                                    <resource>META-INF/LICENSE.md</resource>
-                                </transformer>
-                            </transformers>
-                            <!-- When true, it will attempt to shade the contents of the java source files when creating the sources jar. -->
-                            <shadeSourcesContent>true</shadeSourcesContent>
-                            <createDependencyReducedPom>true</createDependencyReducedPom>
-                        </configuration>
-                    </execution>
-                </executions>
             </plugin>
         </plugins>
     </build>
