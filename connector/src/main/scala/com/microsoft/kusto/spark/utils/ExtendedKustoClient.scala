@@ -357,8 +357,8 @@ class ExtendedKustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcs
     RetryConfig.custom
       .maxAttempts(MaxCommandsRetryAttempts)
       .intervalFunction(sleepConfig)
-      .retryOnException((e: Throwable) =>
-        e.isInstanceOf[KustoDataExceptionBase] && !e.asInstanceOf[KustoDataExceptionBase].isPermanent).build
+      .retryOnException(JavaConverter.asJavaPredicate((e: Throwable) =>
+        e.isInstanceOf[KustoDataExceptionBase] && !e.asInstanceOf[KustoDataExceptionBase].isPermanent)).build
   }
 
   private def buildRetryConfigForAsyncOp = {
