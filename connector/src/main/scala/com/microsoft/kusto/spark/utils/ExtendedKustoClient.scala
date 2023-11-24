@@ -1,10 +1,11 @@
 package com.microsoft.kusto.spark.utils
 
-import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import com.fasterxml.jackson.databind.node.ArrayNode
+import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
+import com.microsoft.azure.kusto.data._
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.exceptions.KustoDataExceptionBase
-import com.microsoft.azure.kusto.data._
+import com.microsoft.azure.kusto.ingest.resources.ResourceWithSas
 import com.microsoft.azure.kusto.ingest.{IngestClientFactory, QueuedIngestClient}
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.KustoWriter.DelayPeriodBetweenCalls
@@ -34,38 +35,16 @@ class ExtendedKustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcs
   // Reading process does not require ingest client to start working
   lazy val dmClient: Client = ClientFactory.createClient(ingestKcsb)
   lazy val ingestClient: QueuedIngestClient = IngestClientFactory.createClient(ingestKcsb)
-  private val exportProviderEntryCreator = (c: ContainerAndSas) => new TransientStorageCredentials(c.containerUrl + c.sas)
-  private val ingestProviderEntryCreator = (c: ContainerAndSas) => c
-  private lazy val ingestContainersContainerProvider = new ContainerProvider[ContainerAndSas](this, clusterAlias,
-    generateCreateTmpStorageCommand(), ingestProviderEntryCreator)
+  private lazy val ingestContainersContainerProvider = new ContainerProvider(this, clusterAlias,
+    generateCreateTmpStorageCommand())
   private lazy val exportContainersContainerProvider = new ContainerProvider(this, clusterAlias,
-    generateGetExportContainersCommand(), exportProviderEntryCreator)
+    generateGetExportContainersCommand())
   RetryConfig.ofDefaults()
-
   private val retryConfig = buildRetryConfig
   private val retryConfigAsyncOp = buildRetryConfigForAsyncOp
 
   private val myName = this.getClass.getSimpleName
   private val durationFormat = "dd:HH:mm:ss"
-
-  private def buildRetryConfig = {
-    val sleepConfig = IntervalFunction.ofExponentialRandomBackoff(
-      ExtendedKustoClient.BaseIntervalMs, IntervalFunction.DEFAULT_MULTIPLIER, IntervalFunction.DEFAULT_RANDOMIZATION_FACTOR, ExtendedKustoClient.MaxRetryIntervalMs)
-    RetryConfig.custom
-      .maxAttempts(MaxCommandsRetryAttempts)
-      .intervalFunction(sleepConfig)
-      .retryOnException(JavaConverter.asJavaPredicate((e: Throwable) =>
-        e.isInstanceOf[KustoDataExceptionBase] && !e.asInstanceOf[KustoDataExceptionBase].isPermanent)).build
-  }
-
-  private def buildRetryConfigForAsyncOp = {
-    val sleepConfig = IntervalFunction.ofExponentialRandomBackoff(
-      ExtendedKustoClient.BaseIntervalMs, IntervalFunction.DEFAULT_MULTIPLIER, IntervalFunction.DEFAULT_RANDOMIZATION_FACTOR, ExtendedKustoClient.MaxRetryIntervalMs)
-    RetryConfig.custom
-      .maxAttempts(MaxCommandsRetryAttempts)
-      .intervalFunction(sleepConfig)
-      .retryExceptions(classOf[FailedOperationException]).build
-  }
 
   def initializeTablesBySchema(tableCoordinates: KustoCoordinates,
                                tmpTableName: String,
@@ -96,11 +75,11 @@ class ExtendedKustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcs
     } else {
       // Table exists. Parse kusto table schema and check if it matches the dataframes schema
       val transformedTargetSchema = new ObjectMapper().createArrayNode()
-         targetSchema.foreach {
-           case (value) => {
-             transformedTargetSchema.add(value)
-           }
-         }
+      targetSchema.foreach {
+        case (value) => {
+          transformedTargetSchema.add(value)
+        }
+      }
       tmpTableSchema = extractSchemaFromResultTable(transformedTargetSchema)
     }
 
@@ -126,17 +105,139 @@ class ExtendedKustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcs
     }
   }
 
+  def executeDM(command: String, maybeCrp: Option[ClientRequestProperties], retryConfig: Option[RetryConfig] = None): KustoOperationResult = {
+    KDSU.retryApplyFunction(() => dmClient.execute(ExtendedKustoClient.DefaultDb, command, maybeCrp.orNull), retryConfig.getOrElse(this.retryConfig),
+      "Execute DM command with retries")
+  }
+
   def getTempBlobForIngestion: ContainerAndSas = {
     ingestContainersContainerProvider.getContainer
   }
 
+  def reportIngestionResult(resource: ResourceWithSas[_], success: Boolean): Unit = {
+    try {
+      ingestClient.getResourceManager.reportIngestionResult(resource, success)
+    } catch {
+      case exception: Exception => KDSU.logDebug(myName, s"Exception in repoting ingestion result : ${exception.getMessage} ")
+    }
+  }
+
   def getTempBlobsForExport: TransientStorageParameters = {
-    val storage = exportContainersContainerProvider.getAllContainers
-    val endpointSuffix = storage.head.domainSuffix
+    val storage = exportContainersContainerProvider.getExportContainers
+    val transientStorage = storage.map(c=>new TransientStorageCredentials(c.containerUrl + c.sas))
+    val endpointSuffix = transientStorage.head.domainSuffix
     if (StringUtils.isNoneBlank(endpointSuffix)) {
-      new TransientStorageParameters(storage.toArray, endpointSuffix)
+      new TransientStorageParameters(transientStorage.toArray, endpointSuffix)
     } else {
-      new TransientStorageParameters(storage.toArray)
+      new TransientStorageParameters(transientStorage.toArray)
+    }
+  }
+
+  def moveExtents(database: String, tmpTableName: String, targetTable: String, crp: ClientRequestProperties,
+                  writeOptions: WriteOptions, sinkStartTime: Instant): Unit = {
+    val extentsCountQuery = executeEngine(database, generateExtentsCountCommand(tmpTableName), crp).getPrimaryResults
+    extentsCountQuery.next()
+    val extentsCount = extentsCountQuery.getInt(0)
+    if (extentsCount > writeOptions.minimalExtentsCountForSplitMerge) {
+      val nodeCountQuery = executeEngine(database, generateNodesCountCommand(), crp).getPrimaryResults
+      nodeCountQuery.next()
+      val nodeCount = nodeCountQuery.getInt(0)
+      moveExtentsWithRetries(Some(nodeCount * writeOptions.minimalExtentsCountForSplitMerge), extentsCount, database,
+        tmpTableName, targetTable, sinkStartTime, crp, writeOptions)
+    } else {
+      moveExtentsWithRetries(None, extentsCount, database,
+        tmpTableName, targetTable, sinkStartTime, crp, writeOptions)
+    }
+  }
+
+  def moveExtentsWithRetries(batchSize: Option[Int], totalAmount: Int, database: String, tmpTableName: String, targetTable: String, ingestionStartTime: Instant,
+                             crp: ClientRequestProperties, writeOptions: WriteOptions): Unit = {
+    var extentsProcessed = 0
+    var retry = 0
+    var curBatchSize = batchSize.getOrElse(0)
+    var delayPeriodBetweenCalls = DelayPeriodBetweenCalls
+    var consecutiveSuccesses = 0
+    val useMaterializedViewFlag = shouldUseMaterializedViewFlag(database, targetTable, crp)
+    val firstMoveRetries = writeOptions.maxRetriesOnMoveExtents
+    val secondMovesRetries = Math.max(10, writeOptions.maxRetriesOnMoveExtents)
+    while (extentsProcessed < totalAmount) {
+      var error: Object = null
+      var res: Option[KustoResultSetTable] = None
+      var failed = false
+      // Execute move batch and keep any transient error for handling
+      try {
+        val timeRange = Array[Instant](ingestionStartTime, Instant.now())
+        val operation = executeEngine(database, generateTableMoveExtentsAsyncCommand(tmpTableName,
+          targetTable, timeRange, if (batchSize.isEmpty) None else Some(curBatchSize), useMaterializedViewFlag), crp).getPrimaryResults
+        val operationResult = KDSU.verifyAsyncCommandCompletion(engineClient, database, operation, samplePeriod =
+          KustoConstants
+            .DefaultPeriodicSamplePeriod, writeOptions.timeout, s"move extents to destination table '$targetTable' ",
+          myName,
+          writeOptions.requestId)
+        // TODO: use count over the show operations
+        res = Some(executeEngine(database, generateShowOperationDetails(operationResult.get.getString(0)), crp)
+          .getPrimaryResults)
+        if (res.get.count() == 0) {
+          failed = handleNoResults(totalAmount, extentsProcessed, database, tmpTableName, crp)
+          if (!failed) {
+            // No more extents to move - succeeded
+            extentsProcessed = totalAmount
+          }
+        }
+      } catch {
+        // We don't check for the shouldRetry or permanent errors because we know
+        // The issue is not with syntax or non-existing tables, it can only be transient
+        // issues that might be solved in retries even if engine reports them as permanent
+        case ex: FailedOperationException =>
+          if (ex.getResult.isDefined) {
+            error = ex.getResult.get.getString("Status")
+          }
+          failed = true
+        case ex: KustoDataExceptionBase =>
+          error = ExceptionUtils.getStackTrace(ex)
+          failed = true
+      }
+
+      // When some node fails the move - it will put "failed" as the target extent id
+      if (res.isDefined && error == null) {
+        val errorInResult = findErrorInResult(res.get)
+        failed = errorInResult._1
+        error = errorInResult._2
+      }
+
+      if (failed) {
+        consecutiveSuccesses = 0
+        retry += 1
+        val extentsProcessedErrorString = if (extentsProcessed > 0) s"and ${extentsProcessed} were moved" else ""
+        if (extentsProcessed > 0) {
+          // This is not the first move command
+          if (retry > secondMovesRetries)
+            throw RetriesExhaustedException(s"Failed to move extents after $retry tries$extentsProcessedErrorString.")
+        } else if (retry > firstMoveRetries)
+          throw RetriesExhaustedException(s"Failed to move extents after $retry tries$extentsProcessedErrorString.")
+
+        // Lower batch size, increase delay
+        val params = handleRetryFail(curBatchSize, retry, delayPeriodBetweenCalls, targetTable, error)
+
+        curBatchSize = params._1
+        delayPeriodBetweenCalls = params._2
+      } else {
+        consecutiveSuccesses += 1
+        if (consecutiveSuccesses > 2) {
+          // After curBatchSize size has decreased - we can lower it again according to original batch size
+          curBatchSize = Math.min(curBatchSize * 2, batchSize.getOrElse(curBatchSize * 2))
+        }
+
+        extentsProcessed += res.get.count()
+        val batchSizeString = if (batchSize.isDefined) s"maxBatch: $curBatchSize," else ""
+        KDSU.logDebug(myName, s"Moving extents batch succeeded at retry: $retry," +
+          s" $batchSizeString consecutive successfull batches: $consecutiveSuccesses, successes this " +
+          s"batch: ${res.get.count()}," +
+          s" extentsProcessed: $extentsProcessed, backoff: $delayPeriodBetweenCalls, total:$totalAmount")
+
+        retry = 0
+        delayPeriodBetweenCalls = DelayPeriodBetweenCalls
+      }
     }
   }
 
@@ -213,112 +314,60 @@ class ExtendedKustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcs
     }
   }
 
-  def moveExtentsWithRetries(batchSize: Option[Int], totalAmount: Int, database: String, tmpTableName: String, targetTable: String, ingestionStartTime: Instant,
-                             crp: ClientRequestProperties, writeOptions: WriteOptions): Unit = {
-    var extentsProcessed = 0
-    var retry = 0
-    var curBatchSize = batchSize.getOrElse(0)
-    var delayPeriodBetweenCalls = DelayPeriodBetweenCalls
-    var consecutiveSuccesses = 0
-    val useMaterializedViewFlag = shouldUseMaterializedViewFlag(database, targetTable, crp)
-    val firstMoveRetries = writeOptions.maxRetriesOnMoveExtents
-    val secondMovesRetries = Math.max(10, writeOptions.maxRetriesOnMoveExtents)
-    while (extentsProcessed < totalAmount) {
-      var error: Object = null
-      var res: Option[KustoResultSetTable] = None
-      var failed = false
-      // Execute move batch and keep any transient error for handling
-      try {
-        val timeRange = Array[Instant](ingestionStartTime, Instant.now())
-        val operation = executeEngine(database, generateTableMoveExtentsAsyncCommand(tmpTableName,
-          targetTable, timeRange ,  if (batchSize.isEmpty) None else Some(curBatchSize), useMaterializedViewFlag), crp).getPrimaryResults
-        val operationResult = KDSU.verifyAsyncCommandCompletion(engineClient, database, operation, samplePeriod =
-          KustoConstants
-            .DefaultPeriodicSamplePeriod, writeOptions.timeout, s"move extents to destination table '$targetTable' ",
-          myName,
-          writeOptions.requestId)
-        // TODO: use count over the show operations
-        res = Some(executeEngine(database, generateShowOperationDetails(operationResult.get.getString(0)), crp)
-          .getPrimaryResults)
-        if (res.get.count() == 0) {
-          failed = handleNoResults(totalAmount, extentsProcessed, database, tmpTableName, crp)
-          if (!failed) {
-            // No more extents to move - succeeded
-            extentsProcessed = totalAmount
+  def shouldIngestData(tableCoordinates: KustoCoordinates, ingestionProperties: Option[String],
+                       tableExists: Boolean, crp: ClientRequestProperties): Boolean = {
+    var shouldIngest = true
+
+    if (tableExists && ingestionProperties.isDefined) {
+      val ingestIfNotExistsTags = SparkIngestionProperties.fromString(ingestionProperties.get).ingestIfNotExists
+      if (ingestIfNotExistsTags != null && !ingestIfNotExistsTags.isEmpty) {
+        val ingestIfNotExistsTagsSet = ingestIfNotExistsTags.asScala.toSet
+
+        val res = fetchTableExtentsTags(tableCoordinates.database, tableCoordinates.table.get, crp)
+        if (res.next()) {
+          val tagsArray = res.getObject(0).asInstanceOf[ArrayNode]
+          for (i <- 0 until tagsArray.size()) {
+            if (ingestIfNotExistsTagsSet.contains(tagsArray.get(i).asText())) {
+              shouldIngest = false
+            }
           }
         }
-      } catch {
-        // We don't check for the shouldRetry or permanent errors because we know
-        // The issue is not with syntax or non-existing tables, it can only be transient
-        // issues that might be solved in retries even if engine reports them as permanent
-        case ex: FailedOperationException =>
-          if (ex.getResult.isDefined) {
-            error = ex.getResult.get.getString("Status")
-          }
-          failed = true
-        case ex: KustoDataExceptionBase =>
-            error = ExceptionUtils.getStackTrace(ex)
-            failed = true
-      }
-
-      // When some node fails the move - it will put "failed" as the target extent id
-      if (res.isDefined && error == null) {
-        val errorInResult = findErrorInResult(res.get)
-        failed = errorInResult._1
-        error = errorInResult._2
-      }
-
-      if (failed) {
-        consecutiveSuccesses = 0
-        retry += 1
-        val extentsProcessedErrorString = if (extentsProcessed > 0) s"and ${extentsProcessed} were moved" else ""
-        if (extentsProcessed > 0) {
-          // This is not the first move command
-          if (retry > secondMovesRetries)
-            throw RetriesExhaustedException(s"Failed to move extents after $retry tries$extentsProcessedErrorString.")
-        } else if (retry > firstMoveRetries)
-            throw RetriesExhaustedException(s"Failed to move extents after $retry tries$extentsProcessedErrorString.")
-
-        // Lower batch size, increase delay
-        val params = handleRetryFail(curBatchSize, retry, delayPeriodBetweenCalls, targetTable, error)
-
-        curBatchSize = params._1
-        delayPeriodBetweenCalls = params._2
-      } else {
-        consecutiveSuccesses += 1
-        if (consecutiveSuccesses > 2) {
-          // After curBatchSize size has decreased - we can lower it again according to original batch size
-          curBatchSize = Math.min(curBatchSize * 2, batchSize.getOrElse(curBatchSize * 2))
-        }
-
-        extentsProcessed += res.get.count()
-        val batchSizeString = if (batchSize.isDefined) s"maxBatch: $curBatchSize," else ""
-        KDSU.logDebug(myName, s"Moving extents batch succeeded at retry: $retry," +
-          s" $batchSizeString consecutive successfull batches: $consecutiveSuccesses, successes this " +
-          s"batch: ${res.get.count()}," +
-          s" extentsProcessed: $extentsProcessed, backoff: $delayPeriodBetweenCalls, total:$totalAmount")
-
-        retry = 0
-        delayPeriodBetweenCalls = DelayPeriodBetweenCalls
       }
     }
+
+    shouldIngest
   }
 
-  def moveExtents(database: String, tmpTableName: String, targetTable: String, crp: ClientRequestProperties,
-                  writeOptions: WriteOptions, sinkStartTime: Instant): Unit = {
-    val extentsCountQuery = executeEngine(database, generateExtentsCountCommand(tmpTableName), crp).getPrimaryResults
-    extentsCountQuery.next()
-    val extentsCount = extentsCountQuery.getInt(0)
-    if (extentsCount > writeOptions.minimalExtentsCountForSplitMerge) {
-      val nodeCountQuery = executeEngine(database, generateNodesCountCommand(), crp).getPrimaryResults
-      nodeCountQuery.next()
-      val nodeCount = nodeCountQuery.getInt(0)
-      moveExtentsWithRetries(Some(nodeCount * writeOptions.minimalExtentsCountForSplitMerge), extentsCount, database,
-        tmpTableName, targetTable, sinkStartTime, crp, writeOptions)
-    } else {
-      moveExtentsWithRetries(None, extentsCount, database,
-        tmpTableName, targetTable, sinkStartTime, crp, writeOptions)
-    }
+  def fetchTableExtentsTags(database: String, table: String, crp: ClientRequestProperties): KustoResultSetTable = {
+    executeEngine(database, CslCommandsGenerator.generateFetchTableIngestByTagsCommand(table), crp)
+      .getPrimaryResults
+  }
+
+  def retryAsyncOp(database: String, cmd: String, crp: ClientRequestProperties, timeout: FiniteDuration, cmdName: String, requestId: String): Option[KustoResultSetTable] = {
+    KDSU.retryApplyFunction(() => {
+      val operation = executeEngine(database, cmd, crp).getPrimaryResults
+      KDSU.verifyAsyncCommandCompletion(engineClient, database, operation, samplePeriod =
+        KustoConstants.DefaultPeriodicSamplePeriod, timeout, cmdName, myName, requestId)
+    }, retryConfigAsyncOp, cmdName)
+  }
+
+  private def buildRetryConfig = {
+    val sleepConfig = IntervalFunction.ofExponentialRandomBackoff(
+      ExtendedKustoClient.BaseIntervalMs, IntervalFunction.DEFAULT_MULTIPLIER, IntervalFunction.DEFAULT_RANDOMIZATION_FACTOR, ExtendedKustoClient.MaxRetryIntervalMs)
+    RetryConfig.custom
+      .maxAttempts(MaxCommandsRetryAttempts)
+      .intervalFunction(sleepConfig)
+      .retryOnException(JavaConverter.asJavaPredicate((e: Throwable) =>
+        e.isInstanceOf[KustoDataExceptionBase] && !e.asInstanceOf[KustoDataExceptionBase].isPermanent)).build
+  }
+
+  private def buildRetryConfigForAsyncOp = {
+    val sleepConfig = IntervalFunction.ofExponentialRandomBackoff(
+      ExtendedKustoClient.BaseIntervalMs, IntervalFunction.DEFAULT_MULTIPLIER, IntervalFunction.DEFAULT_RANDOMIZATION_FACTOR, ExtendedKustoClient.MaxRetryIntervalMs)
+    RetryConfig.custom
+      .maxAttempts(MaxCommandsRetryAttempts)
+      .intervalFunction(sleepConfig)
+      .retryExceptions(classOf[FailedOperationException]).build
   }
 
   private[kusto] def cleanupIngestionByProducts(database: String, tmpTableName: String,
@@ -332,6 +381,12 @@ class ExtendedKustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcs
       case exception: Exception =>
         KDSU.reportExceptionAndThrow(myName, exception, s"deleting temporary table $tmpTableName", database, shouldNotThrow = false)
     }
+  }
+
+  def executeEngine(database: String, command: String, crp: ClientRequestProperties, retryConfig: Option[RetryConfig] = None): KustoOperationResult = {
+    // TODO - CID should reflect retries
+    KDSU.retryApplyFunction(() => engineClient.execute(database, command, crp), retryConfig.getOrElse(this.retryConfig),
+      "Execute engine command with retries")
   }
 
   private[kusto] def setMappingOnStagingTableIfNeeded(stagingTableSparkIngestionProperties: SparkIngestionProperties,
@@ -358,54 +413,6 @@ class ExtendedKustoClient(val engineKcsb: ConnectionStringBuilder, val ingestKcs
         }
       }
     }
-  }
-
-  def fetchTableExtentsTags(database: String, table: String, crp: ClientRequestProperties): KustoResultSetTable = {
-    executeEngine(database, CslCommandsGenerator.generateFetchTableIngestByTagsCommand(table), crp)
-      .getPrimaryResults
-  }
-
-  def shouldIngestData(tableCoordinates: KustoCoordinates, ingestionProperties: Option[String],
-                       tableExists: Boolean, crp: ClientRequestProperties): Boolean = {
-    var shouldIngest = true
-
-    if (tableExists && ingestionProperties.isDefined) {
-      val ingestIfNotExistsTags = SparkIngestionProperties.fromString(ingestionProperties.get).ingestIfNotExists
-      if (ingestIfNotExistsTags != null && !ingestIfNotExistsTags.isEmpty) {
-        val ingestIfNotExistsTagsSet = ingestIfNotExistsTags.asScala.toSet
-
-        val res = fetchTableExtentsTags(tableCoordinates.database, tableCoordinates.table.get, crp)
-        if (res.next()) {
-          val tagsArray = res.getObject(0).asInstanceOf[ArrayNode]
-          for (i <- 0 until tagsArray.size()) {
-            if (ingestIfNotExistsTagsSet.contains(tagsArray.get(i).asText())) {
-              shouldIngest = false
-            }
-          }
-        }
-      }
-    }
-
-    shouldIngest
-  }
-
-  def executeEngine(database: String, command: String, crp: ClientRequestProperties, retryConfig: Option[RetryConfig] = None): KustoOperationResult = {
-    // TODO - CID should reflect retries
-    KDSU.retryApplyFunction(() => engineClient.execute(database, command, crp), retryConfig.getOrElse(this.retryConfig),
-      "Execute engine command with retries")
-  }
-
-  def executeDM(command: String, maybeCrp: Option[ClientRequestProperties], retryConfig: Option[RetryConfig] = None): KustoOperationResult = {
-    KDSU.retryApplyFunction(() => dmClient.execute(ExtendedKustoClient.DefaultDb, command, maybeCrp.orNull), retryConfig.getOrElse(this.retryConfig),
-      "Execute DM command with retries")
-  }
-
-  def retryAsyncOp(database: String, cmd: String, crp: ClientRequestProperties, timeout: FiniteDuration, cmdName: String, requestId: String): Option[KustoResultSetTable] = {
-    KDSU.retryApplyFunction(() => {
-      val operation = executeEngine(database, cmd, crp).getPrimaryResults
-      KDSU.verifyAsyncCommandCompletion(engineClient, database, operation, samplePeriod =
-        KustoConstants.DefaultPeriodicSamplePeriod, timeout, cmdName, myName, requestId)
-    }, retryConfigAsyncOp, cmdName)
   }
 }
 

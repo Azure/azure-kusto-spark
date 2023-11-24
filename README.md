@@ -12,7 +12,12 @@ Azure Data Explorer (A.K.A. [Kusto](https://azure.microsoft.com/services/data-ex
 
 [Spark](https://spark.apache.org/) is a unified analytics engine for large-scale data processing.
 
-Making Azure Data Explorer and Spark work together enables building fast and scalable applications, targeting a variety of Machine Learning, Extract-Transform-Load, Log Analytics and other data-driven scenarios. 
+Making Azure Data Explorer and Spark work together enables building fast and scalable applications, targeting a variety of Machine Learning, Extract-Transform-Load, Log Analytics and other data-driven scenarios.
+
+This connector works with the following spark environments:
+[Azure Databricks](https://azure.microsoft.com/products/databricks),
+[Azure Synapse Data Explorer](https://docs.microsoft.com/azure/synapse-analytics/data-explorer/data-explorer-overview) and
+[Real time analytics in Fabric](https://learn.microsoft.com/fabric/real-time-analytics/overview)
 
 ## Changelog
 

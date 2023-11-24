@@ -5,35 +5,32 @@ import com.fasterxml.jackson.databind.JsonNode
 import com.microsoft.azure.kusto.data.ClientRequestProperties
 import com.microsoft.azure.kusto.ingest.IngestionProperties.DataFormat
 import com.microsoft.azure.kusto.ingest.exceptions.IngestionServiceException
+import com.microsoft.azure.kusto.ingest.resources.ContainerWithSas
 import com.microsoft.azure.kusto.ingest.result.IngestionResult
 import com.microsoft.azure.kusto.ingest.source.BlobSourceInfo
 import com.microsoft.azure.kusto.ingest.{IngestClient, IngestionProperties}
-import com.microsoft.azure.storage.RetryNoRetry
 import com.microsoft.azure.storage.blob.{BlobRequestOptions, CloudBlockBlob}
-import com.microsoft.azure.storage.queue.QueueRequestOptions
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
+import com.microsoft.kusto.spark.datasink.FinalizeHelper.finalizeIngestionWhenWorkersSucceeded
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator.generateTableGetSchemaAsRowsCommand
 import com.microsoft.kusto.spark.utils.KustoConstants.{IngestSkippedTrace, MaxIngestRetryAttempts}
-import com.microsoft.kusto.spark.utils.{ExtendedKustoClient, KustoClientCache, KustoIngestionUtils,
-  KustoQueryUtils, KustoConstants => KCONST, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.{ExtendedKustoClient, KustoClientCache, KustoIngestionUtils, KustoQueryUtils, KustoConstants => KCONST, KustoDataSourceUtils => KDSU}
+import io.github.resilience4j.retry.RetryConfig
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.CollectionAccumulator
-import io.github.resilience4j.retry.RetryConfig
 
 import java.io._
 import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.security.InvalidParameterException
+import java.time.{Clock, Duration, Instant}
 import java.util
 import java.util.zip.GZIPOutputStream
 import java.util.{TimeZone, UUID}
-import com.microsoft.kusto.spark.datasink.FinalizeHelper.finalizeIngestionWhenWorkersSucceeded
-
-import java.time.{Clock, Duration, Instant}
 import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.{Failure, Success, Try}
@@ -268,9 +265,9 @@ object KustoWriter {
   = {
     val partitionId = TaskContext.getPartitionId
     val partitionIdString = TaskContext.getPartitionId.toString
-    def ingest(blob: CloudBlockBlob, size: Long, sas: String, flushImmediately: Boolean = false, blobUUID: String): Unit = {
+    def ingest(blobResource: BlobWriteResource, size: Long, sas: String, flushImmediately: Boolean = false, blobUUID: String, kustoClient: ExtendedKustoClient): Unit = {
         var props = ingestionProperties
-        val blobUri = blob.getStorageUri.getPrimaryUri.toString
+        val blobUri = blobResource.blob.getStorageUri.getPrimaryUri.toString
         if (parameters.writeOptions.ensureNoDupBlobs || (!props.getFlushImmediately && flushImmediately)) {
           // Need to copy the ingestionProperties so that only this blob ingestion will be effected
           props = SparkIngestionProperties.cloneIngestionProperties(ingestionProperties)
@@ -298,10 +295,18 @@ object KustoWriter {
           Try(
             ingestClient.ingestFromBlob(new BlobSourceInfo(blobUri + sas, size, UUID.randomUUID()), props)
           ) match {
-            case Success(x) => x
+            case Success(x) =>
+              <!-- The statuses of the ingestion operations are now set in the ingestion result -->
+              val blobUrlWithSas = s"${blobResource.blob.getStorageUri.getPrimaryUri.toString}${blobResource.sas}"
+              val containerWithSas = new ContainerWithSas(blobUrlWithSas, null)
+              kustoClient.reportIngestionResult(containerWithSas,success = true)
+              x
             case Failure(e: Throwable) =>
               KDSU.reportExceptionAndThrow(className, e, "Queueing blob for ingestion in partition " +
                 s"$partitionIdString for requestId: '${parameters.writeOptions.requestId}")
+              val blobUrlWithSas = s"${blobResource.blob.getStorageUri.getPrimaryUri.toString}${blobResource.sas}"
+              val containerWithSas = new ContainerWithSas(blobUrlWithSas, null)
+              kustoClient.reportIngestionResult(containerWithSas ,success = false)
               null
           }
         }, this.retryConfig, "Ingest into Kusto")
@@ -333,10 +338,10 @@ object KustoWriter {
           KDSU.logInfo(className, s"Sealing blob in partition $partitionIdString for requestId: '${parameters.writeOptions.requestId}', " +
             s"blob number ${row._2}, with size $count")
           finalizeBlobWrite(blobWriter)
-          ingest(blobWriter.blob, blobWriter.csvWriter.getCounter, blobWriter.sas, flushImmediately =
-            !parameters.writeOptions.disableFlushImmediately, curBlobUUID)
+          ingest(blobWriter, blobWriter.csvWriter.getCounter, blobWriter.sas, flushImmediately =
+            !parameters.writeOptions.disableFlushImmediately, curBlobUUID, kustoClient)
           curBlobUUID = UUID.randomUUID().toString
-          createBlobWriter(parameters.coordinates, parameters.tmpTableName, kustoClient, partitionIdString, row._2, curBlobUUID)
+          createBlobWriter(parameters.coordinates, parameters.tmpTableName, kustoClient, partitionIdString, row._2, curBlobUUID )
         }
     }
 
@@ -344,8 +349,8 @@ object KustoWriter {
       s"requestId: '${parameters.writeOptions.requestId}' ")
     finalizeBlobWrite(lastBlobWriter)
     if (lastBlobWriter.csvWriter.getCounter > 0) {
-      ingest(lastBlobWriter.blob, lastBlobWriter.csvWriter.getCounter, lastBlobWriter.sas,
-        flushImmediately = false, curBlobUUID)
+      ingest(lastBlobWriter, lastBlobWriter.csvWriter.getCounter, lastBlobWriter.sas,
+        flushImmediately = false, curBlobUUID, kustoClient)
     }
   }
 
