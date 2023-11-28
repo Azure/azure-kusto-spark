@@ -26,7 +26,7 @@
         <junit4.version>4.13.2</junit4.version>
         <commons.lang3.version>3.12.0</commons.lang3.version>
         <hadoop.version>3.3.6</hadoop.version>
-        <kusto.sdk.version>5.0.2</kusto.sdk.version>
+        <kusto.sdk.version>5.0.3</kusto.sdk.version>
         <java.source.version>1.8</java.source.version>
         <java.target.version>1.8</java.target.version>
         <!-- test dependencies -->
@@ -44,7 +44,7 @@
         <scalamock.version>5.2.0</scalamock.version>
         <scalastyle.maven.plugin.version>1.0.0</scalastyle.maven.plugin.version>
         <scalatest.maven.version>2.2.0</scalatest.maven.version>
-        <scalatest.version>3.2.15</scalatest.version>
+        <scalatest.version>3.2.17</scalatest.version>
         <shadingPrefix>azure_kusto_spark</shadingPrefix>
         <slf4j.version>1.8.0-beta4</slf4j.version>
         <specs2.version>3.6.5</specs2.version>
