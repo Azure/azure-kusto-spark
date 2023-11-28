@@ -39,7 +39,7 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
 
   private val loggingLevel = Option(System.getProperty("logLevel"))
   private var kustoAdminClient: Option[Client] = None
-  private var maybeKustoIngestClient: Option[Client] = None
+  private var maybeKustoDmClient: Option[Client] = None
   if (loggingLevel.isDefined) KDSU.setLoggingLevel(loggingLevel.get)
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -52,7 +52,7 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
     val ingestKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(
       ingestUrl,
       kustoConnectionOptions.appId, kustoConnectionOptions.appKey, kustoConnectionOptions.authority)
-      maybeKustoIngestClient = Some(ClientFactory.createClient(ingestKcsb))
+      maybeKustoDmClient = Some(ClientFactory.createClient(ingestKcsb))
     Try(kustoAdminClient.get.execute(kustoConnectionOptions.database, generateAlterIngestionBatchingPolicyCommand(
       "database",
       kustoConnectionOptions.database,
@@ -159,7 +159,7 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
   }
 
   "KustoSource" should "execute a read query on Kusto cluster in distributed mode" in {
-    maybeKustoIngestClient match {
+    maybeKustoDmClient match {
       case Some(kustoIngestClient) =>
         val storageWithKey = kustoIngestClient.execute(kustoConnectionOptions.database,
           generateGetExportContainersCommand()).getPrimaryResults.getData.get(0).get(0).toString
