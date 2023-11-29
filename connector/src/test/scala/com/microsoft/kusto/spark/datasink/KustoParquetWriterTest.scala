@@ -1,8 +1,14 @@
 package com.microsoft.kusto.spark.datasink
 
+import com.microsoft.azure.kusto.data.ClientRequestProperties
+import com.microsoft.kusto.spark.authentication.{AadApplicationAuthentication, KustoAuthentication}
+import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasource.TransientStorageCredentials
 import com.microsoft.kusto.spark.utils.KustoDataSourceUtils
-import org.apache.spark.sql.types.{DoubleType, LongType, StringType, StructField, StructType}
+import org.apache.parquet.Log
+import org.apache.parquet.hadoop.ParquetOutputCommitter
+import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd, SparkListenerTaskEnd}
+import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StringType, StructField, StructType}
 import org.apache.spark.sql.{Row, SparkSession}
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
@@ -16,10 +22,18 @@ class KustoParquetWriterTest extends FunSuite with BeforeAndAfterAll {
   private var kustoParquetWriter: KustoParquetWriter = _
 
   override def beforeAll(): Unit = {
+    val LOG = new Log(classOf[KustoParquetWriterTest])
     spark = SparkSession.builder()
       .appName("KustoSink")
       .master(f"local[$nofExecutors]")
+      .config("spark.sql.parquet.output.committer.class", "com.microsoft.kusto.spark.datasink.KustoParquetOutputCommitter")
+      .config("spark.sql.files.maxPartitionBytes", 100 * 1024 * 1024)
+      .config("spark.sql.sources.commitProtocolClass", "com.microsoft.kusto.spark.datasink.KustoFileCommitProtocol")
       .getOrCreate()
+      spark.conf.set("spark.sql.parquet.output.committer.class", "com.microsoft.kusto.spark.datasink.KustoParquetOutputCommitter")
+      spark.conf.set("spark.sql.files.maxPartitionBytes", 100 * 1024 * 1024)
+      spark.conf.set("spark.sql.sources.commitProtocolClass", "com.microsoft.kusto.spark.datasink.KustoFileCommitProtocol")
+
 
     /*val appId: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_APP_ID)
     val appKey: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_APP_SECRET)
@@ -44,7 +58,22 @@ class KustoParquetWriterTest extends FunSuite with BeforeAndAfterAll {
   }
 
   test("testWrite") {
-
+    val yellowSourcePath = "wasbs://nyctlc@azureopendatastorage.blob.core.windows.net/yellow/puYear=2018/puMonth=11/part-00000-tid-8898858832658823408-a1de80bd-eed3-4d11-b9d4-fa74bfbd47bc-426339-124.c000.snappy.parquet"
+    //val yellowSourcePath = "wasbs://nyctlc@azureopendatastorage.blob.core.windows.net/yellow/puYear=2018/puMonth=11/*.snappy.parquet"
+    val inputDF = spark.read.parquet(yellowSourcePath)
+    inputDF.show()
+    kustoParquetWriter = new KustoParquetWriter()
+    kustoParquetWriter.write(Some(100L),
+      inputDF,
+      KustoCoordinates(
+        clusterUrl = "https://xx.southeastasia.dev.kusto.windows.net",
+        database = "spark",
+        table = Some("yellowtaxi"),clusterAlias = "x",
+        ingestionUrl = Some("https://ingest-xx.southeastasia.dev.kusto.windows.net")),
+      AadApplicationAuthentication("xx-x-4093-9c2f-6f6c3c85b60c","x",
+        "x"),
+      WriteOptions(tableCreateOptions = SinkTableCreationMode.CreateIfNotExist),
+      new ClientRequestProperties())
     /*val schema = StructType(Array(
       StructField("EventId", StringType, nullable = true),
       StructField("State", StringType, nullable = true),
