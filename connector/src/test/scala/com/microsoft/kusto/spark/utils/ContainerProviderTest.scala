@@ -91,6 +91,7 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
      */
     val containerProvider = new ContainerProvider(extendedMockClient, clusterAlias, command, CACHE_EXPIRY_SEC)
 
+    // HttpHostConnectException -> IOException -> ConnectException This is the only hierarchy available
     extendedMockClient.executeDM _ expects(command, None, *) throws new DataServiceException(clusterAlias,
       "IOError when trying to retrieve CloudInfo",new HttpHostConnectException(
       new IOException(new ConnectException("Connection timed out")),
