@@ -27,8 +27,6 @@ class ContainerProvider(val client: ExtendedKustoClient, val clusterAlias: Strin
     val retryException: Predicate[Throwable] = (e: Throwable) =>
       (e.isInstanceOf[IngestionServiceException] && !e.asInstanceOf[KustoDataExceptionBase].isPermanent) ||
         (e.isInstanceOf[DataServiceException] && ExceptionUtils.getRootCause(e).isInstanceOf[HttpHostConnectException])
-        // TODO Should we add this too ?
-        //  ||(e.isInstanceOf[DataServiceException] && e.asInstanceOf[DataServiceException].getStatusCode == 404)
 
     val sleepConfig = IntervalFunction.ofExponentialRandomBackoff(
       ExtendedKustoClient.BaseIntervalMs, IntervalFunction.DEFAULT_MULTIPLIER,
