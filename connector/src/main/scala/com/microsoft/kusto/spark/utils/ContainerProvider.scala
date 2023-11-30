@@ -1,13 +1,15 @@
 package com.microsoft.kusto.spark.utils
 
-import com.microsoft.azure.kusto.data.exceptions.KustoDataExceptionBase
+import com.microsoft.azure.kusto.data.exceptions.{DataServiceException, KustoDataExceptionBase}
 import com.microsoft.azure.kusto.ingest.exceptions.IngestionServiceException
-import com.microsoft.kusto.spark.utils
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import io.github.resilience4j.core.IntervalFunction
 import io.github.resilience4j.retry.RetryConfig
+import org.apache.commons.lang3.exception.ExceptionUtils
+import org.apache.http.conn.HttpHostConnectException
 
 import java.time.{Clock, Instant}
+import java.util.function.Predicate
 import scala.collection.JavaConverters.asScalaBufferConverter
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
@@ -22,14 +24,18 @@ class ContainerProvider(val client: ExtendedKustoClient, val clusterAlias: Strin
   private val retryConfig = buildRetryConfig
 
   private def buildRetryConfig = {
+    val retryException: Predicate[Throwable] = (e: Throwable) =>
+      (e.isInstanceOf[IngestionServiceException] && !e.asInstanceOf[KustoDataExceptionBase].isPermanent) ||
+        (e.isInstanceOf[DataServiceException] && ExceptionUtils.getRootCause(e).isInstanceOf[HttpHostConnectException])
+
     val sleepConfig = IntervalFunction.ofExponentialRandomBackoff(
       ExtendedKustoClient.BaseIntervalMs, IntervalFunction.DEFAULT_MULTIPLIER,
       IntervalFunction.DEFAULT_RANDOMIZATION_FACTOR, ExtendedKustoClient.MaxRetryIntervalMs)
     RetryConfig.custom
+      // TODO the only difference between this and the one in ExtendedKustoClient is the maxAttempts. Should we refactor ?
       .maxAttempts(maxCommandsRetryAttempts)
       .intervalFunction(sleepConfig)
-      .retryOnException((e: Throwable) =>
-        e.isInstanceOf[IngestionServiceException] && !e.asInstanceOf[KustoDataExceptionBase].isPermanent).build
+      .retryOnException(retryException).build
   }
 
   def getContainer: ContainerAndSas = {
