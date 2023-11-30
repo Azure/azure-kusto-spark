@@ -24,9 +24,9 @@ class ContainerProvider(val client: ExtendedKustoClient, val clusterAlias: Strin
   private val retryConfig = buildRetryConfig
 
   private def buildRetryConfig = {
-    val retryException: Predicate[Throwable] = (e: Throwable) =>
+    val retryException: Predicate[Throwable] = JavaConverter.asJavaPredicate((e: Throwable) =>
       (e.isInstanceOf[IngestionServiceException] && !e.asInstanceOf[KustoDataExceptionBase].isPermanent) ||
-        (e.isInstanceOf[DataServiceException] && ExceptionUtils.getRootCause(e).isInstanceOf[HttpHostConnectException])
+        (e.isInstanceOf[DataServiceException] && ExceptionUtils.getRootCause(e).isInstanceOf[HttpHostConnectException]))
 
     val sleepConfig = IntervalFunction.ofExponentialRandomBackoff(
       ExtendedKustoClient.BaseIntervalMs, IntervalFunction.DEFAULT_MULTIPLIER,
