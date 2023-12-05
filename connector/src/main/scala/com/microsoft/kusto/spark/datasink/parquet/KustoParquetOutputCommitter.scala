@@ -1,9 +1,9 @@
-package com.microsoft.kusto.spark.datasink
+package com.microsoft.kusto.spark.datasink.parquet
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
-import org.apache.parquet.hadoop.ParquetOutputCommitter
 import org.apache.parquet.Log
+import org.apache.parquet.hadoop.ParquetOutputCommitter
 
 class KustoParquetOutputCommitter(outputPath: Path, context: TaskAttemptContext) extends ParquetOutputCommitter(outputPath, context) {
   val LOG = new Log(classOf[ParquetOutputCommitter])

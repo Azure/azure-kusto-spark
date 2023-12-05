@@ -26,13 +26,13 @@ class KustoParquetWriterTest extends FunSuite with BeforeAndAfterAll {
     spark = SparkSession.builder()
       .appName("KustoSink")
       .master(f"local[$nofExecutors]")
-      .config("spark.sql.parquet.output.committer.class", "com.microsoft.kusto.spark.datasink.KustoParquetOutputCommitter")
+      .config("spark.sql.parquet.output.committer.class", "com.microsoft.kusto.spark.datasink.parquet.KustoParquetOutputCommitter")
       .config("spark.sql.files.maxPartitionBytes", 100 * 1024 * 1024)
-      .config("spark.sql.sources.commitProtocolClass", "com.microsoft.kusto.spark.datasink.KustoFileCommitProtocol")
+      .config("spark.sql.sources.commitProtocolClass", "com.microsoft.kusto.spark.datasink.parquet.KustoFileCommitProtocol")
       .getOrCreate()
-      spark.conf.set("spark.sql.parquet.output.committer.class", "com.microsoft.kusto.spark.datasink.KustoParquetOutputCommitter")
+      spark.conf.set("spark.sql.parquet.output.committer.class", "com.microsoft.kusto.spark.datasink.parquet.KustoParquetOutputCommitter")
       spark.conf.set("spark.sql.files.maxPartitionBytes", 100 * 1024 * 1024)
-      spark.conf.set("spark.sql.sources.commitProtocolClass", "com.microsoft.kusto.spark.datasink.KustoFileCommitProtocol")
+      spark.conf.set("spark.sql.sources.commitProtocolClass", "com.microsoft.kusto.spark.datasink.parquet.KustoFileCommitProtocol")
 
 
     /*val appId: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_APP_ID)

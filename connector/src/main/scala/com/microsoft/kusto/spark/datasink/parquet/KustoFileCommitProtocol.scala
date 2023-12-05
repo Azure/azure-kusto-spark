@@ -1,4 +1,4 @@
-package com.microsoft.kusto.spark.datasink
+package com.microsoft.kusto.spark.datasink.parquet
 
 import org.apache.hadoop.mapreduce.TaskAttemptContext
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
