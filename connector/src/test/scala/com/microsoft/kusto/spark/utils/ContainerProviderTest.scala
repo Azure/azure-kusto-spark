@@ -2,20 +2,15 @@ package com.microsoft.kusto.spark.utils
 
 import com.azure.storage.blob.BlobContainerClient
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
-import com.microsoft.azure.kusto.data.exceptions.DataServiceException
-import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties, KustoOperationResult}
+import com.microsoft.azure.kusto.data.{Client, KustoOperationResult}
 import com.microsoft.azure.kusto.ingest.exceptions.IngestionServiceException
 import com.microsoft.azure.kusto.ingest.resources.ContainerWithSas
 import com.microsoft.azure.kusto.ingest.{IngestionResourceManager, QueuedIngestClient}
-import org.apache.http.HttpHost
-import org.apache.http.conn.HttpHostConnectException
 import org.mockito.Mockito
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
-import java.io.IOException
-import java.net.{ConnectException, InetAddress}
 import java.util.Collections
 import scala.collection.JavaConverters.seqAsJavaListConverter
 import scala.io.Source
@@ -43,7 +38,7 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
       }
     }
     // noMoreThanTwice()
-    mockIngestClient.getResourceManager _ expects() returning mockIngestionResourceManager
+    mockIngestClient.getResourceManager _ expects() atLeastOnce() returning mockIngestionResourceManager
     // Unfortunately we cannot Mock this class as there is a member variable that is a val and cannot be mocked
     new ExtendedKustoClient(new ConnectionStringBuilder("https://somecluster.eastus.kusto.windows.net/"),
       new ConnectionStringBuilder("https://ingest-somecluster.eastus.kusto.windows.net"), "somecluster") {

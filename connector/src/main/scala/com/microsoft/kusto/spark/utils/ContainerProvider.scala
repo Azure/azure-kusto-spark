@@ -4,7 +4,8 @@ import com.microsoft.azure.kusto.data.exceptions.{DataServiceException, KustoDat
 import com.microsoft.azure.kusto.ingest.exceptions.IngestionServiceException
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import io.github.resilience4j.core.IntervalFunction
-import io.github.resilience4j.retry.RetryConfig
+import io.github.resilience4j.retry.{Retry, RetryConfig}
+import io.vavr.CheckedFunction0
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.http.conn.HttpHostConnectException
 
@@ -26,7 +27,8 @@ class ContainerProvider(val client: ExtendedKustoClient, val clusterAlias: Strin
   private def buildRetryConfig = {
     val retryException: Predicate[Throwable] = (e: Throwable) =>
       (e.isInstanceOf[IngestionServiceException] && !e.asInstanceOf[KustoDataExceptionBase].isPermanent) ||
-        (e.isInstanceOf[DataServiceException] && ExceptionUtils.getRootCause(e).isInstanceOf[HttpHostConnectException])
+        (e.isInstanceOf[DataServiceException] && ExceptionUtils.getRootCause(e).isInstanceOf[HttpHostConnectException]) ||
+        (e.isInstanceOf[RuntimeException] && e.getMessage.equals("Failed to allocate temporary storage"))
 
     val sleepConfig = IntervalFunction.ofExponentialRandomBackoff(
       ExtendedKustoClient.BaseIntervalMs, IntervalFunction.DEFAULT_MULTIPLIER,
@@ -75,17 +77,21 @@ class ContainerProvider(val client: ExtendedKustoClient, val clusterAlias: Strin
           storageUris(roundRobinIdx)
       }
     } else {
-      Try(client.ingestClient.getResourceManager.getShuffledContainers) match {
-        case Success(res) =>
-          val storage = res.asScala.map(row => {
-            ContainerAndSas(row.getContainer.getBlobContainerUrl, s"${row.getSas}")
-          })
-          processContainerResults(storage)
-        case Failure(exception) =>
-          KDSU.reportExceptionAndThrow(className, exception,
-            "Error querying for create tempstorage", clusterAlias, shouldNotThrow = storageUris.nonEmpty)
-          storageUris(roundRobinIdx)
-      }
+      val retry = Retry.of("refresh ingestion resources", this.retryConfig)
+      val retryExecute: CheckedFunction0[ContainerAndSas] = Retry.decorateCheckedSupplier(retry, () => {
+        Try(client.ingestClient.getResourceManager.getShuffledContainers) match {
+          case Success(res) =>
+            val storage = res.asScala.map(row => {
+              ContainerAndSas(row.getContainer.getBlobContainerUrl, s"${row.getSas}")
+            })
+            processContainerResults(storage)
+          case Failure(exception) =>
+            KDSU.reportExceptionAndThrow(className, exception,
+              "Error querying for create tempstorage", clusterAlias, shouldNotThrow = storageUris.nonEmpty)
+            storageUris(roundRobinIdx)
+        }
+      })
+      retryExecute.apply()
     }
   }
 
