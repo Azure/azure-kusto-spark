@@ -26,11 +26,11 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
   val SLEEP_TIME_SEC = 10
 
   private def createExtendedKustoMockClient(hasEmptyResults: Boolean = false, mockDmClient: Client,
-                                            mayBeExceptionThrown: Option[Throwable] = None): ExtendedKustoClient = {
+                                            maybeExceptionThrown: Option[Throwable] = None): ExtendedKustoClient = {
     val mockIngestClient: QueuedIngestClient = mock[QueuedIngestClient]
     val mockIngestionResourceManager: IngestionResourceManager = Mockito.mock[IngestionResourceManager](classOf[IngestionResourceManager])
 
-    mayBeExceptionThrown match {
+    maybeExceptionThrown match {
       case Some(exception) => Mockito.when(mockIngestionResourceManager.getShuffledContainers)
         .thenThrow(exception).thenThrow(exception).
         thenAnswer(_ => List(getMockContainerWithSas(1), getMockContainerWithSas(2)).asJava)
@@ -134,7 +134,7 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
      */
     val mockDmClient = mock[Client]
     val extendedMockClient = createExtendedKustoMockClient(mockDmClient = mockDmClient,
-      mayBeExceptionThrown = Some(new IngestionServiceException("IOError when trying to retrieve CloudInfo")))
+      maybeExceptionThrown = Some(new IngestionServiceException("IOError when trying to retrieve CloudInfo")))
     val containerProvider = new ContainerProvider(extendedMockClient, clusterAlias, command, CACHE_EXPIRY_SEC)
     the[IngestionServiceException] thrownBy containerProvider.getContainer should have message "IOError when trying to retrieve CloudInfo"
   }
