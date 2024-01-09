@@ -61,11 +61,10 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
     mockResultsOne
   }
   // happy path
-  "ContainerProvider" should "return a container" in {
+  "ContainerProvider returns a container" should "from RM" in {
     val kustoOperationResult = new KustoOperationResult(readTestSource("storage-result.json"), "v1")
     val mockDmClient = mock[Client]
-    (mockDmClient.execute(_: String, _: String, _: ClientRequestProperties)).expects(*, *, *).
-      noMoreThanOnce().returning(kustoOperationResult)
+    (mockDmClient.execute(_: String, _: String, _: ClientRequestProperties)).expects(*, *, *) returning(kustoOperationResult)
 
     val clusterAlias = "ingest-cluster"
     val command = ".create tempstorage"
