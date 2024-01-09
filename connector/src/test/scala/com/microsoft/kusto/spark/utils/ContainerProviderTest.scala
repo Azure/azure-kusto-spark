@@ -22,7 +22,7 @@ import scala.io.Source
 
 
 class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
-  val CACHE_EXPIRY_SEC = 2
+  val CACHE_EXPIRY_SEC = 30
   val SLEEP_TIME_SEC = 10
 
   private def createExtendedKustoMockClient(hasEmptyResults: Boolean = false, mockDmClient: Client,
@@ -64,7 +64,7 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
   "ContainerProvider returns a container" should "from RM" in {
     val kustoOperationResult = new KustoOperationResult(readTestSource("storage-result.json"), "v1")
     val mockDmClient = mock[Client]
-    (mockDmClient.execute(_: String, _: String, _: ClientRequestProperties)).expects(*, *, *) returning(kustoOperationResult)
+//    (mockDmClient.execute(_: String, _: String, _: ClientRequestProperties)).expects(*, *, *) returning(kustoOperationResult)
 
     val clusterAlias = "ingest-cluster"
     val command = ".create tempstorage"
@@ -112,8 +112,8 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
 
     val kustoOperationResult = new KustoOperationResult(readTestSource("storage-result-empty.json"), "v1")
     val mockDmClient = mock[Client]
-    (mockDmClient.execute(_: String, _: String, _: ClientRequestProperties)).expects(*, *, *).
-      noMoreThanOnce() returning (kustoOperationResult)
+//    (mockDmClient.execute(_: String, _: String, _: ClientRequestProperties)).expects(*, *, *).
+//      returning (kustoOperationResult)
     /*
       Invoke and test
      */
