@@ -27,8 +27,7 @@ class ContainerProvider(val client: ExtendedKustoClient, val clusterAlias: Strin
   private def buildRetryConfig = {
     val retryException: Predicate[Throwable] = (e: Throwable) =>
       (e.isInstanceOf[IngestionServiceException] && !e.asInstanceOf[KustoDataExceptionBase].isPermanent) ||
-        (e.isInstanceOf[DataServiceException] && ExceptionUtils.getRootCause(e).isInstanceOf[HttpHostConnectException]) ||
-        (e.isInstanceOf[RuntimeException] && e.getMessage.equals("Failed to allocate temporary storage"))
+        (e.isInstanceOf[DataServiceException] && ExceptionUtils.getRootCause(e).isInstanceOf[HttpHostConnectException])
 
     val sleepConfig = IntervalFunction.ofExponentialRandomBackoff(
       ExtendedKustoClient.BaseIntervalMs, IntervalFunction.DEFAULT_MULTIPLIER,
@@ -77,7 +76,14 @@ class ContainerProvider(val client: ExtendedKustoClient, val clusterAlias: Strin
           storageUris(roundRobinIdx)
       }
     } else {
-      val retry = Retry.of("refresh ingestion resources", this.retryConfig)
+      //Q: Could be merged with the retry config of exportContainer but fails TCs due to retry's exception criteria
+      val sleepConfig = IntervalFunction.ofExponentialRandomBackoff(
+        ExtendedKustoClient.BaseIntervalMs, IntervalFunction.DEFAULT_MULTIPLIER,
+        IntervalFunction.DEFAULT_RANDOMIZATION_FACTOR, ExtendedKustoClient.MaxRetryIntervalMs)
+      val retry = Retry.of("refresh ingestion resources", RetryConfig.custom
+        .maxAttempts(maxCommandsRetryAttempts)
+        .intervalFunction(sleepConfig)
+        .retryOnException(e => e.isInstanceOf[RuntimeException]).build)
       val retryExecute: CheckedFunction0[ContainerAndSas] = Retry.decorateCheckedSupplier(retry, () => {
         Try(client.ingestClient.getResourceManager.getShuffledContainers) match {
           case Success(res) =>
