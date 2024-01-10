@@ -37,8 +37,8 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
           thenAnswer(_ => List(getMockContainerWithSas(1), getMockContainerWithSas(2)).asJava)
       }
     }
-    // noMoreThanTwice()
-    mockIngestClient.getResourceManager _ expects() atLeastOnce() returning mockIngestionResourceManager
+    // Expecting getResourceManager to be called maxCommandsRetryAttempts i.e. 8 times.
+    mockIngestClient.getResourceManager _ expects() repeated 8 times() returning mockIngestionResourceManager
     // Unfortunately we cannot Mock this class as there is a member variable that is a val and cannot be mocked
     new ExtendedKustoClient(new ConnectionStringBuilder("https://somecluster.eastus.kusto.windows.net/"),
       new ConnectionStringBuilder("https://ingest-somecluster.eastus.kusto.windows.net"), "somecluster") {
