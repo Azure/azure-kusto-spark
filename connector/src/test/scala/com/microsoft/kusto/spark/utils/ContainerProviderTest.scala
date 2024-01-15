@@ -21,7 +21,7 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
   val SLEEP_TIME_SEC = 10
 
   private def createExtendedKustoMockClient(hasEmptyResults: Boolean = false, mockDmClient: Client,
-                                            maybeExceptionThrown: Option[Throwable] = None): ExtendedKustoClient = {
+                                            maybeExceptionThrown: Option[Throwable] = None, getRMOccurances : Int = 1): ExtendedKustoClient = {
     val mockIngestClient: QueuedIngestClient = mock[QueuedIngestClient]
     val mockIngestionResourceManager: IngestionResourceManager = Mockito.mock[IngestionResourceManager](classOf[IngestionResourceManager])
 
@@ -38,7 +38,7 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
       }
     }
     // Expecting getResourceManager to be called maxCommandsRetryAttempts i.e. 8 times.
-    mockIngestClient.getResourceManager _ expects() repeated 8 times() returning mockIngestionResourceManager
+    mockIngestClient.getResourceManager _ expects() repeated getRMOccurances times() returning mockIngestionResourceManager
     // Unfortunately we cannot Mock this class as there is a member variable that is a val and cannot be mocked
     new ExtendedKustoClient(new ConnectionStringBuilder("https://somecluster.eastus.kusto.windows.net/"),
       new ConnectionStringBuilder("https://ingest-somecluster.eastus.kusto.windows.net"), "somecluster") {
@@ -92,7 +92,7 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
     Thread.sleep((SLEEP_TIME_SEC * 2) * 1000) // Milliseconds
 
     val mockDmFailClient = mock[Client]
-    val extendedMockClientEmptyFail = createExtendedKustoMockClient(hasEmptyResults = true, mockDmClient = mockDmFailClient)
+    val extendedMockClientEmptyFail = createExtendedKustoMockClient(hasEmptyResults = true, mockDmClient = mockDmFailClient, getRMOccurances = 8)
     val emptyStorageContainerProvider = new ContainerProvider(extendedMockClientEmptyFail, clusterAlias, command, CACHE_EXPIRY_SEC)
     val caught =
       intercept[RuntimeException] { // Result type: Assertion
@@ -112,7 +112,7 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
     /*
       Invoke and test
      */
-    val extendedMockClient = createExtendedKustoMockClient(hasEmptyResults = true, mockDmClient = mockDmClient)
+    val extendedMockClient = createExtendedKustoMockClient(hasEmptyResults = true, mockDmClient = mockDmClient, getRMOccurances = 8)
     /*
       Invoke and test. In this case the call succeeds but returns no storage. This will hit the empty storage block
      */
