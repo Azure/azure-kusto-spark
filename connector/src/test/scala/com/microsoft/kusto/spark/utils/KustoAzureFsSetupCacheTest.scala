@@ -33,7 +33,7 @@ class KustoAzureFsSetupCacheTest extends AnyFunSuite {
     val dataToTest = Table(
       ("now", "checkIfRefreshNeeded", "Scenario"),
       // Initial set is false for the flag, but refresh
-      (now, true, "Initial set is false for the flag, but refresh"),
+      (now, true, "Initial set is false, refresh is needed"),
       // The cache is expired, so it will be re-set.The checkIfRefreshNeeded will return false, but the state is already true.
       (now.minus(3 * KustoConstants.SparkSettingsRefreshMinutes, ChronoUnit.MINUTES), true,
         "The cache is expired, so it will be re-set.The checkIfRefreshNeeded will return false, but the state is already true."),
