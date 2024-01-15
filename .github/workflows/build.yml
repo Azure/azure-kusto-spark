@@ -18,6 +18,12 @@ jobs:
           cache: 'maven'
       - name: Run the Maven verify phase
         run: mvn clean verify -DkustoAadAppId=${{ secrets.APP_ID }} -DkustoAadAuthorityID=${{ secrets.TENANT_ID }} -DkustoAadAppSecret=${{ secrets.APP_SECRET }} -DkustoDatabase=${{ secrets.DATABASE }} -DkustoCluster=${{ secrets.CLUSTER }} 
+        env:
+          kustoAadAppId: ${{ secrets.APP_ID }}
+          DkustoAadAuthorityID: ${{ secrets.TENANT_ID }}
+          kustoAadAppSecret: ${{ secrets.APP_SECRET }}
+          kustoDatabase: ${{ secrets.DATABASE }}
+          kustoCluster: ${{ secrets.CLUSTER }}
       - name: Publish Unit Test Results
         uses: EnricoMi/publish-unit-test-result-action@v2
         if: always()
