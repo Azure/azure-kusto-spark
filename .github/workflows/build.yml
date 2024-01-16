@@ -24,7 +24,7 @@ jobs:
           kustoCluster: ${{secrets.CLUSTER}}
           SecretPath: ${{secrets.SECRET_PATH}}
           kustoAadAppId: ${{secrets.APP_ID}}
-        run: mvn clean verify
+        run: mvn clean verify -DkustoAadAppId=${{secrets.APP_ID}} -DkustoAadAuthorityID=${{secrets.TENANT_ID}} -DkustoAadAppSecret=${{secrets.APP_SECRET}} -DkustoDatabase=${{secrets.DATABASE}} -DkustoCluster=${{secrets.CLUSTER}} -DSecretPath=${{secrets.SECRET_PATH}}
       - name: Publish Unit Test Results
         uses: EnricoMi/publish-unit-test-result-action@v2
         if: always()
