@@ -6,6 +6,7 @@ import com.microsoft.azure.kusto.data.{Client, KustoOperationResult}
 import com.microsoft.azure.kusto.ingest.exceptions.IngestionServiceException
 import com.microsoft.azure.kusto.ingest.resources.ContainerWithSas
 import com.microsoft.azure.kusto.ingest.{IngestionResourceManager, QueuedIngestClient}
+import com.microsoft.kusto.spark.exceptions.NoStorageContainersException
 import org.mockito.Mockito
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.flatspec.AnyFlatSpec
@@ -27,7 +28,7 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
 
     maybeExceptionThrown match {
       case Some(exception) => Mockito.when(mockIngestionResourceManager.getShuffledContainers)
-        .thenThrow(exception).thenThrow(exception).
+        .thenThrow(exception, exception, exception, exception, exception, exception, exception, exception). //throws exception 8 times due to retry
         thenAnswer(_ => List(getMockContainerWithSas(1), getMockContainerWithSas(2)).asJava)
       case None => if (hasEmptyResults) {
         Mockito.when(mockIngestionResourceManager.getShuffledContainers).
@@ -95,10 +96,10 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
     val extendedMockClientEmptyFail = createExtendedKustoMockClient(hasEmptyResults = true, mockDmClient = mockDmFailClient, getRMOccurances = 8)
     val emptyStorageContainerProvider = new ContainerProvider(extendedMockClientEmptyFail, clusterAlias, command, CACHE_EXPIRY_SEC)
     val caught =
-      intercept[RuntimeException] { // Result type: Assertion
+      intercept[NoStorageContainersException] { // Result type: Assertion
         emptyStorageContainerProvider.getContainer
       }
-    assert(caught.getMessage.indexOf("Failed to allocate temporary storage") != -1)
+    assert(caught.getMessage.indexOf("No storage containers received. Failed to allocate temporary storage") != -1)
   }
 
   "ContainerProvider" should "fail in the case when call succeeds but returns no storage" in {
@@ -107,8 +108,6 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
 
     val kustoOperationResult = new KustoOperationResult(readTestSource("storage-result-empty.json"), "v1")
     val mockDmClient = mock[Client]
-//    (mockDmClient.execute(_: String, _: String, _: ClientRequestProperties)).expects(*, *, *).
-//      returning (kustoOperationResult)
     /*
       Invoke and test
      */
@@ -117,7 +116,7 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
       Invoke and test. In this case the call succeeds but returns no storage. This will hit the empty storage block
      */
     val containerProvider = new ContainerProvider(extendedMockClient, clusterAlias, command, CACHE_EXPIRY_SEC)
-    the[RuntimeException] thrownBy containerProvider.getContainer should have message "Failed to allocate temporary storage"
+    the[NoStorageContainersException] thrownBy containerProvider.getContainer should have message "No storage containers received. Failed to allocate temporary storage"
   }
 
   "ContainerProvider" should "retry and return a container in case of a temporary HTTPException" in {
@@ -128,7 +127,7 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
      */
     val mockDmClient = mock[Client]
     val extendedMockClient = createExtendedKustoMockClient(mockDmClient = mockDmClient,
-      maybeExceptionThrown = Some(new IngestionServiceException("IOError when trying to retrieve CloudInfo")))
+      maybeExceptionThrown = Some(new IngestionServiceException("IOError when trying to retrieve CloudInfo")), getRMOccurances = 8)
     val containerProvider = new ContainerProvider(extendedMockClient, clusterAlias, command, CACHE_EXPIRY_SEC)
     the[IngestionServiceException] thrownBy containerProvider.getContainer should have message "IOError when trying to retrieve CloudInfo"
   }
