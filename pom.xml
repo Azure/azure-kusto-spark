@@ -15,7 +15,7 @@
         <spark.version.major>3.0</spark.version.major>
         <spark.version.minor>1</spark.version.minor>
         <!-- other dependencies -->
-        <azure.bom.version>1.2.18</azure.bom.version>
+        <azure.bom.version>1.2.14</azure.bom.version>
         <!-- versions from https://learn.microsoft.com/en-us/azure/databricks/release-notes/runtime/13.2-->
         <fasterxml.jackson.jar.version>2.13.4</fasterxml.jackson.jar.version>
         <fasterxml.jackson.version>2.14.3</fasterxml.jackson.version>
@@ -25,7 +25,7 @@
         <junit4.version>4.13.2</junit4.version>
         <commons.lang3.version>3.12.0</commons.lang3.version>
         <hadoop.version>3.3.6</hadoop.version>
-        <kusto.sdk.version>5.0.4</kusto.sdk.version>
+        <kusto.sdk.version>5.0.3</kusto.sdk.version>
         <java.source.version>1.8</java.source.version>
         <java.target.version>1.8</java.target.version>
         <!-- test dependencies -->
