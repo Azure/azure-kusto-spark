@@ -88,7 +88,7 @@
         <dependency>
             <groupId>com.microsoft.azure</groupId>
             <artifactId>msal4j</artifactId>
-            <version>1.13.9</version>
+            <version>${msal4j.version}</version>
         </dependency>
         <dependency>
             <groupId>com.microsoft.azure.kusto</groupId>
