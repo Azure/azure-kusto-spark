@@ -6,7 +6,8 @@ import com.microsoft.aad.msal4j.{DeviceCode, DeviceCodeFlowParameters, IAuthenti
 import com.microsoft.azure.kusto.data.auth
 import scala.concurrent.TimeoutException
 
-class DeviceAuthentication (val cluster: String, val authority:String) extends auth.DeviceAuthTokenProvider(cluster, authority, null) {
+class DeviceAuthentication(val cluster: String, val authority: String)
+    extends auth.DeviceAuthTokenProvider(cluster, authority, null) {
   var currentDeviceCode: Option[DeviceCode] = None
   var expiresAt: Option[Long] = None
   val NewDeviceCodeFetchTimeout = 60L * 1000L
@@ -17,17 +18,18 @@ class DeviceAuthentication (val cluster: String, val authority:String) extends a
   }
 
   def acquireNewAccessTokenAsync(): CompletableFuture[IAuthenticationResult] = {
-    val deviceCodeConsumer: Consumer[DeviceCode] = toJavaConsumer((deviceCode:DeviceCode) => {
+    val deviceCodeConsumer: Consumer[DeviceCode] = toJavaConsumer((deviceCode: DeviceCode) => {
       this.currentDeviceCode = Some(deviceCode)
       this.expiresAt = Some(System.currentTimeMillis + (deviceCode.expiresIn() * 1000))
       println(deviceCode.message())
     })
 
-    val deviceCodeFlowParams: DeviceCodeFlowParameters = DeviceCodeFlowParameters.builder(scopes, deviceCodeConsumer).build
+    val deviceCodeFlowParams: DeviceCodeFlowParameters =
+      DeviceCodeFlowParameters.builder(scopes, deviceCodeConsumer).build
     clientApplication.acquireToken(deviceCodeFlowParams)
   }
 
-  implicit def toJavaConsumer[T](f:Function1[T, Unit]): Consumer[T] = new Consumer[T] {
+  implicit def toJavaConsumer[T](f: Function1[T, Unit]): Consumer[T] = new Consumer[T] {
     override def accept(t: T) = f(t)
   }
 

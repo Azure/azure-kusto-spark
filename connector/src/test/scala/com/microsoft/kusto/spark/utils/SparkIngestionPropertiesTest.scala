@@ -1,12 +1,10 @@
 package com.microsoft.kusto.spark.utils
 
-
 import com.microsoft.kusto.spark.datasink.SparkIngestionProperties
 import org.apache.commons.lang3.builder.EqualsBuilder
 
 import java.time.{Clock, Instant}
 import org.scalatest.flatspec.AnyFlatSpec
-
 
 class SparkIngestionPropertiesTest extends AnyFlatSpec {
 
@@ -22,8 +20,7 @@ class SparkIngestionPropertiesTest extends AnyFlatSpec {
       creationTime = Instant.now(Clock.systemUTC()),
       ingestIfNotExists = ingestByTags,
       additionalTags = ingestByTags,
-      csvMapping = "[{\"Column\": \"a\", \"Properties\": {\"Ordinal\": \"0\"}}]"
-    )
+      csvMapping = "[{\"Column\": \"a\", \"Properties\": {\"Ordinal\": \"0\"}}]")
     val stringProps = sp.toString
     val spFromString = SparkIngestionProperties.fromString(stringProps)
 

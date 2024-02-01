@@ -19,8 +19,9 @@ trait KustoOptions {
   val KUSTO_DATABASE: String = newOption("kustoDatabase")
 
   /**
-   * Authentication parameters - If not provided - device code would show on console. If console is not available
-   * use DeviceAuthentication class-https://github.com/Azure/azure-kusto-spark/blob/56667c54dfd43455113a9b48725b236a8d92ccd4/samples/src/main/python/pyKusto.py#L147
+   * Authentication parameters - If not provided - device code would show on console. If console
+   * is not available use DeviceAuthentication
+   * class-https://github.com/Azure/azure-kusto-spark/blob/56667c54dfd43455113a9b48725b236a8d92ccd4/samples/src/main/python/pyKusto.py#L147
    */
   // AAD application identifier of the client
   val KUSTO_AAD_APP_ID: String = newOption("kustoAadAppId")
@@ -47,10 +48,11 @@ trait KustoOptions {
   // the options provided to the connector. The class should extend Callable[String] with Serializeable and is expected
   // to return an AAD token upon invoking the call method.
   // The provider will be called for every request to the kusto service
-  val KUSTO_TOKEN_PROVIDER_CALLBACK_CLASSPATH: String = newOption("tokenProviderCallbackClasspath")
+  val KUSTO_TOKEN_PROVIDER_CALLBACK_CLASSPATH: String = newOption(
+    "tokenProviderCallbackClasspath")
 
-  val KUSTO_MANAGED_IDENTITY_AUTH : String = newOption("managedIdentityAuth")
-  val KUSTO_MANAGED_IDENTITY_CLIENT_ID : String = newOption("managedIdentityClientId")
+  val KUSTO_MANAGED_IDENTITY_AUTH: String = newOption("managedIdentityAuth")
+  val KUSTO_MANAGED_IDENTITY_CLIENT_ID: String = newOption("managedIdentityClientId")
 
   /** Optional parameters */
   // it merge origin/aKusto ingestion cluster URL for reading data - provide this if ingestion URL cannot be deduced
@@ -71,18 +73,23 @@ trait KustoOptions {
   val KUSTO_REQUEST_ID: String = newOption("requestId")
 }
 
-case class KustoCoordinates(clusterUrl: String,
-                            clusterAlias: String,
-                            database: String,
-                            table: Option[String] = None,
-                            ingestionUrl: Option[String] = None)
+case class KustoCoordinates(
+    clusterUrl: String,
+    clusterAlias: String,
+    database: String,
+    table: Option[String] = None,
+    ingestionUrl: Option[String] = None)
 
-/** ******************************************************************************* */
+/**
+ * *******************************************************************************
+ */
 /*                                    NOTE!!!                                       */
 /* These options are intended for testing, experimentation and debug.               */
 /* They may not be used in a production environment                                 */
 /* Interface stability is not guaranteed: options may be removed or changed freely  */
-/** ******************************************************************************* */
+/**
+ * *******************************************************************************
+ */
 private[kusto] object KustoDebugOptions {
   private val kustoOptionNames = collection.mutable.Set[String]()
 
@@ -115,8 +122,8 @@ private[kusto] object KustoDebugOptions {
   val KEY_VAULT_PEM_FILE_PATH = "keyVaultPemFilePath" // Not yet supported
   val KEY_VAULT_CERTIFICATE_KEY = "keyVaultPemFileKey" // Not yet supported
 
-  val KUSTO_MAXIMAL_EXTENTS_COUNT_FOR_SPLIT_MERGE_PER_NODE
-  : String = newOption("maximalExtentsCountForSplitMergePerNode")
+  val KUSTO_MAXIMAL_EXTENTS_COUNT_FOR_SPLIT_MERGE_PER_NODE: String = newOption(
+    "maximalExtentsCountForSplitMergePerNode")
   val KUSTO_MAX_RETRIES_ON_MOVE_EXTENTS: String = newOption("maxRetriesOnMoveExtents")
 
   val KUSTO_DISABLE_FLUSH_IMMEDIATELY: String = newOption("disableFlushImmediately")
@@ -124,5 +131,6 @@ private[kusto] object KustoDebugOptions {
   // Needed only if your task produce big blobs in high volume
   val KUSTO_ENSURE_NO_DUPLICATED_BLOBS: String = newOption("ensureNoDuplicatedBlobs")
 
-  val KUSTO_DISABLE_QUEUE_REQUEST_OPTIONS_OVERRIDE: String = newOption("disableQueueRequestOptionsOverride")
+  val KUSTO_DISABLE_QUEUE_REQUEST_OPTIONS_OVERRIDE: String = newOption(
+    "disableQueueRequestOptionsOverride")
 }

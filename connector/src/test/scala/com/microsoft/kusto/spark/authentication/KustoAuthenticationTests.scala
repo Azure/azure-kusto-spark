@@ -13,7 +13,6 @@ class TokenProvider2(map: CaseInsensitiveMap[String]) extends Callable[String] w
   override def call(): String = map("token")
 }
 
-
 class kustoAuthenticationTests extends AnyFlatSpec {
   "KeyVaultAppAuthentication Equals" should "Check equality and inequality between different KeyVaultAppAuthentication" in {
     val kvaa11 = KeyVaultAppAuthentication("uri1", "appId1", "pass1", null)
@@ -80,11 +79,13 @@ class kustoAuthenticationTests extends AnyFlatSpec {
 
     val tokenProvider1 = java.lang.ClassLoader.getSystemClassLoader
       .loadClass("com.microsoft.kusto.spark.authentication.TokenProvider1")
-      .getConstructor(params.getClass).newInstance(params)
+      .getConstructor(params.getClass)
+      .newInstance(params)
 
     val tokenProvider2 = java.lang.ClassLoader.getSystemClassLoader
       .loadClass("com.microsoft.kusto.spark.authentication.TokenProvider1")
-      .getConstructor(params.getClass).newInstance(params)
+      .getConstructor(params.getClass)
+      .newInstance(params)
 
     val ktp1 = KustoTokenProviderAuthentication(tokenProvider1.asInstanceOf[Callable[String]])
     val ktp2 = KustoTokenProviderAuthentication(tokenProvider2.asInstanceOf[Callable[String]])

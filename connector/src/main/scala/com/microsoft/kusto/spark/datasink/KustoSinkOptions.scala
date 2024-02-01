@@ -8,7 +8,8 @@ import com.microsoft.kusto.spark.utils.KustoConstants
 
 import scala.concurrent.duration.FiniteDuration
 
-object KustoSinkOptions extends KustoOptions{
+object KustoSinkOptions extends KustoOptions {
+
   /** Required options */
   val KUSTO_TABLE: String = newOption("kustoTable")
 
@@ -50,7 +51,8 @@ object KustoSinkOptions extends KustoOptions{
 
   // An integer number corresponding to the period in seconds after which the staging resources used for the writing
   // are cleaned if they weren't cleaned at the end of the run
-  val KUSTO_STAGING_RESOURCE_AUTO_CLEANUP_TIMEOUT: String = newOption("stagingResourcesAutoCleanupTimeout")
+  val KUSTO_STAGING_RESOURCE_AUTO_CLEANUP_TIMEOUT: String = newOption(
+    "stagingResourcesAutoCleanupTimeout")
 
   // If set to 'Transactional' - guarantees write operation to either completely succeed or fail together
   // but includes additional steps - it creates a temporary table and after processing the data it polls on ingestion result
@@ -69,7 +71,6 @@ object KustoSinkOptions extends KustoOptions{
   val KUSTO_TEMP_TABLE_NAME: String = newOption("tempTableName")
 }
 
-
 object SinkTableCreationMode extends Enumeration {
   type SinkTableCreationMode = Value
   val CreateIfNotExist, FailIfNotExist = Value
@@ -85,23 +86,25 @@ object WriteMode extends Enumeration {
   val Transactional, Queued = Value
 }
 
-case class WriteOptions(pollingOnDriver:Boolean = false,
-                        tableCreateOptions: SinkTableCreationMode.SinkTableCreationMode = SinkTableCreationMode.FailIfNotExist,
-                        isAsync: Boolean = false,
-                        writeResultLimit: String = KustoSinkOptions.NONE_RESULT_LIMIT,
-                        timeZone: String = "UTC",
-                        timeout: FiniteDuration = new FiniteDuration(KustoConstants.DefaultWaitingIntervalLongRunning.toInt,
-                          TimeUnit.SECONDS),
-                        ingestionProperties: Option[String] = None,
-                        batchLimit: Int = KustoConstants.DefaultBatchingLimit,
-                        requestId: String = UUID.randomUUID().toString,
-                        autoCleanupTime: FiniteDuration = new FiniteDuration(KustoConstants.DefaultCleaningInterval.toInt,
-                          TimeUnit.SECONDS),
-                        maxRetriesOnMoveExtents: Int = 10,
-                        minimalExtentsCountForSplitMerge: Int = 400,
-                        adjustSchema: SchemaAdjustmentMode.SchemaAdjustmentMode = SchemaAdjustmentMode.NoAdjustment,
-                        isTransactionalMode: Boolean = true,
-                        userTempTableName: Option[String] = None,
-                        disableFlushImmediately:Boolean = false,
-                        ensureNoDupBlobs: Boolean = false)
-
+case class WriteOptions(
+    pollingOnDriver: Boolean = false,
+    tableCreateOptions: SinkTableCreationMode.SinkTableCreationMode =
+      SinkTableCreationMode.FailIfNotExist,
+    isAsync: Boolean = false,
+    writeResultLimit: String = KustoSinkOptions.NONE_RESULT_LIMIT,
+    timeZone: String = "UTC",
+    timeout: FiniteDuration = new FiniteDuration(
+      KustoConstants.DefaultWaitingIntervalLongRunning.toInt,
+      TimeUnit.SECONDS),
+    ingestionProperties: Option[String] = None,
+    batchLimit: Int = KustoConstants.DefaultBatchingLimit,
+    requestId: String = UUID.randomUUID().toString,
+    autoCleanupTime: FiniteDuration =
+      new FiniteDuration(KustoConstants.DefaultCleaningInterval.toInt, TimeUnit.SECONDS),
+    maxRetriesOnMoveExtents: Int = 10,
+    minimalExtentsCountForSplitMerge: Int = 400,
+    adjustSchema: SchemaAdjustmentMode.SchemaAdjustmentMode = SchemaAdjustmentMode.NoAdjustment,
+    isTransactionalMode: Boolean = true,
+    userTempTableName: Option[String] = None,
+    disableFlushImmediately: Boolean = false,
+    ensureNoDupBlobs: Boolean = false)
