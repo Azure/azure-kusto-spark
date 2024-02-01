@@ -8,10 +8,13 @@ import com.microsoft.azure.kusto.ingest.resources.ContainerWithSas
 import com.microsoft.azure.kusto.ingest.{IngestionResourceManager, QueuedIngestClient}
 import com.microsoft.kusto.spark.exceptions.NoStorageContainersException
 import org.mockito.Mockito
+import org.mockito.invocation.InvocationOnMock
+import org.mockito.stubbing.Answer
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
+import java.util
 import java.util.Collections
 import scala.collection.JavaConverters.seqAsJavaListConverter
 import scala.io.Source
@@ -28,14 +31,24 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
 
     maybeExceptionThrown match {
       case Some(exception) => Mockito.when(mockIngestionResourceManager.getShuffledContainers)
-        .thenThrow(exception, exception, exception, exception, exception, exception, exception, exception). //throws exception 8 times due to retry
-        thenAnswer(_ => List(getMockContainerWithSas(1), getMockContainerWithSas(2)).asJava)
+        .thenThrow(exception, exception, exception, exception, exception, exception, exception, exception) //throws exception 8 times due to retry
+        .thenAnswer(new Answer[util.List[ContainerWithSas]] {
+          override def answer(invocationOnMock: InvocationOnMock): java.util.List[ContainerWithSas] = List(getMockContainerWithSas(1), getMockContainerWithSas(2)).asJava
+        });
       case None => if (hasEmptyResults) {
         Mockito.when(mockIngestionResourceManager.getShuffledContainers).
-          thenAnswer(_ => Collections.EMPTY_LIST)
+          thenAnswer(new Answer[java.util.List[_]] {
+            override def answer(invocationOnMock: InvocationOnMock): java.util.List[_] = Collections.EMPTY_LIST
+          })
+
       } else {
         Mockito.when(mockIngestionResourceManager.getShuffledContainers).
-          thenAnswer(_ => List(getMockContainerWithSas(1), getMockContainerWithSas(2)).asJava)
+          thenAnswer(new Answer[util.List[ContainerWithSas]] {
+            override def answer(invocationOnMock: InvocationOnMock): util.List[ContainerWithSas] =
+              List(getMockContainerWithSas(1), getMockContainerWithSas(2)).asJava
+          });
+
+
       }
     }
     // Expecting getResourceManager to be called maxCommandsRetryAttempts i.e. 8 times.
@@ -51,9 +64,15 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
   private def getMockContainerWithSas(index: Int): ContainerWithSas = {
     val mockResultsOne: ContainerWithSas = Mockito.mock[ContainerWithSas](classOf[ContainerWithSas])
     val blobResultsOne: BlobContainerClient = Mockito.mock[BlobContainerClient](classOf[BlobContainerClient])
-    Mockito.when(blobResultsOne.getBlobContainerUrl).thenAnswer(_ => s"https://sacc$index.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0")
-    Mockito.when(mockResultsOne.getSas).thenAnswer(_ => "?sv=2018-03-28&sr=c&sp=rw")
-    Mockito.when(mockResultsOne.getContainer).thenAnswer(_ => blobResultsOne)
+    Mockito.when(blobResultsOne.getBlobContainerUrl).thenAnswer(new Answer[String] {
+      override def answer(invocationOnMock: InvocationOnMock): String = s"https://sacc$index.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0"
+    });
+    Mockito.when(mockResultsOne.getSas).thenAnswer(new Answer[String] {
+      override def answer(invocationOnMock: InvocationOnMock): String = "?sv=2018-03-28&sr=c&sp=rw"
+    });
+    Mockito.when(mockResultsOne.getContainer).thenAnswer(new Answer[BlobContainerClient] {
+      override def answer(invocationOnMock: InvocationOnMock): BlobContainerClient = blobResultsOne
+    });
     mockResultsOne
   }
   // happy path
