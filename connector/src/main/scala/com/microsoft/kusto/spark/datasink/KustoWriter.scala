@@ -12,7 +12,12 @@ import com.microsoft.azure.kusto.ingest.exceptions.IngestionServiceException
 import com.microsoft.azure.kusto.ingest.resources.ContainerWithSas
 import com.microsoft.azure.kusto.ingest.result.IngestionResult
 import com.microsoft.azure.kusto.ingest.source.{BlobSourceInfo, StreamSourceInfo}
-import com.microsoft.azure.kusto.ingest.{IngestClient, IngestionProperties, StreamingIngestClient}
+import com.microsoft.azure.kusto.ingest.{
+  IngestClient,
+  IngestionProperties,
+  ManagedStreamingIngestClient,
+  StreamingIngestClient
+}
 import com.microsoft.azure.storage.blob.{BlobRequestOptions, CloudBlockBlob}
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
@@ -380,7 +385,7 @@ object KustoWriter {
   private def streamBytesIntoKusto(
       batchIdForTracing: String,
       bytes: Array[Byte],
-      streamingClient: StreamingIngestClient,
+      streamingClient: ManagedStreamingIngestClient,
       parameters: KustoWriteResource): Unit = {
     val streamSourceInfo = new StreamSourceInfo(new ByteArrayInputStream(bytes))
     val ingestionProperties = getIngestionProperties(
@@ -417,7 +422,7 @@ object KustoWriter {
       parameters.coordinates.ingestionUrl,
       parameters.coordinates.clusterAlias)
     val ingestClient = clientCache.ingestClient
-    CloudInfo.manuallyAddToCache(clientCache.ingestKcsb.getClusterUrl, parameters.cloudInfo);
+    CloudInfo.manuallyAddToCache(clientCache.ingestKcsb.getClusterUrl, parameters.cloudInfo)
 
     val reqRetryOpts = new RequestRetryOptions(
       RetryPolicyType.FIXED,
