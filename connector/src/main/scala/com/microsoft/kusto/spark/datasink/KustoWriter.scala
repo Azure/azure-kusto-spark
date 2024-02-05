@@ -259,11 +259,9 @@ object KustoWriter {
         className,
         s"sink to Kusto table '${parameters.coordinates.table.get}' with no rows to write " +
           s"on partition ${TaskContext.getPartitionId} $batchIdForTracing")
-    }
-    else if (parameters.writeOptions.writeMode == WriteMode.Stream) {
+    } else if (parameters.writeOptions.writeMode == WriteMode.Stream) {
       streamRowsIntoKusto(batchIdForTracing, rows, parameters)
-    }
-    else {
+    } else {
       ingestToTemporaryTableByWorkers(batchIdForTracing, rows, partitionsResults, parameters)
     }
   }
@@ -327,14 +325,17 @@ object KustoWriter {
     ingestionProperties
   }
 
-  private def streamRowsIntoKusto(batchIdForTracing: String,
-                              rows: Iterator[InternalRow],
-                              parameters: KustoWriteResource): Unit = {
-    val streamingClient = KustoClientCache.getClient(
-      parameters.coordinates.clusterUrl,
-      parameters.authentication,
-      parameters.coordinates.ingestionUrl,
-      parameters.coordinates.clusterAlias).streamingClient
+  private def streamRowsIntoKusto(
+      batchIdForTracing: String,
+      rows: Iterator[InternalRow],
+      parameters: KustoWriteResource): Unit = {
+    val streamingClient = KustoClientCache
+      .getClient(
+        parameters.coordinates.clusterUrl,
+        parameters.authentication,
+        parameters.coordinates.ingestionUrl,
+        parameters.coordinates.clusterAlias)
+      .streamingClient
 
     val timeZone = TimeZone.getTimeZone(parameters.writeOptions.timeZone).toZoneId
     val byteArrayOutputStream = new ByteArrayOutputStream()
@@ -346,10 +347,16 @@ object KustoWriter {
     for (row <- rows) {
       RowCSVWriterUtils.writeRowAsCSV(row, parameters.schema, timeZone, csvWriter)
       if (csvWriter.getCounter >= KCONST.MaxStreamingBytes) {
-        KDSU.logWarn(className, s"Batch $batchIdForTracing exceeds the max streaming size (${KCONST.MaxStreamingBytes} bytes)! " +
-          s"Streaming ${csvWriter.getCounter} bytes from batch $batchIdForTracing ($count).")
+        KDSU.logWarn(
+          className,
+          s"Batch $batchIdForTracing exceeds the max streaming size (${KCONST.MaxStreamingBytes} bytes)! " +
+            s"Streaming ${csvWriter.getCounter} bytes from batch $batchIdForTracing ($count).")
         writer.flush()
-        streamBytesIntoKusto(batchIdForTracing, byteArrayOutputStream.toByteArray, streamingClient, parameters)
+        streamBytesIntoKusto(
+          batchIdForTracing,
+          byteArrayOutputStream.toByteArray,
+          streamingClient,
+          parameters)
         csvWriter.resetCounter()
         byteArrayOutputStream.reset()
         count = count + 1
@@ -359,29 +366,39 @@ object KustoWriter {
     writer.flush()
     writer.close()
     if (csvWriter.getCounter > 0) {
-      KDSU.logInfo(className, s"Streaming ${csvWriter.getCounter} bytes from batch $batchIdForTracing ($count).")
-      streamBytesIntoKusto(batchIdForTracing, byteArrayOutputStream.toByteArray, streamingClient, parameters)
+      KDSU.logInfo(
+        className,
+        s"Streaming ${csvWriter.getCounter} bytes from batch $batchIdForTracing ($count).")
+      streamBytesIntoKusto(
+        batchIdForTracing,
+        byteArrayOutputStream.toByteArray,
+        streamingClient,
+        parameters)
     }
   }
 
-  private def streamBytesIntoKusto(batchIdForTracing: String,
-                              bytes: Array[Byte],
-                              streamingClient: StreamingIngestClient,
-                              parameters: KustoWriteResource): Unit = {
+  private def streamBytesIntoKusto(
+      batchIdForTracing: String,
+      bytes: Array[Byte],
+      streamingClient: StreamingIngestClient,
+      parameters: KustoWriteResource): Unit = {
     val streamSourceInfo = new StreamSourceInfo(new ByteArrayInputStream(bytes))
-    val ingestionProperties = getIngestionProperties(parameters.writeOptions, parameters.coordinates.database, parameters.coordinates.table.get)
+    val ingestionProperties = getIngestionProperties(
+      parameters.writeOptions,
+      parameters.coordinates.database,
+      parameters.coordinates.table.get)
     val status = streamingClient.ingestFromStream(streamSourceInfo, ingestionProperties)
-    status.getIngestionStatusCollection.forEach(
-      item => {
-        KDSU.logInfo(
-          className, s"BatchId $batchIdForTracing IngestionStatus { " +
-            s"status: '${item.status.toString}', " +
-            s"details: ${item.details}, " +
-            s"activityId: ${item.activityId}, " +
-            s"errorCode: ${item.errorCode}, " +
-            s"errorCodeString: ${item.errorCodeString}" +
-            "}")
-      })
+    status.getIngestionStatusCollection.forEach(item => {
+      KDSU.logInfo(
+        className,
+        s"BatchId $batchIdForTracing IngestionStatus { " +
+          s"status: '${item.status.toString}', " +
+          s"details: ${item.details}, " +
+          s"activityId: ${item.activityId}, " +
+          s"errorCode: ${item.errorCode}, " +
+          s"errorCodeString: ${item.errorCodeString}" +
+          "}")
+    })
   }
 
   private def ingestToTemporaryTableByWorkers(
