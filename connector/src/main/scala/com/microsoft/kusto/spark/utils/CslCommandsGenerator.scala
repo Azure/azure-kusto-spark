@@ -245,11 +245,13 @@ private[kusto] object CslCommandsGenerator {
   }
 
   def generateTableAlterStreamIngestionCommand(tmpTableName: String): String = {
-    s""".alter table ${KustoQueryUtils.normalizeTableName(tmpTableName)} policy streamingingestion enable"""
+    s""".alter table ${KustoQueryUtils.normalizeTableName(
+        tmpTableName)} policy streamingingestion enable"""
   }
 
   def generateClearStreamingIngestionCacheCommand(tmpTableName: String): String = {
-    s""".clear table ${KustoQueryUtils.normalizeTableName(tmpTableName)} cache streamingingestion schema"""
+    s""".clear table ${KustoQueryUtils.normalizeTableName(
+        tmpTableName)} cache streamingingestion schema"""
   }
 
   def generateShowTableMappingsCommand(tableName: String, kind: String): String = {

@@ -391,7 +391,13 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
       .mode(SaveMode.Append)
       .save()
 
-    KustoTestUtils.validateResultsAndCleanup(kustoAdminClient, table, database, expectedNumberOfRows, timeoutMs, tableCleanupPrefix = prefix)
+    KustoTestUtils.validateResultsAndCleanup(
+      kustoAdminClient,
+      table,
+      database,
+      expectedNumberOfRows,
+      timeoutMs,
+      tableCleanupPrefix = prefix)
   }
 
   "KustoBatchSinkStreaming" should "ingest structured data to a Kusto cluster in stream ingestion mode" taggedAs KustoE2E in {
@@ -399,9 +405,15 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
     val df = rows.toDF("name", "value")
     val prefix = "KustoBatchSinkE2EIngestStreamIngestion"
     val table = KustoQueryUtils.simplifyName(s"${prefix}_${UUID.randomUUID()}")
-    val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://$cluster.kusto.windows.net", appId, appKey, authority)
+    val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(
+      s"https://$cluster.kusto.windows.net",
+      appId,
+      appKey,
+      authority)
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
-    kustoAdminClient.execute(database, generateTempTableCreateCommand(table, columnsTypesAndNames = "ColA:string, ColB:int"))
+    kustoAdminClient.execute(
+      database,
+      generateTempTableCreateCommand(table, columnsTypesAndNames = "ColA:string, ColB:int"))
     kustoAdminClient.execute(database, generateTableAlterStreamIngestionCommand(table))
 
     Thread.sleep(sleepTimeTillTableCreate)
