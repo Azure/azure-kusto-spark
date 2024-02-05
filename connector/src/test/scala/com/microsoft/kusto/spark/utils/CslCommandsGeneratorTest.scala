@@ -1,31 +1,60 @@
 package com.microsoft.kusto.spark.utils
 
-import com.microsoft.kusto.spark.datasource.{TransientStorageCredentials, TransientStorageParameters}
+import com.microsoft.kusto.spark.datasource.{
+  TransientStorageCredentials,
+  TransientStorageParameters
+}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.prop.TableDrivenPropertyChecks.forAll
 import org.scalatest.prop.Tables.Table
-
 
 class CslCommandsGeneratorTest extends AnyFlatSpec {
   private val dataCombinations =
     Table(
       ("additionalExportOptions", "expectedOptions", "compressed", "iteration"),
-      (Map("key1" -> "value1", "exportOption2" -> "eo2", "sizeLimit" -> "1000"), "with (sizeLimit=1048576000 , namePrefix=\"storms/data/part1\", " +
-        "compressionType=\"snappy\",key1=\"value1\",exportOption2=\"eo2\")", "compressed", 1),
+      (
+        Map("key1" -> "value1", "exportOption2" -> "eo2", "sizeLimit" -> "1000"),
+        "with (sizeLimit=1048576000 , namePrefix=\"storms/data/part1\", " +
+          "compressionType=\"snappy\",key1=\"value1\",exportOption2=\"eo2\")",
+        "compressed",
+        1),
       // size is not provided. Hence this will fallback to default without size
-      (Map("key1" -> "value1", "exportOption2" -> "eo2", "compressionType" -> "gz"),
-        "with ( namePrefix=\"storms/data/part1\", compressionType=\"gz\",key1=\"value1\",exportOption2=\"eo2\")", "compressed" ,2),
+      (
+        Map("key1" -> "value1", "exportOption2" -> "eo2", "compressionType" -> "gz"),
+        "with ( namePrefix=\"storms/data/part1\", compressionType=\"gz\",key1=\"value1\",exportOption2=\"eo2\")",
+        "compressed",
+        2),
       // Though namePrefix is specified, we do not use this option and ignore this. This has downstream implications
       // where we read the exported data, better to lock this option atleast for now
-      (Map("key1" -> "value1", "exportOption2" -> "eo2", "compressionType" -> "gz", "namePrefix" -> "Np-2"),
-        "with ( namePrefix=\"storms/data/part1\", compressionType=\"gz\",key1=\"value1\",exportOption2=\"eo2\")", "compressed", 3),
+      (
+        Map(
+          "key1" -> "value1",
+          "exportOption2" -> "eo2",
+          "compressionType" -> "gz",
+          "namePrefix" -> "Np-2"),
+        "with ( namePrefix=\"storms/data/part1\", compressionType=\"gz\",key1=\"value1\",exportOption2=\"eo2\")",
+        "compressed",
+        3),
       // when compressed is set as none, this should not appear in the command
-      (Map("key1" -> "value1", "exportOption2" -> "eo2", "compressionType" -> "gz", "compressed" -> "none"),
-        "with ( namePrefix=\"storms/data/part1\", compressionType=\"gz\",key1=\"value1\",exportOption2=\"eo2\")", "", 4),
+      (
+        Map(
+          "key1" -> "value1",
+          "exportOption2" -> "eo2",
+          "compressionType" -> "gz",
+          "compressed" -> "none"),
+        "with ( namePrefix=\"storms/data/part1\", compressionType=\"gz\",key1=\"value1\",exportOption2=\"eo2\")",
+        "",
+        4),
       // when compressed is none , it should not be in the command
-      (Map("key1" -> "value1", "exportOption2" -> "eo2", "compressionType" -> "gz", "compressed" -> "none"),
-        "with ( namePrefix=\"storms/data/part1\", compressionType=\"gz\",key1=\"value1\",exportOption2=\"eo2\")", "",5)
-    )
+      (
+        Map(
+          "key1" -> "value1",
+          "exportOption2" -> "eo2",
+          "compressionType" -> "gz",
+          "compressed" -> "none"),
+        "with ( namePrefix=\"storms/data/part1\", compressionType=\"gz\",key1=\"value1\",exportOption2=\"eo2\")",
+        "",
+        5))
 
   forAll(dataCombinations) { (additionalExportOptions, expectedOptions, compressed, iteration) =>
     "TestGenerateExportDataCommand" should s"generate command with additional options-$iteration" in {
@@ -36,9 +65,15 @@ class CslCommandsGeneratorTest extends AnyFlatSpec {
         "test-storage-account",
         "test-storage-account-key",
         "test-storage-account-container")
-      val transientStorageParameters = new TransientStorageParameters(Array(transientStorageCredentials))
-      val commandResult = CslCommandsGenerator.generateExportDataCommand(query, directory, partitionId,
-        transientStorageParameters, Option.empty[String], additionalExportOptions = additionalExportOptions)
+      val transientStorageParameters =
+        new TransientStorageParameters(Array(transientStorageCredentials))
+      val commandResult = CslCommandsGenerator.generateExportDataCommand(
+        query,
+        directory,
+        partitionId,
+        transientStorageParameters,
+        Option.empty[String],
+        additionalExportOptions = additionalExportOptions)
       assert(commandResult.nonEmpty)
       val expectedResult = s".export async $compressed to parquet " +
         "(\"https://test-storage-account.blob.core.windows.net/test-storage-account-container;\" h@\"test-storage-account-key\") " +

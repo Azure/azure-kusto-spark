@@ -9,20 +9,24 @@ import org.apache.commons.lang3.StringUtils
 
 import java.security.InvalidParameterException
 import scala.util.matching.Regex
-class TransientStorageParameters(val storageCredentials: scala.Array[TransientStorageCredentials],
-                                 var endpointSuffix: String = KustoDataSourceUtils.DefaultDomainPostfix){
+class TransientStorageParameters(
+    val storageCredentials: scala.Array[TransientStorageCredentials],
+    var endpointSuffix: String = KustoDataSourceUtils.DefaultDomainPostfix) {
 
   // C'tor for serialization
-  def this(){
+  def this() {
     this(Array())
   }
 
   override def toString: String = {
-    storageCredentials.map(tsc => tsc.toString).mkString("[",System.lineSeparator(),s", domain: $endpointSuffix]")
+    storageCredentials
+      .map(tsc => tsc.toString)
+      .mkString("[", System.lineSeparator(), s", domain: $endpointSuffix]")
   }
 
   def toInsecureString: String = {
-    new ObjectMapper().setVisibility(PropertyAccessor.FIELD, Visibility.ANY)
+    new ObjectMapper()
+      .setVisibility(PropertyAccessor.FIELD, Visibility.ANY)
       .writerWithDefaultPrettyPrinter
       .writeValueAsString(this)
   }
@@ -37,7 +41,7 @@ final case class TransientStorageCredentials() {
   var sasUrl: String = _
   var domainSuffix: String = _
 
-  def this(storageAccountName: String,  storageAccountKey: String, blobContainer: String) {
+  def this(storageAccountName: String, storageAccountKey: String, blobContainer: String) {
     this()
     this.blobContainer = blobContainer
     this.storageAccountName = storageAccountName
@@ -75,31 +79,39 @@ final case class TransientStorageCredentials() {
 
   private[kusto] def parseSas(url: String): Unit = {
     url match {
-      case TransientStorageCredentials.SasPattern(storageAccountName, maybeZone, cloud, container, sasKey) =>
+      case TransientStorageCredentials.SasPattern(
+            storageAccountName,
+            maybeZone,
+            cloud,
+            container,
+            sasKey) =>
         this.storageAccountName = storageAccountName + (if (maybeZone == null) "" else maybeZone)
         this.blobContainer = container
         this.sasKey = sasKey
         domainSuffix = cloud
-      case _ => throw new InvalidParameterException(
-        "SAS url couldn't be parsed. Should be https://<storage-account>.blob.<domainEndpointSuffix>/<container>?<SAS-Token>"
-      )
+      case _ =>
+        throw new InvalidParameterException(
+          "SAS url couldn't be parsed. Should be https://<storage-account>.blob.<domainEndpointSuffix>/<container>?<SAS-Token>")
     }
   }
 
   override def toString: String = {
-      s"BlobContainer: $blobContainer ,Storage: $storageAccountName , IsSasKeyDefined: $sasDefined"
+    s"BlobContainer: $blobContainer ,Storage: $storageAccountName , IsSasKeyDefined: $sasDefined"
   }
 
 }
 
 object TransientStorageParameters {
   private[kusto] def fromString(json: String): TransientStorageParameters = {
-    new ObjectMapper().registerModule(new JavaTimeModule()).
-      setVisibility(PropertyAccessor.FIELD, Visibility.ANY).setVisibility(PropertyAccessor.FIELD, Visibility.ANY).
-      readValue(json, classOf[TransientStorageParameters])
+    new ObjectMapper()
+      .registerModule(new JavaTimeModule())
+      .setVisibility(PropertyAccessor.FIELD, Visibility.ANY)
+      .setVisibility(PropertyAccessor.FIELD, Visibility.ANY)
+      .readValue(json, classOf[TransientStorageParameters])
   }
 }
 
 object TransientStorageCredentials {
-  private val SasPattern: Regex = raw"https:\/\/([^.]+)(\.[^.]+)?\.blob\.([^\/]+)\/([^?]+)(\?.+)".r
+  private val SasPattern: Regex =
+    raw"https:\/\/([^.]+)(\.[^.]+)?\.blob\.([^\/]+)\/([^?]+)(\?.+)".r
 }

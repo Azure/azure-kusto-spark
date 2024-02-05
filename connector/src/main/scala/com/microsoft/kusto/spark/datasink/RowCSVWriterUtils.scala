@@ -12,11 +12,21 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 object RowCSVWriterUtils {
-  def writeRowAsCSV(row: InternalRow, schema: StructType, timeZone: ZoneId, writer: CountingWriter): Unit = {
+  def writeRowAsCSV(
+      row: InternalRow,
+      schema: StructType,
+      timeZone: ZoneId,
+      writer: CountingWriter): Unit = {
     val schemaFields: Array[StructField] = schema.fields
 
     if (!row.isNullAt(0)) {
-      writeField(row, fieldIndexInRow = 0, schemaFields(0).dataType, timeZone, writer, nested = false)
+      writeField(
+        row,
+        fieldIndexInRow = 0,
+        schemaFields(0).dataType,
+        timeZone,
+        writer,
+        nested = false)
     }
 
     for (i <- 1 until row.numFields) {
@@ -37,31 +47,56 @@ object RowCSVWriterUtils {
     }
   }
 
-  private def getLocalDateTimeFromTimestampWithZone (timestamp:Long, timeZone: ZoneId) ={
+  private def getLocalDateTimeFromTimestampWithZone(timestamp: Long, timeZone: ZoneId) = {
     LocalDateTime.ofInstant(Instant.EPOCH.plus(timestamp, ChronoUnit.MICROS), timeZone)
   }
 
   // This method does not check for null at the current row idx and should be checked before !
-  private def writeField(row: SpecializedGetters, fieldIndexInRow: Int, dataType: DataType, timeZone: ZoneId,
-                         writer: Writer, nested: Boolean): Unit = {
+  private def writeField(
+      row: SpecializedGetters,
+      fieldIndexInRow: Int,
+      dataType: DataType,
+      timeZone: ZoneId,
+      writer: Writer,
+      nested: Boolean): Unit = {
     dataType match {
       case StringType => writeStringFromUTF8(row.getUTF8String(fieldIndexInRow), writer)
-      case DateType => writer.writeStringField(DateTimeUtils.toJavaDate(row.getInt(fieldIndexInRow)).toString)
-      case TimestampType => writer.writeStringField(getLocalDateTimeFromTimestampWithZone(row.getLong
-        (fieldIndexInRow), timeZone).toString)
+      case DateType =>
+        writer.writeStringField(DateTimeUtils.toJavaDate(row.getInt(fieldIndexInRow)).toString)
+      case TimestampType =>
+        writer.writeStringField(
+          getLocalDateTimeFromTimestampWithZone(row.getLong(fieldIndexInRow), timeZone).toString)
       case BooleanType => writer.write(row.getBoolean(fieldIndexInRow).toString)
-      case structType: StructType => writeJsonField(convertStructToJson(row.getStruct(fieldIndexInRow, structType.length),
-        structType, timeZone), writer, nested)
-      case arrType: ArrayType => writeJsonField(convertArrayToJson(row.getArray(fieldIndexInRow), arrType.elementType, timeZone), writer, nested)
-      case mapType: MapType => writeJsonField(convertMapToJson(row.getMap(fieldIndexInRow), mapType, timeZone), writer, nested)
+      case structType: StructType =>
+        writeJsonField(
+          convertStructToJson(
+            row.getStruct(fieldIndexInRow, structType.length),
+            structType,
+            timeZone),
+          writer,
+          nested)
+      case arrType: ArrayType =>
+        writeJsonField(
+          convertArrayToJson(row.getArray(fieldIndexInRow), arrType.elementType, timeZone),
+          writer,
+          nested)
+      case mapType: MapType =>
+        writeJsonField(
+          convertMapToJson(row.getMap(fieldIndexInRow), mapType, timeZone),
+          writer,
+          nested)
       case ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType =>
         writer.write(row.get(fieldIndexInRow, dataType).toString)
-      case decimalType: DecimalType => writeDecimalField(row, fieldIndexInRow, decimalType.precision, decimalType.scale, writer)
+      case decimalType: DecimalType =>
+        writeDecimalField(row, fieldIndexInRow, decimalType.precision, decimalType.scale, writer)
       case _ => writer.writeStringField(row.get(fieldIndexInRow, dataType).toString)
     }
   }
 
-  private def convertStructToJson(row: InternalRow, schema: StructType, timeZone: ZoneId): String = {
+  private def convertStructToJson(
+      row: InternalRow,
+      schema: StructType,
+      timeZone: ZoneId): String = {
     val fields = schema.fields
     if (fields.length != 0) {
       val writer = EscapedWriter(new CharArrayWriter())
@@ -78,7 +113,7 @@ object RowCSVWriterUtils {
       }
 
       while (x < fields.length) {
-        if (!row.isNullAt(x)){
+        if (!row.isNullAt(x)) {
           writer.write(',')
           writeStructField(x)
         }
@@ -98,15 +133,21 @@ object RowCSVWriterUtils {
     }
   }
 
-  private def convertArrayToJson(ar: ArrayData, fieldsType: DataType, timeZone: ZoneId): String = {
-    if (ar.numElements() == 0) "[]" else {
+  private def convertArrayToJson(
+      ar: ArrayData,
+      fieldsType: DataType,
+      timeZone: ZoneId): String = {
+    if (ar.numElements() == 0) "[]"
+    else {
       val writer = EscapedWriter(new CharArrayWriter())
 
       writer.write('[')
-      if (ar.isNullAt(0)) writer.write("null") else writeField(ar, fieldIndexInRow = 0, fieldsType, timeZone, writer, nested = true)
+      if (ar.isNullAt(0)) writer.write("null")
+      else writeField(ar, fieldIndexInRow = 0, fieldsType, timeZone, writer, nested = true)
       for (x <- 1 until ar.numElements()) {
         writer.write(',')
-        if (ar.isNullAt(x)) writer.write("null") else writeField(ar, x, fieldsType, timeZone, writer, nested = true)
+        if (ar.isNullAt(x)) writer.write("null")
+        else writeField(ar, x, fieldsType, timeZone, writer, nested = true)
       }
       writer.write(']')
 
@@ -143,14 +184,31 @@ object RowCSVWriterUtils {
     writer.write('}')
 
     def writeMapField(idx: Int): Unit = {
-      writeField(keys, fieldIndexInRow = idx, dataType = fieldsType.keyType, timeZone = timeZone, writer, nested = true)
+      writeField(
+        keys,
+        fieldIndexInRow = idx,
+        dataType = fieldsType.keyType,
+        timeZone = timeZone,
+        writer,
+        nested = true)
       writer.write(':')
-      writeField(values, fieldIndexInRow = idx, dataType = fieldsType.valueType, timeZone = timeZone, writer = writer, nested = true)
+      writeField(
+        values,
+        fieldIndexInRow = idx,
+        dataType = fieldsType.valueType,
+        timeZone = timeZone,
+        writer = writer,
+        nested = true)
     }
     writer.out.toString
   }
 
-  private def writeDecimalField(row: SpecializedGetters, fieldIndexInRow: Int, precision: Int,scale: Int, writer: Writer): Unit = {
+  private def writeDecimalField(
+      row: SpecializedGetters,
+      fieldIndexInRow: Int,
+      precision: Int,
+      scale: Int,
+      writer: Writer): Unit = {
     writer.write('"')
     val (numStr: String, negative: Boolean) = if (precision <= Decimal.MAX_LONG_DIGITS) {
       val num: Long = row.getLong(fieldIndexInRow)
@@ -163,19 +221,19 @@ object RowCSVWriterUtils {
 
     // Get string representation without scientific notation
     var point = numStr.length - scale
-    if (negative){
+    if (negative) {
       writer.write("-")
     }
-    if (point <= 0){
+    if (point <= 0) {
       writer.write('0')
       writer.write('.')
-      while(point < 0){
+      while (point < 0) {
         writer.write('0')
         point += 1
       }
       writer.write(numStr)
     } else {
-      for (i <- 0 until numStr.length){
+      for (i <- 0 until numStr.length) {
         if (point == i) {
           writer.write('.')
         }

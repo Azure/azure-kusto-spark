@@ -22,7 +22,7 @@ case class CountingWriter(out: java.io.Writer) extends Writer {
     bytesCounter += newLineSepLength
   }
 
-  def write(c: Char): Unit ={
+  def write(c: Char): Unit = {
     out.write(c)
     bytesCounter += 1
   }
@@ -56,13 +56,13 @@ case class CountingWriter(out: java.io.Writer) extends Writer {
 }
 
 case class EscapedWriter(out: java.io.Writer) extends Writer {
-  def write(c: Char): Unit ={
+  def write(c: Char): Unit = {
     out.write(c)
   }
 
-  def write(str: String): Unit ={
+  def write(str: String): Unit = {
     for (c <- str) {
-      val escaped =  if (c > 127) 0 else EscapedWriter.escapeTable(c)
+      val escaped = if (c > 127) 0 else EscapedWriter.escapeTable(c)
       if (escaped != 0) {
         out.write('\\')
         out.write(escaped)

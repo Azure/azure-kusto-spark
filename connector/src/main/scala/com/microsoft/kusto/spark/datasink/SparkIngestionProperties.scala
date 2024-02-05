@@ -11,31 +11,34 @@ import com.microsoft.azure.kusto.ingest.{IngestionMapping, IngestionProperties}
 
 import java.time.Instant
 
-class SparkIngestionProperties(var flushImmediately: Boolean = false,
-                               var dropByTags: util.ArrayList[String] = null,
-                               var ingestByTags: util.ArrayList[String] = null,
-                               var additionalTags: util.ArrayList[String] = null,
-                               var ingestIfNotExists: util.List[String] = null,
-                               var creationTime: Instant = null,
-                               var csvMapping: String = null,
-                               var csvMappingNameReference: String = null){
+class SparkIngestionProperties(
+    var flushImmediately: Boolean = false,
+    var dropByTags: util.ArrayList[String] = null,
+    var ingestByTags: util.ArrayList[String] = null,
+    var additionalTags: util.ArrayList[String] = null,
+    var ingestIfNotExists: util.List[String] = null,
+    var creationTime: Instant = null,
+    var csvMapping: String = null,
+    var csvMappingNameReference: String = null) {
   // C'tor for serialization
-  def this(){
+  def this() {
     this(false)
   }
 
   override def toString: String = {
-    new ObjectMapper().registerModule(new JavaTimeModule()).
-      setVisibility(PropertyAccessor.FIELD, Visibility.ANY).setVisibility(PropertyAccessor.FIELD, Visibility.ANY)
+    new ObjectMapper()
+      .registerModule(new JavaTimeModule())
+      .setVisibility(PropertyAccessor.FIELD, Visibility.ANY)
+      .setVisibility(PropertyAccessor.FIELD, Visibility.ANY)
       .writerWithDefaultPrettyPrinter
       .writeValueAsString(this)
   }
 
-  def toIngestionProperties(database: String, table: String): IngestionProperties ={
+  def toIngestionProperties(database: String, table: String): IngestionProperties = {
     val ingestionProperties = new IngestionProperties(database, table)
     val additionalProperties = new util.HashMap[String, String]()
 
-    if (this.flushImmediately){
+    if (this.flushImmediately) {
       ingestionProperties.setFlushImmediately(true)
     }
 
@@ -65,7 +68,10 @@ class SparkIngestionProperties(var flushImmediately: Boolean = false,
     }
 
     if (this.csvMappingNameReference != null) {
-      ingestionProperties.setIngestionMapping(new IngestionMapping(this.csvMappingNameReference, IngestionMapping.IngestionMappingKind.CSV))
+      ingestionProperties.setIngestionMapping(
+        new IngestionMapping(
+          this.csvMappingNameReference,
+          IngestionMapping.IngestionMappingKind.CSV))
     }
 
     ingestionProperties.setAdditionalProperties(additionalProperties)
@@ -74,9 +80,12 @@ class SparkIngestionProperties(var flushImmediately: Boolean = false,
 }
 
 object SparkIngestionProperties {
-  def cloneIngestionProperties(ingestionProperties: IngestionProperties, destinationTable: Option[String] = None): IngestionProperties = {
-    val cloned = new IngestionProperties(ingestionProperties.getDatabaseName,
-      if(destinationTable.isDefined) destinationTable.get else ingestionProperties.getTableName)
+  def cloneIngestionProperties(
+      ingestionProperties: IngestionProperties,
+      destinationTable: Option[String] = None): IngestionProperties = {
+    val cloned = new IngestionProperties(
+      ingestionProperties.getDatabaseName,
+      if (destinationTable.isDefined) destinationTable.get else ingestionProperties.getTableName)
     cloned.setReportLevel(ingestionProperties.getReportLevel)
     cloned.setReportMethod(ingestionProperties.getReportMethod)
     cloned.setAdditionalTags(ingestionProperties.getAdditionalTags)
@@ -91,7 +100,9 @@ object SparkIngestionProperties {
   }
 
   private[kusto] def fromString(json: String): SparkIngestionProperties = {
-    new ObjectMapper().registerModule(new JavaTimeModule()).
-      setVisibility(PropertyAccessor.FIELD, Visibility.ANY).readValue(json, classOf[SparkIngestionProperties])
+    new ObjectMapper()
+      .registerModule(new JavaTimeModule())
+      .setVisibility(PropertyAccessor.FIELD, Visibility.ANY)
+      .readValue(json, classOf[SparkIngestionProperties])
   }
 }

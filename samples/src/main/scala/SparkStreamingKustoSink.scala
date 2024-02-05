@@ -7,9 +7,13 @@ import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.sql.functions._
 
 // COMMAND ----------
-/** ************************************************/
+/**
+ * ***********************************************
+ */
 /*          STREAMING SINK EXAMPLE                */
-/** ************************************************/
+/**
+ * ***********************************************
+ */
 
 // To enable faster ingestion into kusto, set a minimal value for the batching ingestion policy:
 // .alter table <table name> policy ingestionbatching @'{"MaximumBatchingTimeSpan": "00:00:10",}'
@@ -18,7 +22,8 @@ object SparkStreamingKustoSink {
   def main(args: Array[String]): Unit = {
     // COMMAND ----------
     // Note! This command is not required if you run in a Databricks notebook
-    val spark: SparkSession = SparkSession.builder()
+    val spark: SparkSession = SparkSession
+      .builder()
       .appName("SparkStreamingKustoSink")
       .master(f"local[4]")
       .getOrCreate()
@@ -43,8 +48,7 @@ object SparkStreamingKustoSink {
     spark.conf.set("spark.sql.streaming.checkpointLocation", "target/temp/checkpoint/")
 
     // Write to a Kusto table from a streaming source
-    val df1 = df
-      .writeStream
+    val df1 = df.writeStream
       .format("com.microsoft.kusto.spark.datasink.KustoSinkProvider")
       .option(KustoSinkOptions.KUSTO_CLUSTER, "Your Kusto Cluster")
       .option(KustoSinkOptions.KUSTO_DATABASE, "Your Kusto Database")
@@ -57,4 +61,3 @@ object SparkStreamingKustoSink {
     df1.awaitTermination(TimeUnit.MINUTES.toMillis(8))
   }
 }
-

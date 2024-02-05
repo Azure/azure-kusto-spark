@@ -7,7 +7,6 @@ import java.sql.Timestamp
 import scala.collection.JavaConverters.collectionAsScalaIterableConverter
 import scala.io.Source
 
-
 class KustoResponseDeserializerTest extends AnyFlatSpec {
 
   "Data types should get resolved and rows" should "get extracted - v1 queries" in {
@@ -21,7 +20,8 @@ class KustoResponseDeserializerTest extends AnyFlatSpec {
   }
 
   private def readTestSource(fileName: String): String = {
-    val queryResultsSource = Source.fromFile(this.getClass.getResource(s"/TestData/json/$fileName").getPath)
+    val queryResultsSource =
+      Source.fromFile(this.getClass.getResource(s"/TestData/json/$fileName").getPath)
     val queryResults = queryResultsSource.getLines().mkString
     queryResultsSource.close()
     queryResults
@@ -45,7 +45,8 @@ class KustoResponseDeserializerTest extends AnyFlatSpec {
       val actualRealResult = rowAsMap.getOrElse("vreal", 0.0d)
       val expectedLongResult = primaryResults.getLong("vlong")
       val actualLongResult = rowAsMap.getOrElse("vlong", 0L)
-      val expectedDateResult = Timestamp.from(java.time.Instant.parse(primaryResults.getString("vdate")))
+      val expectedDateResult =
+        Timestamp.from(java.time.Instant.parse(primaryResults.getString("vdate")))
       val fallbackTime = Timestamp.from(java.time.Instant.now())
       val actualDateResult = rowAsMap.getOrElse("vdate", fallbackTime)
       assert(expectedRealResult == actualRealResult)

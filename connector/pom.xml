@@ -357,6 +357,16 @@
                 </executions>
                 <configuration>
                     <addScalacArgs>-target:jvm-1.8</addScalacArgs>
+                    <args>
+                        <arg>-Ywarn-unused</arg> <!-- if you need exactly RemoveUnused -->
+                    </args>
+                    <compilerPlugins>
+                        <compilerPlugin>
+                            <groupId>org.scalameta</groupId>
+                            <artifactId>semanticdb-scalac_${scala.version.major}.${scala.version.minor}</artifactId>
+                            <version>4.8.14</version>
+                        </compilerPlugin>
+                    </compilerPlugins>
                 </configuration>
             </plugin>
             <plugin>
