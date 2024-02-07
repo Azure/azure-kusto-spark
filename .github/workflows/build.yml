@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     name: Setup Java 8, build and run tests
     permissions:
-      actions: write
+      checks: write
     steps:
       - uses: actions/checkout@v2
       - name: Setup java
