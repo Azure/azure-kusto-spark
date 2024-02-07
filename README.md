@@ -4,7 +4,7 @@
 
 # Azure Data Explorer Connector for Apache Spark
   
-master: [![Build Status](https://github.com/Azure/azure-kusto-spark/actions/workflows/build.yml/badge.svg)](https://github.com/Azure/azure-kusto-spark/actions/workflows/build.yml)
+master: [![Build](https://github.com/Azure/azure-kusto-spark/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/Azure/azure-kusto-spark/actions/workflows/build.yml)
 
 This library contains the source code for Azure Data Explorer Data Source and Data Sink Connector for Apache Spark.
 
