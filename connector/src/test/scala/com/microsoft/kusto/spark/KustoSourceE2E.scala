@@ -107,7 +107,7 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
     // Create a new table.
     KDSU.logInfo("e2e","running KustoConnector")
     val crp = new ClientRequestProperties
-    crp.setTimeoutInMilliSec(2000)
+    crp.setTimeoutInMilliSec(60000)
     val ingestByTags = new java.util.ArrayList[String]
     val tag = "dammyTag"
     ingestByTags.add(tag)

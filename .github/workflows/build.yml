@@ -1,0 +1,36 @@
+name: Build Java
+on:
+  push:
+    branches: [ '**' ]
+  pull_request:
+    branches: [ '**' ]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    name: Setup Java 8, build and run tests
+    steps:
+      - uses: actions/checkout@v2
+      - name: Setup java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'adopt'
+          java-version: 8
+          cache: 'maven'
+      - name: Run the Maven verify phase
+        env:
+          kustoAadAuthorityID: ${{ secrets.TENANT_ID }}
+          kustoAadAppSecret: ${{ secrets.APP_SECRET }}
+          kustoDatabase: ${{ secrets.DATABASE }}
+          kustoCluster: ${{ secrets.CLUSTER }}
+          SecretPath: ${{ secrets.SECRET_PATH }}
+          kustoAadAppId: ${{secrets.APP_ID}}
+        run: mvn clean verify -DkustoAadAppId=${{ secrets.APP_ID }} -DkustoAadAuthorityID=${{ secrets.TENANT_ID }} -DkustoAadAppSecret=${{ secrets.APP_SECRET }} -DkustoDatabase=${{ secrets.DATABASE }} -DkustoCluster=${{ secrets.CLUSTER }} -DSecretPath=${{ secrets.SECRET_PATH }}
+      - name: Publish Unit Test Results
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        if: always()
+        with:
+          files: |
+            data/target/surefire-reports/*.xml
+            ingest/target/surefire-reports/*.xml
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v2
