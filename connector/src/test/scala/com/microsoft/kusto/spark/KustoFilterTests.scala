@@ -9,21 +9,20 @@ import org.scalatest.matchers.should.Matchers
 
 import java.sql.{Date, Timestamp}
 
+class KustoFilterTests extends AnyFlatSpec with MockFactory with Matchers {
 
-class KustoFilterTests extends AnyFlatSpec with MockFactory with Matchers{
-
-  private val schema: StructType = StructType(Seq(
-    StructField("string", StringType),
-    StructField("bool", BooleanType),
-    StructField("int", IntegerType),
-    StructField("byte", ByteType),
-    StructField("double", DoubleType),
-    StructField("float", FloatType),
-    StructField("long", LongType),
-    StructField("short", ShortType),
-    StructField("date", DateType),
-    StructField("timestamp", TimestampType)))
-
+  private val schema: StructType = StructType(
+    Seq(
+      StructField("string", StringType),
+      StructField("bool", BooleanType),
+      StructField("int", IntegerType),
+      StructField("byte", ByteType),
+      StructField("double", DoubleType),
+      StructField("float", FloatType),
+      StructField("long", LongType),
+      StructField("short", ShortType),
+      StructField("date", DateType),
+      StructField("timestamp", TimestampType)))
 
   "Filter clause" should "be empty if filters list is empty" in {
     assert(KustoFilter.buildFiltersClause(StructType(Nil), Seq.empty) === "")
@@ -40,14 +39,17 @@ class KustoFilterTests extends AnyFlatSpec with MockFactory with Matchers{
   }
 
   "EqualTo expression" should "construct equality filter correctly for date type" in {
-      // Java.sql.date  year is 1900-based, month is 0-based
-      val filter = KustoFilter.buildFilterExpression(schema, EqualTo("date", Date.valueOf("2019-02-21")))
-      filter shouldBe Some("""['date'] == datetime('2019-02-21')""")
+    // Java.sql.date  year is 1900-based, month is 0-based
+    val filter =
+      KustoFilter.buildFilterExpression(schema, EqualTo("date", Date.valueOf("2019-02-21")))
+    filter shouldBe Some("""['date'] == datetime('2019-02-21')""")
   }
 
   "EqualTo expression" should "construct equality filter correctly for timestamp type" in {
     // Java.sql.date  year is 1900-based, month is 0-based
-    val filter = KustoFilter.buildFilterExpression(schema, EqualTo("timestamp", Timestamp.valueOf("2019-02-21 12:30:02.000000123")))
+    val filter = KustoFilter.buildFilterExpression(
+      schema,
+      EqualTo("timestamp", Timestamp.valueOf("2019-02-21 12:30:02.000000123")))
     filter shouldBe Some("""['timestamp'] == datetime('2019-02-21 12:30:02.000000123')""")
   }
 
@@ -88,7 +90,9 @@ class KustoFilterTests extends AnyFlatSpec with MockFactory with Matchers{
 
   "In expression" should "construct filter expression correctly for a set of values" in {
     val stringArray = Array("One Mississippi", "Two Mississippi", "Hippo")
-    val filter = KustoFilter.buildFilterExpression(schema, In("string", stringArray.asInstanceOf[Array[Any]]))
+    val filter = KustoFilter.buildFilterExpression(
+      schema,
+      In("string", stringArray.asInstanceOf[Array[Any]]))
     filter shouldBe Some("""['string'] in ('One Mississippi', 'Two Mississippi', 'Hippo')""")
   }
 
@@ -126,17 +130,20 @@ class KustoFilterTests extends AnyFlatSpec with MockFactory with Matchers{
   }
 
   "StringStartsWith expression" should "construct the correct expression" in {
-    val filter = KustoFilter.buildFilterExpression(schema, StringStartsWith("string", "StartingString"))
+    val filter =
+      KustoFilter.buildFilterExpression(schema, StringStartsWith("string", "StartingString"))
     filter shouldBe Some("""['string'] startswith_cs 'StartingString'""")
   }
 
   "StringEndsWith expression" should "construct the correct expression" in {
-    val filter = KustoFilter.buildFilterExpression(schema, StringEndsWith("string", "EndingString"))
+    val filter =
+      KustoFilter.buildFilterExpression(schema, StringEndsWith("string", "EndingString"))
     filter shouldBe Some("""['string'] endswith_cs 'EndingString'""")
   }
 
   "StringContains expression" should "construct the correct expression" in {
-    val filter = KustoFilter.buildFilterExpression(schema, StringContains("string", "ContainedString"))
+    val filter =
+      KustoFilter.buildFilterExpression(schema, StringContains("string", "ContainedString"))
     filter shouldBe Some("""['string'] contains_cs 'ContainedString'""")
   }
 
@@ -151,27 +158,36 @@ class KustoFilterTests extends AnyFlatSpec with MockFactory with Matchers{
   }
 
   "Providing multiple filters" should "lead to and-concatenation of these filters" in {
-    val testSchema = StructType(Seq(StructField("ColA", StringType), StructField("ColB", IntegerType)))
-    val filters: Array[Filter] = Array(StringEndsWith("ColA", "EndingString"), LessThanOrEqual("ColB", 5))
+    val testSchema =
+      StructType(Seq(StructField("ColA", StringType), StructField("ColB", IntegerType)))
+    val filters: Array[Filter] =
+      Array(StringEndsWith("ColA", "EndingString"), LessThanOrEqual("ColB", 5))
     val expr = KustoFilter.buildFiltersClause(testSchema, filters)
 
     expr shouldBe " | where ['ColA'] endswith_cs 'EndingString' and ['ColB'] <= 5"
   }
 
   "Providing two filters when one is resolved to NONE" should "only apply the second filter" in {
-    val testSchema = StructType(Seq(StructField("ColA", StringType), StructField("ColB", IntegerType)))
-    val filters: Array[Filter] = Array(StringEndsWith("ColA", "EndingString"), LessThanOrEqual("ColNotInTheSchema", 5))
+    val testSchema =
+      StructType(Seq(StructField("ColA", StringType), StructField("ColB", IntegerType)))
+    val filters: Array[Filter] =
+      Array(StringEndsWith("ColA", "EndingString"), LessThanOrEqual("ColNotInTheSchema", 5))
     val expr = KustoFilter.buildFiltersClause(testSchema, filters)
 
     expr shouldBe " | where ['ColA'] endswith_cs 'EndingString'"
   }
 
   "Requesting only column pruning" should "adjust the query with prune expression" in {
-    val testSchema = StructType(Seq(StructField("ColA", StringType), StructField("ColB", IntegerType)))
+    val testSchema =
+      StructType(Seq(StructField("ColA", StringType), StructField("ColB", IntegerType)))
     val originalQuery = "MyTable | take 100"
     val columns = Array("ColA", "ColB")
-    val filters: Array[Filter] = Array(StringEndsWith("ColA", "EndingString"), LessThanOrEqual("ColB", 5))
-    val query = KustoFilter.pruneAndFilter(KustoSchema(testSchema, Set("ColA")), originalQuery, KustoFiltering(columns, filters))
+    val filters: Array[Filter] =
+      Array(StringEndsWith("ColA", "EndingString"), LessThanOrEqual("ColB", 5))
+    val query = KustoFilter.pruneAndFilter(
+      KustoSchema(testSchema, Set("ColA")),
+      originalQuery,
+      KustoFiltering(columns, filters))
 
     query shouldBe "MyTable | take 100 | where ['ColA'] endswith_cs 'EndingString' and ['ColB'] <= 5 | project tostring(['ColA']), ['ColB']"
   }

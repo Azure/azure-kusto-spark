@@ -18,34 +18,48 @@ object KeyVaultUtils {
   val Container = "blobContainer"
   var cachedClient: SecretClient = _
 
-  private def getClient(uri: String, clientID: String, clientPassword: String, authority: String): SecretClient = {
+  private def getClient(
+      uri: String,
+      clientID: String,
+      clientPassword: String,
+      authority: String): SecretClient = {
     if (cachedClient == null) {
-      cachedClient = new KeyVaultADALAuthenticator(uri, clientID, clientPassword, authority).getAuthenticatedClient
+      cachedClient = new KeyVaultADALAuthenticator(
+        uri,
+        clientID,
+        clientPassword,
+        authority).getAuthenticatedClient
     }
     cachedClient
   }
 
   @throws[IOException]
-  def getStorageParamsFromKeyVault(keyVaultAuthentication: KeyVaultAuthentication): TransientStorageCredentials = {
+  def getStorageParamsFromKeyVault(
+      keyVaultAuthentication: KeyVaultAuthentication): TransientStorageCredentials = {
     keyVaultAuthentication match {
       case app: KeyVaultAppAuthentication =>
         val client = getClient(app.uri, app.keyVaultAppID, app.keyVaultAppKey, app.authority)
         getStorageParamsFromKeyVaultImpl(client, app.uri)
-      case certificate: KeyVaultCertificateAuthentication => throw new UnsupportedOperationException("certificates are not yet supported")
+      case certificate: KeyVaultCertificateAuthentication =>
+        throw new UnsupportedOperationException("certificates are not yet supported")
     }
   }
 
   @throws[IOException]
-  def getAadAppParametersFromKeyVault(keyVaultAuthentication: KeyVaultAuthentication): AadApplicationAuthentication = {
+  def getAadAppParametersFromKeyVault(
+      keyVaultAuthentication: KeyVaultAuthentication): AadApplicationAuthentication = {
     keyVaultAuthentication match {
       case app: KeyVaultAppAuthentication =>
         val client = getClient(app.uri, app.keyVaultAppID, app.keyVaultAppKey, app.authority)
         getAadAppParamsFromKeyVaultImpl(client, app.uri)
-      case _: KeyVaultCertificateAuthentication => throw new UnsupportedOperationException("certificates are not yet supported")
+      case _: KeyVaultCertificateAuthentication =>
+        throw new UnsupportedOperationException("certificates are not yet supported")
     }
   }
 
-  private def getAadAppParamsFromKeyVaultImpl(client: SecretClient, uri: String): AadApplicationAuthentication = {
+  private def getAadAppParamsFromKeyVaultImpl(
+      client: SecretClient,
+      uri: String): AadApplicationAuthentication = {
     val id = client.getSecret(AppId)
     val key = client.getSecret(AppKey)
 
@@ -67,7 +81,9 @@ object KeyVaultUtils {
       authority = authority.get)
   }
 
-  private def getStorageParamsFromKeyVaultImpl(client: SecretClient, uri: String): TransientStorageCredentials = {
+  private def getStorageParamsFromKeyVaultImpl(
+      client: SecretClient,
+      uri: String): TransientStorageCredentials = {
     val sasUrl = Try(client.getSecret(SasUrl))
 
     val accountName = Try(client.getSecret(StorageAccountName))

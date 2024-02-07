@@ -11,7 +11,8 @@ object KustoConstants {
   val NoTimeout: String = (-1 seconds).toSeconds.toString
   val ClientName: String = KustoDataSourceUtils.clientName
   val DefaultBufferSize: Int = 16 * 1024
-  val StorageExpirySeconds: Int = 2 * 60 * 60 // 2 hours of delay in seconds. Refactored for seconds
+  val StorageExpirySeconds: Int =
+    2 * 60 * 60 // 2 hours of delay in seconds. Refactored for seconds
   val SparkSettingsRefreshMinutes: Int = 120
   val OneKiloByte: Int = 1024
   val OneMegaByte: Int = OneKiloByte * OneKiloByte
@@ -20,7 +21,8 @@ object KustoConstants {
   val DirectQueryUpperBoundRows = 5000
   val TimeoutForCountCheck: FiniteDuration = 3 seconds
   val IngestByPrefix = "ingest-by:"
-  val IngestSkippedTrace = s"Ingestion skipped: Provided ingest-by tags are present in the destination table: "
+  val IngestSkippedTrace =
+    s"Ingestion skipped: Provided ingest-by tags are present in the destination table: "
   val MaxSleepOnMoveExtentsMillis: Int = 3 * 60 * 1000
   val DefaultBatchingLimit: Int = 300
   val DefaultExtentsCountForSplitMergePerNode: Int = 400
@@ -31,7 +33,8 @@ object KustoConstants {
   val MaxCommandsRetryAttempts = 4
   val EmptyString = ""
   val DefaultMaximumIngestionTime: FiniteDuration = FiniteDuration.apply(
-    MaxIngestRetryAttempts * (DefaultExecutionQueueing + DefaultTimeoutQueueing) + 2000,"millis")
+    MaxIngestRetryAttempts * (DefaultExecutionQueueing + DefaultTimeoutQueueing) + 2000,
+    "millis")
   val QueueRetryAttempts = 1
 
   object Schema {
@@ -40,4 +43,3 @@ object KustoConstants {
     val TYPE: String = "Type"
   }
 }
-

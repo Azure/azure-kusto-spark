@@ -20,22 +20,42 @@ import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.immutable
 
-
-class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll{
+class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
   private val myName = this.getClass.getSimpleName
   private val rowId = new AtomicInteger(1)
   private val rowId2 = new AtomicInteger(1)
 
   private def newRow(): String = s"row-${rowId.getAndIncrement()}"
-  private def newAllDataTypesRow(v: Int): (String, Int, java.sql.Date, Boolean, Short, Byte, Float ,java.sql.Timestamp, Double, java.math.BigDecimal, Long) ={
+  private def newAllDataTypesRow(v: Int): (
+      String,
+      Int,
+      java.sql.Date,
+      Boolean,
+      Short,
+      Byte,
+      Float,
+      java.sql.Timestamp,
+      Double,
+      java.math.BigDecimal,
+      Long) = {
     val longie = 80000000 + v.toLong * 100000000
-    (s"row-${rowId2.getAndIncrement()}", v, new java.sql.Date(longie), v % 2 == 0, v.toShort, v.toByte,
-                1/v.toFloat, if (v % 10 == 0) null else new java.sql.Timestamp(longie), 1/v.toDouble, BigDecimal.valueOf(1/v.toDouble), v)
+    (
+      s"row-${rowId2.getAndIncrement()}",
+      v,
+      new java.sql.Date(longie),
+      v % 2 == 0,
+      v.toShort,
+      v.toByte,
+      1 / v.toFloat,
+      if (v % 10 == 0) null else new java.sql.Timestamp(longie),
+      1 / v.toDouble,
+      BigDecimal.valueOf(1 / v.toDouble),
+      v)
   }
 
-
   private val nofExecutors = 4
-  private val spark: SparkSession = SparkSession.builder()
+  private val spark: SparkSession = SparkSession
+    .builder()
     .appName("KustoSink")
     .master(f"local[$nofExecutors]")
     .getOrCreate()
@@ -58,11 +78,13 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll{
 
   val appId: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_APP_ID)
   val appKey: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_APP_SECRET)
-  val authority: String = System.getProperty(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com")
+  val authority: String =
+    System.getProperty(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com")
   val cluster: String = System.getProperty(KustoSinkOptions.KUSTO_CLUSTER)
   val database: String = System.getProperty(KustoSinkOptions.KUSTO_DATABASE)
   val expectedNumberOfRows: Int = 1 * 1000
-  val rows: immutable.IndexedSeq[(String, Int)] = (1 to expectedNumberOfRows).map(v => (newRow(), v))
+  val rows: immutable.IndexedSeq[(String, Int)] =
+    (1 to expectedNumberOfRows).map(v => (newRow(), v))
 
   private val loggingLevel: Option[String] = Option(System.getProperty("logLevel"))
   if (loggingLevel.isDefined) KDSU.setLoggingLevel(loggingLevel.get)
@@ -70,7 +92,9 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll{
   "KustoConnectorLogger" should "log to console according to the level set" taggedAs KustoE2E in {
     KDSU.logInfo(myName, "******** info ********")
     KDSU.logError(myName, "******** error ********")
-    KDSU.logFatal(myName,"******** fatal  ********. Use a 'logLevel' system variable to change the logging level.")
+    KDSU.logFatal(
+      myName,
+      "******** fatal  ********. Use a 'logLevel' system variable to change the logging level.")
   }
 
   "KustoBatchSinkDataTypesTest" should "ingest structured data of all types to a Kusto cluster" taggedAs KustoE2E in {
@@ -79,8 +103,30 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll{
     val prefix = "KustoBatchSinkDataTypesTest_Ingest"
     val table = KustoQueryUtils.simplifyName(s"${prefix}_${UUID.randomUUID()}")
 
-    val dataTypesRows: immutable.IndexedSeq[(String, Int, java.sql.Date, Boolean, Short, Byte, Float ,java.sql.Timestamp, Double, java.math.BigDecimal, Long)] = (1 to expectedNumberOfRows).map(v => newAllDataTypesRow(v))
-    val dfOrig = dataTypesRows.toDF("String", "Int", "Date", "Boolean", "short", "Byte", "floatie", "Timestamp", "Double", "BigDecimal", "Long")
+    val dataTypesRows: immutable.IndexedSeq[(
+        String,
+        Int,
+        java.sql.Date,
+        Boolean,
+        Short,
+        Byte,
+        Float,
+        java.sql.Timestamp,
+        Double,
+        java.math.BigDecimal,
+        Long)] = (1 to expectedNumberOfRows).map(v => newAllDataTypesRow(v))
+    val dfOrig = dataTypesRows.toDF(
+      "String",
+      "Int",
+      "Date",
+      "Boolean",
+      "short",
+      "Byte",
+      "floatie",
+      "Timestamp",
+      "Double",
+      "BigDecimal",
+      "Long")
     sqlContext.sql("select current_timestamp()").show(false)
 
     dfOrig.write
@@ -93,68 +139,192 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll{
       .option(KustoSinkOptions.KUSTO_AAD_APP_SECRET, appKey)
       .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, authority)
       .option(DateTimeUtils.TIMEZONE_OPTION, "GMT+4")
-      .option(KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS, SinkTableCreationMode.CreateIfNotExist.toString)
+      .option(
+        KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS,
+        SinkTableCreationMode.CreateIfNotExist.toString)
       .mode(SaveMode.Append)
       .save()
 
     val conf: Map[String, String] = Map(
       KustoSinkOptions.KUSTO_AAD_APP_ID -> appId,
       KustoSinkOptions.KUSTO_AAD_APP_SECRET -> appKey,
-      KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceDistributedMode.toString
-    )
+      KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceDistributedMode.toString)
 
     val conf2: Map[String, String] = Map(
       KustoSinkOptions.KUSTO_AAD_APP_ID -> appId,
       KustoSinkOptions.KUSTO_AAD_APP_SECRET -> appKey,
-      KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceSingleMode.toString
-    )
+      KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceSingleMode.toString)
 
     val dfResultDist: DataFrame = spark.read.kusto(cluster, database, table, conf)
     val dfResultSingle: DataFrame = spark.read.kusto(cluster, database, table, conf2)
 
-    def getRowOriginal(x:Row): (String, Int, Date, Boolean, Short, Byte, Float, Timestamp, Double, BigDecimal, Long) ={
-      (x.getString(0), x.getInt(1),x.getDate(2),x.getBoolean(3),x.getShort(4),x.getByte(5),x.getFloat(6),x.getTimestamp(7),x.getDouble(8),x.getDecimal(9),x.getLong(10))
+    def getRowOriginal(x: Row): (
+        String,
+        Int,
+        Date,
+        Boolean,
+        Short,
+        Byte,
+        Float,
+        Timestamp,
+        Double,
+        BigDecimal,
+        Long) = {
+      (
+        x.getString(0),
+        x.getInt(1),
+        x.getDate(2),
+        x.getBoolean(3),
+        x.getShort(4),
+        x.getByte(5),
+        x.getFloat(6),
+        x.getTimestamp(7),
+        x.getDouble(8),
+        x.getDecimal(9),
+        x.getLong(10))
     }
 
-    def getRowFromKusto(x:Row): (String, Int, Timestamp, Boolean, Short, Byte, Float, Timestamp, Double, BigDecimal, Long) ={
-      (x.getString(0), x.getInt(1),x.getTimestamp(2),x.getBoolean(3),x.getInt(4).toShort, x.getInt(5).toByte,x.getDouble(6).toFloat,x.getTimestamp(7),x.getDouble(8),x.getDecimal(9),x.getLong(10))
+    def getRowFromKusto(x: Row): (
+        String,
+        Int,
+        Timestamp,
+        Boolean,
+        Short,
+        Byte,
+        Float,
+        Timestamp,
+        Double,
+        BigDecimal,
+        Long) = {
+      (
+        x.getString(0),
+        x.getInt(1),
+        x.getTimestamp(2),
+        x.getBoolean(3),
+        x.getInt(4).toShort,
+        x.getInt(5).toByte,
+        x.getDouble(6).toFloat,
+        x.getTimestamp(7),
+        x.getDouble(8),
+        x.getDecimal(9),
+        x.getLong(10))
     }
 
     val dateFormat = new SimpleDateFormat("yyyy-MM-dd")
-    def compareRowsWithTimestamp(row1:(String, Int, Date, Boolean, Short, Byte, Float, Timestamp, Double, BigDecimal, Long), row2:(String, Int, Timestamp, Boolean, Short, Byte, Float, Timestamp, Double, BigDecimal, Long)): Boolean ={
+    def compareRowsWithTimestamp(
+        row1: (
+            String,
+            Int,
+            Date,
+            Boolean,
+            Short,
+            Byte,
+            Float,
+            Timestamp,
+            Double,
+            BigDecimal,
+            Long),
+        row2: (
+            String,
+            Int,
+            Timestamp,
+            Boolean,
+            Short,
+            Byte,
+            Float,
+            Timestamp,
+            Double,
+            BigDecimal,
+            Long)): Boolean = {
       val myValA = row2._10.setScale(2, RoundingMode.HALF_UP)
       val myValB = row1._10.setScale(2, RoundingMode.HALF_UP)
 
-      var res = dateFormat.format(row2._3.getTime)  == row1._3.toString &&
-          Math.abs( row2._9 - row1._9) < 0.00000000000001 && myValA.compareTo(myValB) == 0
+      var res = dateFormat.format(row2._3.getTime) == row1._3.toString &&
+        Math.abs(row2._9 - row1._9) < 0.00000000000001 && myValA.compareTo(myValB) == 0
 
       val it1 = row1.productIterator
       val it2 = row2.productIterator
-      while (it1.hasNext){
+      while (it1.hasNext) {
         val v1 = it1.next()
         val v2 = it2.next()
-        if(v1 != v2 && !v1.isInstanceOf[Date] && !v2.isInstanceOf[BigDecimal]){
+        if (v1 != v2 && !v1.isInstanceOf[Date] && !v2.isInstanceOf[BigDecimal]) {
           res = false
         }
       }
       res
     }
 
-    val orig = dfOrig.select("String", "Int", "Date", "Boolean", "short", "Byte", "floatie", "Timestamp", "Double", "BigDecimal", "Long").rdd.map(x => getRowOriginal(x)).collect().sortBy(_._2)
-    val result = dfResultDist.select("String", "Int", "Date", "Boolean", "short", "Byte", "floatie", "Timestamp", "Double", "BigDecimal", "Long").rdd.map(x => getRowFromKusto(x)).collect().sortBy(_._2)
-    val resultSingle = dfResultSingle.select("String", "Int", "Date", "Boolean", "short", "Byte", "floatie", "Timestamp", "Double", "BigDecimal", "Long").rdd.map(x => getRowFromKusto(x)).collect().sortBy(_._2)
+    val orig = dfOrig
+      .select(
+        "String",
+        "Int",
+        "Date",
+        "Boolean",
+        "short",
+        "Byte",
+        "floatie",
+        "Timestamp",
+        "Double",
+        "BigDecimal",
+        "Long")
+      .rdd
+      .map(x => getRowOriginal(x))
+      .collect()
+      .sortBy(_._2)
+    val result = dfResultDist
+      .select(
+        "String",
+        "Int",
+        "Date",
+        "Boolean",
+        "short",
+        "Byte",
+        "floatie",
+        "Timestamp",
+        "Double",
+        "BigDecimal",
+        "Long")
+      .rdd
+      .map(x => getRowFromKusto(x))
+      .collect()
+      .sortBy(_._2)
+    val resultSingle = dfResultSingle
+      .select(
+        "String",
+        "Int",
+        "Date",
+        "Boolean",
+        "short",
+        "Byte",
+        "floatie",
+        "Timestamp",
+        "Double",
+        "BigDecimal",
+        "Long")
+      .rdd
+      .map(x => getRowFromKusto(x))
+      .collect()
+      .sortBy(_._2)
 
     var isEqual = true
-    for(idx <- orig.indices) {
-      if(!compareRowsWithTimestamp(orig(idx),result(idx)) || !compareRowsWithTimestamp(orig(idx),resultSingle(idx))){
+    for (idx <- orig.indices) {
+      if (!compareRowsWithTimestamp(orig(idx), result(idx)) || !compareRowsWithTimestamp(
+          orig(idx),
+          resultSingle(idx))) {
         isEqual = false
       }
     }
 
     assert(isEqual)
-    KDSU.logInfo(myName, s"KustoBatchSinkDataTypesTest: Ingestion results validated for table '$table'")
+    KDSU.logInfo(
+      myName,
+      s"KustoBatchSinkDataTypesTest: Ingestion results validated for table '$table'")
 
-    val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://$cluster.kusto.windows.net", appId, appKey, authority)
+    val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(
+      s"https://$cluster.kusto.windows.net",
+      appId,
+      appKey,
+      authority)
     val engineClient = ClientFactory.createClient(engineKcsb)
     KustoTestUtils.tryDropAllTablesByPrefix(engineClient, database, prefix)
   }
@@ -164,9 +334,15 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll{
     val df = rows.toDF("name", "value")
     val prefix = "KustoBatchSinkE2E_Ingest"
     val table = KustoQueryUtils.simplifyName(s"${prefix}_${UUID.randomUUID()}")
-    val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://$cluster.kusto.windows.net", appId, appKey, authority)
+    val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(
+      s"https://$cluster.kusto.windows.net",
+      appId,
+      appKey,
+      authority)
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
-    kustoAdminClient.execute(database, generateTempTableCreateCommand(table, columnsTypesAndNames = "ColA:string, ColB:int"))
+    kustoAdminClient.execute(
+      database,
+      generateTempTableCreateCommand(table, columnsTypesAndNames = "ColA:string, ColB:int"))
 
     df.write
       .format("com.microsoft.kusto.spark.datasource")
@@ -183,7 +359,13 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll{
 
     val timeoutMs: Int = 8 * 60 * 1000 // 8 minutes
 
-    KustoTestUtils.validateResultsAndCleanup(kustoAdminClient, table, database, expectedNumberOfRows, timeoutMs, tableCleanupPrefix = prefix)
+    KustoTestUtils.validateResultsAndCleanup(
+      kustoAdminClient,
+      table,
+      database,
+      expectedNumberOfRows,
+      timeoutMs,
+      tableCleanupPrefix = prefix)
   }
 
   "KustoBatchSinkAsync" should "ingest structured data to a Kusto cluster in async mode" taggedAs KustoE2E in {
@@ -191,9 +373,15 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll{
     val df = rows.toDF("name", "value")
     val prefix = "KustoBatchSinkE2EIngestAsync"
     val table = KustoQueryUtils.simplifyName(s"${prefix}_${UUID.randomUUID()}")
-    val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(s"https://$cluster.kusto.windows.net", appId, appKey, authority)
+    val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(
+      s"https://$cluster.kusto.windows.net",
+      appId,
+      appKey,
+      authority)
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
-    kustoAdminClient.execute(database, generateTempTableCreateCommand(table, columnsTypesAndNames = "ColA:string, ColB:int"))
+    kustoAdminClient.execute(
+      database,
+      generateTempTableCreateCommand(table, columnsTypesAndNames = "ColA:string, ColB:int"))
 
     df.write
       .format("com.microsoft.kusto.spark.datasource")
@@ -209,7 +397,12 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll{
 
     val timeoutMs: Int = 8 * 60 * 1000 // 8 minutes
 
-    KustoTestUtils.validateResultsAndCleanup(kustoAdminClient, table, database, expectedNumberOfRows, timeoutMs, tableCleanupPrefix = prefix)
+    KustoTestUtils.validateResultsAndCleanup(
+      kustoAdminClient,
+      table,
+      database,
+      expectedNumberOfRows,
+      timeoutMs,
+      tableCleanupPrefix = prefix)
   }
 }
-

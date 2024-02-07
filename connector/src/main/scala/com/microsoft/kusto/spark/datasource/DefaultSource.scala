@@ -6,16 +6,28 @@ import com.microsoft.azure.kusto.data.ClientRequestProperties
 import com.microsoft.kusto.spark.authentication.{KeyVaultAuthentication, KustoAuthentication}
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, KustoWriter}
-import com.microsoft.kusto.spark.utils.{KeyVaultUtils, KustoQueryUtils, KustoConstants => KCONST, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.{
+  KeyVaultUtils,
+  KustoQueryUtils,
+  KustoConstants => KCONST,
+  KustoDataSourceUtils => KDSU
+}
 import com.microsoft.kusto.spark.utils.KustoDataSourceUtils.SourceParameters
 import org.apache.commons.lang3.StringUtils
-import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister, RelationProvider}
+import org.apache.spark.sql.sources.{
+  BaseRelation,
+  CreatableRelationProvider,
+  DataSourceRegister,
+  RelationProvider
+}
 import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode}
 
 import scala.concurrent.duration.FiniteDuration
 
-class DefaultSource extends CreatableRelationProvider
-  with RelationProvider with DataSourceRegister {
+class DefaultSource
+    extends CreatableRelationProvider
+    with RelationProvider
+    with DataSourceRegister {
   var authenticationParameters: Option[KustoAuthentication] = None
   var kustoCoordinates: KustoCoordinates = _
   var keyVaultAuthentication: Option[KeyVaultAuthentication] = None
@@ -23,7 +35,7 @@ class DefaultSource extends CreatableRelationProvider
   var requestId: Option[String] = None
   val myName: String = this.getClass.getSimpleName
 
-  def initCommonParams(sourceParams: SourceParameters): Unit ={
+  def initCommonParams(sourceParams: SourceParameters): Unit = {
     keyVaultAuthentication = sourceParams.keyVaultAuth
     kustoCoordinates = sourceParams.kustoCoordinates
     authenticationParameters = Some(sourceParams.authenticationParameters)
@@ -31,13 +43,19 @@ class DefaultSource extends CreatableRelationProvider
     clientRequestProperties = Some(sourceParams.clientRequestProperties)
   }
 
-  override def createRelation(sqlContext: SQLContext, mode: SaveMode, parameters: Map[String, String], data: DataFrame): BaseRelation = {
+  override def createRelation(
+      sqlContext: SQLContext,
+      mode: SaveMode,
+      parameters: Map[String, String],
+      data: DataFrame): BaseRelation = {
     val sinkParameters = KDSU.parseSinkParameters(parameters, mode)
     initCommonParams(sinkParameters.sourceParametersResults)
 
     if (keyVaultAuthentication.isDefined) {
-      val paramsFromKeyVault = KeyVaultUtils.getAadAppParametersFromKeyVault(keyVaultAuthentication.get)
-      authenticationParameters = Some(KDSU.mergeKeyVaultAndOptionsAuthentication(paramsFromKeyVault, authenticationParameters))
+      val paramsFromKeyVault =
+        KeyVaultUtils.getAadAppParametersFromKeyVault(keyVaultAuthentication.get)
+      authenticationParameters = Some(
+        KDSU.mergeKeyVaultAndOptionsAuthentication(paramsFromKeyVault, authenticationParameters))
     }
 
     KustoWriter.write(
@@ -48,27 +66,37 @@ class DefaultSource extends CreatableRelationProvider
       sinkParameters.writeOptions,
       clientRequestProperties.get)
 
-    val limit = if (sinkParameters.writeOptions.writeResultLimit.equalsIgnoreCase(KustoSinkOptions.NONE_RESULT_LIMIT)) None else {
-      try {
-        Some(sinkParameters.writeOptions.writeResultLimit.toInt)
+    val limit =
+      if (sinkParameters.writeOptions.writeResultLimit.equalsIgnoreCase(
+          KustoSinkOptions.NONE_RESULT_LIMIT)) None
+      else {
+        try {
+          Some(sinkParameters.writeOptions.writeResultLimit.toInt)
+        } catch {
+          case _: Exception =>
+            throw new InvalidParameterException(
+              s"KustoOptions.KUSTO_WRITE_RESULT_LIMIT is set to '${sinkParameters.writeOptions.writeResultLimit}'. Must be either 'none' or an integer value")
+        }
       }
-      catch {
-        case _: Exception => throw new InvalidParameterException(s"KustoOptions.KUSTO_WRITE_RESULT_LIMIT is set to '${sinkParameters.writeOptions.writeResultLimit}'. Must be either 'none' or an integer value")
-      }
-    }
 
     createRelation(sqlContext, adjustParametersForBaseRelation(parameters, limit))
   }
 
-  def adjustParametersForBaseRelation(parameters: Map[String, String], limit: Option[Int]): Map[String, String] = {
+  def adjustParametersForBaseRelation(
+      parameters: Map[String, String],
+      limit: Option[Int]): Map[String, String] = {
     if (limit.isDefined) {
-      parameters + (KustoSourceOptions.KUSTO_QUERY -> KustoQueryUtils.limitQuery(parameters(KustoSinkOptions.KUSTO_TABLE), limit.get))
+      parameters + (KustoSourceOptions.KUSTO_QUERY -> KustoQueryUtils.limitQuery(
+        parameters(KustoSinkOptions.KUSTO_TABLE),
+        limit.get))
     } else {
       parameters
     }
   }
 
-  override def createRelation(sqlContext: SQLContext, parameters: Map[String, String]): BaseRelation = {
+  override def createRelation(
+      sqlContext: SQLContext,
+      parameters: Map[String, String]): BaseRelation = {
     val readOptions = KDSU.getReadParameters(parameters, sqlContext)
     if (authenticationParameters.isEmpty) {
       // Parse parameters if haven't got parsed before
@@ -83,35 +111,47 @@ class DefaultSource extends CreatableRelationProvider
       } else {
         None
       }
-    val (kustoAuthentication, mergedStorageParameters): (Option[KustoAuthentication], Option[TransientStorageParameters]) = {
+    val (kustoAuthentication, mergedStorageParameters)
+        : (Option[KustoAuthentication], Option[TransientStorageParameters]) = {
       if (keyVaultAuthentication.isDefined) {
         // Get params from keyVault
-        authenticationParameters = Some(KDSU.mergeKeyVaultAndOptionsAuthentication(KeyVaultUtils.
-          getAadAppParametersFromKeyVault(keyVaultAuthentication.get), authenticationParameters))
+        authenticationParameters = Some(
+          KDSU.mergeKeyVaultAndOptionsAuthentication(
+            KeyVaultUtils.getAadAppParametersFromKeyVault(keyVaultAuthentication.get),
+            authenticationParameters))
 
-        (authenticationParameters, KDSU.mergeKeyVaultAndOptionsStorageParams(
-          transientStorageParams,
-          keyVaultAuthentication.get))
-      } else if(transientStorageParams.isDefined) {
+        (
+          authenticationParameters,
+          KDSU.mergeKeyVaultAndOptionsStorageParams(
+            transientStorageParams,
+            keyVaultAuthentication.get))
+      } else if (transientStorageParams.isDefined) {
         // If any of the storage parameters defined a SAS we will take endpoint suffix from there
-        transientStorageParams.get.storageCredentials.
-          foreach(st => {
-            st.validate()
-            if (StringUtils.isNoneBlank(st.domainSuffix)){
-              transientStorageParams.get.endpointSuffix = st.domainSuffix
-            }
-          })
+        transientStorageParams.get.storageCredentials.foreach(st => {
+          st.validate()
+          if (StringUtils.isNoneBlank(st.domainSuffix)) {
+            transientStorageParams.get.endpointSuffix = st.domainSuffix
+          }
+        })
         // Params passed from options
         (authenticationParameters, transientStorageParams)
-      }
-      else {
+      } else {
         (authenticationParameters, None)
       }
     }
 
-    val timeout = new FiniteDuration(parameters.getOrElse(KustoSourceOptions.KUSTO_TIMEOUT_LIMIT, KCONST.DefaultWaitingIntervalLongRunning).toLong, TimeUnit.SECONDS)
+    val timeout = new FiniteDuration(
+      parameters
+        .getOrElse(
+          KustoSourceOptions.KUSTO_TIMEOUT_LIMIT,
+          KCONST.DefaultWaitingIntervalLongRunning)
+        .toLong,
+      TimeUnit.SECONDS)
 
-    KDSU.logInfo(myName, s"Finished serializing parameters for reading: {requestId: $requestId, timeout: $timeout, readMode: ${readOptions.readMode.getOrElse("Default")}, clientRequestProperties: $clientRequestProperties")
+    KDSU.logInfo(
+      myName,
+      s"Finished serializing parameters for reading: {requestId: $requestId, timeout: $timeout, readMode: ${readOptions.readMode
+          .getOrElse("Default")}, clientRequestProperties: $clientRequestProperties")
     KustoRelation(
       kustoCoordinates,
       kustoAuthentication.get,
@@ -121,8 +161,7 @@ class DefaultSource extends CreatableRelationProvider
       parameters.get(KustoSourceOptions.KUSTO_CUSTOM_DATAFRAME_COLUMN_TYPES),
       mergedStorageParameters,
       clientRequestProperties,
-      requestId.get
-    )(sqlContext.sparkSession)
+      requestId.get)(sqlContext.sparkSession)
   }
 
   override def shortName(): String = "kusto"

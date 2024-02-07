@@ -19,7 +19,8 @@ trait KustoAuthentication {
 
 abstract class KeyVaultAuthentication(uri: String, authority: String) extends KustoAuthentication
 
-case class AadApplicationAuthentication(ID: String, password: String, authority: String) extends KustoAuthentication {
+case class AadApplicationAuthentication(ID: String, password: String, authority: String)
+    extends KustoAuthentication {
   def canEqual(that: Any): Boolean = that.isInstanceOf[AadApplicationAuthentication]
 
   override def equals(that: Any): Boolean = that match {
@@ -30,7 +31,7 @@ case class AadApplicationAuthentication(ID: String, password: String, authority:
   override def hashCode(): Int = ID.hashCode + (if (authority == null) 0 else authority.hashCode)
 }
 
-case class ManagedIdentityAuthentication(clientId : Option[String]) extends KustoAuthentication {
+case class ManagedIdentityAuthentication(clientId: Option[String]) extends KustoAuthentication {
   def canEqual(that: Any): Boolean = that.isInstanceOf[ManagedIdentityAuthentication]
 
   override def equals(that: Any): Boolean = that match {
@@ -41,7 +42,12 @@ case class ManagedIdentityAuthentication(clientId : Option[String]) extends Kust
   override def hashCode(): Int = if (clientId.isDefined) clientId.hashCode() else 0
 }
 
-case class AadApplicationCertificateAuthentication(appId: String, certFilePath: String, certPassword: String, authority: String) extends KustoAuthentication {
+case class AadApplicationCertificateAuthentication(
+    appId: String,
+    certFilePath: String,
+    certPassword: String,
+    authority: String)
+    extends KustoAuthentication {
   def canEqual(that: Any): Boolean = that.isInstanceOf[AadApplicationCertificateAuthentication]
 
   override def equals(that: Any): Boolean = that match {
@@ -53,8 +59,12 @@ case class AadApplicationCertificateAuthentication(appId: String, certFilePath: 
   override def hashCode(): Int = appId.hashCode + certFilePath.hashCode + certPassword.hashCode()
 }
 
-final case class KeyVaultAppAuthentication(uri: String, keyVaultAppID: String, keyVaultAppKey: String, authority: String)
-  extends KeyVaultAuthentication(uri, authority) {
+final case class KeyVaultAppAuthentication(
+    uri: String,
+    keyVaultAppID: String,
+    keyVaultAppKey: String,
+    authority: String)
+    extends KeyVaultAuthentication(uri, authority) {
   def canEqual(that: Any): Boolean = that.isInstanceOf[KeyVaultAppAuthentication]
 
   override def equals(that: Any): Boolean = that match {
@@ -65,12 +75,17 @@ final case class KeyVaultAppAuthentication(uri: String, keyVaultAppID: String, k
   override def hashCode(): Int = uri.hashCode + keyVaultAppID.hashCode
 }
 
-final case class KeyVaultCertificateAuthentication(uri: String, pemFilePath: String, pemFilePassword: String, authority: String)
-  extends KeyVaultAuthentication(uri, authority) {
+final case class KeyVaultCertificateAuthentication(
+    uri: String,
+    pemFilePath: String,
+    pemFilePassword: String,
+    authority: String)
+    extends KeyVaultAuthentication(uri, authority) {
   def canEqual(that: Any): Boolean = that.isInstanceOf[KeyVaultCertificateAuthentication]
 
   override def equals(that: Any): Boolean = that match {
-    case auth: KeyVaultCertificateAuthentication => uri == auth.uri && pemFilePath == auth.pemFilePath
+    case auth: KeyVaultCertificateAuthentication =>
+      uri == auth.uri && pemFilePath == auth.pemFilePath
     case _ => false
   }
 
@@ -88,11 +103,13 @@ case class KustoAccessTokenAuthentication(token: String) extends KustoAuthentica
   override def hashCode(): Int = token.hashCode
 }
 
-case class KustoTokenProviderAuthentication(tokenProviderCallback: Callable[String]) extends KustoAuthentication {
+case class KustoTokenProviderAuthentication(tokenProviderCallback: Callable[String])
+    extends KustoAuthentication {
   def canEqual(that: Any): Boolean = that.isInstanceOf[KustoTokenProviderAuthentication]
 
   override def equals(that: Any): Boolean = that match {
-    case auth: KustoTokenProviderAuthentication => tokenProviderCallback == auth.tokenProviderCallback
+    case auth: KustoTokenProviderAuthentication =>
+      tokenProviderCallback == auth.tokenProviderCallback
     case _ => false
   }
 
@@ -107,5 +124,6 @@ case class KustoUserPromptAuthentication(authority: String) extends KustoAuthent
     case _ => false
   }
 
-  override def hashCode(): Int = "KustoUserPromptAuthentication".hashCode + (if (authority == null) 0 else authority.hashCode)
+  override def hashCode(): Int =
+    "KustoUserPromptAuthentication".hashCode + (if (authority == null) 0 else authority.hashCode)
 }

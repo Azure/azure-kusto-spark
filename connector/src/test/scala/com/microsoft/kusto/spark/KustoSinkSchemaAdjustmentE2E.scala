@@ -11,14 +11,15 @@ import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
 import java.util.UUID
 
-
-
-class KustoSinkSchemaAdjustmentE2E extends AnyFlatSpec
-  with BeforeAndAfterEach with BeforeAndAfterAll {
+class KustoSinkSchemaAdjustmentE2E
+    extends AnyFlatSpec
+    with BeforeAndAfterEach
+    with BeforeAndAfterAll {
 
   private val nofExecutors = 4
   private val testTablePrefix = "KustoBatchSinkE2E_SchemaAdjust"
-  private val spark = SparkSession.builder()
+  private val spark = SparkSession
+    .builder()
     .appName("KustoSink")
     .master(f"local[$nofExecutors]")
     .getOrCreate()
@@ -28,16 +29,13 @@ class KustoSinkSchemaAdjustmentE2E extends AnyFlatSpec
 
   val kustoConnectionOptions: KustoConnectionOptions = KustoTestUtils.getSystemTestOptions
 
-
   override def afterAll(): Unit = {
     spark.sparkContext.stop()
   }
 
   override def afterEach(): Unit = {
-   // KustoTestUtils.cleanup(kustoConnectionOptions, testTablePrefix)
+    // KustoTestUtils.cleanup(kustoConnectionOptions, testTablePrefix)
   }
-
-
 
   "Source DataFrame schema adjustment" should "not adjust" taggedAs KustoE2E in {
     import spark.implicits._
@@ -46,7 +44,8 @@ class KustoSinkSchemaAdjustmentE2E extends AnyFlatSpec
     val targetSchema = "ColA:int, ColB:string"
     val schemaAdjustmentMode = "NoAdjustment"
 
-    val testTable = KustoTestUtils.createTestTable(kustoConnectionOptions, testTablePrefix, targetSchema)
+    val testTable =
+      KustoTestUtils.createTestTable(kustoConnectionOptions, testTablePrefix, targetSchema)
     KustoTestUtils.ingest(kustoConnectionOptions, df, testTable, schemaAdjustmentMode)
 
     val expectedData = df
@@ -54,11 +53,12 @@ class KustoSinkSchemaAdjustmentE2E extends AnyFlatSpec
       .withColumn("ColB", functions.col("WrongColB").cast(StringType))
       .select("ColA", "ColB")
 
-    assert(KustoTestUtils.validateTargetTable(kustoConnectionOptions, testTable, expectedData, spark))
+    assert(
+      KustoTestUtils.validateTargetTable(kustoConnectionOptions, testTable, expectedData, spark))
 
   }
 
-  "Source DataFrame schema adjustment"  should "produce SchemaMatchException when column names not match" taggedAs KustoE2E in {
+  "Source DataFrame schema adjustment" should "produce SchemaMatchException when column names not match" taggedAs KustoE2E in {
     val thrown = intercept[SchemaMatchException] {
       import spark.implicits._
       val sourceValues = (1 to expectedNumberOfRows).map(v => (newRow(v), v))
@@ -70,10 +70,11 @@ class KustoSinkSchemaAdjustmentE2E extends AnyFlatSpec
       KustoTestUtils.ingest(kustoConnectionOptions, df, testTable, schemaAdjustmentMode)
 
     }
-    assert(thrown.getMessage.startsWith("Target table schema does not match to DataFrame schema."))
+    assert(
+      thrown.getMessage.startsWith("Target table schema does not match to DataFrame schema."))
   }
 
-  "Source DataFrame schema adjustment"  should "produce SchemaMatchException when source has additional columns" taggedAs KustoE2E in {
+  "Source DataFrame schema adjustment" should "produce SchemaMatchException when source has additional columns" taggedAs KustoE2E in {
     val thrown = intercept[SchemaMatchException] {
       import spark.implicits._
       val sourceValues = (1 to expectedNumberOfRows).map(v => (newRow(v), v, "AdditionalData"))
@@ -85,17 +86,22 @@ class KustoSinkSchemaAdjustmentE2E extends AnyFlatSpec
       KustoTestUtils.ingest(kustoConnectionOptions, df, testTable, schemaAdjustmentMode)
 
     }
-    assert(thrown.getMessage.startsWith("Source schema has columns that are not present in the target"))
+    assert(
+      thrown.getMessage.startsWith(
+        "Source schema has columns that are not present in the target"))
   }
 
-  "Source DataFrame schema adjustment"  should "generate dynamic csv mapping according to column names" taggedAs KustoE2E in {
+  "Source DataFrame schema adjustment" should "generate dynamic csv mapping according to column names" taggedAs KustoE2E in {
     import spark.implicits._
     val sourceValues = (1 to expectedNumberOfRows).map(v => (newRow(v), v))
     val df = sourceValues.toDF("SourceColA", "SourceColB")
     val targetSchema = "ColA:string, ColB:int, SourceColB:int, SourceColA:string"
     val schemaAdjustmentMode = "GenerateDynamicCsvMapping"
 
-    val testTable = KustoTestUtils.createTestTable(kustoConnectionOptions, "KustoBatchSinkE2E_SchemaAdjust", targetSchema)
+    val testTable = KustoTestUtils.createTestTable(
+      kustoConnectionOptions,
+      "KustoBatchSinkE2E_SchemaAdjust",
+      targetSchema)
     KustoTestUtils.ingest(kustoConnectionOptions, df, testTable, schemaAdjustmentMode)
 
     val expectedData = df
@@ -103,11 +109,12 @@ class KustoSinkSchemaAdjustmentE2E extends AnyFlatSpec
       .withColumn("ColB", functions.lit(null))
       .select("ColA", "ColB", "SourceColB", "SourceColA")
 
-    assert(KustoTestUtils.validateTargetTable(kustoConnectionOptions, testTable, expectedData, spark))
+    assert(
+      KustoTestUtils.validateTargetTable(kustoConnectionOptions, testTable, expectedData, spark))
 
   }
 
-  "Source DataFrame schema adjustment"  should "produce IllegalArgumentException when csvMappingNameReference in sink options" taggedAs KustoE2E in {
+  "Source DataFrame schema adjustment" should "produce IllegalArgumentException when csvMappingNameReference in sink options" taggedAs KustoE2E in {
     val thrown = intercept[IllegalArgumentException] {
       import spark.implicits._
       val sourceValues = (1 to expectedNumberOfRows).map(v => (newRow(v), v))
@@ -116,22 +123,30 @@ class KustoSinkSchemaAdjustmentE2E extends AnyFlatSpec
       val schemaAdjustmentMode = "GenerateDynamicCsvMapping"
 
       val testTable = KustoTestUtils.createTestTable(kustoConnectionOptions, "", targetSchema)
-      KustoTestUtils.ingest(kustoConnectionOptions, df, testTable, schemaAdjustmentMode,
+      KustoTestUtils.ingest(
+        kustoConnectionOptions,
+        df,
+        testTable,
+        schemaAdjustmentMode,
         new SparkIngestionProperties(csvMappingNameReference = "testError"))
 
     }
     assert(thrown.getMessage.contains("are not compatible"))
   }
 
-
   "Source DataFrame schema adjustment" should "generate dynamic csv mapping according to column names when table does not exist " taggedAs KustoE2E in {
     import spark.implicits._
     val sourceValues = (1 to expectedNumberOfRows).map(v => (newRow(v), v))
     val df = sourceValues.toDF("SourceColA", "SourceColB")
     val schemaAdjustmentMode = "GenerateDynamicCsvMapping"
-    val testTable = KustoQueryUtils.simplifyName(s"KustoBatchSinkE2E_SchemaAdjust_${UUID.randomUUID()}")
-    KustoTestUtils.ingest(kustoConnectionOptions.copy(createTableIfNotExists = SinkTableCreationMode.CreateIfNotExist),
-      df, testTable, schemaAdjustmentMode)
+    val testTable =
+      KustoQueryUtils.simplifyName(s"KustoBatchSinkE2E_SchemaAdjust_${UUID.randomUUID()}")
+    KustoTestUtils.ingest(
+      kustoConnectionOptions.copy(createTableIfNotExists =
+        SinkTableCreationMode.CreateIfNotExist),
+      df,
+      testTable,
+      schemaAdjustmentMode)
     assert(KustoTestUtils.validateTargetTable(kustoConnectionOptions, testTable, df, spark))
   }
 }
