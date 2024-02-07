@@ -59,10 +59,3 @@ jobs:
           source_folder: staging
           destination_folder: kusto/spark/${{ steps.get_version.outputs.SPARK_VERSION }}_${{ steps.get_version.outputs.SCALA_VERSION }}-${{ steps.get_version.outputs.VERSION }}
           delete_if_exists: true
-      - name: Trigger pipelines release
-        uses: jacopocarlini/azure-pipelines@v1.3
-        with:
-          azure-devops-project-url: '${{ secrets.AZURE_PIPELINES_RELEASE_REPO }}'
-          azure-devops-token: '${{ secrets.AZURE_PIPELINES_PAT }}'
-          azure-pipeline-name: 'java - partner-release'
-          azure-template-parameters:  '{"BlobPath": "kusto/java/${{ steps.get_version.outputs.VERSION }}"}'
