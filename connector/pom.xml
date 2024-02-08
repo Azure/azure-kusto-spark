@@ -13,6 +13,33 @@
     <dependencies>
         <!-- Compile Scope -->
         <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jsr310</artifactId>
+            <version>${fasterxml.jackson.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>${fasterxml.jackson.version}</version>
+            <exclusions>
+                <exclusion>
+                    <artifactId>scala-library</artifactId>
+                    <groupId>org.scala-lang</groupId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.module</groupId>
+            <artifactId>jackson-module-scala_${scala.version.major}</artifactId>
+            <version>${fasterxml.jackson.version}</version>
+            <exclusions>
+                <exclusion>
+                    <artifactId>scala-library</artifactId>
+                    <groupId>org.scala-lang</groupId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-lang3</artifactId>
             <version>${commons.lang3.version}</version>
@@ -499,12 +526,11 @@
                             </filters>
                             <relocations>
                                 <relocation>
-                                    <pattern>com.fasterxml.jackson</pattern>
-                                    <shadedPattern>kusto.shaded.com.fasterxml.jackson</shadedPattern>
-                                </relocation>
-                                <relocation>
-                                    <!--Environment like Databricks may bring its own version of azure-core which may be incompatible with your Azure client libraries.
-                                        Relocate azure-core to avoid collisions with it-->
+                                    <!--
+                                        Environment like Databricks may bring its own version of azure-core which may
+                                        be incompatible with your Azure client libraries.Relocate azure-core to avoid
+                                        collisions with it
+                                    -->
                                     <pattern>com.azure</pattern>
                                     <shadedPattern>kusto.shaded.com.azure</shadedPattern>
                                 </relocation>
