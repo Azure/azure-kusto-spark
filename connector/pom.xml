@@ -13,33 +13,6 @@
     <dependencies>
         <!-- Compile Scope -->
         <dependency>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-databind</artifactId>
-            <version>${fasterxml.jackson.version}</version>
-            <exclusions>
-                <exclusion>
-                    <artifactId>scala-library</artifactId>
-                    <groupId>org.scala-lang</groupId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-        <dependency>
-            <groupId>com.fasterxml.jackson.module</groupId>
-            <artifactId>jackson-module-scala_${scala.version.major}</artifactId>
-            <version>${fasterxml.jackson.version}</version>
-            <exclusions>
-                <exclusion>
-                    <artifactId>scala-library</artifactId>
-                    <groupId>org.scala-lang</groupId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-        <dependency>
-            <groupId>com.fasterxml.jackson.datatype</groupId>
-            <artifactId>jackson-datatype-jsr310</artifactId>
-            <version>${fasterxml.jackson.jar.version}</version>
-        </dependency>
-        <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-lang3</artifactId>
             <version>${commons.lang3.version}</version>
@@ -136,14 +109,6 @@
                     <artifactId>azure-storage-common</artifactId>
                 </exclusion>
             </exclusions>
-        </dependency>
-        <dependency>
-            <groupId>com.azure</groupId>
-            <artifactId>azure-storage-queue</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.azure</groupId>
-            <artifactId>azure-storage-common</artifactId>
         </dependency>
         <dependency>
             <groupId>io.netty</groupId>
@@ -489,6 +454,13 @@
                 <configuration>
                     <source>${java.source.version}</source>
                     <target>${java.target.version}</target>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.antipathy</groupId>
+                <artifactId>mvn-scalafmt_${scala.version.major}</artifactId>
+                <configuration>
+                    <configLocation>${project.parent.basedir}/.scalafmt.conf</configLocation> <!-- path to config -->
                 </configuration>
             </plugin>
         </plugins>

@@ -18,7 +18,6 @@
         <!-- other dependencies -->
         <azure.bom.version>1.2.14</azure.bom.version>
         <!-- versions from https://learn.microsoft.com/en-us/azure/databricks/release-notes/runtime/13.2-->
-        <fasterxml.jackson.jar.version>2.13.4</fasterxml.jackson.jar.version>
         <fasterxml.jackson.version>2.14.3</fasterxml.jackson.version>
         <!-- Deprecate only after full migration to azure storage 12-->
         <azure-storage.version>8.6.6</azure-storage.version>
@@ -39,14 +38,14 @@
         <mockito.version>4.11.0</mockito.version>
         <netty.version>4.1.94.Final</netty.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <reactor.netty.version>1.0.39</reactor.netty.version>
+        <reactor.netty.version>1.1.5</reactor.netty.version>
         <scala.maven.plugin.version>4.8.1</scala.maven.plugin.version>
         <scalamock.version>5.2.0</scalamock.version>
         <scalastyle.maven.plugin.version>1.0.0</scalastyle.maven.plugin.version>
         <scalatest.maven.version>2.2.0</scalatest.maven.version>
         <scalatest.version>3.2.17</scalatest.version>
         <shadingPrefix>azure_kusto_spark</shadingPrefix>
-        <slf4j.version>1.8.0-beta4</slf4j.version>
+        <slf4j.version>2.0.5</slf4j.version>
         <specs2.version>3.6.5</specs2.version>
         <msal4j.version>1.13.9</msal4j.version>
     </properties>
@@ -75,7 +74,6 @@
         <module>connector</module>
         <module>samples</module>
     </modules>
-
     <build>
         <plugins>
             <plugin>
@@ -109,7 +107,7 @@
                 <artifactId>mvn-scalafmt_${scala.version.major}</artifactId>
                 <version>${scalafmt.plugin.version}</version>
                 <configuration>
-                    <configLocation>./.scalafmt.conf</configLocation> <!-- path to config -->
+                    <configLocation>${project.basedir}/.scalafmt.conf</configLocation> <!-- path to config -->
                     <validateOnly>false</validateOnly> <!-- check formatting without changing files -->
                     <onlyChangedFiles>true</onlyChangedFiles> <!-- only format (staged) files that have been changed from the specified git branch -->
                     <showReformattedOnly>false</showReformattedOnly> <!-- log only modified files -->
@@ -133,6 +131,9 @@
                 <groupId>io.github.evis</groupId>
                 <artifactId>scalafix-maven-plugin_${scala.version.major}</artifactId>
                 <version>0.1.8_0.11.0</version>
+                <configuration>
+                    <config>./.scalafix.conf</config>
+                </configuration>
                 <dependencies>
                     <dependency>
                         <groupId>ch.epfl.scala</groupId>
@@ -151,7 +152,39 @@
                     </dependency>
                 </dependencies>
             </plugin>
+            <!--
+            For the shading to work, the shaded library and its transient jar files have to be
+            first packaged into a jar file. This is then included in the child module.
 
+            In this case, we have moved the queue dependency upfront to the parent pom, the connector
+            module will then use this shaded jar instead of taking it from maven
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>${maven.shade.plugin.version}</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <shadedArtifactAttached>true</shadedArtifactAttached>
+                            <filters>
+                                <filter>
+                                    <artifact>*:*</artifact>
+                                    <excludes>
+                                        <exclude>META-INF/*.SF</exclude>
+                                        <exclude>META-INF/*.DSA</exclude>
+                                        <exclude>META-INF/*.RSA</exclude>
+                                    </excludes>
+                                </filter>
+                            </filters>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
     <dependencyManagement>
@@ -165,4 +198,41 @@
             </dependency>
         </dependencies>
     </dependencyManagement>
+    <!--
+    the core dependencies are defined in the parent pom
+    The dependencies that are at risk are the one for Azure Queue, the storage common and the jackson libraries
+    -->
+    <dependencies>
+        <dependency>
+            <groupId>com.azure</groupId>
+            <artifactId>azure-storage-queue</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jsr310</artifactId>
+            <version>${fasterxml.jackson.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>${fasterxml.jackson.version}</version>
+            <exclusions>
+                <exclusion>
+                    <artifactId>scala-library</artifactId>
+                    <groupId>org.scala-lang</groupId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.module</groupId>
+            <artifactId>jackson-module-scala_${scala.version.major}</artifactId>
+            <version>${fasterxml.jackson.version}</version>
+            <exclusions>
+                <exclusion>
+                    <artifactId>scala-library</artifactId>
+                    <groupId>org.scala-lang</groupId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+    </dependencies>
 </project>
