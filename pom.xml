@@ -171,6 +171,8 @@
                         </goals>
                         <configuration>
                             <shadedArtifactAttached>true</shadedArtifactAttached>
+                            <shadedClassifierName>shaded</shadedClassifierName>
+                            <shadeSourcesContent>true</shadeSourcesContent>
                             <filters>
                                 <filter>
                                     <artifact>*:*</artifact>
