@@ -16,7 +16,7 @@
         <spark.version.major>3.0</spark.version.major>
         <spark.version.minor>1</spark.version.minor>
         <!-- other dependencies -->
-        <azure.bom.version>1.2.14</azure.bom.version>
+        <azure.bom.version>1.2.16</azure.bom.version>
         <!-- versions from https://learn.microsoft.com/en-us/azure/databricks/release-notes/runtime/13.2-->
         <fasterxml.jackson.version>2.14.3</fasterxml.jackson.version>
         <!-- Deprecate only after full migration to azure storage 12-->
