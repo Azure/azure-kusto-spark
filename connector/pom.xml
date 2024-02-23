@@ -504,7 +504,7 @@
                             <minimizeJar>true</minimizeJar>
                             <!--Create shaded JAR only-->
                             <shadedArtifactAttached>false</shadedArtifactAttached>
-<!--                        <!--Remove original replaced dependencies-->
+                           <!--Remove original replaced dependencies-->
                             <createDependencyReducedPom>true</createDependencyReducedPom>
                             <!--Promotes transitive dependencies of removed dependencies to direct-->
                             <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
