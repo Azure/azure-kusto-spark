@@ -526,7 +526,7 @@
                                 </filter>
                             </filters>
                             <relocations>
-                                <relocation>
+                                <!--<relocation>
                                     <pattern>com.microsoft.kusto.spark</pattern>
                                     <shadedPattern>kusto.shaded.com.microsoft.kusto.spark</shadedPattern>
                                     <excludes>
@@ -539,7 +539,7 @@
                                         <exclude>com.microsoft.kusto.spark.sql.*</exclude>
                                         <exclude>com.microsoft.kusto.spark.sql.extension.*</exclude>
                                     </excludes>
-                                </relocation>
+                                </relocation>-->
                                 <relocation>
                                     <!--
                                         Environment like Databricks may bring its own version of azure-core which may
@@ -559,8 +559,16 @@
                                     <shadedPattern>kusto.shaded.io.vavr</shadedPattern>
                                 </relocation>
                                 <relocation>
-                                    <pattern>com.microsoft</pattern>
-                                    <shadedPattern>kusto.shaded.com.microsoft</shadedPattern>
+                                    <pattern>com.microsoft.aad</pattern>
+                                    <shadedPattern>kusto.shaded.com.microsoft.aad</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.microsoft.azure</pattern>
+                                    <shadedPattern>kusto.shaded.com.microsoft.azure</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.microsoft.rest</pattern>
+                                    <shadedPattern>kusto.shaded.com.microsoft.rest</shadedPattern>
                                 </relocation>
                                 <relocation>
                                     <pattern>reactor</pattern>
