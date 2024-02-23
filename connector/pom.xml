@@ -250,6 +250,10 @@
                     <artifactId>scala-library</artifactId>
                     <groupId>org.scala-lang</groupId>
                 </exclusion>
+                <exclusion>
+                    <groupId>io.netty</groupId>
+                    <artifactId>netty-codec</artifactId>
+                </exclusion>
             </exclusions>
         </dependency>
         <dependency>
@@ -269,6 +273,10 @@
                 <exclusion>
                     <artifactId>scala-library</artifactId>
                     <groupId>org.scala-lang</groupId>
+                </exclusion>
+                <exclusion>
+                    <groupId>io.netty</groupId>
+                    <artifactId>netty-codec</artifactId>
                 </exclusion>
             </exclusions>
         </dependency>
