@@ -451,13 +451,13 @@
                     </execution>
                 </executions>
             </plugin>
-            <plugin>
+            <!--<plugin>
                 <artifactId>maven-assembly-plugin</artifactId>
                 <version>3.2.0</version>
                 <executions>
                     <execution>
-                        <id>make-assembly</id> <!-- this is used for inheritance merges -->
-                        <phase>package</phase> <!-- bind to the packaging phase -->
+                        <id>make-assembly</id> &lt;!&ndash; this is used for inheritance merges &ndash;&gt;
+                        <phase>package</phase> &lt;!&ndash; bind to the packaging phase &ndash;&gt;
                         <goals>
                             <goal>single</goal>
                         </goals>
@@ -473,7 +473,7 @@
                         <descriptorRef>jar-with-dependencies</descriptorRef>
                     </descriptorRefs>
                 </configuration>
-            </plugin>
+            </plugin>-->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
@@ -503,11 +503,12 @@
                         <configuration>
                             <minimizeJar>true</minimizeJar>
                             <!--Create shaded JAR only-->
-                            <shadedArtifactAttached>true</shadedArtifactAttached>
-                            <!--Remove original replaced dependencies-->
+                            <shadedArtifactAttached>false</shadedArtifactAttached>
+<!--                        <!--Remove original replaced dependencies-->
                             <createDependencyReducedPom>true</createDependencyReducedPom>
                             <!--Promotes transitive dependencies of removed dependencies to direct-->
                             <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
+                            <finalName>${project.artifactId}-${project.version}</finalName>
                             <transformers>
                                 <!--Transforms META-INF/services (essential if you relocate com.azure classes)-->
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
@@ -552,6 +553,10 @@
                                 <relocation>
                                     <pattern>io.netty</pattern>
                                     <shadedPattern>kusto.shaded.io.netty</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>io.vavr</pattern>
+                                    <shadedPattern>kusto.shaded.io.vavr</shadedPattern>
                                 </relocation>
                                 <relocation>
                                     <pattern>com.microsoft</pattern>
