@@ -451,29 +451,6 @@
                     </execution>
                 </executions>
             </plugin>
-            <!--<plugin>
-                <artifactId>maven-assembly-plugin</artifactId>
-                <version>3.2.0</version>
-                <executions>
-                    <execution>
-                        <id>make-assembly</id> &lt;!&ndash; this is used for inheritance merges &ndash;&gt;
-                        <phase>package</phase> &lt;!&ndash; bind to the packaging phase &ndash;&gt;
-                        <goals>
-                            <goal>single</goal>
-                        </goals>
-                    </execution>
-                </executions>
-                <configuration>
-                    <archive>
-                        <manifest>
-                            <mainClass>fully.qualified.MainClass</mainClass>
-                        </manifest>
-                    </archive>
-                    <descriptorRefs>
-                        <descriptorRef>jar-with-dependencies</descriptorRef>
-                    </descriptorRefs>
-                </configuration>
-            </plugin>-->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
@@ -504,15 +481,15 @@
                             <minimizeJar>true</minimizeJar>
                             <!--Create shaded JAR only-->
                             <shadedArtifactAttached>false</shadedArtifactAttached>
-                           <!--Remove original replaced dependencies-->
+                            <!--Remove original replaced dependencies-->
                             <createDependencyReducedPom>true</createDependencyReducedPom>
                             <!--Promotes transitive dependencies of removed dependencies to direct-->
                             <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
-                            <finalName>${project.artifactId}-${project.version}</finalName>
                             <transformers>
                                 <!--Transforms META-INF/services (essential if you relocate com.azure classes)-->
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
                             </transformers>
+                            <finalName>${project.artifactId}-${project.version}</finalName>
                             <filters>
                                 <filter>
                                     <artifact>*:*</artifact>
@@ -526,20 +503,6 @@
                                 </filter>
                             </filters>
                             <relocations>
-                                <!--<relocation>
-                                    <pattern>com.microsoft.kusto.spark</pattern>
-                                    <shadedPattern>kusto.shaded.com.microsoft.kusto.spark</shadedPattern>
-                                    <excludes>
-                                        <exclude>com.microsoft.kusto.spark.*</exclude>
-                                        <exclude>com.microsoft.kusto.spark.authentication.*</exclude>
-                                        <exclude>com.microsoft.kusto.spark.common.*</exclude>
-                                        <exclude>com.microsoft.kusto.spark.datasource.*</exclude>
-                                        <exclude>com.microsoft.kusto.spark.datasink.*</exclude>
-                                        <exclude>com.microsoft.kusto.spark.exceptions.*</exclude>
-                                        <exclude>com.microsoft.kusto.spark.sql.*</exclude>
-                                        <exclude>com.microsoft.kusto.spark.sql.extension.*</exclude>
-                                    </excludes>
-                                </relocation>-->
                                 <relocation>
                                     <!--
                                         Environment like Databricks may bring its own version of azure-core which may
