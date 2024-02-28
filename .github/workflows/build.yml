@@ -1,4 +1,4 @@
-name: Build Java
+name: Build
 on:
   push:
     branches: [ '**' ]
@@ -8,6 +8,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     name: Setup Java 8, build and run tests
+    permissions:
+      checks: write
     steps:
       - uses: actions/checkout@v2
       - name: Setup java

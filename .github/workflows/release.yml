@@ -1,0 +1,61 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v(2.4|3.0)_[0-9]+.[0-9]+.[0-9]+"
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        java: [ '8' ]
+    name: Java ${{ matrix.java }}
+    steps:
+      - uses: actions/checkout@v2
+      - name: Setup java ${{ matrix.java }}
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'adopt'
+          java-version: ${{ matrix.java }}
+          cache: 'maven'
+      - name: Run the Maven verify phase
+        run: mvn clean verify -DkustoAadAppId=${{ secrets.APP_ID }} -DkustoAadAuthorityID=${{ secrets.TENANT_ID }} -DkustoAadAppSecret=${{ secrets.APP_SECRET }} -DkustoDatabase=${{ secrets.DATABASE }} -DkustoCluster=${{ secrets.CLUSTER }}
+        env:
+          kustoAadAppId: ${{ secrets.APP_ID }}
+          kustoAadAuthorityID: ${{ secrets.TENANT_ID }}
+          kustoAadAppSecret: ${{ secrets.APP_SECRET }}
+          kustoDatabase: ${{ secrets.DATABASE }}
+          kustoCluster: ${{ secrets.CLUSTER }}
+      - name: Get versions
+        id: get_version
+        run: |
+          echo ::set-output name=VERSION::$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+          echo ::set-output name=SCALA_VERSION::$(mvn help:evaluate -Dexpression=scala.version.major -q -DforceStdout)
+          echo ::set-output name=SPARK_VERSION::$(mvn help:evaluate -Dexpression=spark.version.major -q -DforceStdout)
+      - name: Move artifacts to staging
+        run: |
+          version=${{ steps.get_version.outputs.VERSION }}
+          scalaversion=${{steps.get_version.outputs.SCALA_VERSION}}
+          sparkversion=${{steps.get_version.outputs.SPARK_VERSION}}
+          mkdir staging
+          cp connector/target/*.jar staging
+          cp connector/.flattened-pom.xml staging/kusto-spark_$sparkversion_$scalaversion-$version.pom
+      - name: Github Release
+        uses: anton-yurchenko/git-release@v5.0.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          args: |
+            staging/kusto-spark_${{ steps.get_version.outputs.SPARK_VERSION }}_${{ steps.get_version.outputs.SCALA_VERSION }}-${{ steps.get_version.outputs.VERSION }}-jar-with-dependencies.jar
+            staging/kusto-spark_${{ steps.get_version.outputs.SPARK_VERSION }}_${{ steps.get_version.outputs.SCALA_VERSION }}-${{ steps.get_version.outputs.VERSION }}-sources.jar
+        continue-on-error: true
+      - uses: LanceMcCarthy/Action-AzureBlobUpload@v2
+        name: Uploading to Azure storage
+        with:
+          connection_string: ${{ secrets.AZURE_STORAGE_CONNECTION_STRING}}
+          container_name: ${{ secrets.AZURE_STORAGE_CONTAINER}}
+          source_folder: staging
+          destination_folder: kusto/spark/${{ steps.get_version.outputs.SPARK_VERSION }}_${{ steps.get_version.outputs.SCALA_VERSION }}-${{ steps.get_version.outputs.VERSION }}
+          delete_if_exists: true
