@@ -13,6 +13,11 @@
     <dependencies>
         <!-- Compile Scope -->
         <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jsr310</artifactId>
+            <version>${fasterxml.jackson.version}</version>
+        </dependency>
+        <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
             <version>${fasterxml.jackson.version}</version>
@@ -33,11 +38,6 @@
                     <groupId>org.scala-lang</groupId>
                 </exclusion>
             </exclusions>
-        </dependency>
-        <dependency>
-            <groupId>com.fasterxml.jackson.datatype</groupId>
-            <artifactId>jackson-datatype-jsr310</artifactId>
-            <version>${fasterxml.jackson.jar.version}</version>
         </dependency>
         <dependency>
             <groupId>org.apache.commons</groupId>
@@ -137,19 +137,11 @@
                 </exclusion>
             </exclusions>
         </dependency>
-        <dependency>
-            <groupId>com.azure</groupId>
-            <artifactId>azure-storage-queue</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.azure</groupId>
-            <artifactId>azure-storage-common</artifactId>
-        </dependency>
-        <dependency>
+        <!--<dependency>
             <groupId>io.netty</groupId>
             <artifactId>netty-codec</artifactId>
             <version>${netty.version}</version>
-        </dependency>
+        </dependency>-->
         <dependency>
             <groupId>io.projectreactor.netty</groupId>
             <artifactId>reactor-netty-core</artifactId>
@@ -258,6 +250,10 @@
                     <artifactId>scala-library</artifactId>
                     <groupId>org.scala-lang</groupId>
                 </exclusion>
+                <exclusion>
+                    <groupId>io.netty</groupId>
+                    <artifactId>netty-codec</artifactId>
+                </exclusion>
             </exclusions>
         </dependency>
         <dependency>
@@ -277,6 +273,10 @@
                 <exclusion>
                     <artifactId>scala-library</artifactId>
                     <groupId>org.scala-lang</groupId>
+                </exclusion>
+                <exclusion>
+                    <groupId>io.netty</groupId>
+                    <artifactId>netty-codec</artifactId>
                 </exclusion>
             </exclusions>
         </dependency>
@@ -460,29 +460,6 @@
                 </executions>
             </plugin>
             <plugin>
-                <artifactId>maven-assembly-plugin</artifactId>
-                <version>3.2.0</version>
-                <executions>
-                    <execution>
-                        <id>make-assembly</id> <!-- this is used for inheritance merges -->
-                        <phase>package</phase> <!-- bind to the packaging phase -->
-                        <goals>
-                            <goal>single</goal>
-                        </goals>
-                    </execution>
-                </executions>
-                <configuration>
-                    <archive>
-                        <manifest>
-                            <mainClass>fully.qualified.MainClass</mainClass>
-                        </manifest>
-                    </archive>
-                    <descriptorRefs>
-                        <descriptorRef>jar-with-dependencies</descriptorRef>
-                    </descriptorRefs>
-                </configuration>
-            </plugin>
-            <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>${maven.compile.plugin.version}</version>
@@ -490,6 +467,88 @@
                     <source>${java.source.version}</source>
                     <target>${java.target.version}</target>
                 </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.antipathy</groupId>
+                <artifactId>mvn-scalafmt_${scala.version.major}</artifactId>
+                <configuration>
+                    <configLocation>${project.parent.basedir}/.scalafmt.conf</configLocation> <!-- path to config -->
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>${maven.shade.plugin.version}</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <minimizeJar>true</minimizeJar>
+                            <!--Create shaded JAR only-->
+                            <shadedArtifactAttached>false</shadedArtifactAttached>
+                            <!--Remove original replaced dependencies-->
+                            <createDependencyReducedPom>true</createDependencyReducedPom>
+                            <!--Promotes transitive dependencies of removed dependencies to direct-->
+                            <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
+                            <transformers>
+                                <!--Transforms META-INF/services (essential if you relocate com.azure classes)-->
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                            </transformers>
+                            <finalName>${project.artifactId}-${project.version}</finalName>
+                            <filters>
+                                <filter>
+                                    <artifact>*:*</artifact>
+                                    <excludes>
+                                        <exclude>module-info.class</exclude>
+                                        <exclude>META-INF/maven/**</exclude>
+                                        <exclude>META-INF/*.SF</exclude>
+                                        <exclude>META-INF/*.DSA</exclude>
+                                        <exclude>META-INF/*.RSA</exclude>
+                                    </excludes>
+                                </filter>
+                            </filters>
+                            <relocations>
+                                <relocation>
+                                    <!--
+                                        Environment like Databricks may bring its own version of azure-core which may
+                                        be incompatible with your Azure client libraries.Relocate azure-core to avoid
+                                        collisions with it
+                                    -->
+                                    <pattern>com.azure</pattern>
+                                    <shadedPattern>kusto.shaded.com.azure</shadedPattern>
+                                </relocation>
+                                <!--In Databricks 10.2 you nay also need to relocate reactor netty packages-->
+                                <relocation>
+                                    <pattern>io.netty</pattern>
+                                    <shadedPattern>kusto.shaded.io.netty</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>io.vavr</pattern>
+                                    <shadedPattern>kusto.shaded.io.vavr</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.microsoft.aad</pattern>
+                                    <shadedPattern>kusto.shaded.com.microsoft.aad</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.microsoft.azure</pattern>
+                                    <shadedPattern>kusto.shaded.com.microsoft.azure</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.microsoft.rest</pattern>
+                                    <shadedPattern>kusto.shaded.com.microsoft.rest</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>reactor</pattern>
+                                    <shadedPattern>kusto.shaded.reactor</shadedPattern>
+                                </relocation>
+                            </relocations>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>
