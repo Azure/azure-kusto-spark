@@ -3,9 +3,9 @@
 </p>
 
 # Azure Data Explorer Connector for Apache Spark
+  
+master: [![Build](https://github.com/Azure/azure-kusto-spark/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/Azure/azure-kusto-spark/actions/workflows/build.yml)
 
-master: [![Build status](https://msazure.visualstudio.com/One/_apis/build/status/Custom/Kusto/azure-kusto-spark%20ci?branchName=master)](https://msazure.visualstudio.com/One/_build/latest?definitionId=58677)
- 
 This library contains the source code for Azure Data Explorer Data Source and Data Sink Connector for Apache Spark.
 
 Azure Data Explorer (A.K.A. [Kusto](https://azure.microsoft.com/services/data-explorer/)) is a lightning-fast indexing and querying service. 

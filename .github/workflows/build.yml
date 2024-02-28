@@ -1,4 +1,4 @@
-name: Build Java
+name: Build
 on:
   push:
     branches: [ '**' ]
@@ -8,6 +8,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     name: Setup Java 8, build and run tests
+    permissions:
+      checks: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v2
       - name: Setup java
@@ -30,7 +33,6 @@ jobs:
         if: always()
         with:
           files: |
-            data/target/surefire-reports/*.xml
-            ingest/target/surefire-reports/*.xml
+            connector/target/surefire-reports/*.xml
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v2
