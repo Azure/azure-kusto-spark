@@ -76,7 +76,10 @@ All the options that can be used in the Kusto Sink can be found in KustoSinkOpti
   'Stream' mode - uses [stream ingestion](https://learn.microsoft.com/en-us/azure/data-explorer/ingest-data-streaming?tabs=azure-portal%2Cjava) 
   to load data into Kusto. Streaming ingestion is useful for loading data when you need low latency between ingestion and query.
   *Note - Stream ingestion must be enabled on the destination table or cluster (see [here](https://learn.microsoft.com/en-us/azure/data-explorer/ingest-data-streaming?tabs=azure-portal%2Cjava) for details).
-  Stream ingestion has a [data size limit](https://learn.microsoft.com/en-us/azure/data-explorer/kusto/management/streamingingestionpolicy) of 4 MB. 
+  As ADX Streaming ingestion has a [data size limit](https://learn.microsoft.com/en-us/azure/data-explorer/ingest-data-streaming) of 4 MB, for each partition over a batched rdd the connector will ingest 4MB chunks of data, ingesting each individually. For each such batch - The connector will try 3 times to stream the data and if fails it will fallback to uploading it to blob storage and queue the ingestion. 
+  It is therefore recommended to configure the rate of Spark stream to produce around 10mb of data per batch and avoid using Stream.
+  It is also recommended to tune the target table [ingestion batching policy](https://learn.microsoft.com/azure/data-explorer/kusto/management/batching-policy) as this will effect the fallback flow latency.
+  **note : Do not use Stream mode for the sake of streaming as ADX streaming has additional cost and may not be what you need. Spark streaming goes well with Queued mode when developing continuous integration.
   If a request exceeds this size, it will be broken into multiple appropriately sized chunks.
 
 * **KUSTO_POLLING_ON_DRIVER**:
