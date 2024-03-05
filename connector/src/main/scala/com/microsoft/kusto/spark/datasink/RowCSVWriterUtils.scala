@@ -4,6 +4,7 @@ import java.io.CharArrayWriter
 import java.math.BigInteger
 import java.time.temporal.ChronoUnit
 import java.time.{Instant, LocalDateTime, ZoneId}
+import java.util.Base64
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
@@ -61,6 +62,7 @@ object RowCSVWriterUtils {
       nested: Boolean): Unit = {
     dataType match {
       case StringType => writeStringFromUTF8(row.getUTF8String(fieldIndexInRow), writer)
+      case BinaryType => writeStringFromBinary(row.getBinary(fieldIndexInRow), writer)
       case DateType =>
         writer.writeStringField(DateTimeUtils.toJavaDate(row.getInt(fieldIndexInRow)).toString)
       case TimestampType =>
@@ -246,5 +248,9 @@ object RowCSVWriterUtils {
 
   private def writeStringFromUTF8(str: UTF8String, writer: Writer): Unit = {
     writer.writeStringField(str.toString)
+  }
+
+  private def writeStringFromBinary(bytes: Array[Byte], writer: Writer): Unit = {
+    writer.writeStringField(Base64.getEncoder.encodeToString(bytes))
   }
 }
