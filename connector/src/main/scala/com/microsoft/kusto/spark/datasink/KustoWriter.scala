@@ -12,14 +12,30 @@ import com.microsoft.azure.kusto.ingest.exceptions.IngestionServiceException
 import com.microsoft.azure.kusto.ingest.resources.ContainerWithSas
 import com.microsoft.azure.kusto.ingest.result.IngestionResult
 import com.microsoft.azure.kusto.ingest.source.{BlobSourceInfo, CompressionType, StreamSourceInfo}
-import com.microsoft.azure.kusto.ingest.{IngestClient, IngestionProperties, ManagedStreamingIngestClient, StreamingIngestClient}
+import com.microsoft.azure.kusto.ingest.{
+  IngestClient,
+  IngestionProperties,
+  ManagedStreamingIngestClient,
+  StreamingIngestClient
+}
 import com.microsoft.azure.storage.blob.{BlobRequestOptions, CloudBlockBlob}
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.FinalizeHelper.finalizeIngestionWhenWorkersSucceeded
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator.generateTableGetSchemaAsRowsCommand
-import com.microsoft.kusto.spark.utils.KustoConstants.{IngestSkippedTrace, MaxIngestRetryAttempts, WarnStreamingBytes}
-import com.microsoft.kusto.spark.utils.{ExtendedKustoClient, KustoClientCache, KustoIngestionUtils, KustoQueryUtils, KustoConstants => KCONST, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.KustoConstants.{
+  IngestSkippedTrace,
+  MaxIngestRetryAttempts,
+  WarnStreamingBytes
+}
+import com.microsoft.kusto.spark.utils.{
+  ExtendedKustoClient,
+  KustoClientCache,
+  KustoIngestionUtils,
+  KustoQueryUtils,
+  KustoConstants => KCONST,
+  KustoDataSourceUtils => KDSU
+}
 import io.github.resilience4j.retry.RetryConfig
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.DataFrame
@@ -387,7 +403,7 @@ object KustoWriter {
         className,
         s"Streaming final batch of ${csvWriter.getCounter} bytes from batch $batchIdForTracing.")
       totalSize.getAndUpdate(_ + csvWriter.getCounter)
-      if(totalSize.get() > WarnStreamingBytes) {
+      if (totalSize.get() > WarnStreamingBytes) {
         KDSU.logWarn(
           className,
           s"Total of ${totalSize.get()} bytes were ingested in the batch. Please consider 'Queued' writeMode for ingestion.")
@@ -410,10 +426,15 @@ object KustoWriter {
     val status = streamingClient.ingestFromStream(streamSourceInfo, ingestionProperties)
 
     status.getIngestionStatusCollection.forEach(ingestionStatus => {
-      FinalizeHelper.processIngestionStatusResults(
-        ingestionInfoString = batchIdForTracing,
-        shouldThrowOnTagsAlreadyExists = false,
-        ingestionStatusResult = ingestionStatus)
+      KDSU.logInfo(
+        className,
+        s"BatchId $batchIdForTracing IngestionStatus { " +
+          s"status: '${ingestionStatus.status.toString}', " +
+          s"details: ${ingestionStatus.details}, " +
+          s"activityId: ${ingestionStatus.activityId}, " +
+          s"errorCode: ${ingestionStatus.errorCode}, " +
+          s"errorCodeString: ${ingestionStatus.errorCodeString}" +
+          "}")
     })
   }
 
