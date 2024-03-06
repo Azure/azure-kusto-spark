@@ -37,6 +37,7 @@ import com.microsoft.kusto.spark.utils.{
   KustoDataSourceUtils => KDSU
 }
 import io.github.resilience4j.retry.RetryConfig
+import org.apache.commons.io.IOUtils
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.InternalRow
@@ -49,7 +50,7 @@ import java.nio.charset.StandardCharsets
 import java.security.InvalidParameterException
 import java.time.{Clock, Duration, Instant}
 import java.util
-import java.util.zip.GZIPOutputStream
+import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 import java.util.{TimeZone, UUID}
 import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -365,8 +366,8 @@ object KustoWriter {
 
     val timeZone = TimeZone.getTimeZone(parameters.writeOptions.timeZone).toZoneId
     val byteArrayOutputStream = new ByteArrayOutputStream()
-    // val compressedStream = new GZIPOutputStream(byteArrayOutputStream)
-    val streamWriter = new OutputStreamWriter(byteArrayOutputStream)
+    val compressedStream = new GZIPOutputStream(byteArrayOutputStream)
+    val streamWriter = new OutputStreamWriter(compressedStream)
     val writer = new BufferedWriter(streamWriter)
     val csvWriter = CountingWriter(writer)
     val totalSize = new AtomicLong(0)
@@ -378,11 +379,14 @@ object KustoWriter {
           className,
           s"Batch $batchIdForTracing exceeds the max streaming size 10MB compressed! " +
             s"Streaming ${csvWriter.getCounter} bytes from batch $batchIdForTracing. Index of the batch ($index).")
+        // compressedStream.flush()
+        byteArrayOutputStream.flush()
         writer.flush()
         streamBytesIntoKusto(
           batchIdForTracing,
           byteArrayOutputStream.toByteArray,
           ingestionProperties,
+          parameters.writeOptions,
           streamingClient)
         totalSize.getAndUpdate(_ + csvWriter.getCounter)
         csvWriter.resetCounter()
@@ -391,13 +395,13 @@ object KustoWriter {
     }
     // Close all resources
     writer.flush()
-    writer.close()
-//    compressedStream.flush()
-//    compressedStream.finish()
-//    compressedStream.close()
-    byteArrayOutputStream.flush()
-    byteArrayOutputStream.close()
-
+    compressedStream.flush()
+    IOUtils.close(writer, byteArrayOutputStream)
+    // compressedStream.finish()
+    // byteArrayOutputStream.flush()
+    // Close the handles
+    // IOUtils.close(writer, compressedStream, byteArrayOutputStream)
+    // IOUtils.close(writer, byteArrayOutputStream)
     if (csvWriter.getCounter > 0) {
       KDSU.logInfo(
         className,
@@ -412,6 +416,7 @@ object KustoWriter {
         batchIdForTracing,
         byteArrayOutputStream.toByteArray,
         ingestionProperties,
+        parameters.writeOptions,
         streamingClient)
     }
   }
@@ -420,22 +425,38 @@ object KustoWriter {
       batchIdForTracing: String,
       bytes: Array[Byte],
       ingestionProperties: IngestionProperties,
+      writeOptions: WriteOptions,
       streamingClient: ManagedStreamingIngestClient): Unit = {
-    val streamSourceInfo = new StreamSourceInfo(new ByteArrayInputStream(bytes))
-    // streamSourceInfo.setCompressionType(CompressionType.gz)
-    val status = streamingClient.ingestFromStream(streamSourceInfo, ingestionProperties)
-
-    status.getIngestionStatusCollection.forEach(ingestionStatus => {
-      KDSU.logInfo(
-        className,
-        s"BatchId $batchIdForTracing IngestionStatus { " +
-          s"status: '${ingestionStatus.status.toString}', " +
-          s"details: ${ingestionStatus.details}, " +
-          s"activityId: ${ingestionStatus.activityId}, " +
-          s"errorCode: ${ingestionStatus.errorCode}, " +
-          s"errorCodeString: ${ingestionStatus.errorCodeString}" +
-          "}")
-    })
+    KDSU.retryApplyFunction(
+      () => {
+        val inputStream = new ByteArrayInputStream(bytes)
+        val streamSourceInfo = new StreamSourceInfo(inputStream)
+        streamSourceInfo.setCompressionType(CompressionType.gz)
+        Try(streamingClient.ingestFromStream(streamSourceInfo, ingestionProperties)) match {
+          case Success(status) =>
+            // have to ignore any exception here for close
+            IOUtils.close(inputStream)
+            status.getIngestionStatusCollection.forEach(ingestionStatus => {
+              KDSU.logInfo(
+                className,
+                s"BatchId $batchIdForTracing IngestionStatus { " +
+                  s"status: '${ingestionStatus.status.toString}', " +
+                  s"details: ${ingestionStatus.details}, " +
+                  s"activityId: ${ingestionStatus.activityId}, " +
+                  s"errorCode: ${ingestionStatus.errorCode}, " +
+                  s"errorCodeString: ${ingestionStatus.errorCodeString}" +
+                  "}")
+            })
+          case Failure(e: Throwable) =>
+            KDSU.reportExceptionAndThrow(
+              className,
+              e,
+              "Streaming ingestion in partition " +
+                s"${TaskContext.getPartitionId.toString} for requestId: '${writeOptions.requestId} failed")
+        }
+      },
+      this.retryConfig,
+      "Streaming ingest to Kusto")
   }
 
   private def ingestToTemporaryTableByWorkers(
