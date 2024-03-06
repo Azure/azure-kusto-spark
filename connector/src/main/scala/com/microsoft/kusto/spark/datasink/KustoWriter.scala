@@ -365,8 +365,6 @@ object KustoWriter {
 
     val timeZone = TimeZone.getTimeZone(parameters.writeOptions.timeZone).toZoneId
     val byteArrayOutputStream = new ByteArrayOutputStream()
-//    val compressedStream = new GZIPOutputStream(byteArrayOutputStream)
-//    val streamWriter = new OutputStreamWriter(compressedStream)
     val streamWriter = new OutputStreamWriter(byteArrayOutputStream)
     val writer = new BufferedWriter(streamWriter)
     val csvWriter = CountingWriter(writer)
@@ -379,7 +377,6 @@ object KustoWriter {
           className,
           s"Batch $batchIdForTracing exceeds the max streaming size 10MB compressed! " +
             s"Streaming ${csvWriter.getCounter} bytes from batch $batchIdForTracing. Index of the batch ($index).")
-        // compressedStream.flush()
         byteArrayOutputStream.flush()
         writer.flush()
         streamBytesIntoKusto(
@@ -395,13 +392,8 @@ object KustoWriter {
     }
     // Close all resources
     writer.flush()
-    // compressedStream.flush()
+    byteArrayOutputStream.flush()
     IOUtils.close(writer, byteArrayOutputStream)
-    // compressedStream.finish()
-    // byteArrayOutputStream.flush()
-    // Close the handles
-    // IOUtils.close(writer, compressedStream, byteArrayOutputStream)
-    // IOUtils.close(writer, byteArrayOutputStream)
     if (csvWriter.getCounter > 0) {
       KDSU.logInfo(
         className,
@@ -430,8 +422,8 @@ object KustoWriter {
     KDSU.retryApplyFunction(
       () => {
         val inputStream = new ByteArrayInputStream(bytes)
+        // The SDK will compress the stream by default.
         val streamSourceInfo = new StreamSourceInfo(inputStream)
-        streamSourceInfo.setCompressionType(CompressionType.gz)
         Try(streamingClient.ingestFromStream(streamSourceInfo, ingestionProperties)) match {
           case Success(status) =>
             // have to ignore any exception here for close
