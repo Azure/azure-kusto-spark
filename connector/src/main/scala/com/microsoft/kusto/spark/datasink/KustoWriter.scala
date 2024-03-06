@@ -362,8 +362,9 @@ object KustoWriter {
 
     val timeZone = TimeZone.getTimeZone(parameters.writeOptions.timeZone).toZoneId
     val byteArrayOutputStream = new ByteArrayOutputStream()
-    val compressedStream = new GZIPOutputStream(byteArrayOutputStream)
-    val streamWriter = new OutputStreamWriter(compressedStream)
+//    val compressedStream = new GZIPOutputStream(byteArrayOutputStream)
+//    val streamWriter = new OutputStreamWriter(compressedStream)
+    val streamWriter = new OutputStreamWriter(byteArrayOutputStream)
     val writer = new BufferedWriter(streamWriter)
     val csvWriter = CountingWriter(writer)
     val totalSize = new AtomicLong(0)
@@ -391,7 +392,7 @@ object KustoWriter {
     }
     // Close all resources
     writer.flush()
-    compressedStream.flush()
+    // compressedStream.flush()
     IOUtils.close(writer, byteArrayOutputStream)
     // compressedStream.finish()
     // byteArrayOutputStream.flush()
