@@ -293,6 +293,42 @@ class WriterTests extends AnyFlatSpec with Matchers {
     res5 shouldEqual "\"-123456789123456789.0000000000\"" + lineSep + "\"0.0000000000\"" + lineSep + "\"0.1000000000\"" +
       lineSep + "\"-0.1000000000\"" + lineSep
   }
+
+  "convertRowToCsv" should "convert the row as expected with binary data" in {
+    val sparkConf: SparkConf = new SparkConf()
+      .set("spark.testing", "true")
+      .set("spark.ui.enabled", "false")
+      .setAppName("SimpleKustoDataSink")
+      .setMaster("local[*]")
+    val sparkSession: SparkSession = SparkSession.builder().config(sparkConf).getOrCreate()
+    val byteArrayOutputStream = new ByteArrayOutputStream()
+    val streamWriter = new OutputStreamWriter(byteArrayOutputStream)
+    val writer = new BufferedWriter(streamWriter)
+    val csvWriter = CountingWriter(writer)
+
+    val someData =
+      List(
+        "Test string for spark binary".getBytes(),
+        "A second test string for spark binary".getBytes(),
+        null
+      )
+
+    val someSchema = List(StructField("binaryString", BinaryType, nullable = true))
+
+    val df = sparkSession.createDataFrame(
+      sparkSession.sparkContext.parallelize(WriterTests.asRows(someData)),
+      StructType(WriterTests.asSchema(someSchema)))
+
+    val dfRows: Array[InternalRow] = df.queryExecution.toRdd.collect()
+
+    RowCSVWriterUtils.writeRowAsCSV(dfRows(0), df.schema, TimeZone.getTimeZone("UTC").toZoneId, csvWriter)
+    RowCSVWriterUtils.writeRowAsCSV(dfRows(1), df.schema, TimeZone.getTimeZone("UTC").toZoneId, csvWriter)
+    RowCSVWriterUtils.writeRowAsCSV(dfRows(2), df.schema, TimeZone.getTimeZone("UTC").toZoneId, csvWriter)
+
+    writer.flush()
+    val res1 = byteArrayOutputStream.toString
+    res1 shouldEqual "\"VGVzdCBzdHJpbmcgZm9yIHNwYXJrIGJpbmFyeQ==\"" + lineSep + "\"QSBzZWNvbmQgdGVzdCBzdHJpbmcgZm9yIHNwYXJrIGJpbmFyeQ==\"" + lineSep + lineSep
+  }
 }
 
 object WriterTests {

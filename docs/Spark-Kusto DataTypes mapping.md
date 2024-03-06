@@ -8,6 +8,7 @@ When writing to or reading from a Kusto table, the connector converts types from
 | Spark data type | Kusto data type |
 |-----------------|-----------------|
 | StringType      | string          |
+| BinaryType      | string          |
 | IntegerType     | int             |
 | LongType        | long            |
 | BooleanType     | bool            |
@@ -46,6 +47,8 @@ When writing to or reading from a Kusto table, the connector converts types from
 Kusto **datetime** data type is always read in '%Y-%m-%d %H:%M:%s' format , while **timespan** format is '%H:%M:%s'. On the other
 hand spark **DateType** is of format '%Y-%m-%d' and **TimestampType** is of format '%Y-%m-%d %H:%M:%s'. This is why Kusto 'timespan' 
 type is translated into a string by the connector and **we recommend using only datetime and TimestampType**. 
+
+Spark **BinaryType** is convereted to a base 64 encoded string.
 
 Kusto **decimal** type 
 - Kusto as a source : The precision and scale supported with Kusto as a source is (38,18) respectively.
