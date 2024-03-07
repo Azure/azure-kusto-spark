@@ -11,9 +11,16 @@ import com.microsoft.azure.kusto.ingest.result.{IngestionStatus, OperationStatus
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.KustoWriter.DelayPeriodBetweenCalls
-import com.microsoft.kusto.spark.utils.CslCommandsGenerator.{generateExtentTagsDropByPrefixCommand, generateTableAlterMergePolicyCommand}
+import com.microsoft.kusto.spark.utils.CslCommandsGenerator.{
+  generateExtentTagsDropByPrefixCommand,
+  generateTableAlterMergePolicyCommand
+}
 import com.microsoft.kusto.spark.utils.KustoConstants.IngestSkippedTrace
-import com.microsoft.kusto.spark.utils.{ExtendedKustoClient, KustoClientCache, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.{
+  ExtendedKustoClient,
+  KustoClientCache,
+  KustoDataSourceUtils => KDSU
+}
 import org.apache.spark.SparkContext
 import org.apache.spark.util.CollectionAccumulator
 
@@ -40,7 +47,7 @@ object FinalizeHelper {
       sinkStartTime: Instant): Unit = {
     if (!kustoClient.shouldIngestData(
         coordinates,
-        writeOptions.ingestionProperties,
+        writeOptions.maybeSparkIngestionProperties,
         tableExists,
         crp)) {
       KDSU.logInfo(myName, s"$IngestSkippedTrace '${coordinates.table}'")
@@ -254,9 +261,10 @@ object FinalizeHelper {
       case otherStatus: Any =>
         // TODO error code should be added to java client
         if (ingestionStatusResult.errorCodeString != "Skipped_IngestByTagAlreadyExists") {
-          throw new RuntimeException(s"Ingestion to Kusto failed with status '$otherStatus'." +
-            s" $ingestionInfoString, partition: '$partitionId'. Ingestion info: '${mapper.writerWithDefaultPrettyPrinter
-                .writeValueAsString(ingestionStatusResult)}'")
+          throw new RuntimeException(
+            s"Ingestion to Kusto failed with status '$otherStatus'." +
+              s" $ingestionInfoString, partition: '$partitionId'. Ingestion info: '${mapper.writerWithDefaultPrettyPrinter
+                  .writeValueAsString(ingestionStatusResult)}'")
         } else if (shouldThrowOnTagsAlreadyExists) {
           // TODO - think about this logic and other cases that should not throw all (maybe everything that starts with skip? this actualy
           //  seems like a bug in engine that the operation status is not Skipped)

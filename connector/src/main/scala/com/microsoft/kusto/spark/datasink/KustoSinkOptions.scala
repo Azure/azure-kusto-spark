@@ -102,7 +102,7 @@ case class WriteOptions(
     timeout: FiniteDuration = new FiniteDuration(
       KustoConstants.DefaultWaitingIntervalLongRunning.toInt,
       TimeUnit.SECONDS),
-    ingestionProperties: Option[String] = None,
+    maybeSparkIngestionProperties: Option[SparkIngestionProperties] = None,
     batchLimit: Int = KustoConstants.DefaultBatchingLimit,
     requestId: String = UUID.randomUUID().toString,
     autoCleanupTime: FiniteDuration =

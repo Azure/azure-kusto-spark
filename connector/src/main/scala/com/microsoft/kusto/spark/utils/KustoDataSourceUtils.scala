@@ -9,6 +9,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import com.microsoft.azure.kusto.data.exceptions.{DataClientException, DataServiceException}
 import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties, KustoResultSetTable}
+import com.microsoft.azure.kusto.ingest.IngestionProperties
 import com.microsoft.kusto.spark.authentication._
 import com.microsoft.kusto.spark.common.{KustoCoordinates, KustoDebugOptions}
 import com.microsoft.kusto.spark.datasink.KustoWriter.TempIngestionTablePrefix
@@ -465,6 +466,9 @@ object KustoDataSourceUtils {
 
     val sourceParameters = parseSourceParameters(parameters, allowProxy = false)
 
+    val maybeSparkIngestionProperties =
+      getIngestionProperties(writeMode == WriteMode.Stream, ingestionPropertiesAsJson)
+
     val writeOptions = WriteOptions(
       pollingOnDriver,
       tableCreation,
@@ -472,7 +476,7 @@ object KustoDataSourceUtils {
       parameters.getOrElse(KustoSinkOptions.KUSTO_WRITE_RESULT_LIMIT, "1"),
       parameters.getOrElse(DateTimeUtils.TIMEZONE_OPTION, "UTC"),
       timeout,
-      ingestionPropertiesAsJson,
+      maybeSparkIngestionProperties = maybeSparkIngestionProperties,
       batchLimit,
       sourceParameters.requestId,
       autoCleanupTime,
@@ -494,7 +498,7 @@ object KustoDataSourceUtils {
       s"Parsed write options for sink: {'table': '${sourceParameters.kustoCoordinates.table}', 'timeout': '${writeOptions.timeout}, 'async': ${writeOptions.isAsync}, 'writeMode': ${writeOptions.writeMode}, " +
         s"'tableCreationMode': ${writeOptions.tableCreateOptions}, 'writeLimit': ${writeOptions.writeResultLimit}, 'batchLimit': ${writeOptions.batchLimit}" +
         s", 'timeout': ${writeOptions.timeout}, 'timezone': ${writeOptions.timeZone}, " +
-        s"'ingestionProperties': $ingestionPropertiesAsJson, 'requestId': '${sourceParameters.requestId}', 'pollingOnDriver': ${writeOptions.pollingOnDriver}," +
+        s"'maybeSparkIngestionProperties': $ingestionPropertiesAsJson, 'requestId': '${sourceParameters.requestId}', 'pollingOnDriver': ${writeOptions.pollingOnDriver}," +
         s"'maxRetriesOnMoveExtents':$maxRetriesOnMoveExtents, 'minimalExtentsCountForSplitMergePerNode':$minimalExtentsCountForSplitMergePerNode, " +
         s"'adjustSchema': $adjustSchema, 'autoCleanupTime': $autoCleanupTime${if (writeOptions.userTempTableName.isDefined)
             s", userTempTableName: ${userTempTableName.get}"
@@ -502,6 +506,21 @@ object KustoDataSourceUtils {
           else ""}")
 
     SinkParameters(writeOptions, sourceParameters)
+  }
+
+  private def getIngestionProperties(
+      isStreamingIngestion: Boolean,
+      mayBeIngestionPropertiesAsJson: Option[String]): Option[SparkIngestionProperties] = {
+
+    mayBeIngestionPropertiesAsJson match {
+      case Some(ingestionPropertiesAsJson) =>
+        val sip = SparkIngestionProperties.fromString(ingestionPropertiesAsJson)
+        if (isStreamingIngestion) {
+          sip.validateStreamingProperties()
+        }
+        Some(sip)
+      case None => Option.empty[SparkIngestionProperties]
+    }
   }
 
   def retryApplyFunction[T](func: () => T, retryConfig: RetryConfig, retryName: String): T = {

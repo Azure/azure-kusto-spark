@@ -49,30 +49,21 @@ class ExtendedKustoClientTests extends AnyFlatSpec with Matchers {
     val stubbedClient = new ExtendedKustoClientStub(null, null, "", null)
     stubbedClient.tagsToReturn = emptyTags
     val props = new SparkIngestionProperties
-    val shouldIngestWhenNoTags = stubbedClient.shouldIngestData(
-      kustoCoordinates,
-      Some(props.toString),
-      tableExists = true,
-      null)
+    val shouldIngestWhenNoTags =
+      stubbedClient.shouldIngestData(kustoCoordinates, Some(props), tableExists = true, null)
     shouldIngestWhenNoTags shouldEqual true
 
     val tags = new util.ArrayList[String]
     tags.add("tag")
     stubbedClient.tagsToReturn = tags
     props.ingestIfNotExists = util.Collections.singletonList("otherTag")
-    val shouldIngestWhenNoOverlap = stubbedClient.shouldIngestData(
-      kustoCoordinates,
-      Some(props.toString),
-      tableExists = true,
-      null)
+    val shouldIngestWhenNoOverlap =
+      stubbedClient.shouldIngestData(kustoCoordinates, Some(props), tableExists = true, null)
     shouldIngestWhenNoOverlap shouldEqual true
 
     tags.add("otherTag")
-    val shouldIngestWhenOverlap = stubbedClient.shouldIngestData(
-      kustoCoordinates,
-      Some(props.toString),
-      tableExists = true,
-      null)
+    val shouldIngestWhenOverlap =
+      stubbedClient.shouldIngestData(kustoCoordinates, Some(props), tableExists = true, null)
     shouldIngestWhenOverlap shouldEqual false
   }
 
