@@ -114,12 +114,12 @@ object KustoWriter {
       writeOptions.tableCreateOptions)
 
     val rebuiltOptions =
-      writeOptions.copy(ingestionProperties = Some(stagingTableIngestionProperties.toString()))
+      writeOptions.copy(maybeSparkIngestionProperties = Some(stagingTableIngestionProperties))
 
     val tableExists = schemaShowCommandResult.count() > 0
     val shouldIngest = kustoClient.shouldIngestData(
       tableCoordinates,
-      writeOptions.ingestionProperties,
+      writeOptions.maybeSparkIngestionProperties,
       tableExists,
       crp)
 
@@ -330,25 +330,19 @@ object KustoWriter {
       writeOptions: WriteOptions,
       database: String,
       tableName: String): IngestionProperties = {
-    if (writeOptions.ingestionProperties.isDefined) {
-      val ingestionProperties = SparkIngestionProperties
-        .fromString(writeOptions.ingestionProperties.get)
-        .toIngestionProperties(database, tableName)
-      ingestionProperties
-    } else {
-      new IngestionProperties(database, tableName)
+    writeOptions.maybeSparkIngestionProperties match {
+      case Some(sparkIngestionProperties) =>
+        sparkIngestionProperties.toIngestionProperties(database, tableName)
+      case None => new IngestionProperties(database, tableName)
     }
   }
 
   private def getSparkIngestionProperties(
       writeOptions: WriteOptions): SparkIngestionProperties = {
-    val ingestionProperties =
-      if (writeOptions.ingestionProperties.isDefined)
-        SparkIngestionProperties.fromString(writeOptions.ingestionProperties.get)
-      else
-        new SparkIngestionProperties()
-    ingestionProperties.ingestIfNotExists = new util.ArrayList()
-    ingestionProperties
+    val sparkIngestionProperties =
+      writeOptions.maybeSparkIngestionProperties.getOrElse(new SparkIngestionProperties())
+    sparkIngestionProperties.ingestIfNotExists = new util.ArrayList()
+    sparkIngestionProperties
   }
 
   private def streamRowsIntoKustoByWorkers(
@@ -541,7 +535,7 @@ object KustoWriter {
       var props = ingestionProperties
       val blobUri = blobResource.blob.getStorageUri.getPrimaryUri.toString
       if (parameters.writeOptions.ensureNoDupBlobs || (!props.getFlushImmediately && flushImmediately)) {
-        // Need to copy the ingestionProperties so that only this blob ingestion will be effected
+        // Need to copy the maybeSparkIngestionProperties so that only this blob ingestion will be effected
         props = SparkIngestionProperties.cloneIngestionProperties(ingestionProperties)
       }
 
