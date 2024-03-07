@@ -443,31 +443,26 @@ class ExtendedKustoClient(
 
   def shouldIngestData(
       tableCoordinates: KustoCoordinates,
-      ingestionProperties: Option[String],
+      maybeSparkIngestionProperties: Option[SparkIngestionProperties],
       tableExists: Boolean,
       crp: ClientRequestProperties): Boolean = {
-    var shouldIngest = true
-
-    if (tableExists && ingestionProperties.isDefined) {
-      val ingestIfNotExistsTags =
-        SparkIngestionProperties.fromString(ingestionProperties.get).ingestIfNotExists
+    if (tableExists && maybeSparkIngestionProperties.isDefined) {
+      val ingestIfNotExistsTags = maybeSparkIngestionProperties.orNull.ingestIfNotExists
       if (ingestIfNotExistsTags != null && !ingestIfNotExistsTags.isEmpty) {
         val ingestIfNotExistsTagsSet = ingestIfNotExistsTags.asScala.toSet
-
         val res =
           fetchTableExtentsTags(tableCoordinates.database, tableCoordinates.table.get, crp)
         if (res.next()) {
           val tagsArray = res.getObject(0).asInstanceOf[ArrayNode]
           for (i <- 0 until tagsArray.size()) {
             if (ingestIfNotExistsTagsSet.contains(tagsArray.get(i).asText())) {
-              shouldIngest = false
+              return false
             }
           }
         }
       }
     }
-
-    shouldIngest
+    true
   }
 
   def fetchTableExtentsTags(
