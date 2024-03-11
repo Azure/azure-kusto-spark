@@ -35,8 +35,10 @@ object KustoConstants {
   val MaxIngestRetryAttempts = 2
   val MaxCommandsRetryAttempts = 4
   // val MaxStreamingBytes: Int = 4 * OneMegaByte
-  // This is just a temporary value until we actually count compressed bytes. GZIP is about 25-40% of the original size.
-  val MaxStreamingBytesUnCompressed: Int = 4 * OneMegaByte
+  // TODO - make it configureable, user can then fine tune it using the SDK logs reporting fallback to queue (we should
+  // make sure its evident that the reason for fallback was the size of the, and that the Max size in the ManagedClient is the same
+  // Problem now is actually that the ManagedClient has a limit of 4 mb ... we need to make it configureable in the sdk for this to work
+  val MaxStreamingBytesUncompressed: Int = 4 * OneMegaByte
   val WarnStreamingBytes: Long = 100 * OneMegaByte
   val EmptyString = ""
   val DefaultMaximumIngestionTime: FiniteDuration = FiniteDuration.apply(

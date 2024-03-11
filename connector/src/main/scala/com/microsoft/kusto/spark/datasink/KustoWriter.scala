@@ -11,12 +11,11 @@ import com.microsoft.azure.kusto.ingest.IngestionProperties.DataFormat
 import com.microsoft.azure.kusto.ingest.exceptions.IngestionServiceException
 import com.microsoft.azure.kusto.ingest.resources.ContainerWithSas
 import com.microsoft.azure.kusto.ingest.result.IngestionResult
-import com.microsoft.azure.kusto.ingest.source.{BlobSourceInfo, CompressionType, StreamSourceInfo}
+import com.microsoft.azure.kusto.ingest.source.{BlobSourceInfo, StreamSourceInfo}
 import com.microsoft.azure.kusto.ingest.{
   IngestClient,
   IngestionProperties,
-  ManagedStreamingIngestClient,
-  StreamingIngestClient
+  ManagedStreamingIngestClient
 }
 import com.microsoft.azure.storage.blob.{BlobRequestOptions, CloudBlockBlob}
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
@@ -29,6 +28,7 @@ import com.microsoft.kusto.spark.utils.KustoConstants.{
   WarnStreamingBytes
 }
 import com.microsoft.kusto.spark.utils.{
+  ByteArrayOutputStreamWithOffset,
   ExtendedKustoClient,
   KustoClientCache,
   KustoIngestionUtils,
@@ -50,7 +50,7 @@ import java.nio.charset.StandardCharsets
 import java.security.InvalidParameterException
 import java.time.{Clock, Duration, Instant}
 import java.util
-import java.util.zip.{GZIPInputStream, GZIPOutputStream}
+import java.util.zip.GZIPOutputStream
 import java.util.{TimeZone, UUID}
 import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -359,31 +359,54 @@ object KustoWriter {
       .streamingClient
 
     val timeZone = TimeZone.getTimeZone(parameters.writeOptions.timeZone).toZoneId
-    val byteArrayOutputStream = new ByteArrayOutputStream()
+    // TODO - use a pool of two - or make ByteArrayOutputStreamWithOffset
+//    var curBbId = 0
+//    val byteArrayPool = Array[ByteArrayOutputStream](new ByteArrayOutputStream(), null)// Init the 2nd lazy.
+//    val byteArrayOutputStream = byteArrayPool[]
+    var byteArrayOutputStream = new ByteArrayOutputStreamWithOffset()
     val streamWriter = new OutputStreamWriter(byteArrayOutputStream)
     val writer = new BufferedWriter(streamWriter)
     val csvWriter = CountingWriter(writer)
-    val totalSize = new AtomicLong(0)
-
+    var totalSize = 0L
+    var lastIndex = 0
     for ((row, index) <- rows.zipWithIndex) {
       RowCSVWriterUtils.writeRowAsCSV(row, parameters.schema, timeZone, csvWriter)
-      if (csvWriter.getCounter >= KCONST.MaxStreamingBytesUnCompressed) {
+      if (csvWriter.getCounter >= KCONST.MaxStreamingBytesUncompressed) {
         KDSU.logWarn(
           className,
-          s"Batch $batchIdForTracing exceeds the max streaming size 10MB compressed! " +
+          s"Batch $batchIdForTracing exceeds the max streaming size ${KCONST.MaxStreamingBytesUncompressed}MB compressed! " +
             s"Streaming ${csvWriter.getCounter} bytes from batch $batchIdForTracing. Index of the batch ($index).")
-        byteArrayOutputStream.flush()
         writer.flush()
-        streamBytesIntoKusto(
-          batchIdForTracing,
-          byteArrayOutputStream.toByteArray,
-          ingestionProperties,
-          parameters.writeOptions,
-          streamingClient)
-        totalSize.getAndUpdate(_ + csvWriter.getCounter)
+        if (lastIndex != 0) {
+          // Split the byteArrayOutputStream into two
+          val firstBB = byteArrayOutputStream.toByteArray
+          val bb2 = byteArrayOutputStream.createNewFromOffset(lastIndex)
+          byteArrayOutputStream = bb2
+          streamBytesIntoKusto(
+            batchIdForTracing,
+            firstBB,
+            ingestionProperties,
+            parameters.writeOptions,
+            streamingClient,
+            lastIndex)
+
+        } else {
+          // lastIndex == 0 meaning one row exceeded MaxStreamingBytesUncompressed -> no need to split
+          streamBytesIntoKusto(
+            batchIdForTracing,
+            byteArrayOutputStream.toByteArray,
+            ingestionProperties,
+            parameters.writeOptions,
+            streamingClient,
+            0)
+        }
+
+        totalSize += csvWriter.getCounter
         csvWriter.resetCounter()
-        byteArrayOutputStream.reset()
+        // byteArrayOutputStream.reset()
       }
+
+      lastIndex = byteArrayOutputStream.size()
     }
     // Close all resources
     writer.flush()
@@ -393,18 +416,19 @@ object KustoWriter {
       KDSU.logInfo(
         className,
         s"Streaming final batch of ${csvWriter.getCounter} bytes from batch $batchIdForTracing.")
-      totalSize.getAndUpdate(_ + csvWriter.getCounter)
-      if (totalSize.get() > WarnStreamingBytes) {
+      totalSize += csvWriter.getCounter
+      if (totalSize > WarnStreamingBytes) {
         KDSU.logWarn(
           className,
-          s"Total of ${totalSize.get()} bytes were ingested in the batch. Please consider 'Queued' writeMode for ingestion.")
+          s"Total of ${totalSize} bytes were ingested in the batch. Please consider 'Queued' writeMode for ingestion.")
       }
       streamBytesIntoKusto(
         batchIdForTracing,
         byteArrayOutputStream.toByteArray,
         ingestionProperties,
         parameters.writeOptions,
-        streamingClient)
+        streamingClient,
+        0)
     }
   }
 
@@ -413,10 +437,11 @@ object KustoWriter {
       bytes: Array[Byte],
       ingestionProperties: IngestionProperties,
       writeOptions: WriteOptions,
-      streamingClient: ManagedStreamingIngestClient): Unit = {
+      streamingClient: ManagedStreamingIngestClient,
+      inputStreamStartingIdx: Int): Unit = {
     KDSU.retryApplyFunction(
       () => {
-        val inputStream = new ByteArrayInputStream(bytes)
+        val inputStream = new ByteArrayInputStream(bytes, 0, inputStreamStartingIdx)
         // The SDK will compress the stream by default.
         val streamSourceInfo = new StreamSourceInfo(inputStream)
         Try(streamingClient.ingestFromStream(streamSourceInfo, ingestionProperties)) match {
