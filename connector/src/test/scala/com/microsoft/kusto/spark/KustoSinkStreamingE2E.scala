@@ -194,7 +194,7 @@ class KustoSinkStreamingE2E extends AnyFlatSpec with BeforeAndAfterAll {
       table,
       kustoConnectionOptions.database,
       expectedNumberOfRows,
-      10000,
+      10,
       tableCleanupPrefix = prefix)
   }
 
@@ -234,7 +234,7 @@ class KustoSinkStreamingE2E extends AnyFlatSpec with BeforeAndAfterAll {
       table,
       kustoConnectionOptions.database,
       expectedNumberOfRows,
-      10000,
+      10,
       tableCleanupPrefix = prefix)
   }
 }
