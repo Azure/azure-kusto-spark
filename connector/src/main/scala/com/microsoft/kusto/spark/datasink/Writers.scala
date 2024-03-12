@@ -22,9 +22,7 @@ trait Writer {
   def resetCounter(): Unit = {}
 }
 
-case class CountingWriter(out: java.io.Writer) extends Writer {
-
-  private var bytesCounter: Long = 0L
+case class CountingWriter(out: java.io.Writer, var bytesCounter: Long = 0L) extends Writer {
 
   override def newLine(): Unit = {
     out.write(newLineSep)

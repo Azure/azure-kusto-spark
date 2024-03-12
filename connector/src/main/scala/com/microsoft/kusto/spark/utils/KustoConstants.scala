@@ -38,6 +38,7 @@ object KustoConstants {
   // TODO - make it configureable, user can then fine tune it using the SDK logs reporting fallback to queue (we should
   // make sure its evident that the reason for fallback was the size of the, and that the Max size in the ManagedClient is the same
   // Problem now is actually that the ManagedClient has a limit of 4 mb ... we need to make it configureable in the sdk for this to work
+  //TODO when this is configureable - we need 3 tests: 1) max = 10 < one row size  2) row size < max=20< size(all the data), 3) size(data)< max = 4mb
   val MaxStreamingBytesUncompressed: Int = 4 * OneMegaByte
   val WarnStreamingBytes: Long = 100 * OneMegaByte
   val EmptyString = ""
