@@ -72,12 +72,12 @@ object KustoWriter {
     DateTimeFormatter.ofPattern("HH-mm-ss-SSSSSS").withZone(ZoneId.systemDefault)
 
   private[kusto] def write(
-                            batchId: Option[Long],
-                            data: DataFrame,
-                            tableCoordinates: KustoCoordinates,
-                            authentication: KustoAuthentication,
-                            writeOptions: WriteOptions,
-                            crp: ClientRequestProperties): Unit = {
+      batchId: Option[Long],
+      data: DataFrame,
+      tableCoordinates: KustoCoordinates,
+      authentication: KustoAuthentication,
+      writeOptions: WriteOptions,
+      crp: ClientRequestProperties): Unit = {
     val batchIdIfExists = batchId.map(b => s"${b.toString}").getOrElse("")
     val kustoClient = KustoClientCache.getClient(
       tableCoordinates.clusterUrl,
@@ -126,12 +126,12 @@ object KustoWriter {
     } else {
       if (writeOptions.userTempTableName.isDefined) {
         if (kustoClient
-          .executeEngine(
-            tableCoordinates.database,
-            generateTableGetSchemaAsRowsCommand(writeOptions.userTempTableName.get),
-            crp)
-          .getPrimaryResults
-          .count() <= 0 ||
+            .executeEngine(
+              tableCoordinates.database,
+              generateTableGetSchemaAsRowsCommand(writeOptions.userTempTableName.get),
+              crp)
+            .getPrimaryResults
+            .count() <= 0 ||
           !tableExists) {
           throw new InvalidParameterException(
             "Temp table name provided but the table does not exist. Either drop this " +
@@ -259,10 +259,10 @@ object KustoWriter {
   }
 
   private def ingestRowsIntoTempTbl(
-                                     rows: Iterator[InternalRow],
-                                     batchIdForTracing: String,
-                                     partitionsResults: CollectionAccumulator[PartitionResult],
-                                     parameters: KustoWriteResource): Unit = {
+      rows: Iterator[InternalRow],
+      batchIdForTracing: String,
+      partitionsResults: CollectionAccumulator[PartitionResult],
+      parameters: KustoWriteResource): Unit = {
     if (rows.isEmpty) {
       KDSU.logWarn(
         className,
@@ -291,12 +291,12 @@ object KustoWriter {
   }
 
   def ingestRowsIntoKusto(
-                           rows: Iterator[InternalRow],
-                           ingestClient: IngestClient,
-                           partitionsResults: CollectionAccumulator[PartitionResult],
-                           batchIdForTracing: String,
-                           ingestionProperties: IngestionProperties,// TODO not used
-                           parameters: KustoWriteResource): Unit = {
+      rows: Iterator[InternalRow],
+      ingestClient: IngestClient,
+      partitionsResults: CollectionAccumulator[PartitionResult],
+      batchIdForTracing: String,
+      ingestionProperties: IngestionProperties, // TODO not used
+      parameters: KustoWriteResource): Unit = {
     // Transactional mode write into the temp table instead of the destination table
     val ingestionProperties = getIngestionProperties(
       parameters.writeOptions,
@@ -325,9 +325,9 @@ object KustoWriter {
   }
 
   private def getIngestionProperties(
-                                      writeOptions: WriteOptions,
-                                      database: String,
-                                      tableName: String): IngestionProperties = {
+      writeOptions: WriteOptions,
+      database: String,
+      tableName: String): IngestionProperties = {
     writeOptions.maybeSparkIngestionProperties match {
       case Some(sparkIngestionProperties) =>
         sparkIngestionProperties.toIngestionProperties(database, tableName)
@@ -336,7 +336,7 @@ object KustoWriter {
   }
 
   private def getSparkIngestionProperties(
-                                           writeOptions: WriteOptions): SparkIngestionProperties = {
+      writeOptions: WriteOptions): SparkIngestionProperties = {
     val sparkIngestionProperties =
       writeOptions.maybeSparkIngestionProperties.getOrElse(new SparkIngestionProperties())
     sparkIngestionProperties.ingestIfNotExists = new util.ArrayList()
@@ -344,10 +344,10 @@ object KustoWriter {
   }
 
   private def streamRowsIntoKustoByWorkers(
-                                            batchIdForTracing: String,
-                                            rows: Iterator[InternalRow],
-                                            ingestionProperties: IngestionProperties,
-                                            parameters: KustoWriteResource): Unit = {
+      batchIdForTracing: String,
+      rows: Iterator[InternalRow],
+      ingestionProperties: IngestionProperties,
+      parameters: KustoWriteResource): Unit = {
     val streamingClient = KustoClientCache
       .getClient(
         parameters.coordinates.clusterUrl,
@@ -369,11 +369,12 @@ object KustoWriter {
     var lastIndex = 0
     for ((row, index) <- rows.zipWithIndex) {
       RowCSVWriterUtils.writeRowAsCSV(row, parameters.schema, timeZone, csvWriter)
-      if (csvWriter.getCounter >= KCONST.MaxStreamingBytesUncompressed) {
+      if (csvWriter.getCounter >= parameters.writeOptions.streamIngestCompressedMaxSize) {
         KDSU.logWarn(
           className,
-          s"Batch $batchIdForTracing exceeds the max streaming size 4MB compressed! " +
-            s"Streaming ${csvWriter.getCounter} bytes from batch $batchIdForTracing. Index of the batch ($index).")
+          s"Batch $batchIdForTracing exceeds the max streaming size ${parameters.writeOptions.streamIngestCompressedMaxSize} " +
+            s"MB compressed!.Streaming ${csvWriter.getCounter} bytes from batch $batchIdForTracing." +
+            s"Index of the batch ($index).")
         writer.flush()
         streamWriter.flush()
         if (lastIndex != 0) {
@@ -381,7 +382,7 @@ object KustoWriter {
           val firstBB = byteArrayOutputStream.toByteArray
           val bb2 = byteArrayOutputStream.createNewFromOffset(lastIndex)
           byteArrayOutputStream = bb2
-          totalSize+=lastIndex
+          totalSize += lastIndex
 
           streamBytesIntoKusto(
             batchIdForTracing,
@@ -389,7 +390,8 @@ object KustoWriter {
             ingestionProperties,
             parameters.writeOptions,
             streamingClient,
-            lastIndex)// =4mb-size(last row)
+            lastIndex
+          ) // =4mb-size(last row)
           lastIndex = bb2.size()
           // TODO Is it really better > (other option is to copy the data from the stream to a new stream - which i try to avoid)?
           streamWriter = new OutputStreamWriter(byteArrayOutputStream)
@@ -411,11 +413,10 @@ object KustoWriter {
           csvWriter.resetCounter()
         }
       } else {
-
         // flush before counting output size
         writer.flush()
-        lastIndex = byteArrayOutputStream.size() // TODO Can i simply use csvWriter.getCounter without flush? (we count all bytes and no transformation is done)
-
+        lastIndex = byteArrayOutputStream
+          .size() // TODO Can i simply use csvWriter.getCounter without flush? (we count all bytes and no transformation is done)
       }
     }
 
@@ -445,12 +446,12 @@ object KustoWriter {
   }
 
   private def streamBytesIntoKusto(
-                                    batchIdForTracing: String,
-                                    bytes: Array[Byte],
-                                    ingestionProperties: IngestionProperties,
-                                    writeOptions: WriteOptions,
-                                    streamingClient: ManagedStreamingIngestClient,
-                                    inputStreamLastIdx: Int): Unit = {
+      batchIdForTracing: String,
+      bytes: Array[Byte],
+      ingestionProperties: IngestionProperties,
+      writeOptions: WriteOptions,
+      streamingClient: ManagedStreamingIngestClient,
+      inputStreamLastIdx: Int): Unit = {
     KDSU.retryApplyFunction(
       () => {
         val inputStream = new ByteArrayInputStream(bytes, 0, inputStreamLastIdx)
@@ -482,11 +483,11 @@ object KustoWriter {
   }
 
   private def ingestToTemporaryTableByWorkers(
-                                               batchIdForTracing: String,
-                                               rows: Iterator[InternalRow],
-                                               partitionsResults: CollectionAccumulator[PartitionResult],
-                                               ingestionProperties: IngestionProperties,
-                                               parameters: KustoWriteResource): Unit = {
+      batchIdForTracing: String,
+      rows: Iterator[InternalRow],
+      partitionsResults: CollectionAccumulator[PartitionResult],
+      ingestionProperties: IngestionProperties,
+      parameters: KustoWriteResource): Unit = {
 
     val partitionId = TaskContext.getPartitionId
     KDSU.logInfo(
@@ -520,17 +521,17 @@ object KustoWriter {
   }
 
   private def createBlobWriter(
-                                tableCoordinates: KustoCoordinates,
-                                tmpTableName: String,
-                                client: ExtendedKustoClient,
-                                partitionId: String,
-                                blobNumber: Int,
-                                blobUUID: String): BlobWriteResource = {
+      tableCoordinates: KustoCoordinates,
+      tmpTableName: String,
+      client: ExtendedKustoClient,
+      partitionId: String,
+      blobNumber: Int,
+      blobUUID: String): BlobWriteResource = {
     val now = Instant.now()
 
     val blobName = s"${KustoQueryUtils.simplifyName(
-      tableCoordinates.database)}_${tmpTableName}_${blobUUID}_${partitionId}_${blobNumber}_${formatter
-      .format(now)}_spark.csv.gz"
+        tableCoordinates.database)}_${tmpTableName}_${blobUUID}_${partitionId}_${blobNumber}_${formatter
+        .format(now)}_spark.csv.gz"
 
     val containerAndSas = client.getTempBlobForIngestion
     val currentBlob = new CloudBlockBlob(
@@ -550,21 +551,21 @@ object KustoWriter {
 
   @throws[IOException]
   private[kusto] def ingestRows(
-                                 rows: Iterator[InternalRow],
-                                 parameters: KustoWriteResource,
-                                 ingestClient: IngestClient,
-                                 ingestionProperties: IngestionProperties,
-                                 partitionsResults: CollectionAccumulator[PartitionResult],
-                                 batchIdForTracing: String): Unit = {
+      rows: Iterator[InternalRow],
+      parameters: KustoWriteResource,
+      ingestClient: IngestClient,
+      ingestionProperties: IngestionProperties,
+      partitionsResults: CollectionAccumulator[PartitionResult],
+      batchIdForTracing: String): Unit = {
     val partitionId = TaskContext.getPartitionId
     val partitionIdString = TaskContext.getPartitionId.toString
     def ingest(
-                blobResource: BlobWriteResource,
-                size: Long,
-                sas: String,
-                flushImmediately: Boolean = false,
-                blobUUID: String,
-                kustoClient: ExtendedKustoClient): Unit = {
+        blobResource: BlobWriteResource,
+        size: Long,
+        sas: String,
+        flushImmediately: Boolean = false,
+        blobUUID: String,
+        kustoClient: ExtendedKustoClient): Unit = {
       var props = ingestionProperties
       val blobUri = blobResource.blob.getStorageUri.getPrimaryUri.toString
       if (parameters.writeOptions.ensureNoDupBlobs || (!props.getFlushImmediately && flushImmediately)) {
@@ -700,17 +701,17 @@ object KustoWriter {
 }
 
 final case class BlobWriteResource(
-                                    writer: BufferedWriter,
-                                    gzip: GZIPOutputStream,
-                                    csvWriter: CountingWriter,
-                                    blob: CloudBlockBlob,
-                                    sas: String)
+    writer: BufferedWriter,
+    gzip: GZIPOutputStream,
+    csvWriter: CountingWriter,
+    blob: CloudBlockBlob,
+    sas: String)
 final case class KustoWriteResource(
-                                     authentication: KustoAuthentication,
-                                     coordinates: KustoCoordinates,
-                                     schema: StructType,
-                                     writeOptions: WriteOptions,
-                                     tmpTableName: String,
-                                     cloudInfo: CloudInfo)
+    authentication: KustoAuthentication,
+    coordinates: KustoCoordinates,
+    schema: StructType,
+    writeOptions: WriteOptions,
+    tmpTableName: String,
+    cloudInfo: CloudInfo)
 
 final case class PartitionResult(ingestionResult: IngestionResult, partitionId: Int)
