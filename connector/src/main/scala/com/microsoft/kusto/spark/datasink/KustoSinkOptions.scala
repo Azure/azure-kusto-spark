@@ -3,12 +3,11 @@
 
 package com.microsoft.kusto.spark.datasink
 
-import java.util.UUID
-import java.util.concurrent.TimeUnit
-
 import com.microsoft.kusto.spark.common.KustoOptions
 import com.microsoft.kusto.spark.utils.KustoConstants
 
+import java.util.UUID
+import java.util.concurrent.TimeUnit
 import scala.concurrent.duration.FiniteDuration
 
 object KustoSinkOptions extends KustoOptions {
@@ -75,6 +74,10 @@ object KustoSinkOptions extends KustoOptions {
   // https://docs.microsoft.com/azure/data-explorer/kusto/management/auto-delete-policy
   // Use this option if you want to persist partial write results (as the failure could be of a single partition)
   val KUSTO_TEMP_TABLE_NAME: String = newOption("tempTableName")
+
+  // The batch size that we want to use for each "streaming batch". The default is 4MB.
+  val KUSTO_STREAMING_INGEST_SIZE = newOption("kustoStreamingIngestSize")
+
 }
 
 object SinkTableCreationMode extends Enumeration {
@@ -113,4 +116,5 @@ case class WriteOptions(
     writeMode: WriteMode.WriteMode = WriteMode.Transactional,
     userTempTableName: Option[String] = None,
     disableFlushImmediately: Boolean = false,
-    ensureNoDupBlobs: Boolean = false)
+    ensureNoDupBlobs: Boolean = false,
+    streamIngestCompressedMaxSize: Int = KustoConstants.DefaultMaxStreamingBytesUncompressed)

@@ -26,7 +26,9 @@ import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.KustoConstants.{
   DefaultBatchingLimit,
   DefaultExtentsCountForSplitMergePerNode,
-  DefaultMaxRetriesOnMoveExtents
+  DefaultMaxRetriesOnMoveExtents,
+  DefaultMaxStreamingBytesUncompressed,
+  OneMegaByte
 }
 import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
 import io.github.resilience4j.retry.{Retry, RetryConfig}
@@ -411,6 +413,12 @@ object KustoDataSourceUtils {
       case _: NoSuchElementException =>
         throw new InvalidParameterException(s"No such WriteMode option: '${writeModeParam.get}'")
     }
+
+    val streamIngestCompressedMaxSize =
+      parameters.get(KustoSinkOptions.KUSTO_STREAMING_INGEST_SIZE) match {
+        case Some(value) => value.toInt * OneMegaByte
+        case None => DefaultMaxStreamingBytesUncompressed
+      }
     val userTempTableName = parameters.get(KustoSinkOptions.KUSTO_TEMP_TABLE_NAME)
     if (userTempTableName.isDefined && (tableCreation == SinkTableCreationMode.CreateIfNotExist || writeMode != WriteMode.Transactional)) {
       throw new InvalidParameterException(
@@ -486,7 +494,8 @@ object KustoDataSourceUtils {
       writeMode,
       userTempTableName,
       disableFlushImmediately,
-      ensureNoDupBlobs)
+      ensureNoDupBlobs,
+      streamIngestCompressedMaxSize)
 
     if (sourceParameters.kustoCoordinates.table.isEmpty) {
       throw new InvalidParameterException(
