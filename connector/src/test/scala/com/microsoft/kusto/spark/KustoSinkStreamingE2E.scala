@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT License.
+
 package com.microsoft.kusto.spark
 
 import com.microsoft.azure.kusto.data.ClientFactory
@@ -7,7 +10,8 @@ import com.microsoft.kusto.spark.common.KustoDebugOptions
 import com.microsoft.kusto.spark.datasink.{
   KustoSinkOptions,
   SinkTableCreationMode,
-  SparkIngestionProperties
+  SparkIngestionProperties,
+  WriteMode
 }
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import org.apache.spark.SparkContext
@@ -152,6 +156,94 @@ class KustoSinkStreamingE2E extends AnyFlatSpec with BeforeAndAfterAll {
       kustoConnectionOptions.database,
       expectedNumberOfRows,
       timeoutMs,
+      tableCleanupPrefix = prefix)
+  }
+
+  "KustoStreamingSinkStreamingIngestion" should "ingest structured data to a Kusto cluster using stream ingestion" taggedAs KustoE2E in {
+    val prefix = "KustoStreamingSparkE2E_StreamIngest"
+    val table = s"${prefix}_${UUID.randomUUID().toString.replace("-", "_")}"
+    val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(
+      s"https://${kustoConnectionOptions.cluster}.kusto.windows.net",
+      kustoConnectionOptions.appId,
+      kustoConnectionOptions.appKey,
+      kustoConnectionOptions.authority)
+    val kustoAdminClient = ClientFactory.createClient(engineKcsb)
+    kustoAdminClient.execute(
+      kustoConnectionOptions.database,
+      generateTempTableCreateCommand(table, columnsTypesAndNames = "ColA:string, ColB:int"))
+    kustoAdminClient.execute(
+      kustoConnectionOptions.database,
+      generateTableAlterStreamIngestionCommand(table))
+    kustoAdminClient.execute(
+      kustoConnectionOptions.database,
+      generateClearStreamingIngestionCacheCommand(table))
+
+    val csvDf = spark.readStream
+      .schema(customSchema)
+      .csv(csvPath)
+
+    spark.conf.set("spark.sql.streaming.checkpointLocation", "target/temp/checkpoint")
+
+    val kustoQ = csvDf.writeStream
+      .format("com.microsoft.kusto.spark.datasink.KustoSinkProvider")
+      .options(Map(
+        KustoSinkOptions.KUSTO_CLUSTER -> kustoConnectionOptions.cluster,
+        KustoSinkOptions.KUSTO_TABLE -> table,
+        KustoSinkOptions.KUSTO_DATABASE -> kustoConnectionOptions.database,
+        KustoSinkOptions.KUSTO_AAD_APP_ID -> kustoConnectionOptions.appId,
+        KustoSinkOptions.KUSTO_AAD_APP_SECRET -> kustoConnectionOptions.appKey,
+        KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID -> kustoConnectionOptions.authority,
+        KustoSinkOptions.KUSTO_WRITE_MODE -> WriteMode.Stream.toString))
+      .trigger(Trigger.Once)
+
+    kustoQ.start().awaitTermination()
+
+    KustoTestUtils.validateResultsAndCleanup(
+      kustoAdminClient,
+      table,
+      kustoConnectionOptions.database,
+      expectedNumberOfRows,
+      10,
+      tableCleanupPrefix = prefix)
+  }
+
+  "KustoStreamingSinkStreamingIngestionWithCreate" should "ingest structured data to a Kusto cluster using stream ingestion" taggedAs KustoE2E in {
+    val prefix = "KustoStreamingSparkE2E_StreamIngest"
+    val table = s"${prefix}_${UUID.randomUUID().toString.replace("-", "_")}"
+    val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(
+      s"https://${kustoConnectionOptions.cluster}.kusto.windows.net",
+      kustoConnectionOptions.appId,
+      kustoConnectionOptions.appKey,
+      kustoConnectionOptions.authority)
+    val kustoAdminClient = ClientFactory.createClient(engineKcsb)
+
+    val csvDf = spark.readStream
+      .schema(customSchema)
+      .csv(csvPath)
+
+    spark.conf.set("spark.sql.streaming.checkpointLocation", "target/temp/checkpoint")
+
+    val kustoQ = csvDf.writeStream
+      .format("com.microsoft.kusto.spark.datasink.KustoSinkProvider")
+      .options(Map(
+        KustoSinkOptions.KUSTO_CLUSTER -> kustoConnectionOptions.cluster,
+        KustoSinkOptions.KUSTO_TABLE -> table,
+        KustoSinkOptions.KUSTO_DATABASE -> kustoConnectionOptions.database,
+        KustoSinkOptions.KUSTO_AAD_APP_ID -> kustoConnectionOptions.appId,
+        KustoSinkOptions.KUSTO_AAD_APP_SECRET -> kustoConnectionOptions.appKey,
+        KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID -> kustoConnectionOptions.authority,
+        KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS -> SinkTableCreationMode.CreateIfNotExist.toString,
+        KustoSinkOptions.KUSTO_WRITE_MODE -> WriteMode.Stream.toString))
+      .trigger(Trigger.Once)
+
+    kustoQ.start().awaitTermination()
+
+    KustoTestUtils.validateResultsAndCleanup(
+      kustoAdminClient,
+      table,
+      kustoConnectionOptions.database,
+      expectedNumberOfRows,
+      10,
       tableCleanupPrefix = prefix)
   }
 }

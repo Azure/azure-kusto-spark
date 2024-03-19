@@ -81,15 +81,16 @@ case class KustoCoordinates(
     ingestionUrl: Option[String] = None)
 
 /**
- * *******************************************************************************
+ * *********************************************************************************
  */
-/*                                    NOTE!!!                                       */
-/* These options are intended for testing, experimentation and debug.               */
-/* They may not be used in a production environment                                 */
-/* Interface stability is not guaranteed: options may be removed or changed freely  */
+//                                    NOTE!!!
+// These options are intended for testing, experimentation and debug.
+// They may not be used in a production environment
+// Interface stability is not guaranteed: options may be removed or changed freely
 /**
- * *******************************************************************************
+ * **********************************************************************************
  */
+
 private[kusto] object KustoDebugOptions {
   private val kustoOptionNames = collection.mutable.Set[String]()
 
