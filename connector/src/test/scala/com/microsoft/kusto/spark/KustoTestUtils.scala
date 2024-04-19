@@ -199,18 +199,23 @@ private[kusto] object KustoTestUtils {
     val cluster: String = KustoTestUtils.getSystemVariable(KustoSinkOptions.KUSTO_CLUSTER)
     val authority: String =
       System.getProperty(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com")
-    val clusterScope = clusterToKustoFQDN(cluster)
+    val clusterScope = s"${clusterToKustoFQDN(cluster)}/.default"
     val tokenRequestContext = new TokenRequestContext()
       .setScopes(Collections.singletonList(clusterScope))
       .setTenantId(authority)
-    val accessToken: String =
-      new AzureCliCredentialBuilder().build().getTokenSync(tokenRequestContext).getToken
+    val accessToken =
+      new AzureCliCredentialBuilder().build().getTokenSync(tokenRequestContext)
+
+    KDSU.logInfo(
+      className,
+      s"Created an access token for the " +
+        s"test that will expire at : ${accessToken.getExpiresAt}. Scope : $clusterScope")
     val database: String = KustoTestUtils.getSystemVariable(KustoSinkOptions.KUSTO_DATABASE)
     var table: String = KustoTestUtils.getSystemVariable(KustoSinkOptions.KUSTO_TABLE)
     if (table == null) {
       table = "SparkTestTable"
     }
-    KustoConnectionOptions(cluster, database, accessToken)
+    KustoConnectionOptions(cluster, database, accessToken.getToken)
   }
 
   private def getSystemVariable(key: String) = {
