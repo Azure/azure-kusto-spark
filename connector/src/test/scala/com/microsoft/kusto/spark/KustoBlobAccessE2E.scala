@@ -1,7 +1,23 @@
+// Copyright (c) 2017 Microsoft Corporation
+// Licensed to the Apache Software Foundation (ASF) under one or more
+// contributor license agreements.  See the NOTICE file distributed with
+// this work for additional information regarding copyright ownership.
+// The ASF licenses this file to You under the Apache License, Version 2.0
+// (the "License"); you may not use this file except in compliance with
+// the License.  You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.microsoft.kusto.spark
 
 import com.microsoft.azure.kusto.data.ClientFactory
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
+import com.microsoft.kusto.spark.KustoTestUtils.getSystemTestOptions
 import com.microsoft.kusto.spark.datasink.KustoSinkOptions
 import com.microsoft.kusto.spark.datasource.{
   KustoResponseDeserializer,
@@ -10,6 +26,8 @@ import com.microsoft.kusto.spark.datasource.{
   TransientStorageParameters
 }
 import com.microsoft.kusto.spark.sql.extension.SparkExtension._
+import java.util.concurrent.atomic.AtomicInteger
+import com.microsoft.kusto.spark.utils.KustoQueryUtils.getQuerySchemaQuery
 import com.microsoft.kusto.spark.utils.{
   CslCommandsGenerator,
   KustoBlobStorageUtils,
@@ -40,39 +58,34 @@ class KustoBlobAccessE2E extends AnyFlatSpec with BeforeAndAfterAll {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-
     sc = spark.sparkContext
     sqlContext = spark.sqlContext
   }
 
   override def afterAll(): Unit = {
     super.afterAll()
-
     sc.stop()
   }
 
-  val appId: String = System.getProperty(KustoSourceOptions.KUSTO_AAD_APP_ID)
-  val appKey: String = System.getProperty(KustoSourceOptions.KUSTO_AAD_APP_SECRET)
-  val authority: String = System.getProperty(KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID)
-  val cluster: String = System.getProperty(KustoSourceOptions.KUSTO_CLUSTER)
-  val database: String = System.getProperty(KustoSourceOptions.KUSTO_DATABASE)
-  val table: String = System.getProperty(KustoSinkOptions.KUSTO_TABLE, "")
-  val storageAccount: String = System.getProperty("storageAccount", "sparkblobforkustomichael")
-  val container: String = System.getProperty("container", "CONTAINER")
-  val blobKey: String = System.getProperty("blobKey", "KEY")
-  val blobSas: String = System.getProperty("blobSas")
+  private val kustoTestConnectionOptions = getSystemTestOptions
+
+  private val table: String = System.getProperty(KustoSinkOptions.KUSTO_TABLE, "")
+  private val storageAccount: String =
+    System.getProperty("storageAccount", "sparkblobforkustomichael")
+  private val container: String = System.getProperty("container", "CONTAINER")
+  private val blobKey: String = System.getProperty("blobKey", "KEY")
+  private val blobSas: String = System.getProperty("blobSas")
 
   private val loggingLevel: Option[String] = Option(System.getProperty("logLevel"))
   if (loggingLevel.isDefined) KDSU.setLoggingLevel(loggingLevel.get)
 
-  def updateKustoTable(tableName: String): String = {
+  def updateKustoTable(): String = {
     var updatedTable = table
 
     if (updatedTable.isEmpty) {
       val prefix = "KustoBatchSinkE2EIngestAsync"
       updatedTable = KustoQueryUtils.simplifyName(s"${prefix}_${UUID.randomUUID()}")
 
-      import java.util.concurrent.atomic.AtomicInteger
       val rowId = new AtomicInteger(1)
       def newRow(): String = s"row-${rowId.getAndIncrement()}"
       // Create 1000 rows, each containing a String and an Integer (change this size per intended test scenario)
@@ -82,28 +95,27 @@ class KustoBlobAccessE2E extends AnyFlatSpec with BeforeAndAfterAll {
       val df = rows.toDF("name", "value")
 
       val conf = Map(
-        KustoSinkOptions.KUSTO_AAD_APP_ID -> appId,
-        KustoSinkOptions.KUSTO_AAD_APP_SECRET -> appKey,
-        KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID -> authority,
+        KustoSinkOptions.KUSTO_ACCESS_TOKEN -> kustoTestConnectionOptions.accessToken,
         KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS -> "CreateIfNotExist")
 
-      df.write.kusto(cluster, database, updatedTable, conf)
+      df.write.kusto(
+        kustoTestConnectionOptions.cluster,
+        kustoTestConnectionOptions.database,
+        updatedTable,
+        conf)
     }
-
     updatedTable
   }
 
   "KustoCreateBlobFile" should "export data to a blob and read it to a dataframe" taggedAs KustoE2E in {
-    val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(
-      s"https://$cluster.kusto.windows.net",
-      appId,
-      appKey,
-      authority)
+    val engineKcsb = ConnectionStringBuilder.createWithAadAccessTokenAuthentication(
+      kustoTestConnectionOptions.cluster,
+      kustoTestConnectionOptions.accessToken)
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
-    val myTable = updateKustoTable(table)
+    val myTable = updateKustoTable()
     val schema = KustoResponseDeserializer(
       kustoAdminClient
-        .execute(database, KustoQueryUtils.getQuerySchemaQuery(myTable))
+        .execute(kustoTestConnectionOptions.database, getQuerySchemaQuery(myTable))
         .getPrimaryResults).getSchema
 
     val firstColumn =
@@ -111,16 +123,16 @@ class KustoBlobAccessE2E extends AnyFlatSpec with BeforeAndAfterAll {
         schema.sparkSchema.head.name
       } else {
         throw new RuntimeException(
-          s"Failed to read schema for myTable $myTable in cluster $cluster, database $database")
+          s"Failed to read schema for myTable $myTable in cluster " +
+            s"${kustoTestConnectionOptions.cluster}, " +
+            s"database ${kustoTestConnectionOptions.database}")
       }
 
-    var secret = ""
-
-    if (blobSas != null) {
+    val secret = if (blobSas != null) {
       val storageParams = new datasource.TransientStorageCredentials(blobSas)
-      secret = storageParams.sasKey
+      storageParams.sasKey
     } else {
-      secret = if (blobSas != null) blobSas else blobKey
+      if (blobSas != null) blobSas else blobKey
     }
 
     val numberOfPartitions = 10
@@ -140,7 +152,7 @@ class KustoBlobAccessE2E extends AnyFlatSpec with BeforeAndAfterAll {
       Some(partitionPredicate))
 
     val blobs = kustoAdminClient
-      .execute(database, exportCommand)
+      .execute(kustoTestConnectionOptions.database, exportCommand)
       .getPrimaryResults
       .getData
       .asScala
@@ -187,11 +199,15 @@ class KustoBlobAccessE2E extends AnyFlatSpec with BeforeAndAfterAll {
       secret: String,
       useKeyNotSas: Boolean): (String, String, String) = {
     val secretString =
-      if (useKeyNotSas) s""";" h@"$secret""""
-      else if (secret(0) == '?') s"""" h@"$secret""""
-      else s"""?" h@"$secret""""
+      if (useKeyNotSas) {
+        s""";" h@"$secret""""
+      } else if (secret(0) == '?') {
+        s"""" h@"$secret""""
+      } else {
+        s"""?" h@"$secret""""
+      }
     val subDir = "dir" + UUID.randomUUID()
-    val directory = KustoQueryUtils.simplifyName(s"$appId/$subDir/")
+    val directory = KustoQueryUtils.simplifyName(s"${UUID.randomUUID()}/$subDir/")
     val blobContainerUri = s"https://$storageAccountName.blob.core.windows.net/" + container
 
     (blobContainerUri, directory, secretString)

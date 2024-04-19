@@ -1,18 +1,29 @@
-name: Build
+name: Go
 on:
   push:
-    branches: [ '**' ]
+    branches: [ "master" ]
   pull_request:
-    branches: [ '**' ]
+    branches: [ "**" ]
+
 jobs:
   build:
+    name: Build
     runs-on: ubuntu-latest
-    name: Setup Java 8, build and run tests
+    environment: build
     permissions:
       checks: write
       pull-requests: write
+      id-token: write
+      contents: read      
     steps:
-      - uses: actions/checkout@v2
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.APP_ID }}
+          tenant-id: ${{ secrets.TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Check out code into the Spark module directory
+        uses: actions/checkout@v2
       - name: Setup java
         uses: actions/setup-java@v3
         with:
@@ -22,12 +33,10 @@ jobs:
       - name: Run the Maven verify phase
         env:
           kustoAadAuthorityID: ${{ secrets.TENANT_ID }}
-          kustoAadAppSecret: ${{ secrets.APP_SECRET }}
           kustoDatabase: ${{ secrets.DATABASE }}
           kustoCluster: ${{ secrets.CLUSTER }}
-          SecretPath: ${{ secrets.SECRET_PATH }}
           kustoAadAppId: ${{secrets.APP_ID}}
-        run: mvn clean verify -DkustoAadAppId=${{ secrets.APP_ID }} -DkustoAadAuthorityID=${{ secrets.TENANT_ID }} -DkustoAadAppSecret=${{ secrets.APP_SECRET }} -DkustoDatabase=${{ secrets.DATABASE }} -DkustoCluster=${{ secrets.CLUSTER }} -DSecretPath=${{ secrets.SECRET_PATH }}
+        run: mvn clean verify -DkustoAadAppId=${{ secrets.APP_ID }} -DkustoAadAuthorityID=${{ secrets.TENANT_ID }} -DkustoDatabase=${{ secrets.DATABASE }} -DkustoCluster=${{ secrets.CLUSTER }}
       - name: Publish Unit Test Results
         uses: EnricoMi/publish-unit-test-result-action@v2
         if: always()

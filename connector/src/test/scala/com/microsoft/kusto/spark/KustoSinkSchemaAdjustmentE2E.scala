@@ -1,6 +1,27 @@
+// Copyright (c) 2017 Microsoft Corporation
+// Licensed to the Apache Software Foundation (ASF) under one or more
+// contributor license agreements.  See the NOTICE file distributed with
+// this work for additional information regarding copyright ownership.
+// The ASF licenses this file to You under the Apache License, Version 2.0
+// (the "License"); you may not use this file except in compliance with
+// the License.  You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.microsoft.kusto.spark
 
-import com.microsoft.kusto.spark.KustoTestUtils.KustoConnectionOptions
+import com.microsoft.kusto.spark.KustoTestUtils.{
+  KustoConnectionOptions,
+  cleanup,
+  createTestTable,
+  ingest,
+  validateTargetTable
+}
 import com.microsoft.kusto.spark.datasink.{SinkTableCreationMode, SparkIngestionProperties}
 import com.microsoft.kusto.spark.exceptions.SchemaMatchException
 import com.microsoft.kusto.spark.utils.KustoQueryUtils
@@ -30,11 +51,8 @@ class KustoSinkSchemaAdjustmentE2E
   val kustoConnectionOptions: KustoConnectionOptions = KustoTestUtils.getSystemTestOptions
 
   override def afterAll(): Unit = {
+    cleanup(kustoConnectionOptions, testTablePrefix)
     spark.sparkContext.stop()
-  }
-
-  override def afterEach(): Unit = {
-    // KustoTestUtils.cleanup(kustoConnectionOptions, testTablePrefix)
   }
 
   "Source DataFrame schema adjustment" should "not adjust" taggedAs KustoE2E in {
@@ -43,19 +61,14 @@ class KustoSinkSchemaAdjustmentE2E
     val df = sourceValues.toDF("WrongColA", "WrongColB")
     val targetSchema = "ColA:int, ColB:string"
     val schemaAdjustmentMode = "NoAdjustment"
-
-    val testTable =
-      KustoTestUtils.createTestTable(kustoConnectionOptions, testTablePrefix, targetSchema)
-    KustoTestUtils.ingest(kustoConnectionOptions, df, testTable, schemaAdjustmentMode)
+    val testTable = createTestTable(kustoConnectionOptions, testTablePrefix, targetSchema)
+    ingest(kustoConnectionOptions, df, testTable, schemaAdjustmentMode)
 
     val expectedData = df
       .withColumn("ColA", functions.lit(null))
       .withColumn("ColB", functions.col("WrongColB").cast(StringType))
       .select("ColA", "ColB")
-
-    assert(
-      KustoTestUtils.validateTargetTable(kustoConnectionOptions, testTable, expectedData, spark))
-
+    assert(validateTargetTable(kustoConnectionOptions, testTable, expectedData, spark))
   }
 
   "Source DataFrame schema adjustment" should "produce SchemaMatchException when column names not match" taggedAs KustoE2E in {

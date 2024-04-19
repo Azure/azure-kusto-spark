@@ -1,3 +1,18 @@
+// Copyright (c) 2017 Microsoft Corporation
+// Licensed to the Apache Software Foundation (ASF) under one or more
+// contributor license agreements.  See the NOTICE file distributed with
+// this work for additional information regarding copyright ownership.
+// The ASF licenses this file to You under the Apache License, Version 2.0
+// (the "License"); you may not use this file except in compliance with
+// the License.  You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.microsoft.kusto.spark
 
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
@@ -44,32 +59,31 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
   private val kustoConnectionOptions: KustoConnectionOptions = KustoTestUtils.getSystemTestOptions
   private val table =
     KustoQueryUtils.simplifyName(s"KustoSparkReadWriteTest_${UUID.randomUUID()}")
-//  val getP = System.getProperty("hadoop.home.dir"); this could fix some exception thrown in the CICD background
-  private val myName = this.getClass.getSimpleName
+  private val className = this.getClass.getSimpleName
 
-  private val loggingLevel = Option(System.getProperty("logLevel"))
   private var kustoAdminClient: Option[Client] = None
   private var maybeKustoDmClient: Option[Client] = None
-  if (loggingLevel.isDefined) KDSU.setLoggingLevel(loggingLevel.get)
+  private val loggingLevel: Option[String] = Option(System.getProperty("logLevel"))
+  loggingLevel match {
+    case Some(level) => KDSU.setLoggingLevel(level)
+    // default to warn for tests
+    case None => KDSU.setLoggingLevel("WARN")
+  }
   override def beforeAll(): Unit = {
     super.beforeAll()
     sc = spark.sparkContext
     sqlContext = spark.sqlContext
-    val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(
+    val engineKcsb = ConnectionStringBuilder.createWithAadAccessTokenAuthentication(
       KDSU.getEngineUrlFromAliasIfNeeded(kustoConnectionOptions.cluster),
-      kustoConnectionOptions.appId,
-      kustoConnectionOptions.appKey,
-      kustoConnectionOptions.authority)
+      kustoConnectionOptions.accessToken)
     kustoAdminClient = Some(ClientFactory.createClient(engineKcsb))
     val ingestUrl =
       new StringBuffer(KDSU.getEngineUrlFromAliasIfNeeded(kustoConnectionOptions.cluster))
         .insert(8, "ingest-")
         .toString
-    val ingestKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(
+    val ingestKcsb = ConnectionStringBuilder.createWithAadAccessTokenAuthentication(
       ingestUrl,
-      kustoConnectionOptions.appId,
-      kustoConnectionOptions.appKey,
-      kustoConnectionOptions.authority)
+      kustoConnectionOptions.accessToken)
     maybeKustoDmClient = Some(ClientFactory.createClient(ingestKcsb))
     Try(
       kustoAdminClient.get.execute(
@@ -78,10 +92,10 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
           "database",
           kustoConnectionOptions.database,
           "{\"\"MaximumBatchingTimeSpan\"\":\"\"00:00:10\"\", \"\"MaximumNumberOfItems\"\": 500, \"\"MaximumRawDataSizeMB\"\": 1024}"))) match {
-      case Success(_) => KDSU.logDebug(myName, "Ingestion policy applied")
+      case Success(_) => KDSU.logDebug(className, "Ingestion policy applied")
       case Failure(exception: Throwable) =>
         KDSU.reportExceptionAndThrow(
-          myName,
+          className,
           exception,
           "Updating database batching policy",
           shouldNotThrow = true)
@@ -94,9 +108,9 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
       // Remove table if stopping gracefully
       kustoAdminClient.get
         .execute(kustoConnectionOptions.database, generateTableDropCommand(table))) match {
-      case Success(_) => KDSU.logDebug(myName, "Ingestion policy applied")
+      case Success(_) => KDSU.logDebug(className, "Ingestion policy applied")
       case Failure(e: Throwable) =>
-        KDSU.reportExceptionAndThrow(myName, e, "Dropping test table", shouldNotThrow = true)
+        KDSU.reportExceptionAndThrow(className, e, "Dropping test table", shouldNotThrow = true)
     }
     sc.stop()
   }
@@ -148,9 +162,7 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
       .option(KustoSinkOptions.KUSTO_CLUSTER, kustoConnectionOptions.cluster)
       .option(KustoSinkOptions.KUSTO_DATABASE, kustoConnectionOptions.database)
       .option(KustoSinkOptions.KUSTO_TABLE, table)
-      .option(KustoSinkOptions.KUSTO_AAD_APP_ID, kustoConnectionOptions.appId)
-      .option(KustoSinkOptions.KUSTO_AAD_APP_SECRET, kustoConnectionOptions.appKey)
-      .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, kustoConnectionOptions.authority)
+      .option(KustoSinkOptions.KUSTO_ACCESS_TOKEN, kustoConnectionOptions.accessToken)
       .option(KustoSinkOptions.KUSTO_CLIENT_REQUEST_PROPERTIES_JSON, crp.toString)
       .option(
         KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS,
@@ -166,9 +178,8 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
       kustoConnectionOptions.database,
       generateTableAlterAutoDeletePolicy(table, instant))
 
-    val conf: Map[String, String] = Map(
-      KustoSinkOptions.KUSTO_AAD_APP_ID -> kustoConnectionOptions.appId,
-      KustoSinkOptions.KUSTO_AAD_APP_SECRET -> kustoConnectionOptions.appKey)
+    val conf: Map[String, String] =
+      Map(KustoSinkOptions.KUSTO_ACCESS_TOKEN -> kustoConnectionOptions.accessToken)
     validateRead(conf)
   }
 
@@ -197,8 +208,7 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
   "KustoSource" should "execute a read query on Kusto cluster in single mode" in {
     val conf: Map[String, String] = Map(
       KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceSingleMode.toString,
-      KustoSourceOptions.KUSTO_AAD_APP_ID -> kustoConnectionOptions.appId,
-      KustoSourceOptions.KUSTO_AAD_APP_SECRET -> kustoConnectionOptions.appKey)
+      KustoSourceOptions.KUSTO_ACCESS_TOKEN -> kustoConnectionOptions.accessToken)
     validateRead(conf)
   }
 
@@ -212,7 +222,7 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
           .get(0)
           .get(0)
           .toString
-        KDSU.logError(myName, s"storageWithKey: $storageWithKey")
+        KDSU.logDebug(className, s"storageWithKey: $storageWithKey")
 
         val storage =
           new TransientStorageParameters(Array(new TransientStorageCredentials(storageWithKey)))
@@ -220,20 +230,22 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
         val conf: Map[String, String] = Map(
           KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceDistributedMode.toString,
           KustoSourceOptions.KUSTO_TRANSIENT_STORAGE -> storage.toInsecureString,
-          KustoSourceOptions.KUSTO_AAD_APP_ID -> kustoConnectionOptions.appId,
-          KustoSourceOptions.KUSTO_AAD_APP_SECRET -> kustoConnectionOptions.appKey)
+          KustoSourceOptions.KUSTO_ACCESS_TOKEN -> kustoConnectionOptions.accessToken)
         val supportNewParquetWriter = new ComparableVersion(spark.version)
           .compareTo(new ComparableVersion(minimalParquetWriterVersion)) > 0
-        supportNewParquetWriter match {
-          case true => validateRead(conf)
-          case false =>
-            val dfResult = spark.read.kusto(
-              kustoConnectionOptions.cluster,
-              kustoConnectionOptions.database,
-              table,
-              conf)
-            assert(dfResult.count() == expectedNumberOfRows)
+        if (supportNewParquetWriter) {
+          validateRead(conf)
+        } else {
+          val dfResult = spark.read.kusto(
+            kustoConnectionOptions.cluster,
+            kustoConnectionOptions.database,
+            table,
+            conf)
+          assert(dfResult.count() == expectedNumberOfRows)
         }
+      case None =>
+        KDSU.logError(className, s"DM client is null & tests are skipped")
+        fail
     }
   }
 
@@ -245,9 +257,7 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
     val conf: Map[String, String] = Map(
       KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceDistributedMode.toString,
       KustoSourceOptions.KUSTO_DISTRIBUTED_READ_MODE_TRANSIENT_CACHE -> true.toString,
-      KustoSourceOptions.KUSTO_AAD_APP_ID -> kustoConnectionOptions.appId,
-      KustoSourceOptions.KUSTO_AAD_APP_SECRET -> kustoConnectionOptions.appKey,
-      KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID -> kustoConnectionOptions.authority)
+      KustoSourceOptions.KUSTO_ACCESS_TOKEN -> kustoConnectionOptions.accessToken)
 
     // write
     dfOrig.write
@@ -255,9 +265,7 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
       .option(KustoSinkOptions.KUSTO_CLUSTER, kustoConnectionOptions.cluster)
       .option(KustoSinkOptions.KUSTO_DATABASE, kustoConnectionOptions.database)
       .option(KustoSinkOptions.KUSTO_TABLE, table)
-      .option(KustoSinkOptions.KUSTO_AAD_APP_ID, kustoConnectionOptions.appId)
-      .option(KustoSinkOptions.KUSTO_AAD_APP_SECRET, kustoConnectionOptions.appKey)
-      .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, kustoConnectionOptions.authority)
+      .option(KustoSinkOptions.KUSTO_ACCESS_TOKEN, kustoConnectionOptions.accessToken)
       .option(
         KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS,
         SinkTableCreationMode.CreateIfNotExist.toString)
