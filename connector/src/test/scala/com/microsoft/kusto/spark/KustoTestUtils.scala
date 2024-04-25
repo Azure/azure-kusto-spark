@@ -202,6 +202,11 @@ private[kusto] object KustoTestUtils {
     val cluster: String = clusterToKustoFQDN(
       KustoTestUtils.getSystemVariable(KustoSinkOptions.KUSTO_CLUSTER))
     val database: String = KustoTestUtils.getSystemVariable(KustoSinkOptions.KUSTO_DATABASE)
+    val table: String = Option(KustoTestUtils.getSystemVariable(KustoSinkOptions.KUSTO_TABLE))
+      .getOrElse("SparkTestTable")
+    KDSU.logInfo(
+      className,
+      s"Getting AZCli token for cluster $cluster , database $database & table $table")
     val key = s"$cluster-$database"
     if (cachedToken.contains(key)) {
       cachedToken(key)
@@ -209,6 +214,7 @@ private[kusto] object KustoTestUtils {
       val authority: String =
         System.getProperty(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com")
       val clusterScope = s"$cluster/.default"
+      KDSU.logInfo(className, s"Using scope $clusterScope and authority $authority")
       val tokenRequestContext = new TokenRequestContext()
         .setScopes(Collections.singletonList(clusterScope))
         .setTenantId(authority)
@@ -218,11 +224,6 @@ private[kusto] object KustoTestUtils {
         className,
         s"Created an access token for the " +
           s"test that will expire at : ${accessToken.getExpiresAt}. Scope : $clusterScope")
-
-      var table: String = KustoTestUtils.getSystemVariable(KustoSinkOptions.KUSTO_TABLE)
-      if (table == null) {
-        table = "SparkTestTable"
-      }
       val kco = KustoConnectionOptions(cluster, database, accessToken.getToken, authority)
       cachedToken.put(key, kco)
       kco

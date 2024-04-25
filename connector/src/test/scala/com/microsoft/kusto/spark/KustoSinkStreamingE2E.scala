@@ -50,14 +50,12 @@ class KustoSinkStreamingE2E extends AnyFlatSpec with BeforeAndAfterAll {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-
     sc = spark.sparkContext
     sqlContext = spark.sqlContext
   }
 
   override def afterAll(): Unit = {
     super.afterAll()
-
     sc.stop()
   }
   private lazy val kustoConnectionOptions: KustoConnectionOptions =
