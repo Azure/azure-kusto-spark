@@ -95,13 +95,17 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
 
   override def afterAll(): Unit = {
     super.afterAll()
-    Try(
       // Remove table if stopping gracefully
-      maybeKustoAdminClient.get
-        .execute(kustoConnectionOptions.database, generateTableDropCommand(table))) match {
-      case Success(_) => KDSU.logDebug(className, "Ingestion policy applied")
-      case Failure(e: Throwable) =>
-        KDSU.reportExceptionAndThrow(className, e, "Dropping test table", shouldNotThrow = true)
+    maybeKustoAdminClient match {
+      case Some(kustoAdminClient) =>
+        Try(
+          kustoAdminClient
+            .execute(kustoConnectionOptions.database, generateTableDropCommand(table))) match {
+          case Success(_) => KDSU.logDebug(className, "Ingestion policy applied")
+          case Failure(e: Throwable) =>
+            KDSU.reportExceptionAndThrow(className, e, "Dropping test table", shouldNotThrow = true)
+        }
+      case None => KDSU.logWarn(className, s"Admin client is null, could not drop table $table ")
     }
     sc.stop()
   }
