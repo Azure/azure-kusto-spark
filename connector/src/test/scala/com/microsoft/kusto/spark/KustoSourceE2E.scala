@@ -17,7 +17,7 @@ package com.microsoft.kusto.spark
 
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.{Client, ClientFactory, ClientRequestProperties}
-import com.microsoft.kusto.spark.KustoTestUtils.{KustoConnectionOptions, getSystemTestOptions}
+import com.microsoft.kusto.spark.KustoTestUtils.{KustoConnectionOptions, getSystemTestOptions, kustoConnectionOptions}
 import com.microsoft.kusto.spark.common.KustoDebugOptions
 import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode, SparkIngestionProperties}
 import com.microsoft.kusto.spark.datasource.{KustoSourceOptions, ReadMode, TransientStorageCredentials, TransientStorageParameters}
@@ -38,6 +38,8 @@ import scala.collection.immutable
 import scala.util.{Failure, Random, Success, Try}
 
 class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
+  private lazy val kustoConnectionOptions: KustoConnectionOptions =
+    getSystemTestOptions
   private val nofExecutors = 4
   private val spark: SparkSession = SparkSession
     .builder()
@@ -63,23 +65,23 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
     super.beforeAll()
     sc = spark.sparkContext
     sqlContext = spark.sqlContext
-    val engineKcsb = ConnectionStringBuilder.createWithAadAccessTokenAuthentication(getSystemTestOptions.cluster,
-      getSystemTestOptions.accessToken)
+    val engineKcsb = ConnectionStringBuilder.createWithAadAccessTokenAuthentication(kustoConnectionOptions.cluster,
+      kustoConnectionOptions.accessToken)
     maybeKustoAdminClient = Some(ClientFactory.createClient(engineKcsb))
     val ingestUrl =
-      new StringBuffer(KDSU.getEngineUrlFromAliasIfNeeded(getSystemTestOptions.cluster))
+      new StringBuffer(KDSU.getEngineUrlFromAliasIfNeeded(kustoConnectionOptions.cluster))
         .insert(8, "ingest-")
         .toString
     val ingestKcsb = ConnectionStringBuilder.createWithAadAccessTokenAuthentication(
       ingestUrl,
-      getSystemTestOptions.accessToken)
+      kustoConnectionOptions.accessToken)
     maybeKustoDmClient = Some(ClientFactory.createClient(ingestKcsb))
     Try(
       maybeKustoAdminClient.get.execute(
-        getSystemTestOptions.database,
+        kustoConnectionOptions.database,
         generateAlterIngestionBatchingPolicyCommand(
           "database",
-          getSystemTestOptions.database,
+          kustoConnectionOptions.database,
           "{\"\"MaximumBatchingTimeSpan\"\":\"\"00:00:10\"\", \"\"MaximumNumberOfItems\"\": 500, \"\"MaximumRawDataSizeMB\"\": 1024}"))) match {
       case Success(_) => KDSU.logDebug(className, "Ingestion policy applied")
       case Failure(exception: Throwable) =>
@@ -96,7 +98,7 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
     Try(
       // Remove table if stopping gracefully
       maybeKustoAdminClient.get
-        .execute(getSystemTestOptions.database, generateTableDropCommand(table))) match {
+        .execute(kustoConnectionOptions.database, generateTableDropCommand(table))) match {
       case Success(_) => KDSU.logDebug(className, "Ingestion policy applied")
       case Failure(e: Throwable) =>
         KDSU.reportExceptionAndThrow(className, e, "Dropping test table", shouldNotThrow = true)
@@ -148,10 +150,10 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
 
     dfOrig.write
       .format("com.microsoft.kusto.spark.datasource")
-      .option(KustoSinkOptions.KUSTO_CLUSTER, getSystemTestOptions.cluster)
-      .option(KustoSinkOptions.KUSTO_DATABASE, getSystemTestOptions.database)
+      .option(KustoSinkOptions.KUSTO_CLUSTER, kustoConnectionOptions.cluster)
+      .option(KustoSinkOptions.KUSTO_DATABASE, kustoConnectionOptions.database)
       .option(KustoSinkOptions.KUSTO_TABLE, table)
-      .option(KustoSinkOptions.KUSTO_ACCESS_TOKEN, getSystemTestOptions.accessToken)
+      .option(KustoSinkOptions.KUSTO_ACCESS_TOKEN, kustoConnectionOptions.accessToken)
       .option(KustoSinkOptions.KUSTO_CLIENT_REQUEST_PROPERTIES_JSON, crp.toString)
       .option(
         KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS,
@@ -164,19 +166,19 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
 
     val instant = Instant.now.plus(1, ChronoUnit.HOURS)
     maybeKustoAdminClient.get.execute(
-      getSystemTestOptions.database,
+      kustoConnectionOptions.database,
       generateTableAlterAutoDeletePolicy(table, instant))
 
     val conf: Map[String, String] =
-      Map(KustoSinkOptions.KUSTO_ACCESS_TOKEN -> getSystemTestOptions.accessToken)
+      Map(KustoSinkOptions.KUSTO_ACCESS_TOKEN -> kustoConnectionOptions.accessToken)
     validateRead(conf)
   }
 
   val minimalParquetWriterVersion: String = "3.3.0"
   private def validateRead(conf: Map[String, String]) = {
     val dfResult = spark.read.kusto(
-      getSystemTestOptions.cluster,
-      getSystemTestOptions.database,
+      kustoConnectionOptions.cluster,
+      kustoConnectionOptions.database,
       table,
       conf)
     val orig = dfOrig
@@ -197,7 +199,7 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
   "KustoSource" should "execute a read query on Kusto cluster in single mode" in {
     val conf: Map[String, String] = Map(
       KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceSingleMode.toString,
-      KustoSourceOptions.KUSTO_ACCESS_TOKEN -> getSystemTestOptions.accessToken)
+      KustoSourceOptions.KUSTO_ACCESS_TOKEN -> kustoConnectionOptions.accessToken)
     validateRead(conf)
   }
 
@@ -205,7 +207,7 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
     maybeKustoDmClient match {
       case Some(kustoIngestClient) =>
         val storageWithKey = kustoIngestClient
-          .execute(getSystemTestOptions.database, generateGetExportContainersCommand())
+          .execute(kustoConnectionOptions.database, generateGetExportContainersCommand())
           .getPrimaryResults
           .getData
           .get(0)
@@ -219,15 +221,15 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
         val conf: Map[String, String] = Map(
           KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceDistributedMode.toString,
           KustoSourceOptions.KUSTO_TRANSIENT_STORAGE -> storage.toInsecureString,
-          KustoSourceOptions.KUSTO_ACCESS_TOKEN -> getSystemTestOptions.accessToken)
+          KustoSourceOptions.KUSTO_ACCESS_TOKEN -> kustoConnectionOptions.accessToken)
         val supportNewParquetWriter = new ComparableVersion(spark.version)
           .compareTo(new ComparableVersion(minimalParquetWriterVersion)) > 0
         if (supportNewParquetWriter) {
           validateRead(conf)
         } else {
           val dfResult = spark.read.kusto(
-            getSystemTestOptions.cluster,
-            getSystemTestOptions.database,
+            kustoConnectionOptions.cluster,
+            kustoConnectionOptions.database,
             table,
             conf)
           assert(dfResult.count() == expectedNumberOfRows)
@@ -246,15 +248,15 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
     val conf: Map[String, String] = Map(
       KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceDistributedMode.toString,
       KustoSourceOptions.KUSTO_DISTRIBUTED_READ_MODE_TRANSIENT_CACHE -> true.toString,
-      KustoSourceOptions.KUSTO_ACCESS_TOKEN -> getSystemTestOptions.accessToken)
+      KustoSourceOptions.KUSTO_ACCESS_TOKEN -> kustoConnectionOptions.accessToken)
 
     // write
     dfOrig.write
       .format("com.microsoft.kusto.spark.datasource")
-      .option(KustoSinkOptions.KUSTO_CLUSTER, getSystemTestOptions.cluster)
-      .option(KustoSinkOptions.KUSTO_DATABASE, getSystemTestOptions.database)
+      .option(KustoSinkOptions.KUSTO_CLUSTER, kustoConnectionOptions.cluster)
+      .option(KustoSinkOptions.KUSTO_DATABASE, kustoConnectionOptions.database)
       .option(KustoSinkOptions.KUSTO_TABLE, table)
-      .option(KustoSinkOptions.KUSTO_ACCESS_TOKEN, getSystemTestOptions.accessToken)
+      .option(KustoSinkOptions.KUSTO_ACCESS_TOKEN, kustoConnectionOptions.accessToken)
       .option(
         KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS,
         SinkTableCreationMode.CreateIfNotExist.toString)
@@ -262,8 +264,8 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
       .save()
 
     val df = spark.read.kusto(
-      getSystemTestOptions.cluster,
-      getSystemTestOptions.database,
+      kustoConnectionOptions.cluster,
+      kustoConnectionOptions.database,
       table,
       conf)
 
