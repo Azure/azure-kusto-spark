@@ -56,7 +56,7 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
   private var sc: SparkContext = _
   private var sqlContext: SQLContext = _
 
-  private val kustoConnectionOptions: KustoConnectionOptions = KustoTestUtils.getSystemTestOptions
+  private lazy val kustoConnectionOptions: KustoConnectionOptions = KustoTestUtils.getSystemTestOptions
   private val table =
     KustoQueryUtils.simplifyName(s"KustoSparkReadWriteTest_${UUID.randomUUID()}")
   private val className = this.getClass.getSimpleName
