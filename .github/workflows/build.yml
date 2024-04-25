@@ -27,7 +27,7 @@ jobs:
         with:
           azcliversion: latest
           inlineScript: |
-            az account show      
+            access_token=$(az account get-access-token --scope=${{ secrets.CLUSTER }}/.default --query accessToken -o tsv)
       - name: Check out code into the Spark module directory
         uses: actions/checkout@v2
       - name: Setup java
@@ -42,7 +42,7 @@ jobs:
           kustoDatabase: ${{ secrets.DATABASE }}
           kustoCluster: ${{ secrets.CLUSTER }}
           kustoAadAppId: ${{secrets.APP_ID}}
-        run: mvn clean test verify -DkustoAadAppId=${{ secrets.APP_ID }} -DkustoAadAuthorityID=${{ secrets.TENANT_ID }} -DkustoDatabase=${{ secrets.DATABASE }} -DkustoCluster=${{ secrets.CLUSTER }}
+        run: mvn clean test verify -DkustoAadAppId=${{ secrets.APP_ID }} -DkustoAadAuthorityID=${{ secrets.TENANT_ID }} -DkustoDatabase=${{ secrets.DATABASE }} -DkustoCluster=${{ secrets.CLUSTER }} -DaccessToken=$access_token
       - name: Publish Unit Test Results
         uses: EnricoMi/publish-unit-test-result-action@v2
         if: always()

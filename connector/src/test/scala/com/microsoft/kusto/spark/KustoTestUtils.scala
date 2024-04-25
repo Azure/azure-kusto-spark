@@ -211,6 +211,7 @@ private[kusto] object KustoTestUtils {
     if (cachedToken.contains(key)) {
       cachedToken(key)
     } else {
+      val maybeAccessTokenEnv = Option(System.getProperty(KustoSinkOptions.KUSTO_ACCESS_TOKEN))
       val authority: String =
         System.getProperty(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com")
       val clusterScope = s"$cluster/.default"
@@ -219,13 +220,16 @@ private[kusto] object KustoTestUtils {
         .setScopes(Collections.singletonList(clusterScope))
         .setTenantId(authority)
       val azureCliCredential = new AzureCliCredentialBuilder().build()
-      val accessToken =
-        azureCliCredential.getToken(tokenRequestContext).block()
-      KDSU.logInfo(
-        className,
-        s"Created an access token for the " +
-          s"test that will expire at : ${accessToken.getExpiresAt}. Scope : $clusterScope")
-      val kco = KustoConnectionOptions(cluster, database, accessToken.getToken, authority)
+      val accessToken = maybeAccessTokenEnv match {
+        case Some(at) =>
+          KDSU.logInfo(
+            className,
+            s"Using access token from environment variable ${KustoSinkOptions.KUSTO_ACCESS_TOKEN}")
+          at
+        case None =>
+          azureCliCredential.getTokenSync(tokenRequestContext).getToken
+      }
+      val kco = KustoConnectionOptions(cluster, database, accessToken, authority)
       cachedToken.put(key, kco)
       kco
     }
