@@ -218,8 +218,9 @@ private[kusto] object KustoTestUtils {
       val tokenRequestContext = new TokenRequestContext()
         .setScopes(Collections.singletonList(clusterScope))
         .setTenantId(authority)
+      val azureCliCredential = new AzureCliCredentialBuilder().build()
       val accessToken =
-        new AzureCliCredentialBuilder().build().getTokenSync(tokenRequestContext)
+        azureCliCredential.getToken(tokenRequestContext).block()
       KDSU.logInfo(
         className,
         s"Created an access token for the " +
