@@ -37,7 +37,6 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.immutable
 import scala.util.{Failure, Random, Success, Try}
 
-@Ignore
 class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
   private lazy val kustoConnectionOptions: KustoConnectionOptions =
     getSystemTestOptions
