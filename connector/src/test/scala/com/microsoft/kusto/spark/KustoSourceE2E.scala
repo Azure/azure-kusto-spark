@@ -17,7 +17,7 @@ package com.microsoft.kusto.spark
 
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.{Client, ClientFactory, ClientRequestProperties}
-import com.microsoft.kusto.spark.KustoTestUtils.{KustoConnectionOptions, getSystemTestOptions, kustoConnectionOptions}
+import com.microsoft.kusto.spark.KustoTestUtils.{KustoConnectionOptions, getSystemTestOptions}
 import com.microsoft.kusto.spark.common.KustoDebugOptions
 import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode, SparkIngestionProperties}
 import com.microsoft.kusto.spark.datasource.{KustoSourceOptions, ReadMode, TransientStorageCredentials, TransientStorageParameters}
