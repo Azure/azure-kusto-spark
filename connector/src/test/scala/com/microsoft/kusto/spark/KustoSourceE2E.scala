@@ -17,19 +17,10 @@ package com.microsoft.kusto.spark
 
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.{Client, ClientFactory, ClientRequestProperties}
-import com.microsoft.kusto.spark.KustoTestUtils.KustoConnectionOptions
+import com.microsoft.kusto.spark.KustoTestUtils.{KustoConnectionOptions, getSystemTestOptions}
 import com.microsoft.kusto.spark.common.KustoDebugOptions
-import com.microsoft.kusto.spark.datasink.{
-  KustoSinkOptions,
-  SinkTableCreationMode,
-  SparkIngestionProperties
-}
-import com.microsoft.kusto.spark.datasource.{
-  KustoSourceOptions,
-  ReadMode,
-  TransientStorageCredentials,
-  TransientStorageParameters
-}
+import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode, SparkIngestionProperties}
+import com.microsoft.kusto.spark.datasource.{KustoSourceOptions, ReadMode, TransientStorageCredentials, TransientStorageParameters}
 import com.microsoft.kusto.spark.sql.extension.SparkExtension._
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils => KDSU}
@@ -56,7 +47,7 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
   private var sc: SparkContext = _
   private var sqlContext: SQLContext = _
 
-  private lazy val kustoConnectionOptions: KustoConnectionOptions = KustoTestUtils.getSystemTestOptions
+  private lazy val kustoConnectionOptions: KustoConnectionOptions = getSystemTestOptions
   private val table =
     KustoQueryUtils.simplifyName(s"KustoSparkReadWriteTest_${UUID.randomUUID()}")
   private val className = this.getClass.getSimpleName

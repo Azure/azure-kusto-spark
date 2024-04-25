@@ -18,13 +18,9 @@ package com.microsoft.kusto.spark
 
 import com.microsoft.azure.kusto.data.ClientFactory
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
-import com.microsoft.kusto.spark.KustoTestUtils.KustoConnectionOptions
+import com.microsoft.kusto.spark.KustoTestUtils.{KustoConnectionOptions, getSystemTestOptions}
 import com.microsoft.kusto.spark.common.KustoDebugOptions
-import com.microsoft.kusto.spark.datasink.{
-  KustoSinkOptions,
-  SinkTableCreationMode,
-  SparkIngestionProperties
-}
+import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode, SparkIngestionProperties}
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.streaming.Trigger
@@ -59,7 +55,7 @@ class KustoSinkStreamingE2E extends AnyFlatSpec with BeforeAndAfterAll {
     sc.stop()
   }
   private lazy val kustoConnectionOptions: KustoConnectionOptions =
-    KustoTestUtils.getSystemTestOptions
+    getSystemTestOptions
 
   val csvPath: String = System.getProperty("path", "connector/src/test/resources/TestData/csv")
   val customSchema: StructType = new StructType()
