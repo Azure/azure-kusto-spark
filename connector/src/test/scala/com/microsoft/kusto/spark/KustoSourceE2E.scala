@@ -47,12 +47,12 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
   private var sc: SparkContext = _
   private var sqlContext: SQLContext = _
 
-  private lazy val kustoConnectionOptions: KustoConnectionOptions = getSystemTestOptions
+  private var kustoConnectionOptions: KustoConnectionOptions = _
   private val table =
     KustoQueryUtils.simplifyName(s"KustoSparkReadWriteTest_${UUID.randomUUID()}")
   private val className = this.getClass.getSimpleName
 
-  private var kustoAdminClient: Option[Client] = None
+  private var maybeKustoAdminClient: Option[Client] = None
   private var maybeKustoDmClient: Option[Client] = None
   private val loggingLevel: Option[String] = Option(System.getProperty("logLevel"))
   loggingLevel match {
@@ -63,11 +63,11 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
   override def beforeAll(): Unit = {
     super.beforeAll()
     sc = spark.sparkContext
+    kustoConnectionOptions = getSystemTestOptions
     sqlContext = spark.sqlContext
-    val engineKcsb = ConnectionStringBuilder.createWithAadAccessTokenAuthentication(
-      KDSU.getEngineUrlFromAliasIfNeeded(kustoConnectionOptions.cluster),
+    val engineKcsb = ConnectionStringBuilder.createWithAadAccessTokenAuthentication(kustoConnectionOptions.cluster,
       kustoConnectionOptions.accessToken)
-    kustoAdminClient = Some(ClientFactory.createClient(engineKcsb))
+    maybeKustoAdminClient = Some(ClientFactory.createClient(engineKcsb))
     val ingestUrl =
       new StringBuffer(KDSU.getEngineUrlFromAliasIfNeeded(kustoConnectionOptions.cluster))
         .insert(8, "ingest-")
@@ -77,7 +77,7 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
       kustoConnectionOptions.accessToken)
     maybeKustoDmClient = Some(ClientFactory.createClient(ingestKcsb))
     Try(
-      kustoAdminClient.get.execute(
+      maybeKustoAdminClient.get.execute(
         kustoConnectionOptions.database,
         generateAlterIngestionBatchingPolicyCommand(
           "database",
@@ -97,7 +97,7 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
     super.afterAll()
     Try(
       // Remove table if stopping gracefully
-      kustoAdminClient.get
+      maybeKustoAdminClient.get
         .execute(kustoConnectionOptions.database, generateTableDropCommand(table))) match {
       case Success(_) => KDSU.logDebug(className, "Ingestion policy applied")
       case Failure(e: Throwable) =>
@@ -165,7 +165,7 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
       .save()
 
     val instant = Instant.now.plus(1, ChronoUnit.HOURS)
-    kustoAdminClient.get.execute(
+    maybeKustoAdminClient.get.execute(
       kustoConnectionOptions.database,
       generateTableAlterAutoDeletePolicy(table, instant))
 
@@ -278,7 +278,7 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
 
     // Should take up to another 10 seconds for .show commands to come up
     Thread.sleep(5000 * 60)
-    val res3 = kustoAdminClient.get.execute(
+    val res3 = maybeKustoAdminClient.get.execute(
       s""".show commands | where StartedOn > datetime(${time.toString})  | where
                                         CommandType ==
       "DataExportToFile" | where Text has "$table"""")
