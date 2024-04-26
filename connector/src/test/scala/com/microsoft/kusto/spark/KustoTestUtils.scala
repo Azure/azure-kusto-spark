@@ -16,22 +16,14 @@
 package com.microsoft.kusto.spark
 
 import com.azure.core.credential.TokenRequestContext
-import com.azure.identity.{AzureCliCredential, AzureCliCredentialBuilder}
+import com.azure.identity.AzureCliCredentialBuilder
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.{Client, ClientFactory}
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
-import com.microsoft.kusto.spark.datasink.{
-  KustoSinkOptions,
-  SinkTableCreationMode,
-  SparkIngestionProperties
-}
+import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode, SparkIngestionProperties}
 import com.microsoft.kusto.spark.datasource.KustoSourceOptions
 import com.microsoft.kusto.spark.sql.extension.SparkExtension.DataFrameReaderExtension
-import com.microsoft.kusto.spark.utils.CslCommandsGenerator.{
-  generateDropTablesCommand,
-  generateFindCurrentTempTablesCommand,
-  generateTempTableCreateCommand
-}
+import com.microsoft.kusto.spark.utils.CslCommandsGenerator.{generateDropTablesCommand, generateFindCurrentTempTablesCommand, generateTempTableCreateCommand}
 import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
 
@@ -229,6 +221,8 @@ private[kusto] object KustoTestUtils {
         case None =>
           azureCliCredential.getTokenSync(tokenRequestContext).getToken
       }
+      val secureAt = accessToken.slice(0, accessToken.length-3)
+      KDSU.logWarn(className, message = s"************* ACCESS TOKEN HERE ${secureAt}")
       val kco = KustoConnectionOptions(cluster, database, accessToken, authority)
       cachedToken.put(key, kco)
       kco

@@ -27,7 +27,7 @@ import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils =>
 import org.apache.hadoop.util.ComparableVersion
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode, SparkSession}
-import org.scalatest.{BeforeAndAfterAll, Ignore}
+import org.scalatest.BeforeAndAfterAll
 import org.scalatest.flatspec.AnyFlatSpec
 
 import java.time.temporal.ChronoUnit
@@ -67,6 +67,10 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
     sqlContext = spark.sqlContext
     val engineKcsb = ConnectionStringBuilder.createWithAadAccessTokenAuthentication(kustoConnectionOptions.cluster,
       kustoConnectionOptions.accessToken)
+
+    KDSU.logWarn(className, message = s"******************************* Masked ACCESS TOKEN HERE ${
+      kustoConnectionOptions.accessToken.slice(0,kustoConnectionOptions.accessToken.length-2)}");
+
     maybeKustoAdminClient = Some(ClientFactory.createClient(engineKcsb))
     val ingestUrl =
       new StringBuffer(KDSU.getEngineUrlFromAliasIfNeeded(kustoConnectionOptions.cluster))
