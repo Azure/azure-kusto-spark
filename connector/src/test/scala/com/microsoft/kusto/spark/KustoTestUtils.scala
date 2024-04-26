@@ -221,8 +221,6 @@ private[kusto] object KustoTestUtils {
         case None =>
           azureCliCredential.getTokenSync(tokenRequestContext).getToken
       }
-      val secureAt = accessToken.slice(0, accessToken.length-3)
-      KDSU.logWarn(className, message = s"************* ACCESS TOKEN HERE ${secureAt}")
       val kco = KustoConnectionOptions(cluster, database, accessToken, authority)
       cachedToken.put(key, kco)
       kco

@@ -67,10 +67,6 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
     sqlContext = spark.sqlContext
     val engineKcsb = ConnectionStringBuilder.createWithAadAccessTokenAuthentication(kustoConnectionOptions.cluster,
       kustoConnectionOptions.accessToken)
-
-    KDSU.logWarn(className, message = s"******************************* Masked ACCESS TOKEN HERE ${
-      kustoConnectionOptions.accessToken.slice(0,kustoConnectionOptions.accessToken.length-2)}");
-
     maybeKustoAdminClient = Some(ClientFactory.createClient(engineKcsb))
     val ingestUrl =
       new StringBuffer(KDSU.getEngineUrlFromAliasIfNeeded(kustoConnectionOptions.cluster))
@@ -111,6 +107,10 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
         }
       case None => KDSU.logWarn(className, s"Admin client is null, could not drop table $table ")
     }
+    KDSU.logWarn(className, s"******************************* Masked ACCESS TOKEN HERE ${
+      kustoConnectionOptions.accessToken.slice(0, kustoConnectionOptions.accessToken.length - 2)
+    }");
+
     sc.stop()
   }
 
