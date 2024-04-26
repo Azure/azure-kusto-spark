@@ -43,7 +43,7 @@ jobs:
           kustoCluster: ${{ secrets.CLUSTER }}
           kustoAadAppId: ${{secrets.APP_ID}}
         run: |
-          echo $access_token
+          echo "Here is token: $access_token
           mvn clean test verify -DkustoAadAppId=${{ secrets.APP_ID }} -DkustoAadAuthorityID=${{ secrets.TENANT_ID }} -DkustoDatabase=${{ secrets.DATABASE }} -DkustoCluster=${{ secrets.CLUSTER }} -DaccessToken=$access_token
       - name: Publish Unit Test Results
         uses: EnricoMi/publish-unit-test-result-action@v2
