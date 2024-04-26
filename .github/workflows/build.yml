@@ -46,7 +46,7 @@ jobs:
           accessToken: ${{steps.azcliscript.outputs.ACCESS_TOKEN}}
         run: |
           echo "Here is token: $accessToken"
-          mvn clean test verify -DkustoAadAppId=${{ secrets.APP_ID }} -DkustoAadAuthorityID=${{ secrets.TENANT_ID }} -DkustoDatabase=${{ secrets.DATABASE }} -DkustoCluster=${{ secrets.CLUSTER }} -DaccessToken=$accessToken
+          mvn clean test verify -DkustoAadAppId=${{ secrets.APP_ID }} -DkustoAadAuthorityID=${{ secrets.TENANT_ID }} -DkustoDatabase=${{ secrets.DATABASE }} -DkustoCluster=${{ secrets.CLUSTER }} -DaccessToken=${{steps.azcliscript.outputs.ACCESS_TOKEN}}
       - name: Publish Unit Test Results
         uses: EnricoMi/publish-unit-test-result-action@v2
         if: always()
