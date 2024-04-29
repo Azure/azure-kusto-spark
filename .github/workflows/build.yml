@@ -22,13 +22,6 @@ jobs:
           client-id: ${{ secrets.APP_ID }}
           tenant-id: ${{ secrets.TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      - name: Azure CLI script
-        uses: azure/CLI@v1
-        id: azcliscript
-        with:
-          azcliversion: latest
-          inlineScript: |
-            echo "ACCESS_TOKEN=$(az account get-access-token --scope=${{ secrets.CLUSTER }}/.default --query accessToken -o tsv)" >> "$GITHUB_OUTPUT"
       - name: Check out code into the Spark module directory
         uses: actions/checkout@v2
       - name: Setup java
@@ -43,10 +36,8 @@ jobs:
           kustoDatabase: ${{ secrets.DATABASE }}
           kustoCluster: ${{ secrets.CLUSTER }}
           kustoAadAppId: ${{secrets.APP_ID}}
-          accessToken: ${{steps.azcliscript.outputs.ACCESS_TOKEN}}
         run: |
-          echo "Here is token: $accessToken"
-          mvn clean test verify -DkustoAadAppId=${{ secrets.APP_ID }} -DkustoAadAuthorityID=${{ secrets.TENANT_ID }} -DkustoDatabase=${{ secrets.DATABASE }} -DkustoCluster=${{ secrets.CLUSTER }} -DaccessToken=${{steps.azcliscript.outputs.ACCESS_TOKEN}}
+          mvn clean test verify -DkustoAadAppId=${{ secrets.APP_ID }} -DkustoAadAuthorityID=${{ secrets.TENANT_ID }} -DkustoDatabase=${{ secrets.DATABASE }} -DkustoCluster=${{ secrets.CLUSTER }}
       - name: Publish Unit Test Results
         uses: EnricoMi/publish-unit-test-result-action@v2
         if: always()
