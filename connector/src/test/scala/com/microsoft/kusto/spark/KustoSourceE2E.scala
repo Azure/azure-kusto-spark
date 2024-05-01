@@ -19,8 +19,17 @@ import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.{Client, ClientFactory, ClientRequestProperties}
 import com.microsoft.kusto.spark.KustoTestUtils.{KustoConnectionOptions, getSystemTestOptions}
 import com.microsoft.kusto.spark.common.KustoDebugOptions
-import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode, SparkIngestionProperties}
-import com.microsoft.kusto.spark.datasource.{KustoSourceOptions, ReadMode, TransientStorageCredentials, TransientStorageParameters}
+import com.microsoft.kusto.spark.datasink.{
+  KustoSinkOptions,
+  SinkTableCreationMode,
+  SparkIngestionProperties
+}
+import com.microsoft.kusto.spark.datasource.{
+  KustoSourceOptions,
+  ReadMode,
+  TransientStorageCredentials,
+  TransientStorageParameters
+}
 import com.microsoft.kusto.spark.sql.extension.SparkExtension._
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils => KDSU}
@@ -52,9 +61,21 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
   private val table =
     KustoQueryUtils.simplifyName(s"KustoSparkReadWriteTest_${UUID.randomUUID()}")
   private val className = this.getClass.getSimpleName
+  private lazy val ingestUrl =
+    new StringBuffer(KDSU.getEngineUrlFromAliasIfNeeded(kustoConnectionOptions.cluster))
+      .insert(8, "ingest-")
+      .toString
 
-  private var maybeKustoAdminClient: Option[Client] = None
-  private var maybeKustoDmClient: Option[Client] = None
+  private lazy val maybeKustoAdminClient: Option[Client] = Some(
+    ClientFactory.createClient(
+      ConnectionStringBuilder.createWithAadAccessTokenAuthentication(
+        kustoConnectionOptions.cluster,
+        kustoConnectionOptions.accessToken)))
+
+  private lazy val maybeKustoDmClient: Option[Client] = Some(
+    ClientFactory.createClient(ConnectionStringBuilder
+      .createWithAadAccessTokenAuthentication(ingestUrl, kustoConnectionOptions.accessToken)))
+
   private val loggingLevel: Option[String] = Option(System.getProperty("logLevel"))
   loggingLevel match {
     case Some(level) => KDSU.setLoggingLevel(level)
@@ -65,17 +86,6 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
     super.beforeAll()
     sc = spark.sparkContext
     sqlContext = spark.sqlContext
-    val engineKcsb = ConnectionStringBuilder.createWithAadAccessTokenAuthentication(kustoConnectionOptions.cluster,
-      kustoConnectionOptions.accessToken)
-    maybeKustoAdminClient = Some(ClientFactory.createClient(engineKcsb))
-    val ingestUrl =
-      new StringBuffer(KDSU.getEngineUrlFromAliasIfNeeded(kustoConnectionOptions.cluster))
-        .insert(8, "ingest-")
-        .toString
-    val ingestKcsb = ConnectionStringBuilder.createWithAadAccessTokenAuthentication(
-      ingestUrl,
-      kustoConnectionOptions.accessToken)
-    maybeKustoDmClient = Some(ClientFactory.createClient(ingestKcsb))
     Try(
       maybeKustoAdminClient.get.execute(
         kustoConnectionOptions.database,
@@ -95,7 +105,7 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
 
   override def afterAll(): Unit = {
     super.afterAll()
-      // Remove table if stopping gracefully
+    // Remove table if stopping gracefully
     maybeKustoAdminClient match {
       case Some(kustoAdminClient) =>
         Try(
@@ -103,13 +113,18 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
             .execute(kustoConnectionOptions.database, generateTableDropCommand(table))) match {
           case Success(_) => KDSU.logDebug(className, "Ingestion policy applied")
           case Failure(e: Throwable) =>
-            KDSU.reportExceptionAndThrow(className, e, "Dropping test table", shouldNotThrow = true)
+            KDSU.reportExceptionAndThrow(
+              className,
+              e,
+              "Dropping test table",
+              shouldNotThrow = true)
         }
       case None => KDSU.logWarn(className, s"Admin client is null, could not drop table $table ")
     }
-    KDSU.logWarn(className, s"******************************* Masked ACCESS TOKEN HERE ${
-      kustoConnectionOptions.accessToken.slice(0, kustoConnectionOptions.accessToken.length - 2)
-    }");
+    KDSU.logWarn(
+      className,
+      s"******************************* Masked ACCESS TOKEN HERE ${kustoConnectionOptions.accessToken
+          .slice(0, kustoConnectionOptions.accessToken.length - 2)}");
 
     sc.stop()
   }
