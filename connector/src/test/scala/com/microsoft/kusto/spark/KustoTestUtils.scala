@@ -217,7 +217,7 @@ private[kusto] object KustoTestUtils {
       val authority: String =
         System.getProperty(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com")
       val clusterScope = s"https://kusto.kusto.windows.net/.default"
-      KDSU.logInfo(className, s"Using scope $clusterScope and authority $authority")
+      KDSU.logWarn(className, s"Using scope $clusterScope and authority $authority")
       val tokenRequestContext = new TokenRequestContext()
         .setScopes(Collections.singletonList(clusterScope))
 //        .setTenantId(authority)
@@ -229,13 +229,10 @@ private[kusto] object KustoTestUtils {
             s"Using access token from environment variable ${KustoSinkOptions.KUSTO_ACCESS_TOKEN}")
           at
         case None =>
-          Try(new AzureCliCredentialBuilder().build().getToken(tokenRequestContext)) match {
-            case scala.util.Success(token: Mono[AccessToken]) =>
+          val value = new AzureCliCredentialBuilder().build().getToken(tokenRequestContext).block()
+          Try(value) match {
+            case scala.util.Success(token: AccessToken) =>
               val azCliToken: AccessToken = token
-                .retry(3L)
-                .blockOptional()
-                .orElseThrow(throw new RuntimeException(
-                  s"Failed to get JWT access token for cluster $cluster, database $database & table $table at scope $clusterScope"))
               azCliToken.getToken
             case scala.util.Failure(exception) =>
               KDSU.reportExceptionAndThrow(
