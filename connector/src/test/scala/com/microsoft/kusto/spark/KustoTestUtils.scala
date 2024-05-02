@@ -15,17 +15,26 @@
 
 package com.microsoft.kusto.spark
 
-import com.azure.core.credential.TokenRequestContext
+import com.azure.core.credential.{AccessToken, TokenRequestContext}
 import com.azure.identity.AzureCliCredentialBuilder
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.{Client, ClientFactory}
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
-import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode, SparkIngestionProperties}
+import com.microsoft.kusto.spark.datasink.{
+  KustoSinkOptions,
+  SinkTableCreationMode,
+  SparkIngestionProperties
+}
 import com.microsoft.kusto.spark.datasource.KustoSourceOptions
 import com.microsoft.kusto.spark.sql.extension.SparkExtension.DataFrameReaderExtension
-import com.microsoft.kusto.spark.utils.CslCommandsGenerator.{generateDropTablesCommand, generateFindCurrentTempTablesCommand, generateTempTableCreateCommand}
+import com.microsoft.kusto.spark.utils.CslCommandsGenerator.{
+  generateDropTablesCommand,
+  generateFindCurrentTempTablesCommand,
+  generateTempTableCreateCommand
+}
 import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
+import reactor.core.publisher.Mono
 
 import java.security.InvalidParameterException
 import java.util.{Collections, UUID}
@@ -220,18 +229,21 @@ private[kusto] object KustoTestUtils {
             s"Using access token from environment variable ${KustoSinkOptions.KUSTO_ACCESS_TOKEN}")
           at
         case None =>
-          Try (
-            new AzureCliCredentialBuilder().build().getTokenSync(tokenRequestContext).getToken
-            ) match {
-            case scala.util.Success(token) =>
-              token
+          Try(new AzureCliCredentialBuilder().build().getToken(tokenRequestContext)) match {
+            case scala.util.Success(token: Mono[AccessToken]) =>
+              val azCliToken: AccessToken = token
+                .retry(3L)
+                .blockOptional()
+                .orElseThrow(throw new RuntimeException(
+                  s"Failed to get JWT access token for cluster $cluster, database $database & table $table at scope $clusterScope"))
+              azCliToken.getToken
             case scala.util.Failure(exception) =>
               KDSU.reportExceptionAndThrow(
                 s"Failed to get access token for cluster $cluster, database $database & table $table at scope $clusterScope",
                 exception)
-                throw new RuntimeException(
-                  s"Failed to get access token for cluster $cluster, database $database & table $table at scope $clusterScope",
-                  exception)
+              throw new RuntimeException(
+                s"Failed to get access token for cluster $cluster, database $database & table $table at scope $clusterScope",
+                exception)
           }
       }
       val kco = KustoConnectionOptions(cluster, database, accessToken, authority)
