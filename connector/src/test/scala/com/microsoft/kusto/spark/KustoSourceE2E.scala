@@ -80,7 +80,7 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
   loggingLevel match {
     case Some(level) => KDSU.setLoggingLevel(level)
     // default to warn for tests
-    case None => KDSU.setLoggingLevel("WARN")
+    case None => KDSU.setLoggingLevel("DEBUG")
   }
   override def beforeAll(): Unit = {
     super.beforeAll()
