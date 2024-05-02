@@ -229,6 +229,9 @@ private[kusto] object KustoTestUtils {
               KDSU.reportExceptionAndThrow(
                 s"Failed to get access token for cluster $cluster, database $database & table $table at scope $clusterScope",
                 exception)
+                throw new RuntimeException(
+                  s"Failed to get access token for cluster $cluster, database $database & table $table at scope $clusterScope",
+                  exception)
           }
       }
       val kco = KustoConnectionOptions(cluster, database, accessToken, authority)
