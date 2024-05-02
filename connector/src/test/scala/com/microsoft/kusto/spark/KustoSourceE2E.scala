@@ -63,7 +63,7 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
   private val className = this.getClass.getSimpleName
   private lazy val ingestUrl =
     new StringBuffer(KDSU.getEngineUrlFromAliasIfNeeded(kustoConnectionOptions.cluster))
-      .insert(8, "ingest-")
+      .replace("https://", "https://ingest-")
       .toString
 
   private lazy val maybeKustoAdminClient: Option[Client] = Some(
