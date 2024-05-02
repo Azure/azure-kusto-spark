@@ -216,7 +216,7 @@ private[kusto] object KustoTestUtils {
       val maybeAccessTokenEnv = Option(System.getProperty(KustoSinkOptions.KUSTO_ACCESS_TOKEN))
       val authority: String =
         System.getProperty(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com")
-      val clusterScope = s"$cluster/.default"
+      val clusterScope = s"https://kusto.kusto.windows.net/.default"
       KDSU.logInfo(className, s"Using scope $clusterScope and authority $authority")
       val tokenRequestContext = new TokenRequestContext()
         .setScopes(Collections.singletonList(clusterScope))
