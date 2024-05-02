@@ -32,6 +32,7 @@ import java.util.{Collections, UUID}
 import scala.collection.JavaConverters.asScalaBufferConverter
 import scala.collection.mutable
 import scala.concurrent.TimeoutException
+import scala.util.Try
 
 private[kusto] object KustoTestUtils {
   private val className = this.getClass.getSimpleName
@@ -219,8 +220,16 @@ private[kusto] object KustoTestUtils {
             s"Using access token from environment variable ${KustoSinkOptions.KUSTO_ACCESS_TOKEN}")
           at
         case None =>
-          val azureCliCredential = new AzureCliCredentialBuilder().build()
-          azureCliCredential.getTokenSync(tokenRequestContext).getToken
+          Try (
+            new AzureCliCredentialBuilder().build().getTokenSync(tokenRequestContext).getToken
+            ) match {
+            case scala.util.Success(token) =>
+              token
+            case scala.util.Failure(exception) =>
+              KDSU.reportExceptionAndThrow(
+                s"Failed to get access token for cluster $cluster, database $database & table $table at scope $clusterScope",
+                exception)
+          }
       }
       val kco = KustoConnectionOptions(cluster, database, accessToken, authority)
       cachedToken.put(key, kco)
