@@ -199,7 +199,7 @@ private[kusto] object KustoTestUtils {
     KDSU.logInfo(
       className,
       s"Getting AZCli token for cluster $cluster , database $database & table $table")
-    val key = s"$cluster-$database"
+    val key = s"$cluster"
     if (cachedToken.contains(key)) {
       cachedToken(key)
     } else {
@@ -211,7 +211,7 @@ private[kusto] object KustoTestUtils {
       val tokenRequestContext = new TokenRequestContext()
         .setScopes(Collections.singletonList(clusterScope))
         .setTenantId(authority)
-      val azureCliCredential = new AzureCliCredentialBuilder().build()
+
       val accessToken = maybeAccessTokenEnv match {
         case Some(at) =>
           KDSU.logInfo(
@@ -219,6 +219,7 @@ private[kusto] object KustoTestUtils {
             s"Using access token from environment variable ${KustoSinkOptions.KUSTO_ACCESS_TOKEN}")
           at
         case None =>
+          val azureCliCredential = new AzureCliCredentialBuilder().build()
           azureCliCredential.getTokenSync(tokenRequestContext).getToken
       }
       val kco = KustoConnectionOptions(cluster, database, accessToken, authority)
