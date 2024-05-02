@@ -16,12 +16,6 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - name: Azure login
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.APP_ID }}
-          tenant-id: ${{ secrets.TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       - name: Check out code into the Spark module directory
         uses: actions/checkout@v4
       - name: Setup java
@@ -34,6 +28,12 @@ jobs:
             pom.xml
             connector/pom.xml
             samples/pom.xml
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.APP_ID }}
+          tenant-id: ${{ secrets.TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       - name: Run the Maven verify phase
         env:
           kustoAadAuthorityID: ${{ secrets.TENANT_ID }}
