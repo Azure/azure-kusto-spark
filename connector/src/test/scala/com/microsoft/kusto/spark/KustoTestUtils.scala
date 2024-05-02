@@ -220,7 +220,7 @@ private[kusto] object KustoTestUtils {
       KDSU.logInfo(className, s"Using scope $clusterScope and authority $authority")
       val tokenRequestContext = new TokenRequestContext()
         .setScopes(Collections.singletonList(clusterScope))
-        .setTenantId(authority)
+//        .setTenantId(authority)
 
       val accessToken = maybeAccessTokenEnv match {
         case Some(at) =>
