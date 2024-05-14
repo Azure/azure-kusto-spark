@@ -38,7 +38,6 @@ jobs:
         run: |
               access_token=$(az account get-access-token --resource=${{ secrets.APP_ID }} --scope=${{ secrets.CLUSTER }}/.default --query accessToken -o tsv)
               echo "ACCESS_TOKEN=$access_token" >> $GITHUB_ENV
-  
       - name: Run the Maven verify phase
         env:
           kustoAadAuthorityID: ${{ secrets.TENANT_ID }}
@@ -47,7 +46,7 @@ jobs:
           kustoAadAppId: ${{secrets.APP_ID}}
           accessToken: ${{env.ACCESS_TOKEN}}
         run: |
-          mvn clean test verify -DkustoAadAppId=${{ secrets.APP_ID }} -DkustoAadAuthorityID=${{ secrets.TENANT_ID }} -DkustoDatabase=${{ secrets.DATABASE }} -DkustoCluster=${{ secrets.CLUSTER }} -DaccessToken=${{env.ACCESS_TOKEN}}
+          mvn clean verify -DkustoAadAppId=${{ secrets.APP_ID }} -DkustoAadAuthorityID=${{ secrets.TENANT_ID }} -DkustoDatabase=${{ secrets.DATABASE }} -DkustoCluster=${{ secrets.CLUSTER }} -DaccessToken=${{env.ACCESS_TOKEN}}
       - name: Publish Unit Test Results
         uses: EnricoMi/publish-unit-test-result-action@v2
         if: always()
