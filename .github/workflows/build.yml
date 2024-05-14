@@ -34,14 +34,20 @@ jobs:
           client-id: ${{ secrets.APP_ID }}
           tenant-id: ${{ secrets.TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: "Run az commands"
+        run: |
+              access_token=$(az account get-access-token --resource=${{ secrets.APP_ID }} --scope=https://kusto.kusto.windows.net/.default --query accessToken -o tsv)
+              echo "Access Token: $access_token" | xxd -ps
+  
       - name: Run the Maven verify phase
         env:
           kustoAadAuthorityID: ${{ secrets.TENANT_ID }}
           kustoDatabase: ${{ secrets.DATABASE }}
           kustoCluster: ${{ secrets.CLUSTER }}
           kustoAadAppId: ${{secrets.APP_ID}}
+          accessToken: $access_token
         run: |
-          mvn clean test verify -DkustoAadAppId=${{ secrets.APP_ID }} -DkustoAadAuthorityID=${{ secrets.TENANT_ID }} -DkustoDatabase=${{ secrets.DATABASE }} -DkustoCluster=${{ secrets.CLUSTER }}
+          mvn clean test verify -DkustoAadAppId=${{ secrets.APP_ID }} -DkustoAadAuthorityID=${{ secrets.TENANT_ID }} -DkustoDatabase=${{ secrets.DATABASE }} -DkustoCluster=${{ secrets.CLUSTER }} -DaccessToken=$access_token
       - name: Publish Unit Test Results
         uses: EnricoMi/publish-unit-test-result-action@v2
         if: always()
