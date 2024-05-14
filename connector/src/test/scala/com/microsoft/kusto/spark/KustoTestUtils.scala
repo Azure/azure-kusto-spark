@@ -201,26 +201,18 @@ private[kusto] object KustoTestUtils {
   }
 
   def getSystemTestOptions: KustoConnectionOptions = {
-    val cluster: String = clusterToKustoFQDN(
-      KustoTestUtils.getSystemVariable(KustoSinkOptions.KUSTO_CLUSTER))
-    val database: String = KustoTestUtils.getSystemVariable(KustoSinkOptions.KUSTO_DATABASE)
-    val table: String = Option(KustoTestUtils.getSystemVariable(KustoSinkOptions.KUSTO_TABLE))
-      .getOrElse("SparkTestTable")
-    KDSU.logInfo(
-      className,
-      s"Getting AZCli token for cluster $cluster , database $database & table $table")
+    val cluster: String = clusterToKustoFQDN(getSystemVariable(KustoSinkOptions.KUSTO_CLUSTER))
+    val database: String = getSystemVariable(KustoSinkOptions.KUSTO_DATABASE)
+    val table: String = Option(getSystemVariable(KustoSinkOptions.KUSTO_TABLE)).getOrElse("SparkTestTable")
+    KDSU.logInfo(className, s"Getting AZCli token for cluster $cluster , database $database & table $table")
     val key = s"$cluster"
     if (cachedToken.contains(key)) {
       cachedToken(key)
     } else {
-      val maybeAccessTokenEnv = Option(System.getProperty(KustoSinkOptions.KUSTO_ACCESS_TOKEN))
-      val authority: String =
-        System.getProperty(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com")
+      val maybeAccessTokenEnv = Option(getSystemVariable(KustoSinkOptions.KUSTO_ACCESS_TOKEN))
+      val authority: String = getSystemVariable(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID)
       val clusterScope = s"https://kusto.kusto.windows.net/.default"
       KDSU.logWarn(className, s"Using scope $clusterScope and authority $authority")
-      val tokenRequestContext = new TokenRequestContext()
-        .setScopes(Collections.singletonList(clusterScope)).setTenantId(authority)
-
       val accessToken = maybeAccessTokenEnv match {
         case Some(at) =>
           KDSU.logInfo(
@@ -228,6 +220,8 @@ private[kusto] object KustoTestUtils {
             s"Using access token from environment variable ${KustoSinkOptions.KUSTO_ACCESS_TOKEN}")
           at
         case None =>
+          val tokenRequestContext = new TokenRequestContext().setScopes(Collections.singletonList(clusterScope))
+            .setTenantId(authority)
           val value = new AzureCliCredentialBuilder().build().getToken(tokenRequestContext).block()
           Try(value) match {
             case scala.util.Success(token: AccessToken) =>
