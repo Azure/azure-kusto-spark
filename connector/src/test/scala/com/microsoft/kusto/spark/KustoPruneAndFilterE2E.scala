@@ -1,7 +1,23 @@
+// Copyright (c) 2017 Microsoft Corporation
+// Licensed to the Apache Software Foundation (ASF) under one or more
+// contributor license agreements.  See the NOTICE file distributed with
+// this work for additional information regarding copyright ownership.
+// The ASF licenses this file to You under the Apache License, Version 2.0
+// (the "License"); you may not use this file except in compliance with
+// the License.  You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.microsoft.kusto.spark
 
 import com.microsoft.azure.kusto.data.ClientFactory
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
+import com.microsoft.kusto.spark.KustoTestUtils.getSystemTestOptions
 import com.microsoft.kusto.spark.common.KustoDebugOptions
 import com.microsoft.kusto.spark.datasink.KustoSinkOptions
 import com.microsoft.kusto.spark.datasource.{
@@ -23,6 +39,8 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.immutable
 
 class KustoPruneAndFilterE2E extends AnyFlatSpec with BeforeAndAfterAll {
+  private lazy val kustoTestConnectionOptions = getSystemTestOptions
+
   private val nofExecutors = 4
   private val spark: SparkSession = SparkSession
     .builder()
@@ -46,13 +64,6 @@ class KustoPruneAndFilterE2E extends AnyFlatSpec with BeforeAndAfterAll {
     sc.stop()
   }
 
-  val appId: String = System.getProperty(KustoSourceOptions.KUSTO_AAD_APP_ID)
-  val appKey: String = System.getProperty(KustoSourceOptions.KUSTO_AAD_APP_SECRET)
-  val authority: String =
-    System.getProperty(KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com")
-  val cluster: String = System.getProperty(KustoSourceOptions.KUSTO_CLUSTER)
-  val database: String = System.getProperty(KustoSourceOptions.KUSTO_DATABASE)
-
   private val loggingLevel: Option[String] = Option(System.getProperty("logLevel"))
   if (loggingLevel.isDefined) KDSU.setLoggingLevel(loggingLevel.get)
 
@@ -63,11 +74,12 @@ class KustoPruneAndFilterE2E extends AnyFlatSpec with BeforeAndAfterAll {
       s"$table | where (toint(ColB) % 1000 == 0) ")
 
     val conf = Map(
-      KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
-      KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey,
+      KustoSourceOptions.KUSTO_ACCESS_TOKEN -> kustoTestConnectionOptions.accessToken,
       KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceSingleMode.toString)
 
-    val df = spark.read.kusto(cluster, database, query, conf).select("ColA")
+    val df = spark.read
+      .kusto(kustoTestConnectionOptions.cluster, kustoTestConnectionOptions.database, query, conf)
+      .select("ColA")
     df.show()
   }
 
@@ -85,21 +97,23 @@ class KustoPruneAndFilterE2E extends AnyFlatSpec with BeforeAndAfterAll {
         Array(new TransientStorageCredentials(storageAccount, blobKey, container)))
 
       Map(
-        KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
-        KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey,
+        KustoSourceOptions.KUSTO_ACCESS_TOKEN -> kustoTestConnectionOptions.accessToken,
         KustoSourceOptions.KUSTO_TRANSIENT_STORAGE -> storage.toString)
     } else {
       val storage =
         new TransientStorageParameters(Array(new TransientStorageCredentials(blobSas))) //          ,
       Map(
-        KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
-        KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey,
+        KustoSourceOptions.KUSTO_ACCESS_TOKEN -> kustoTestConnectionOptions.accessToken,
         KustoSourceOptions.KUSTO_TRANSIENT_STORAGE -> storage.toString
         // KustoDebugOptions.KUSTO_DBG_BLOB_FORCE_KEEP -> "true"
       )
     }
 
-    val df = spark.read.kusto(cluster, database, query, conf)
+    val df = spark.read.kusto(
+      kustoTestConnectionOptions.cluster,
+      kustoTestConnectionOptions.database,
+      query,
+      conf)
 
     df.show(20)
   }
@@ -123,24 +137,20 @@ class KustoPruneAndFilterE2E extends AnyFlatSpec with BeforeAndAfterAll {
     val blobSas: String = System.getProperty("blobSas")
 
     // Create a new table.
-    val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(
-      s"https://$cluster.kusto.windows.net",
-      appId,
-      appKey,
-      authority)
+    val engineKcsb = ConnectionStringBuilder.createWithAadAccessTokenAuthentication(
+      kustoTestConnectionOptions.cluster,
+      kustoTestConnectionOptions.accessToken)
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
     kustoAdminClient.execute(
-      database,
+      kustoTestConnectionOptions.database,
       generateTempTableCreateCommand(query, columnsTypesAndNames = "ColA:string, ColB:int"))
 
     dfOrig.write
       .format("com.microsoft.kusto.spark.datasource")
-      .option(KustoSinkOptions.KUSTO_CLUSTER, cluster)
-      .option(KustoSinkOptions.KUSTO_DATABASE, database)
+      .option(KustoSinkOptions.KUSTO_CLUSTER, kustoTestConnectionOptions.cluster)
+      .option(KustoSinkOptions.KUSTO_DATABASE, kustoTestConnectionOptions.database)
       .option(KustoSinkOptions.KUSTO_TABLE, query)
-      .option(KustoSinkOptions.KUSTO_AAD_APP_ID, appId)
-      .option(KustoSinkOptions.KUSTO_AAD_APP_SECRET, appKey)
-      .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, authority)
+      .option(KustoSinkOptions.KUSTO_ACCESS_TOKEN, kustoTestConnectionOptions.accessToken)
       .mode(SaveMode.Append)
       .save()
 
@@ -148,8 +158,7 @@ class KustoPruneAndFilterE2E extends AnyFlatSpec with BeforeAndAfterAll {
       val storage = new TransientStorageParameters(
         Array(new TransientStorageCredentials(storageAccount, blobKey, container)))
       Map(
-        KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
-        KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey,
+        KustoSourceOptions.KUSTO_ACCESS_TOKEN -> kustoTestConnectionOptions.accessToken,
         KustoSourceOptions.KUSTO_TRANSIENT_STORAGE -> storage.toString,
         KustoDebugOptions.KUSTO_DBG_BLOB_COMPRESS_ON_EXPORT -> "false"
       ) // Just to test this option
@@ -158,14 +167,17 @@ class KustoPruneAndFilterE2E extends AnyFlatSpec with BeforeAndAfterAll {
         new TransientStorageParameters(Array(new TransientStorageCredentials(blobSas))) //          ,
 
       Map(
-        KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
-        KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey,
+        KustoSourceOptions.KUSTO_ACCESS_TOKEN -> kustoTestConnectionOptions.accessToken,
         KustoSourceOptions.KUSTO_TRANSIENT_STORAGE -> storage.toString,
         KustoDebugOptions.KUSTO_DBG_BLOB_COMPRESS_ON_EXPORT -> "false"
       ) // Just to test this option
     }
 
-    val dfResult = spark.read.kusto(cluster, database, query, conf)
+    val dfResult = spark.read.kusto(
+      kustoTestConnectionOptions.cluster,
+      kustoTestConnectionOptions.database,
+      query,
+      conf)
 
     val orig = dfOrig
       .select("name", "value")
@@ -184,7 +196,7 @@ class KustoPruneAndFilterE2E extends AnyFlatSpec with BeforeAndAfterAll {
     assert(orig.deep == result.deep)
 
     val dfResultPruned = spark.read
-      .kusto(cluster, database, query, conf)
+      .kusto(kustoTestConnectionOptions.cluster, kustoTestConnectionOptions.database, query, conf)
       .select("ColA")
       .sort("ColA")
       .collect()
@@ -199,7 +211,7 @@ class KustoPruneAndFilterE2E extends AnyFlatSpec with BeforeAndAfterAll {
     // Cleanup
     KustoTestUtils.tryDropAllTablesByPrefix(
       kustoAdminClient,
-      database,
+      kustoTestConnectionOptions.database,
       "KustoSparkReadWriteWithFiltersTest")
   }
 
@@ -222,24 +234,21 @@ class KustoPruneAndFilterE2E extends AnyFlatSpec with BeforeAndAfterAll {
     val blobSas: String = System.getProperty("blobSas")
 
     // Create a new table.
-    val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(
-      s"https://$cluster.kusto.windows.net",
-      appId,
-      appKey,
-      authority)
+    val engineKcsb = ConnectionStringBuilder.createWithAadAccessTokenAuthentication(
+      kustoTestConnectionOptions.cluster,
+      kustoTestConnectionOptions.accessToken)
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
     kustoAdminClient.execute(
-      database,
+      kustoTestConnectionOptions.database,
       generateTempTableCreateCommand(query, columnsTypesAndNames = "ColA:string, ColB:int"))
 
     dfOrig.write
       .format("com.microsoft.kusto.spark.datasource")
-      .option(KustoSinkOptions.KUSTO_CLUSTER, cluster)
-      .option(KustoSinkOptions.KUSTO_DATABASE, database)
+      .option(KustoSinkOptions.KUSTO_CLUSTER, kustoTestConnectionOptions.cluster)
+      .option(KustoSinkOptions.KUSTO_DATABASE, kustoTestConnectionOptions.database)
       .option(KustoSinkOptions.KUSTO_TABLE, query)
-      .option(KustoSinkOptions.KUSTO_AAD_APP_ID, appId)
-      .option(KustoSinkOptions.KUSTO_AAD_APP_SECRET, appKey)
-      .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, authority)
+      .option(KustoSinkOptions.KUSTO_ACCESS_TOKEN, kustoTestConnectionOptions.accessToken)
+      .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, kustoTestConnectionOptions.tenantId)
       .mode(SaveMode.Append)
       .save()
 
@@ -247,8 +256,7 @@ class KustoPruneAndFilterE2E extends AnyFlatSpec with BeforeAndAfterAll {
       val storage = new TransientStorageParameters(
         Array(new TransientStorageCredentials(storageAccount, blobKey, container)))
       Map(
-        KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
-        KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey,
+        KustoSourceOptions.KUSTO_ACCESS_TOKEN -> kustoTestConnectionOptions.accessToken,
         KustoSourceOptions.KUSTO_TRANSIENT_STORAGE -> storage.toString)
 
     } else {
@@ -256,12 +264,15 @@ class KustoPruneAndFilterE2E extends AnyFlatSpec with BeforeAndAfterAll {
         new TransientStorageParameters(Array(new TransientStorageCredentials(blobSas))) //          ,
 
       Map(
-        KustoSourceOptions.KUSTO_AAD_APP_ID -> appId,
-        KustoSourceOptions.KUSTO_AAD_APP_SECRET -> appKey,
+        KustoSourceOptions.KUSTO_ACCESS_TOKEN -> kustoTestConnectionOptions.accessToken,
         KustoSourceOptions.KUSTO_TRANSIENT_STORAGE -> storage.toString)
     }
 
-    val dfResult = spark.read.kusto(cluster, database, query, conf)
+    val dfResult = spark.read.kusto(
+      kustoTestConnectionOptions.cluster,
+      kustoTestConnectionOptions.database,
+      query,
+      conf)
     val dfFiltered = dfResult
       .where(dfResult.col("ColA']").startsWith("row-2"))
       .filter("ColB > 12")
@@ -275,7 +286,7 @@ class KustoPruneAndFilterE2E extends AnyFlatSpec with BeforeAndAfterAll {
     // Cleanup
     KustoTestUtils.tryDropAllTablesByPrefix(
       kustoAdminClient,
-      database,
+      kustoTestConnectionOptions.database,
       "KustoSparkReadWriteWithFiltersTest")
   }
 }

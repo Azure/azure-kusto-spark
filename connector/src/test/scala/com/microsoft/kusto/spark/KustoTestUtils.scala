@@ -15,8 +15,8 @@
 
 package com.microsoft.kusto.spark
 
-import com.azure.core.credential.TokenRequestContext
-import com.azure.identity.{AzureCliCredential, AzureCliCredentialBuilder}
+import com.azure.core.credential.{AccessToken, TokenRequestContext}
+import com.azure.identity.AzureCliCredentialBuilder
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.{Client, ClientFactory}
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
@@ -34,15 +34,20 @@ import com.microsoft.kusto.spark.utils.CslCommandsGenerator.{
 }
 import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
+import reactor.core.publisher.Mono
 
 import java.security.InvalidParameterException
 import java.util.{Collections, UUID}
 import scala.collection.JavaConverters.asScalaBufferConverter
+import scala.collection.mutable
 import scala.concurrent.TimeoutException
+import scala.util.Try
 
 private[kusto] object KustoTestUtils {
   private val className = this.getClass.getSimpleName
   private val loggingLevel: Option[String] = Option(System.getProperty("logLevel"))
+  private val cachedToken: mutable.Map[String, KustoConnectionOptions] =
+    new mutable.HashMap[String, KustoConnectionOptions]()
   loggingLevel match {
     case Some(level) => KDSU.setLoggingLevel(level)
     // default to warn for tests
@@ -196,21 +201,45 @@ private[kusto] object KustoTestUtils {
   }
 
   def getSystemTestOptions: KustoConnectionOptions = {
-    val cluster: String = KustoTestUtils.getSystemVariable(KustoSinkOptions.KUSTO_CLUSTER)
-    val authority: String =
-      System.getProperty(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, "microsoft.com")
-    val clusterScope = clusterToKustoFQDN(cluster)
-    val tokenRequestContext = new TokenRequestContext()
-      .setScopes(Collections.singletonList(clusterScope))
-      .setTenantId(authority)
-    val accessToken: String =
-      new AzureCliCredentialBuilder().build().getTokenSync(tokenRequestContext).getToken
-    val database: String = KustoTestUtils.getSystemVariable(KustoSinkOptions.KUSTO_DATABASE)
-    var table: String = KustoTestUtils.getSystemVariable(KustoSinkOptions.KUSTO_TABLE)
-    if (table == null) {
-      table = "SparkTestTable"
+    val cluster: String = clusterToKustoFQDN(getSystemVariable(KustoSinkOptions.KUSTO_CLUSTER))
+    val database: String = getSystemVariable(KustoSinkOptions.KUSTO_DATABASE)
+    val table: String = Option(getSystemVariable(KustoSinkOptions.KUSTO_TABLE)).getOrElse("SparkTestTable")
+    KDSU.logInfo(className, s"Getting AZCli token for cluster $cluster , database $database & table $table")
+    val key = s"$cluster"
+    if (cachedToken.contains(key)) {
+      cachedToken(key)
+    } else {
+      val maybeAccessTokenEnv = Option(getSystemVariable(KustoSinkOptions.KUSTO_ACCESS_TOKEN))
+      val authority: String = getSystemVariable(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID)
+      val clusterScope = s"$cluster/.default"
+      KDSU.logWarn(className, s"Using scope $clusterScope and authority $authority")
+      val accessToken = maybeAccessTokenEnv match {
+        case Some(at) =>
+          KDSU.logInfo(
+            className,
+            s"Using access token from environment variable ${KustoSinkOptions.KUSTO_ACCESS_TOKEN}")
+          at
+        case None =>
+          val tokenRequestContext = new TokenRequestContext().setScopes(Collections.singletonList(clusterScope))
+            .setTenantId(authority)
+          val value = new AzureCliCredentialBuilder().build().getToken(tokenRequestContext).block()
+          Try(value) match {
+            case scala.util.Success(token: AccessToken) =>
+              val azCliToken: AccessToken = token
+              azCliToken.getToken
+            case scala.util.Failure(exception) =>
+              KDSU.reportExceptionAndThrow(
+                s"Failed to get access token for cluster $cluster, database $database & table $table at scope $clusterScope",
+                exception)
+              throw new RuntimeException(
+                s"Failed to get access token for cluster $cluster, database $database & table $table at scope $clusterScope",
+                exception)
+          }
+      }
+      val kco = KustoConnectionOptions(cluster, database, accessToken, authority)
+      cachedToken.put(key, kco)
+      kco
     }
-    KustoConnectionOptions(cluster, database, accessToken)
   }
 
   private def getSystemVariable(key: String) = {
@@ -233,5 +262,6 @@ private[kusto] object KustoTestUtils {
       cluster: String,
       database: String,
       accessToken: String,
+      tenantId: String,
       createTableIfNotExists: SinkTableCreationMode = SinkTableCreationMode.CreateIfNotExist)
 }

@@ -17,7 +17,7 @@ package com.microsoft.kusto.spark
 
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.{Client, ClientFactory, ClientRequestProperties}
-import com.microsoft.kusto.spark.KustoTestUtils.KustoConnectionOptions
+import com.microsoft.kusto.spark.KustoTestUtils.{KustoConnectionOptions, getSystemTestOptions}
 import com.microsoft.kusto.spark.common.KustoDebugOptions
 import com.microsoft.kusto.spark.datasink.{
   KustoSinkOptions,
@@ -47,6 +47,8 @@ import scala.collection.immutable
 import scala.util.{Failure, Random, Success, Try}
 
 class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
+  private lazy val kustoConnectionOptions: KustoConnectionOptions =
+    getSystemTestOptions
   private val nofExecutors = 4
   private val spark: SparkSession = SparkSession
     .builder()
@@ -56,37 +58,36 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
   private var sc: SparkContext = _
   private var sqlContext: SQLContext = _
 
-  private val kustoConnectionOptions: KustoConnectionOptions = KustoTestUtils.getSystemTestOptions
   private val table =
     KustoQueryUtils.simplifyName(s"KustoSparkReadWriteTest_${UUID.randomUUID()}")
   private val className = this.getClass.getSimpleName
+  private lazy val ingestUrl =
+    new StringBuffer(KDSU.getEngineUrlFromAliasIfNeeded(kustoConnectionOptions.cluster))
+      .toString
+      .replace("https://", "https://ingest-")
 
-  private var kustoAdminClient: Option[Client] = None
-  private var maybeKustoDmClient: Option[Client] = None
+  private lazy val maybeKustoAdminClient: Option[Client] = Some(
+    ClientFactory.createClient(
+      ConnectionStringBuilder.createWithAadAccessTokenAuthentication(
+        kustoConnectionOptions.cluster,
+        kustoConnectionOptions.accessToken)))
+
+  private lazy val maybeKustoDmClient: Option[Client] = Some(
+    ClientFactory.createClient(ConnectionStringBuilder
+      .createWithAadAccessTokenAuthentication(ingestUrl, kustoConnectionOptions.accessToken)))
+
   private val loggingLevel: Option[String] = Option(System.getProperty("logLevel"))
   loggingLevel match {
     case Some(level) => KDSU.setLoggingLevel(level)
     // default to warn for tests
-    case None => KDSU.setLoggingLevel("WARN")
+    case None => KDSU.setLoggingLevel("DEBUG")
   }
   override def beforeAll(): Unit = {
     super.beforeAll()
     sc = spark.sparkContext
     sqlContext = spark.sqlContext
-    val engineKcsb = ConnectionStringBuilder.createWithAadAccessTokenAuthentication(
-      KDSU.getEngineUrlFromAliasIfNeeded(kustoConnectionOptions.cluster),
-      kustoConnectionOptions.accessToken)
-    kustoAdminClient = Some(ClientFactory.createClient(engineKcsb))
-    val ingestUrl =
-      new StringBuffer(KDSU.getEngineUrlFromAliasIfNeeded(kustoConnectionOptions.cluster))
-        .insert(8, "ingest-")
-        .toString
-    val ingestKcsb = ConnectionStringBuilder.createWithAadAccessTokenAuthentication(
-      ingestUrl,
-      kustoConnectionOptions.accessToken)
-    maybeKustoDmClient = Some(ClientFactory.createClient(ingestKcsb))
     Try(
-      kustoAdminClient.get.execute(
+      maybeKustoAdminClient.get.execute(
         kustoConnectionOptions.database,
         generateAlterIngestionBatchingPolicyCommand(
           "database",
@@ -104,13 +105,21 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
 
   override def afterAll(): Unit = {
     super.afterAll()
-    Try(
-      // Remove table if stopping gracefully
-      kustoAdminClient.get
-        .execute(kustoConnectionOptions.database, generateTableDropCommand(table))) match {
-      case Success(_) => KDSU.logDebug(className, "Ingestion policy applied")
-      case Failure(e: Throwable) =>
-        KDSU.reportExceptionAndThrow(className, e, "Dropping test table", shouldNotThrow = true)
+    // Remove table if stopping gracefully
+    maybeKustoAdminClient match {
+      case Some(kustoAdminClient) =>
+        Try(
+          kustoAdminClient
+            .execute(kustoConnectionOptions.database, generateTableDropCommand(table))) match {
+          case Success(_) => KDSU.logDebug(className, "Ingestion policy applied")
+          case Failure(e: Throwable) =>
+            KDSU.reportExceptionAndThrow(
+              className,
+              e,
+              "Dropping test table",
+              shouldNotThrow = true)
+        }
+      case None => KDSU.logWarn(className, s"Admin client is null, could not drop table $table ")
     }
     sc.stop()
   }
@@ -174,7 +183,7 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
       .save()
 
     val instant = Instant.now.plus(1, ChronoUnit.HOURS)
-    kustoAdminClient.get.execute(
+    maybeKustoAdminClient.get.execute(
       kustoConnectionOptions.database,
       generateTableAlterAutoDeletePolicy(table, instant))
 
@@ -287,7 +296,7 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
 
     // Should take up to another 10 seconds for .show commands to come up
     Thread.sleep(5000 * 60)
-    val res3 = kustoAdminClient.get.execute(
+    val res3 = maybeKustoAdminClient.get.execute(
       s""".show commands | where StartedOn > datetime(${time.toString})  | where
                                         CommandType ==
       "DataExportToFile" | where Text has "$table"""")

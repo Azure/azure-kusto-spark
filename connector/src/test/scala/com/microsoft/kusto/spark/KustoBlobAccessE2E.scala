@@ -67,7 +67,7 @@ class KustoBlobAccessE2E extends AnyFlatSpec with BeforeAndAfterAll {
     sc.stop()
   }
 
-  private val kustoTestConnectionOptions = getSystemTestOptions
+  private lazy val kustoTestConnectionOptions = getSystemTestOptions
 
   private val table: String = System.getProperty(KustoSinkOptions.KUSTO_TABLE, "")
   private val storageAccount: String =
@@ -179,7 +179,7 @@ class KustoBlobAccessE2E extends AnyFlatSpec with BeforeAndAfterAll {
 
     df.take(10)
       .foreach(row => {
-        rowAsString = row.toString(); rowsProcessed += 1;
+        rowAsString = row.toString(); rowsProcessed += 1
         KDSU.logInfo(myName, s"row: $rowAsString")
         val pattern(rowInt, int) = rowAsString
         assert(rowInt == int)
