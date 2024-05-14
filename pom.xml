@@ -48,7 +48,8 @@
         <shadingPrefix>azure_kusto_spark</shadingPrefix>
         <slf4j.version>1.8.0-beta4</slf4j.version>
         <specs2.version>3.6.5</specs2.version>
-        <msal4j.version>1.13.9</msal4j.version>
+        <msal4j.version>1.15.0</msal4j.version>
+        <az.identity.version>1.12.0</az.identity.version>
     </properties>
 
     <inceptionYear>2018</inceptionYear>

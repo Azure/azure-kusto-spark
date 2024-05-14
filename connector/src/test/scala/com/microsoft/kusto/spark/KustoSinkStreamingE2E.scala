@@ -1,14 +1,26 @@
+
+// Copyright (c) 2017 Microsoft Corporation
+// Licensed to the Apache Software Foundation (ASF) under one or more
+// contributor license agreements.  See the NOTICE file distributed with
+// this work for additional information regarding copyright ownership.
+// The ASF licenses this file to You under the Apache License, Version 2.0
+// (the "License"); you may not use this file except in compliance with
+// the License.  You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.microsoft.kusto.spark
 
 import com.microsoft.azure.kusto.data.ClientFactory
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
-import com.microsoft.kusto.spark.KustoTestUtils.KustoConnectionOptions
+import com.microsoft.kusto.spark.KustoTestUtils.{KustoConnectionOptions, getSystemTestOptions}
 import com.microsoft.kusto.spark.common.KustoDebugOptions
-import com.microsoft.kusto.spark.datasink.{
-  KustoSinkOptions,
-  SinkTableCreationMode,
-  SparkIngestionProperties
-}
+import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode, SparkIngestionProperties}
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.streaming.Trigger
@@ -34,18 +46,16 @@ class KustoSinkStreamingE2E extends AnyFlatSpec with BeforeAndAfterAll {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-
     sc = spark.sparkContext
     sqlContext = spark.sqlContext
   }
 
   override def afterAll(): Unit = {
     super.afterAll()
-
     sc.stop()
   }
   private lazy val kustoConnectionOptions: KustoConnectionOptions =
-    KustoTestUtils.getSystemTestOptions
+    getSystemTestOptions
 
   val csvPath: String = System.getProperty("path", "connector/src/test/resources/TestData/csv")
   val customSchema: StructType = new StructType()
@@ -55,11 +65,9 @@ class KustoSinkStreamingE2E extends AnyFlatSpec with BeforeAndAfterAll {
   "KustoStreamingSinkSyncWithTableCreateAndIngestIfNotExist" should "ingest structured data to a Kusto cluster" taggedAs KustoE2E in {
     val prefix = "KustoStreamingSparkE2E_Ingest"
     val table = s"${prefix}_${UUID.randomUUID().toString.replace("-", "_")}"
-    val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(
-      s"https://${kustoConnectionOptions.cluster}.kusto.windows.net",
-      kustoConnectionOptions.appId,
-      kustoConnectionOptions.appKey,
-      kustoConnectionOptions.authority)
+    val engineKcsb = ConnectionStringBuilder.createWithAadAccessTokenAuthentication(
+      kustoConnectionOptions.cluster,
+      kustoConnectionOptions.accessToken)
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
 
     val csvDf = spark.readStream
@@ -85,9 +93,7 @@ class KustoSinkStreamingE2E extends AnyFlatSpec with BeforeAndAfterAll {
         KustoSinkOptions.KUSTO_CLUSTER -> kustoConnectionOptions.cluster,
         KustoSinkOptions.KUSTO_TABLE -> table,
         KustoSinkOptions.KUSTO_DATABASE -> kustoConnectionOptions.database,
-        KustoSinkOptions.KUSTO_AAD_APP_ID -> kustoConnectionOptions.appId,
-        KustoSinkOptions.KUSTO_AAD_APP_SECRET -> kustoConnectionOptions.appKey,
-        KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID -> kustoConnectionOptions.authority,
+        KustoSinkOptions.KUSTO_ACCESS_TOKEN -> kustoConnectionOptions.accessToken,
         KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS -> SinkTableCreationMode.CreateIfNotExist.toString,
         KustoDebugOptions.KUSTO_ENSURE_NO_DUPLICATED_BLOBS -> true.toString,
         KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON -> sp.toString))
@@ -109,11 +115,9 @@ class KustoSinkStreamingE2E extends AnyFlatSpec with BeforeAndAfterAll {
   "KustoStreamingSinkAsync" should "also ingest structured data to a Kusto cluster" taggedAs KustoE2E in {
     val prefix = "KustoStreamingSparkE2EAsync_Ingest"
     val table = s"${prefix}_${UUID.randomUUID().toString.replace("-", "_")}"
-    val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(
-      s"https://${kustoConnectionOptions.cluster}.kusto.windows.net",
-      kustoConnectionOptions.appId,
-      kustoConnectionOptions.appKey,
-      kustoConnectionOptions.authority)
+    val engineKcsb = ConnectionStringBuilder.createWithAadAccessTokenAuthentication(
+      kustoConnectionOptions.cluster,
+      kustoConnectionOptions.accessToken)
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
 
     kustoAdminClient.execute(
@@ -138,9 +142,7 @@ class KustoSinkStreamingE2E extends AnyFlatSpec with BeforeAndAfterAll {
         KustoSinkOptions.KUSTO_CLUSTER -> kustoConnectionOptions.cluster,
         KustoSinkOptions.KUSTO_TABLE -> table,
         KustoSinkOptions.KUSTO_DATABASE -> kustoConnectionOptions.database,
-        KustoSinkOptions.KUSTO_AAD_APP_ID -> kustoConnectionOptions.appId,
-        KustoSinkOptions.KUSTO_AAD_APP_SECRET -> kustoConnectionOptions.appKey,
-        KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID -> kustoConnectionOptions.authority,
+        KustoSinkOptions.KUSTO_AAD_APP_ID -> kustoConnectionOptions.accessToken,
         KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC -> "true"))
       .trigger(Trigger.Once)
 
