@@ -219,8 +219,7 @@ private[kusto] object KustoTestUtils {
       val clusterScope = s"https://kusto.kusto.windows.net/.default"
       KDSU.logWarn(className, s"Using scope $clusterScope and authority $authority")
       val tokenRequestContext = new TokenRequestContext()
-        .setScopes(Collections.singletonList(clusterScope))
-//        .setTenantId(authority)
+        .setScopes(Collections.singletonList(clusterScope)).setTenantId(authority)
 
       val accessToken = maybeAccessTokenEnv match {
         case Some(at) =>
