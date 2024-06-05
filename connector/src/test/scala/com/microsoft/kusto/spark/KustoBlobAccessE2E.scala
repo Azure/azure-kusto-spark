@@ -137,8 +137,7 @@ class KustoBlobAccessE2E extends AnyFlatSpec with BeforeAndAfterAll {
       directory,
       partitionId,
       new TransientStorageParameters(
-        Array(new TransientStorageCredentials(storageAccount, secret, container))),
-      Some(partitionPredicate))
+        Array(new TransientStorageCredentials(storageAccount, secret, container))))
 
     val blobs = kustoAdminClient
       .execute(kustoTestConnectionOptions.database, exportCommand)

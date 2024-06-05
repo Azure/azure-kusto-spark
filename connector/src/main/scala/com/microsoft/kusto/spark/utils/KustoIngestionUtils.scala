@@ -15,10 +15,8 @@ import com.microsoft.kusto.spark.datasink.{
 import com.microsoft.kusto.spark.datasink.SchemaAdjustmentMode.SchemaAdjustmentMode
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
 import com.microsoft.kusto.spark.exceptions.SchemaMatchException
-import com.microsoft.kusto.spark.utils.DataTypeMapping.{
-  SparkTypeToKustoTypeMap,
-  getSparkTypeToKustoTypeMap
-}
+import com.microsoft.kusto.spark.utils.DataTypeMapping.getSparkTypeToKustoTypeMap
+
 import org.apache.spark.sql.types.StructType
 
 object KustoIngestionUtils {
@@ -73,11 +71,13 @@ object KustoIngestionUtils {
     either to not have a mapping or create an explicit identity mapping. Since GenerateCSVMapping is requested explicitly
     creating an identity mapping made the most appropriate fit */
     val sourceSchemaColumnTypes =
-      if (tableCreationMode == SinkTableCreationMode.CreateIfNotExist)
+      if (tableCreationMode == SinkTableCreationMode.CreateIfNotExist) {
         sourceSchema.fields
           .map(field => (field.name, getSparkTypeToKustoTypeMap(field.dataType)))
           .toMap
-      else Map.empty[String, String]
+      } else {
+        Map.empty[String, String]
+      }
     val notFoundSourceColumns =
       sourceSchemaColumns.filter(c => !targetSchemaColumns.contains(c._1)).keys
     if (notFoundSourceColumns.nonEmpty && targetSchema != null && targetSchema.nonEmpty) {

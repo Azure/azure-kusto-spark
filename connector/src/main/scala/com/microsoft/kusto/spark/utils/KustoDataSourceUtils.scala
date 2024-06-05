@@ -376,14 +376,14 @@ object KustoDataSourceUtils {
       mode: SaveMode = SaveMode.Append): SinkParameters = {
     if (mode != SaveMode.Append) {
       throw new InvalidParameterException(
-        s"Kusto data source supports only 'Append' mode, '$mode' directive is invalid. Please use df.write.mode(SaveMode.Append)..")
+        s"Kusto data source supports only 'Append' mode, '$mode' directive is invalid." +
+          s" Please use df.write.mode(SaveMode.Append)..")
     }
-
     // TODO get defaults from KustoWriter()
     // Parse WriteOptions
     var tableCreation: SinkTableCreationMode = SinkTableCreationMode.FailIfNotExist
     var tableCreationParam: Option[String] = None
-    var isAsync: Boolean = false
+    val isAsync: Boolean = parameters.getOrElse(KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC, "false").trim.toBoolean
     var isTransactionalMode: Boolean = false
     var writeModeParam: Option[String] = None
     var batchLimit: Int = 0
@@ -413,8 +413,6 @@ object KustoDataSourceUtils {
       throw new InvalidParameterException(
         "tempTableName can't be used with CreateIfNotExist or Queued write mode.")
     }
-    isAsync =
-      parameters.getOrElse(KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC, "false").trim.toBoolean
     val pollingOnDriver =
       parameters.getOrElse(KustoSinkOptions.KUSTO_POLLING_ON_DRIVER, "false").trim.toBoolean
 
@@ -487,17 +485,28 @@ object KustoDataSourceUtils {
         "KUSTO_TABLE parameter is missing. Must provide a destination table name")
     }
 
+    val tableName = writeOptions.userTempTableName match {
+      case Some(tbl) => s"userTempTableName: $tbl"
+      case None => ""
+    }
+
+    val isDupBlobs = if (ensureNoDupBlobs) {
+      "ensureNoDupBlobs: true"
+    }
+    else {
+      ""
+    }
+
     logInfo(
       "parseSinkParameters",
-      s"Parsed write options for sink: {'table': '${sourceParameters.kustoCoordinates.table}', 'timeout': '${writeOptions.timeout}, 'async': ${writeOptions.isAsync}, " +
-        s"'tableCreationMode': ${writeOptions.tableCreateOptions}, 'writeLimit': ${writeOptions.writeResultLimit}, 'batchLimit': ${writeOptions.batchLimit}" +
-        s", 'timeout': ${writeOptions.timeout}, 'timezone': ${writeOptions.timeZone}, " +
+      s"Parsed write options for sink: {'table': '${sourceParameters.kustoCoordinates.table}', " +
+        s"'timeout': '${writeOptions.timeout}, 'async': ${writeOptions.isAsync}, " +
+        s"'tableCreationMode': ${writeOptions.tableCreateOptions}, 'writeLimit': ${writeOptions.writeResultLimit}, " +
+        s"'batchLimit': ${writeOptions.batchLimit}, 'timeout': ${writeOptions.timeout}, 'timezone': ${writeOptions.timeZone}, " +
         s"'ingestionProperties': $ingestionPropertiesAsJson, 'requestId': '${sourceParameters.requestId}', 'pollingOnDriver': ${writeOptions.pollingOnDriver}," +
         s"'maxRetriesOnMoveExtents':$maxRetriesOnMoveExtents, 'minimalExtentsCountForSplitMergePerNode':$minimalExtentsCountForSplitMergePerNode, " +
-        s"'adjustSchema': $adjustSchema, 'autoCleanupTime': $autoCleanupTime${if (writeOptions.userTempTableName.isDefined)
-            s", userTempTableName: ${userTempTableName.get}"
-          else ""}, disableFlushImmediately: $disableFlushImmediately${if (ensureNoDupBlobs) "ensureNoDupBlobs: true"
-          else ""}")
+        s"'adjustSchema': $adjustSchema, 'autoCleanupTime': $autoCleanupTime$tableName, " +
+        s"disableFlushImmediately: $disableFlushImmediately$isDupBlobs")
 
     SinkParameters(writeOptions, sourceParameters)
   }
@@ -511,7 +520,7 @@ object KustoDataSourceUtils {
     retry.executeCheckedSupplier(f)
   }
 
-  def getClientRequestProperties(
+  private def getClientRequestProperties(
       parameters: Map[String, String],
       requestId: String): ClientRequestProperties = {
     val crpOption = parameters.get(KustoSourceOptions.KUSTO_CLIENT_REQUEST_PROPERTIES_JSON)

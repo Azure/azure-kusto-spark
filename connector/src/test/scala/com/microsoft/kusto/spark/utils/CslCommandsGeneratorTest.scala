@@ -75,7 +75,6 @@ class CslCommandsGeneratorTest extends AnyFlatSpec {
         directory,
         partitionId,
         transientStorageParameters,
-        Option.empty[String],
         additionalExportOptions = additionalExportOptions)
       assert(commandResult.nonEmpty)
       val expectedResult = s".export async $compressed to parquet " +

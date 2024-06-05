@@ -316,7 +316,6 @@ private[kusto] class KustoReader(client: ExtendedKustoClient) {
       directory = directory,
       partitionId = partition.idx,
       storageParameters = storage,
-      partitionPredicate = partition.predicate,
       additionalExportOptions = options.additionalExportOptions,
       supportNewParquetWriter = supportNewParquetWriter)
 
