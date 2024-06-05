@@ -61,7 +61,8 @@ object SparkExtension {
         database: String,
         table: String,
         conf: Map[String, String] = Map.empty[String, String],
-        sparkIngestionProperties: Option[SparkIngestionProperties] = None) = {
+        sparkIngestionProperties: Option[SparkIngestionProperties] = None)
+        : DataStreamWriter[Row] = {
       if (sparkIngestionProperties.isDefined) {
         df.option(
           KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON,

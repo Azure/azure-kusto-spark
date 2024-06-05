@@ -88,7 +88,7 @@ class ExtendedKustoClientTests extends AnyFlatSpec with Matchers {
       "CslType":"string", "Name":"name"}""")),
       WriteOptions(isTransactionalMode = false),
       null,
-      true)
+      configureRetentionPolicy = true)
     verify(stubbedClient.engineClient, times(0)).execute(any(), any(), any())
   }
 }

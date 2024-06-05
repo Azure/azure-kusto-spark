@@ -99,7 +99,7 @@ private[kusto] object CslCommandsGenerator {
   }
 
   def generateIsTableEngineV3(tableName: String): String = {
-    s""".show table ${tableName} details | project todynamic(ShardingPolicy).UseShardEngine"""
+    s""".show table $tableName details | project todynamic(ShardingPolicy).UseShardEngine"""
   }
 
   def generateTableMoveExtentsCommand(

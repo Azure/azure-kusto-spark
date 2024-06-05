@@ -4,22 +4,27 @@
 package com.microsoft.kusto.spark.utils
 
 import java.io.IOException
-
 import com.azure.security.keyvault.secrets.SecretClient
-import com.microsoft.kusto.spark.authentication._
-import com.microsoft.kusto.spark.datasource._
+import com.microsoft.kusto.spark.authentication.{
+  AadApplicationAuthentication,
+  KeyVaultAppAuthentication,
+  KeyVaultAuthentication,
+  KeyVaultCertificateAuthentication
+}
+import com.microsoft.kusto.spark.datasource.TransientStorageCredentials
 
-import scala.util.{Try}
+import scala.util.Try
 
 object KeyVaultUtils {
-  val AppId = "kustoAppId"
-  val AppKey = "kustoAppKey"
-  val AppAuthority = "kustoAppAuthority"
-  val SasUrl = "blobStorageSasUrl"
-  val StorageAccountName = "blobStorageAccountName"
-  val StorageAccountKey = "blobStorageAccountKey"
-  val Container = "blobContainer"
-  var cachedClient: SecretClient = _
+  private val className = this.getClass.getSimpleName
+  private val AppId = "kustoAppId"
+  private val AppKey = "kustoAppKey"
+  private val AppAuthority = "kustoAppAuthority"
+  private val SasUrl = "blobStorageSasUrl"
+  private val StorageAccountName = "blobStorageAccountName"
+  private val StorageAccountKey = "blobStorageAccountKey"
+  private val Container = "blobContainer"
+  private var cachedClient: SecretClient = _
 
   private def getClient(
       uri: String,
@@ -70,9 +75,11 @@ object KeyVaultUtils {
     try {
       authority = Some(client.getSecret(AppAuthority).getValue)
     } catch {
-      case e: Exception => {
-        println(e)
-      }
+      case e: Exception =>
+        KustoDataSourceUtils.logError(
+          className,
+          s"KeyVaultUtils: getAadAppParamsFromKeyVaultImpl failed to get authority from keyvault: ${e.getMessage}")
+
     }
     if (authority.isEmpty) {
       authority = Some("microsoft.com")

@@ -50,7 +50,7 @@ object CertUtils {
         val key = store.getKey(alias.get, password.toCharArray).asInstanceOf[PrivateKey]
         KeyCert(certificate, key)
       } else {
-        throw new UnrecoverableKeyException(s"cert could not be read from pfx path ${path}")
+        throw new UnrecoverableKeyException(s"cert could not be read from pfx path $path")
       }
     } finally {
       if (stream != null) {

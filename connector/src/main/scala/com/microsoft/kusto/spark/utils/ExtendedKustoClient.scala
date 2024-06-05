@@ -93,10 +93,8 @@ class ExtendedKustoClient(
     } else {
       // Table exists. Parse kusto table schema and check if it matches the dataframes schema
       val transformedTargetSchema = new ObjectMapper().createArrayNode()
-      targetSchema.foreach {
-        case (value) => {
-          transformedTargetSchema.add(value)
-        }
+      targetSchema.foreach { value =>
+        transformedTargetSchema.add(value)
       }
       tmpTableSchema = extractSchemaFromResultTable(transformedTargetSchema)
     }
@@ -296,7 +294,7 @@ class ExtendedKustoClient(
         consecutiveSuccesses = 0
         retry += 1
         val extentsProcessedErrorString =
-          if (extentsProcessed > 0) s"and ${extentsProcessed} were moved" else ""
+          if (extentsProcessed > 0) s"and $extentsProcessed were moved" else ""
         if (extentsProcessed > 0) {
           // This is not the first move command
           if (retry > secondMovesRetries)
@@ -305,11 +303,9 @@ class ExtendedKustoClient(
         } else if (retry > firstMoveRetries)
           throw RetriesExhaustedException(
             s"Failed to move extents after $retry tries$extentsProcessedErrorString.")
-
         // Lower batch size, increase delay
         val params =
           handleRetryFail(curBatchSize, retry, delayPeriodBetweenCalls, targetTable, error)
-
         curBatchSize = params._1
         delayPeriodBetweenCalls = params._2
       } else {
@@ -318,7 +314,6 @@ class ExtendedKustoClient(
           // After curBatchSize size has decreased - we can lower it again according to original batch size
           curBatchSize = Math.min(curBatchSize * 2, batchSize.getOrElse(curBatchSize * 2))
         }
-
         extentsProcessed += res.get.count()
         val batchSizeString = if (batchSize.isDefined) s"maxBatch: $curBatchSize," else ""
         KDSU.logDebug(
@@ -327,7 +322,6 @@ class ExtendedKustoClient(
             s" $batchSizeString consecutive successfull batches: $consecutiveSuccesses, successes this " +
             s"batch: ${res.get.count()}," +
             s" extentsProcessed: $extentsProcessed, backoff: $delayPeriodBetweenCalls, total:$totalAmount")
-
         retry = 0
         delayPeriodBetweenCalls = DelayPeriodBetweenCalls
       }
@@ -454,7 +448,6 @@ class ExtendedKustoClient(
         }
       }
     }
-
     shouldIngest
   }
 
@@ -535,8 +528,7 @@ class ExtendedKustoClient(
           myName,
           exception,
           s"deleting temporary table $tmpTableName",
-          database,
-          shouldNotThrow = false)
+          database)
     }
   }
 

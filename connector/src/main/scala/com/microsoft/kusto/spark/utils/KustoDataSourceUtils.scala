@@ -102,6 +102,7 @@ object KustoDataSourceUtils {
               val errorMessage =
                 s"The configuration for ${KustoSourceOptions.KUSTO_EXPORT_OPTIONS_JSON} has a value " +
                   s"$exportOptionsJsonString that cannot be parsed as Map"
+              logError(className, s"Error parsing export options ${exception.getMessage}")
               logError(className, errorMessage)
               throw new IllegalArgumentException(errorMessage)
           }
@@ -113,7 +114,6 @@ object KustoDataSourceUtils {
         className,
         "User cannot specify namePrefix for additionalExportOptions as it can lead to unexpected behavior in reading output")
     }
-
     KustoReadOptions(
       readMode,
       partitionOptions,
@@ -126,8 +126,9 @@ object KustoDataSourceUtils {
       sqlContext: SQLContext,
       requestedNumPartitions: Option[String],
       partitioningMode: Option[String]): Int = {
-    if (requestedNumPartitions.isDefined) requestedNumPartitions.get.toInt
-    else {
+    if (requestedNumPartitions.isDefined) {
+      requestedNumPartitions.get.toInt
+    } else {
       partitioningMode match {
         case Some("hash") => sqlContext.getConf("spark.sql.shuffle.partitions", "10").toInt
         // In "auto" mode we don't explicitly partition the data:
@@ -139,30 +140,30 @@ object KustoDataSourceUtils {
   }
 
   private val klog = Logger.getLogger("KustoConnector")
-
   val DefaultMicrosoftTenant = "microsoft.com"
   val NewLine: String = sys.props("line.separator")
-  var ReadInitialMaxWaitTime: FiniteDuration = 4 seconds
-  var ReadMaxWaitTime: FiniteDuration = 30 seconds
-  var WriteInitialMaxWaitTime: FiniteDuration = 2 seconds
-  var WriteMaxWaitTime: FiniteDuration = 10 seconds
+  private val ReadInitialMaxWaitTime: FiniteDuration = Duration.create(4, TimeUnit.SECONDS)
+  private val ReadMaxWaitTime: FiniteDuration = Duration.create(30, TimeUnit.SECONDS)
+  val WriteInitialMaxWaitTime: FiniteDuration = 2 seconds
+  val WriteMaxWaitTime: FiniteDuration = 10 seconds
 
-  val input: InputStream = getClass.getClassLoader.getResourceAsStream("spark.kusto.properties")
+  private val input: InputStream =
+    getClass.getClassLoader.getResourceAsStream("spark.kusto.properties")
   val props = new Properties()
   props.load(input)
   var Version: String = props.getProperty("application.version")
   var clientName = s"Kusto.Spark.Connector:$Version"
   val IngestPrefix: String = props.getProperty("ingestPrefix", "ingest-")
-  val EnginePrefix: String = props.getProperty("enginePrefix", "https://")
+  private val EnginePrefix: String = props.getProperty("enginePrefix", "https://")
   val DefaultDomainPostfix: String = props.getProperty("defaultDomainPostfix", "core.windows.net")
   val DefaultClusterSuffix: String =
     props.getProperty("defaultClusterSuffix", "kusto.windows.net")
-  val AriaClustersProxy: String =
+  private val AriaClustersProxy: String =
     props.getProperty("ariaClustersProxy", "https://kusto.aria.microsoft.com")
-  val PlayFabClustersProxy: String =
+  private val PlayFabClustersProxy: String =
     props.getProperty("playFabProxy", "https://insights.playfab.com")
-  val AriaClustersAlias: String = "Aria proxy"
-  val PlayFabClustersAlias: String = "PlayFab proxy"
+  private val AriaClustersAlias: String = "Aria proxy"
+  private val PlayFabClustersAlias: String = "PlayFab proxy"
   var loggingLevel: Level = Level.INFO
 
   def setLoggingLevel(level: String): Unit = {
@@ -263,7 +264,6 @@ object KustoDataSourceUtils {
             authorityId))
       }
     }
-
     // Look for conflicts
     var numberOfAuthenticationMethods = 0
     if (applicationId.nonEmpty) numberOfAuthenticationMethods += 1
@@ -274,7 +274,6 @@ object KustoDataSourceUtils {
       throw new IllegalArgumentException(
         "More than one authentication methods were provided. Failing.")
     }
-
     // Resolve authentication
     if (applicationId.nonEmpty) {
       // Application authentication
