@@ -48,11 +48,13 @@
             <groupId>org.scala-lang</groupId>
             <artifactId>scala-library</artifactId>
             <version>${scala.version.major}.${scala.version.minor}</version>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.scala-lang</groupId>
             <artifactId>scala-reflect</artifactId>
             <version>${scala.version.major}.${scala.version.minor}</version>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>com.microsoft.azure.kusto</groupId>
@@ -451,29 +453,6 @@
                 </executions>
             </plugin>
             <plugin>
-                <artifactId>maven-assembly-plugin</artifactId>
-                <version>3.2.0</version>
-                <executions>
-                    <execution>
-                        <id>make-assembly</id> <!-- this is used for inheritance merges -->
-                        <phase>package</phase> <!-- bind to the packaging phase -->
-                        <goals>
-                            <goal>single</goal>
-                        </goals>
-                    </execution>
-                </executions>
-                <configuration>
-                    <archive>
-                        <manifest>
-                            <mainClass>fully.qualified.MainClass</mainClass>
-                        </manifest>
-                    </archive>
-                    <descriptorRefs>
-                        <descriptorRef>jar-with-dependencies</descriptorRef>
-                    </descriptorRefs>
-                </configuration>
-            </plugin>
-            <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>${maven.compile.plugin.version}</version>
@@ -481,6 +460,274 @@
                     <source>${java.source.version}</source>
                     <target>${java.target.version}</target>
                 </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.5.2</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <relocations>
+                                <relocation>
+                                    <pattern>io.netty</pattern>
+                                    <shadedPattern>kusto_connector_shaded.io.netty</shadedPattern>
+                                </relocation>
+                                <!-- COM -->
+                                <relocation>
+                                    <pattern>com.microsoft.kusto</pattern>
+                                    <shadedPattern>kusto_connector_shaded.com.microsoft.kusto</shadedPattern>
+                                    <excludes>
+                                        <exclude>com.microsoft.kusto.spark.synapse.*</exclude>
+                                        <exclude>com.microsoft.kusto.spark.synapse.common.*</exclude>
+                                        <exclude>com.microsoft.kusto.spark.synapse.datasink.*</exclude>
+                                        <exclude>com.microsoft.kusto.spark.synapse.datasource.*</exclude>
+                                        <exclude>com.microsoft.kusto.spark.synapse.utils.*</exclude>
+                                    </excludes>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.microsoft.azure</pattern>
+                                    <shadedPattern>kusto_connector_shaded.com.microsoft.azure</shadedPattern>
+                                    <excludes>
+                                        <exclude>com.microsoft.kusto.spark.*</exclude>
+                                        <exclude>com.microsoft.kusto.spark.authentication.*</exclude>
+                                        <exclude>com.microsoft.kusto.spark.common.*</exclude>
+                                        <exclude>com.microsoft.kusto.spark.datasink.*</exclude>
+                                        <exclude>com.microsoft.kusto.spark.datasource.*</exclude>
+                                        <exclude>com.microsoft.kusto.spark.exceptions.*</exclude>
+                                        <exclude>com.microsoft.kusto.spark.sql.*</exclude>
+                                        <exclude>com.microsoft.kusto.spark.sql.extension.*</exclude>
+                                        <exclude>com.microsoft.kusto.spark.utils.*</exclude>
+                                    </excludes>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.microsoft.spark</pattern>
+                                    <shadedPattern>kusto_connector_shaded.com.microsoft.spark</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.microsoft.aad</pattern>
+                                    <shadedPattern>kusto_connector_shaded.com.microsoft.aad</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.azure.storage</pattern>
+                                    <shadedPattern>kusto_connector_shaded.com.azure.storage</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.azure.security</pattern>
+                                    <shadedPattern>kusto_connector_shaded.com.azure.security</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.azure.json</pattern>
+                                    <shadedPattern>kusto_connector_shaded.com.azure.json</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.azure.identity</pattern>
+                                    <shadedPattern>kusto_connector_shaded.com.azure.identity</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.azure.data</pattern>
+                                    <shadedPattern>kusto_connector_shaded.com.azure.data</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.azure.core</pattern>
+                                    <shadedPattern>kusto_connector_shaded.com.azure.core</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.thoughtworks.paranamer</pattern>
+                                    <shadedPattern>kusto_connector_shaded.com.thoughtworks.paranamer</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.sun.jna</pattern>
+                                    <shadedPattern>kusto_connector_shaded.com.sun.jna</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.nimbusds.openid</pattern>
+                                    <shadedPattern>kusto_connector_shaded.com.nimbusds.openid</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.nimbusds.oauth2</pattern>
+                                    <shadedPattern>kusto_connector_shaded.com.nimbusds.oauth2</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.nimbusds.jwt</pattern>
+                                    <shadedPattern>kusto_connector_shaded.com.nimbusds.jwt</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.nimbusds.jose</pattern>
+                                    <shadedPattern>kusto_connector_shaded.com.nimbusds.jose</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.nimbusds.common</pattern>
+                                    <shadedPattern>kusto_connector_shaded.com.nimbusds.common</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.google.common</pattern>
+                                    <shadedPattern>kusto_connector_shaded.com.google.common</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.fasterxml.jackson.module</pattern>
+                                    <shadedPattern>kusto_connector_shaded.com.fasterxml.jackson.module</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.fasterxml.jackson.datatype</pattern>
+                                    <shadedPattern>kusto_connector_shaded.com.fasterxml.jackson.datatype</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.fasterxml.jackson.dataformat</pattern>
+                                    <shadedPattern>kusto_connector_shaded.com.fasterxml.jackson.dataformat</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.fasterxml.jackson.databind</pattern>
+                                    <shadedPattern>kusto_connector_shaded.com.fasterxml.jackson.databind</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.fasterxml.jackson.core</pattern>
+                                    <shadedPattern>kusto_connector_shaded.com.fasterxml.jackson.core</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.fasterxml.jackson.annotation</pattern>
+                                    <shadedPattern>kusto_connector_shaded.com.fasterxml.jackson.annotation</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.ctc.wstx</pattern>
+                                    <shadedPattern>kusto_connector_shaded.com.ctc.wstx</shadedPattern>
+                                </relocation>
+                                <!-- ORG -->
+                                <relocation>
+                                    <pattern>org.slf4j</pattern>
+                                    <shadedPattern>kusto_connector_shaded.org.slf4j</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>org.reactivestreams</pattern>
+                                    <shadedPattern>kusto_connector_shaded.org.reactivestreams</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>org.objectweb</pattern>
+                                    <shadedPattern>kusto_connector_shaded.org.objectweb</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>org.jetbrains</pattern>
+                                    <shadedPattern>kusto_connector_shaded.org.jetbrains</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>org.codehaus</pattern>
+                                    <shadedPattern>kusto_connector_shaded.org.codehaus</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>org.apache.http</pattern>
+                                    <shadedPattern>kusto_connector_shaded.org.apache.http</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>org.apache.common</pattern>
+                                    <shadedPattern>kusto_connector_shaded.org.apache.common</shadedPattern>
+                                </relocation>
+                                <!-- IO -->
+                                <relocation>
+                                    <pattern>io.vavr</pattern>
+                                    <shadedPattern>kusto_connector_shaded.io.vavr</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>io.github</pattern>
+                                    <shadedPattern>kusto_connector_shaded.io.github</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>net.minidev</pattern>
+                                    <shadedPattern>kusto_connector_shaded.net.minidev</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>net.jcip</pattern>
+                                    <shadedPattern>kusto_connector_shaded.net.jcip</shadedPattern>
+                                </relocation>
+                                <!-- Reactor -->
+                                <relocation>
+                                    <pattern>reactor.util</pattern>
+                                    <shadedPattern>kusto_connector_shaded.reactor.util</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>reactor.netty</pattern>
+                                    <shadedPattern>kusto_connector_shaded.reactor.netty</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>reactor.adapter</pattern>
+                                    <shadedPattern>kusto_connector_shaded.reactor.adapter</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>reactor.core</pattern>
+                                    <shadedPattern>kusto_connector_shaded.reactor.core</shadedPattern>
+                                </relocation>
+                                <!-- JAVAX -->
+                                <relocation>
+                                    <pattern>javax.annotation</pattern>
+                                    <shadedPattern>kusto_connector_shaded.javax.annotation</shadedPattern>
+                                </relocation>
+                            </relocations>
+                            <filters>
+                                <filter>
+                                    <artifact>*:*</artifact>
+                                    <excludes>
+                                        <exclude>META-INF/services/javax.annotation.processing.Processor</exclude>
+                                        <exclude>META-INF/*.MF</exclude>
+                                        <exclude>META-INF/*.SF</exclude>
+                                        <exclude>META-INF/*.DSA</exclude>
+                                        <exclude>META-INF/*.RSA</exclude>
+                                    </excludes>
+                                </filter>
+                                <filter>
+                                    <artifact>commons-logging:commons-logging</artifact>
+                                    <includes>
+                                        <include>**</include>
+                                    </includes>
+                                </filter>
+                            </filters>
+                            <artifactSet>
+                                <excludes>
+                                    <exclude>org.tachyonproject:tachyon-client</exclude>
+                                    <exclude>org.apache.hadoop:*</exclude>
+                                    <exclude>org.apache.spark:*</exclude>
+                                    <exclude>org.scala-lang:*</exclude>
+                                    <exclude>org.apache.tinkerpop:*</exclude>
+                                </excludes>
+                            </artifactSet>
+                            <transformers>
+                                <!-- The PropertiesTransformer allows a set of properties files to be merged
+                                and to resolve conflicts based on an ordinal giving the priority of each file.
+                                An optional alreadyMergedKey enables to have a boolean flag in the file which,
+                                if set to true, request to use the file as it as the result of the merge.
+                                If two files are considered complete in the merge process then the shade will fail.-->
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.properties.PropertiesTransformer">
+                                    <!-- required configuration -->
+                                    <!-- merges all netty lib version files into one file -->
+                                    <resource>META-INF/io.netty.versions.properties</resource>
+                                    <ordinalKey>ordinal</ordinalKey>
+                                    <!-- optional configuration -->
+                                    <alreadyMergedKey>already_merged</alreadyMergedKey>
+                                    <defaultOrdinal>0</defaultOrdinal>
+                                    <reverseOrder>false</reverseOrder>
+                                </transformer>
+                                <!-- this handles and properly merges the content of META-INF/services in the dependencies -->
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                                    <!-- once 3.3.0 shade plugin is release upgrade the maven plugin and remove AppendingTransformer
+                                        https://issues.apache.org/jira/browse/MSHADE-371 -->
+                                    <resource>META-INF/NOTICE.md</resource>
+                                </transformer>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                                    <!-- once 3.3.0 shade plugin is release upgrade the maven plugin and remove AppendingTransformer
+                                    https://issues.apache.org/jira/browse/MSHADE-371 -->
+                                    <resource>META-INF/LICENSE.md</resource>
+                                </transformer>
+                            </transformers>
+                            <!-- When true, it will attempt to shade the contents of the java source files when creating the sources jar. -->
+                            <shadeSourcesContent>true</shadeSourcesContent>
+                            <minimizeJar>true</minimizeJar>
+                            <finalName>${project.artifactId}-${project.version}</finalName>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>
