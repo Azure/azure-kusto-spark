@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT License.
+
 package com.microsoft.kusto.spark.authentication
 
 import com.microsoft.kusto.spark.utils.KustoConstants
