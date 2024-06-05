@@ -144,8 +144,8 @@ object KustoDataSourceUtils {
   val NewLine: String = sys.props("line.separator")
   private val ReadInitialMaxWaitTime: FiniteDuration = Duration.create(4, TimeUnit.SECONDS)
   private val ReadMaxWaitTime: FiniteDuration = Duration.create(30, TimeUnit.SECONDS)
-  val WriteInitialMaxWaitTime: FiniteDuration = 2 seconds
-  val WriteMaxWaitTime: FiniteDuration = 10 seconds
+  val WriteInitialMaxWaitTime: FiniteDuration = Duration.create(2, TimeUnit.SECONDS)
+  val WriteMaxWaitTime: FiniteDuration = Duration.create(10, TimeUnit.SECONDS)
 
   private val input: InputStream =
     getClass.getClassLoader.getResourceAsStream("spark.kusto.properties")
