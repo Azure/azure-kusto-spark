@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT License.
+
 package com.microsoft.kusto.spark
 
 import com.microsoft.kusto.spark.datasource.{KustoFilter, KustoFiltering, KustoSchema}

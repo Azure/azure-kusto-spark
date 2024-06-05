@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT License.
+
 package com.microsoft.kusto.spark.datasink
 
 import com.azure.storage.common.policy.{RequestRetryOptions, RetryPolicyType}
