@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
-
 package com.microsoft.kusto.spark
 
 import com.microsoft.azure.kusto.data.ClientFactory
@@ -10,7 +9,10 @@ import com.microsoft.kusto.spark.KustoTestUtils.getSystemTestOptions
 import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode}
 import com.microsoft.kusto.spark.datasource.{KustoSourceOptions, ReadMode}
 import com.microsoft.kusto.spark.sql.extension.SparkExtension.DataFrameReaderExtension
-import com.microsoft.kusto.spark.utils.CslCommandsGenerator.generateTempTableCreateCommand
+import com.microsoft.kusto.spark.utils.CslCommandsGenerator.{
+  generateTableAlterStreamIngestionCommand,
+  generateTempTableCreateCommand
+}
 import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.spark.SparkContext
 import org.apache.spark.sql._
@@ -31,7 +33,6 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
   private val rowId2 = new AtomicInteger(1)
   private val timeoutMs: Int = 8 * 60 * 1000 // 8 minutes
   private val sleepTimeTillTableCreate: Int = 3 * 60 * 1000 // 2 minutes
-
   private def newRow(): String = s"row-${rowId.getAndIncrement()}"
   private def newAllDataTypesRow(v: Int): (
       String,
@@ -394,7 +395,7 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
     KustoTestUtils.validateResultsAndCleanup(
       kustoAdminClient,
       table,
-      database,
+      kustoTestConnectionOptions.database,
       expectedNumberOfRows,
       timeoutMs,
       tableCleanupPrefix = prefix)
@@ -405,27 +406,25 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
     val df = rows.toDF("name", "value")
     val prefix = "KustoBatchSinkE2EIngestStreamIngestion"
     val table = KustoQueryUtils.simplifyName(s"${prefix}_${UUID.randomUUID()}")
-    val engineKcsb = ConnectionStringBuilder.createWithAadApplicationCredentials(
-      s"https://$cluster.kusto.windows.net",
-      appId,
-      appKey,
-      authority)
+    val engineKcsb = ConnectionStringBuilder.createWithAadAccessTokenAuthentication(
+      kustoTestConnectionOptions.cluster,
+      kustoTestConnectionOptions.accessToken)
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
     kustoAdminClient.execute(
-      database,
+      kustoTestConnectionOptions.database,
       generateTempTableCreateCommand(table, columnsTypesAndNames = "ColA:string, ColB:int"))
-    kustoAdminClient.execute(database, generateTableAlterStreamIngestionCommand(table))
+    kustoAdminClient.execute(
+      kustoTestConnectionOptions.database,
+      generateTableAlterStreamIngestionCommand(table))
 
     Thread.sleep(sleepTimeTillTableCreate)
 
     df.write
       .format("com.microsoft.kusto.spark.datasource")
-      .option(KustoSinkOptions.KUSTO_CLUSTER, cluster)
-      .option(KustoSinkOptions.KUSTO_DATABASE, database)
+      .option(KustoSinkOptions.KUSTO_CLUSTER, kustoTestConnectionOptions.cluster)
+      .option(KustoSinkOptions.KUSTO_DATABASE, kustoTestConnectionOptions.database)
       .option(KustoSinkOptions.KUSTO_TABLE, table)
-      .option(KustoSinkOptions.KUSTO_AAD_APP_ID, appId)
-      .option(KustoSinkOptions.KUSTO_AAD_APP_SECRET, appKey)
-      .option(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID, authority)
+      .option(KustoSinkOptions.KUSTO_ACCESS_TOKEN, kustoTestConnectionOptions.accessToken)
       .option(KustoSinkOptions.KUSTO_WRITE_MODE, "Stream")
       .mode(SaveMode.Append)
       .save()
