@@ -13,16 +13,18 @@ import java.util
 import com.microsoft.azure.kusto.ingest.{IngestionMapping, IngestionProperties}
 
 import java.time.Instant
+import java.util.Objects
 
 class SparkIngestionProperties(
     var flushImmediately: Boolean = false,
-    var dropByTags: util.ArrayList[String] = null,
-    var ingestByTags: util.ArrayList[String] = null,
-    var additionalTags: util.ArrayList[String] = null,
+    var dropByTags: util.List[String] = null,
+    var ingestByTags: util.List[String] = null,
+    var additionalTags: util.List[String] = null,
     var ingestIfNotExists: util.List[String] = null,
     var creationTime: Instant = null,
     var csvMapping: String = null,
-    var csvMappingNameReference: String = null) {
+    var csvMappingNameReference: String = null)
+    extends Serializable {
   // C'tor for serialization
   def this() {
     this(false)
@@ -35,6 +37,18 @@ class SparkIngestionProperties(
       .setVisibility(PropertyAccessor.FIELD, Visibility.ANY)
       .writerWithDefaultPrettyPrinter
       .writeValueAsString(this)
+  }
+
+  // In case of Streaming, these options are not supported. The idea is to validate before sending the request to Kusto
+  def validateStreamingProperties(): Unit = {
+    if ((this.ingestByTags != null && !this.ingestByTags.isEmpty)
+      || (this.dropByTags != null && !this.dropByTags.isEmpty)
+      || (this.additionalTags != null && !this.additionalTags.isEmpty)
+      || Objects.nonNull(creationTime)) {
+      throw new IllegalArgumentException(
+        "Ingest by tags / Drop by tags / Additional tags / Creation Time are not supported for streaming ingestion " +
+          "through SparkIngestionProperties")
+    }
   }
 
   def toIngestionProperties(database: String, table: String): IngestionProperties = {
