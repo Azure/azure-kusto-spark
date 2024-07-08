@@ -102,16 +102,16 @@ Scala and Java users may take these options from com.microsoft.kusto.spark.datas
 
   The following is the behavior of the connector in either of these read modes
 
-  * **ForceSingleMode** : In force single mode Direct query and get the results
+  * **Single mode** : In force single mode Direct query and get the results
 
-  * **ForceDistributedMode** : When you hit Kusto [query limits](https://aka.ms/kustoquerylimits) (memory / number of records), data is [exported](https://learn.microsoft.com/en-us/azure/data-explorer/kusto/management/data-export/export-data-to-storage) to Blob storage (export containers) , then the exported data is read and processed into a Dataframe. 
+  * **Distributed mode** : When you hit Kusto [query limits](https://aka.ms/kustoquerylimits) (memory / number of records), data is [exported](https://learn.microsoft.com/en-us/azure/data-explorer/kusto/management/data-export/export-data-to-storage) to Blob storage (export containers) , then the exported data is read and processed into a Dataframe. 
 
-  * **Automatic selection of the mode** : In case these options are not specified, the connector tries to count the approximate row counts and the approximate time the query takes. If the approximate row counts exceed the query limits specified above (or) the query times out (or) a memory limit exception is hit from the query, the connector will automatically use **ForceDistributedMode**.
+  * **Default selection of the mode** : In case these options are not specified, the connector tries to approximate row count and the time the query would take. If the approximated row count exceeds the query limits specified above, the connector will automatically use Distributed mode.
 
-  **Note**: Using ForceDistributedMode will use an external storage hop and will add to COGS because of the storage that is used in between.
+  **Note**: Distributed mode will use an external storage hop and will add to COGS because of the storage that is used in between.
 
   **Storage security**
-  In ForceDistributedMode by default the internal Kusto storage accounts are queried and used for ease of the connector. In Production scenarios, it is recommended that this is not used. The storage to be used can be customized by passing [Transient storage parameters](#transient-storage-parameters) parameter specified below. This gives the caller of the read a lot more granular control on blob security policies as opposed to default blob security policies used by the connector and Kusto. This will also come in useful when Kusto administrators restrict security by applying callout policies on what hosts can traffic be let onto. If traffic is not permitted by administrators to the default internal storage, the read operation will fail for ForceDistributedMode.
+  In Distributed mode by default the internal Kusto storage accounts are queried and used for ease of the connector. This is not recommended in production scenarios. The storage to be used can be customized by passing [Transient storage parameters](#transient-storage-parameters) parameter specified below. This gives the caller of the read a more granular control on blob security policies as opposed to default blob security policies used by the connector and Kusto. This will also come in useful when Kusto administrators restrict security by applying callout policies on what hosts can traffic be let onto. If traffic is not permitted by administrators to the default internal storage, the read operation will fail for Distributed mode.
 
 * **KUSTO_DISTRIBUTED_READ_MODE_TRANSIENT_CACHE**
 When 'Distributed' read mode is used and this is set to 'true', the request query is exported only once and exported data is reused.
