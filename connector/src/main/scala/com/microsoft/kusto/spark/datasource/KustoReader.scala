@@ -6,17 +6,12 @@ package com.microsoft.kusto.spark.datasource
 import com.azure.core.credential.AzureSasCredential
 import com.azure.storage.blob.BlobContainerClientBuilder
 import com.azure.storage.common.StorageSharedKeyCredential
+import com.google.common.collect.Iterables
 import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties, KustoResultSetTable}
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasource.ReadMode.ReadMode
-import com.microsoft.kusto.spark.utils.{
-  CslCommandsGenerator,
-  ExtendedKustoClient,
-  KustoAzureFsSetupCache,
-  KustoBlobStorageUtils,
-  KustoDataSourceUtils => KDSU
-}
+import com.microsoft.kusto.spark.utils.{CslCommandsGenerator, ExtendedKustoClient, KustoAzureFsSetupCache, KustoBlobStorageUtils, KustoDataSourceUtils => KDSU}
 import org.apache.hadoop.util.ComparableVersion
 import org.apache.spark.Partition
 import org.apache.spark.rdd.RDD
@@ -216,7 +211,7 @@ private[kusto] object KustoReader {
           .buildClient()
       }
       //
-      val exists = container.listBlobsByHierarchy(directory).stream().count() > 0
+      val exists = container.listBlobsByHierarchy(directory).iterableByPage(1).iterator().hasNext
 // Existing logic container.exists() && container.getDirectoryReference(directory).listBlobsSegmented().getLength > 0
       exists
     }
