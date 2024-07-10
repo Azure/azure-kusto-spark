@@ -514,6 +514,7 @@
                                     <shadedPattern>${kusto.shade.prefix}.com.microsoft.kusto</shadedPattern>
                                     <excludes>
                                         <exclude>com.microsoft.kusto.spark.authentication.*</exclude>
+                                        <exclude>com.microsoft.kusto.spark.common.*</exclude>
                                         <exclude>com.microsoft.kusto.spark.datasink.*</exclude>
                                         <exclude>com.microsoft.kusto.spark.datasource.*</exclude>
                                         <exclude>com.microsoft.kusto.spark.exceptions.*</exclude>
