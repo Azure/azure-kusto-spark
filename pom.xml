@@ -33,13 +33,11 @@
         <maven.compile.plugin.version>3.10.1</maven.compile.plugin.version>
         <maven.flatten.version>1.4.1</maven.flatten.version>
         <maven.jar.plugin.version>3.3.0</maven.jar.plugin.version>
-        <maven.shade.plugin.version>3.5.1</maven.shade.plugin.version>
+        <maven.shade.plugin.version>3.5.2</maven.shade.plugin.version>
         <maven.source.plugin.version>3.0.1</maven.source.plugin.version>
         <maven.surefire.plugin.version>3.0.0</maven.surefire.plugin.version>
         <mockito.version>4.11.0</mockito.version>
-        <netty.version>4.1.94.Final</netty.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <reactor.netty.version>1.0.39</reactor.netty.version>
         <scala.maven.plugin.version>4.8.1</scala.maven.plugin.version>
         <scalamock.version>5.2.0</scalamock.version>
         <scalastyle.maven.plugin.version>1.0.0</scalastyle.maven.plugin.version>
@@ -50,6 +48,7 @@
         <specs2.version>3.6.5</specs2.version>
         <msal4j.version>1.16.0</msal4j.version>
         <az.identity.version>1.12.0</az.identity.version>
+        <kusto.shade.prefix>kusto_connector_shaded</kusto.shade.prefix>
     </properties>
 
     <inceptionYear>2018</inceptionYear>
