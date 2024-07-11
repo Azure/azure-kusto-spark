@@ -120,18 +120,6 @@
                     <artifactId>azure-storage-blob</artifactId>
                 </exclusion>
                 <exclusion>
-                    <groupId>io.netty</groupId>
-                    <artifactId>netty-codec</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>io.projectreactor.netty</groupId>
-                    <artifactId>reactor-netty-http</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>io.projectreactor.netty</groupId>
-                    <artifactId>reactor-netty-core</artifactId>
-                </exclusion>
-                <exclusion>
                     <groupId>com.azure</groupId>
                     <artifactId>azure-storage-queue</artifactId>
                 </exclusion>
@@ -148,21 +136,6 @@
         <dependency>
             <groupId>com.azure</groupId>
             <artifactId>azure-storage-common</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>io.netty</groupId>
-            <artifactId>netty-codec</artifactId>
-            <version>${netty.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>io.projectreactor.netty</groupId>
-            <artifactId>reactor-netty-core</artifactId>
-            <version>${reactor.netty.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>io.projectreactor.netty</groupId>
-            <artifactId>reactor-netty-http</artifactId>
-            <version>${reactor.netty.version}</version>
         </dependency>
         <dependency>
             <groupId>com.azure</groupId>
