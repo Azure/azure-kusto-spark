@@ -97,7 +97,7 @@ class ExtendedKustoClient(
         }
         tmpTableSchema = tableSchemaBuilder.toString
         executeEngine(database, generateTableCreateCommand(table, tmpTableSchema), crp)
-        if (writeOptions.writeMode == WriteMode.Stream) {
+        if (writeOptions.writeMode == WriteMode.KustoStreaming) {
           executeEngine(database, generateTableAlterStreamIngestionCommand(table), crp)
           executeEngine(database, generateClearStreamingIngestionCacheCommand(table), crp)
         }

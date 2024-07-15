@@ -76,7 +76,7 @@ object KustoSinkOptions extends KustoOptions {
   val KUSTO_TEMP_TABLE_NAME: String = newOption("tempTableName")
 
   // The batch size that we want to use for each "streaming batch". The default is 4MB.
-  val KUSTO_STREAMING_INGEST_SIZE = newOption("kustoStreamingIngestSize")
+  val KUSTO_STREAMING_INGEST_SIZE: String = newOption("kustoStreamingIngestSizeInMB")
 
 }
 
@@ -92,7 +92,7 @@ object SchemaAdjustmentMode extends Enumeration {
 
 object WriteMode extends Enumeration {
   type WriteMode = Value
-  val Transactional, Queued, Stream = Value
+  val Transactional, Queued, KustoStreaming = Value
 }
 
 case class WriteOptions(

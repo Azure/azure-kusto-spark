@@ -15,7 +15,7 @@ import com.microsoft.kusto.spark.common.{KustoCoordinates, KustoDebugOptions}
 import com.microsoft.kusto.spark.datasink.KustoWriter.TempIngestionTablePrefix
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
 import com.microsoft.kusto.spark.datasink.WriteMode.WriteMode
-import com.microsoft.kusto.spark.datasink._
+import com.microsoft.kusto.spark.datasink.{SchemaAdjustmentMode, _}
 import com.microsoft.kusto.spark.datasource.ReadMode.ReadMode
 import com.microsoft.kusto.spark.datasource._
 import com.microsoft.kusto.spark.exceptions.{
@@ -367,9 +367,11 @@ object KustoDataSourceUtils {
       clientRequestProperties)
   }
 
-  case class SinkParameters(writeOptions: WriteOptions, sourceParametersResults: SourceParameters)
+  final case class SinkParameters(
+      writeOptions: WriteOptions,
+      sourceParametersResults: SourceParameters)
 
-  case class SourceParameters(
+  final case class SourceParameters(
       authenticationParameters: KustoAuthentication,
       kustoCoordinates: KustoCoordinates,
       keyVaultAuth: Option[KeyVaultAuthentication],
@@ -446,10 +448,17 @@ object KustoDataSourceUtils {
       .trim
       .toInt
 
-    val adjustSchemaParam = parameters.get(KustoSinkOptions.KUSTO_ADJUST_SCHEMA)
-    val adjustSchema =
-      if (adjustSchemaParam.isEmpty) SchemaAdjustmentMode.NoAdjustment
-      else SchemaAdjustmentMode.withName(adjustSchemaParam.get)
+    val maybeSchemaAdjustmentParam = parameters.get(KustoSinkOptions.KUSTO_ADJUST_SCHEMA)
+    val adjustSchema = maybeSchemaAdjustmentParam match {
+      case Some(param) =>
+        SchemaAdjustmentMode.withName(param)
+      case None => SchemaAdjustmentMode.NoAdjustment
+    }
+
+    if (adjustSchema == SchemaAdjustmentMode.GenerateDynamicCsvMapping && writeMode == WriteMode.KustoStreaming) {
+      throw new InvalidParameterException(
+        "GenerateDynamicCsvMapping cannot be used with Spark streaming ingestion")
+    }
 
     val timeout = new FiniteDuration(
       parameters
@@ -475,7 +484,7 @@ object KustoDataSourceUtils {
     val sourceParameters = parseSourceParameters(parameters, allowProxy = false)
 
     val maybeSparkIngestionProperties =
-      getIngestionProperties(writeMode == WriteMode.Stream, ingestionPropertiesAsJson)
+      getIngestionProperties(writeMode == WriteMode.KustoStreaming, ingestionPropertiesAsJson)
 
     val writeOptions = WriteOptions(
       pollingOnDriver,

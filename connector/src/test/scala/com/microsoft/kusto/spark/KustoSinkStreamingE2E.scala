@@ -22,6 +22,7 @@ import org.apache.spark.sql.{SQLContext, SparkSession}
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.flatspec.AnyFlatSpec
 
+import java.security.InvalidParameterException
 import java.util.UUID
 
 class KustoSinkStreamingE2E extends AnyFlatSpec with BeforeAndAfterAll {
@@ -177,7 +178,7 @@ class KustoSinkStreamingE2E extends AnyFlatSpec with BeforeAndAfterAll {
         KustoSinkOptions.KUSTO_TABLE -> table,
         KustoSinkOptions.KUSTO_DATABASE -> kustoTestConnectionOptions.database,
         KustoSinkOptions.KUSTO_ACCESS_TOKEN -> kustoTestConnectionOptions.accessToken,
-        KustoSinkOptions.KUSTO_WRITE_MODE -> WriteMode.Stream.toString))
+        KustoSinkOptions.KUSTO_WRITE_MODE -> WriteMode.KustoStreaming.toString))
       .trigger(Trigger.Once)
 
     kustoQ.start().awaitTermination()
@@ -198,13 +199,10 @@ class KustoSinkStreamingE2E extends AnyFlatSpec with BeforeAndAfterAll {
       s"https://${kustoTestConnectionOptions.cluster}.kusto.windows.net",
       kustoTestConnectionOptions.accessToken)
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
-
     val csvDf = spark.readStream
       .schema(customSchema)
       .csv(csvPath)
-
     spark.conf.set("spark.sql.streaming.checkpointLocation", "target/temp/checkpoint")
-
     val kustoQ = csvDf.writeStream
       .format("com.microsoft.kusto.spark.datasink.KustoSinkProvider")
       .options(Map(
@@ -213,11 +211,9 @@ class KustoSinkStreamingE2E extends AnyFlatSpec with BeforeAndAfterAll {
         KustoSinkOptions.KUSTO_DATABASE -> kustoTestConnectionOptions.database,
         KustoSinkOptions.KUSTO_ACCESS_TOKEN -> kustoTestConnectionOptions.accessToken,
         KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS -> SinkTableCreationMode.CreateIfNotExist.toString,
-        KustoSinkOptions.KUSTO_WRITE_MODE -> WriteMode.Stream.toString))
+        KustoSinkOptions.KUSTO_WRITE_MODE -> WriteMode.KustoStreaming.toString))
       .trigger(Trigger.Once)
-
     kustoQ.start().awaitTermination()
-
     KustoTestUtils.validateResultsAndCleanup(
       kustoAdminClient,
       table,
@@ -225,5 +221,26 @@ class KustoSinkStreamingE2E extends AnyFlatSpec with BeforeAndAfterAll {
       expectedNumberOfRows,
       10,
       tableCleanupPrefix = prefix)
+  }
+
+  "KustoStreamingSinkStreamingIngestion" should "fail when dynamic CSV mapping is used" taggedAs KustoE2E in {
+    val prefix = "KustoStreamingSparkE2E_StreamIngest"
+    val table = s"${prefix}_${UUID.randomUUID().toString.replace("-", "_")}"
+    val csvDf = spark.readStream
+      .schema(customSchema)
+      .csv(csvPath)
+    spark.conf.set("spark.sql.streaming.checkpointLocation", "target/temp/checkpoint")
+    val kustoQ = csvDf.writeStream
+      .format("com.microsoft.kusto.spark.datasink.KustoSinkProvider")
+      .options(Map(
+        KustoSinkOptions.KUSTO_CLUSTER -> kustoTestConnectionOptions.cluster,
+        KustoSinkOptions.KUSTO_TABLE -> table,
+        KustoSinkOptions.KUSTO_DATABASE -> kustoTestConnectionOptions.database,
+        KustoSinkOptions.KUSTO_ADJUST_SCHEMA -> "GenerateDynamicCsvMapping",
+        KustoSinkOptions.KUSTO_ACCESS_TOKEN -> kustoTestConnectionOptions.accessToken,
+        KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS -> SinkTableCreationMode.CreateIfNotExist.toString,
+        KustoSinkOptions.KUSTO_WRITE_MODE -> WriteMode.KustoStreaming.toString))
+      .trigger(Trigger.Once)
+    assertThrows[InvalidParameterException](kustoQ.start().awaitTermination())
   }
 }
