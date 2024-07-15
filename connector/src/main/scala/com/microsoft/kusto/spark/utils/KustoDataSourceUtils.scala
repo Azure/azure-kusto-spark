@@ -529,7 +529,6 @@ object KustoDataSourceUtils {
   private def getIngestionProperties(
       isStreamingIngestion: Boolean,
       mayBeIngestionPropertiesAsJson: Option[String]): Option[SparkIngestionProperties] = {
-
     mayBeIngestionPropertiesAsJson match {
       case Some(ingestionPropertiesAsJson) =>
         val sip = SparkIngestionProperties.fromString(ingestionPropertiesAsJson)
