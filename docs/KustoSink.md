@@ -73,7 +73,7 @@ All the options that can be used in the Kusto Sink can be found in KustoSinkOpti
   'Queued' mode scales better than the Transactional mode as it doesn't need to do track each individual ingestion created by the workers.
   This can also solve many problems faced when using Transactional mode intermediate table and better work with Materialized views.
   *Note - Both modes above are using Kusto native queued ingestion as described [here](https://learn.microsoft.com/azure/data-explorer/kusto/api/netfx/about-kusto-ingest#queued-ingestion).  
-  'Stream' mode - uses [stream ingestion](https://learn.microsoft.com/azure/data-explorer/ingest-data-streaming?tabs=azure-portal%2Cjava) 
+  'KustoStreaming' mode - uses [stream ingestion](https://learn.microsoft.com/azure/data-explorer/ingest-data-streaming?tabs=azure-portal%2Cjava) 
   to load data into Kusto. Streaming ingestion is useful for loading data when you need low latency between ingestion and query.
   *Note - [Streaming ingestion policy](https://learn.microsoft.com/en-us/azure/data-explorer/kusto/management/streamingingestionpolicy) must be enabled on the destination table or database and enabled on cluster configuration (see [documentation](https://learn.microsoft.com/azure/data-explorer/ingest-data-streaming?tabs=azure-portal%2Cjava) for details).
   As ADX Streaming ingestion has a [data size limit](https://learn.microsoft.com/azure/data-explorer/ingest-data-streaming) of 4 MB, for each partition over a batched rdd the connector will ingest 4MB chunks of data, ingesting each individually. For each such batch - The connector will try 3 times to stream the data and if fails it will fallback to uploading it to blob storage and queue the ingestion. 
