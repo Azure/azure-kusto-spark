@@ -279,7 +279,7 @@ object KustoWriter {
         } else {
           parameters.coordinates.table.get
         })
-      if (parameters.writeOptions.writeMode == WriteMode.Stream) {
+      if (parameters.writeOptions.writeMode == WriteMode.KustoStreaming) {
         streamRowsIntoKustoByWorkers(batchIdForTracing, rows, ingestionProperties, parameters)
       } else {
         ingestToTemporaryTableByWorkers(
@@ -292,12 +292,11 @@ object KustoWriter {
     }
   }
 
-  def ingestRowsIntoKusto(
+  private def ingestRowsIntoKusto(
       rows: Iterator[InternalRow],
       ingestClient: IngestClient,
       partitionsResults: CollectionAccumulator[PartitionResult],
       batchIdForTracing: String,
-      ingestionProperties: IngestionProperties, // TODO not used
       parameters: KustoWriteResource): Unit = {
     // Transactional mode write into the temp table instead of the destination table
     val ingestionProperties = getIngestionProperties(
@@ -513,13 +512,7 @@ object KustoWriter {
     ingestClient.setQueueRequestOptions(reqRetryOpts)
     // We force blocking here, since the driver can only complete the ingestion process
     // once all partitions are ingested into the temporary table
-    ingestRowsIntoKusto(
-      rows,
-      ingestClient,
-      partitionsResults,
-      batchIdForTracing,
-      ingestionProperties,
-      parameters)
+    ingestRowsIntoKusto(rows, ingestClient, partitionsResults, batchIdForTracing, parameters)
   }
 
   private def createBlobWriter(

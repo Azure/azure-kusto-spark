@@ -11,6 +11,8 @@ import com.microsoft.azure.kusto.ingest.IngestionMapping.IngestionMappingKind
 
 import java.util
 import com.microsoft.azure.kusto.ingest.{IngestionMapping, IngestionProperties}
+import org.apache.commons.collections.CollectionUtils
+import org.apache.commons.lang3.StringUtils
 
 import java.time.Instant
 import java.util.Objects
@@ -48,6 +50,11 @@ class SparkIngestionProperties(
       throw new IllegalArgumentException(
         "Ingest by tags / Drop by tags / Additional tags / Creation Time are not supported for streaming ingestion " +
           "through SparkIngestionProperties")
+    }
+
+    if (StringUtils.isNotEmpty(this.csvMapping)) {
+      throw new IllegalArgumentException(
+        "CSVMapping cannot be used with Spark streaming ingestion")
     }
   }
 
