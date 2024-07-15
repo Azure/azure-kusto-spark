@@ -100,6 +100,19 @@ All the options that can be used in the Kusto Source can be found in KustoSource
 Options are - 'ForceSingleMode', 'ForceDistributedMode'.
 Scala and Java users may take these options from com.microsoft.kusto.spark.datasource.ReadMode.
 
+  The following is the behavior of the connector in either of these read modes
+
+  * **Single mode** : In single mode Direct query and get the results
+
+  * **Distributed mode** : When you hit Kusto [query limits](https://aka.ms/kustoquerylimits) (memory / number of records), data is [exported](https://learn.microsoft.com/en-us/azure/data-explorer/kusto/management/data-export/export-data-to-storage) to Blob storage (export containers) , then the exported data is read and processed into a Dataframe. 
+
+  * **Default selection of the mode** : In case these options are not specified, the connector tries to approximate row count and the time the query would take. If the approximated row count exceeds the query limits specified above, the connector will automatically use Distributed mode.
+
+  **Note**: Distributed mode will use an external storage hop and will add to COGS because of the storage that is used in between.
+
+  **Storage security**
+  In Distributed mode by default the internal Kusto storage accounts are queried and used for ease of the connector. This is not recommended in production scenarios. The storage to be used can be customized by passing [Transient storage parameters](#transient-storage-parameters) parameter specified below. This gives the caller of the read a more granular control on blob security policies as opposed to default blob security policies used by the connector and Kusto. This will also come in useful when Kusto administrators restrict security by applying callout policies on what hosts can traffic be let onto. If traffic is not permitted by administrators to the default internal storage, the read operation will fail for Distributed mode.
+
 * **KUSTO_DISTRIBUTED_READ_MODE_TRANSIENT_CACHE**
 When 'Distributed' read mode is used and this is set to 'true', the request query is exported only once and exported data is reused.
 
@@ -109,7 +122,7 @@ If set to 'true', query executed on kusto cluster will include the filters.
   'true' by default if KUSTO_DISTRIBUTED_READ_MODE_TRANSIENT_CACHE=false
 
 * **KUSTO_EXPORT_OPTIONS_JSON**:
-  'kustoExportOptionsJson' - JSON that provides the list of [export options](https://learn.microsoft.com/azure/data-explorer/kusto/management/data-export/export-data-to-storage) in case of distributed read (either because of query limits getting hit or user request for ForceDistributed mode). 
+  'kustoExportOptionsJson' - JSON that provides the list of [export options](https://learn.microsoft.com/azure/data-explorer/kusto/management/data-export/export-data-to-storage) in case of distributed read (either because of query limits getting hit or user request for distributed mode). 
   The export options do not support the _OutputDataFormat_ which is defaulted to _parquet_, _namePrefix_ which is a new directory specifically for the current read,
    _compressionType_ is defaulted to snappy and the command also specifies _compressed_ (to create .snappy.gz files), to turn extra compression off - it can be set to _none_ (**not recommended**)
   i.e .option("kustoExportOptionsJson", "{\"distribution\":\"per_node\"}")
