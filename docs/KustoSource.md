@@ -102,7 +102,7 @@ Scala and Java users may take these options from com.microsoft.kusto.spark.datas
 
   The following is the behavior of the connector in either of these read modes
 
-  * **Single mode** : In force single mode Direct query and get the results
+  * **Single mode** : In single mode Direct query and get the results
 
   * **Distributed mode** : When you hit Kusto [query limits](https://aka.ms/kustoquerylimits) (memory / number of records), data is [exported](https://learn.microsoft.com/en-us/azure/data-explorer/kusto/management/data-export/export-data-to-storage) to Blob storage (export containers) , then the exported data is read and processed into a Dataframe. 
 
@@ -122,7 +122,7 @@ If set to 'true', query executed on kusto cluster will include the filters.
   'true' by default if KUSTO_DISTRIBUTED_READ_MODE_TRANSIENT_CACHE=false
 
 * **KUSTO_EXPORT_OPTIONS_JSON**:
-  'kustoExportOptionsJson' - JSON that provides the list of [export options](https://learn.microsoft.com/azure/data-explorer/kusto/management/data-export/export-data-to-storage) in case of distributed read (either because of query limits getting hit or user request for ForceDistributed mode). 
+  'kustoExportOptionsJson' - JSON that provides the list of [export options](https://learn.microsoft.com/azure/data-explorer/kusto/management/data-export/export-data-to-storage) in case of distributed read (either because of query limits getting hit or user request for distributed mode). 
   The export options do not support the _OutputDataFormat_ which is defaulted to _parquet_, _namePrefix_ which is a new directory specifically for the current read,
    _compressionType_ is defaulted to snappy and the command also specifies _compressed_ (to create .snappy.gz files), to turn extra compression off - it can be set to _none_ (**not recommended**)
   i.e .option("kustoExportOptionsJson", "{\"distribution\":\"per_node\"}")
