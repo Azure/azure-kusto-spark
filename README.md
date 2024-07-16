@@ -115,8 +115,7 @@ To facilitate ramp-up from local jar on platforms such as Azure Databricks, pre-
 are published under [GitHub Releases](https://github.com/Azure/azure-kusto-spark/releases).
 These libraries include:
 * Azure Data Explorer connector library
-* User may also need to include Kusto Java SDK libraries (kusto-data and kusto-ingest), which are published under
-[GitHub Releases](https://github.com/Azure/azure-kusto-java/releases)
+* Version 5.2.0 and up of the library publish uber jars to maven. This is because of conflicts between custom jars that are added as part of the job and the exclude/include process that has to be followed to avoid conflicts.
 
 ## Dependencies
 Spark Azure Data Explorer connector depends on [Azure Data Explorer Data Client Library](https://mvnrepository.com/artifact/com.microsoft.azure.kusto/kusto-data) 
