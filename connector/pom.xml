@@ -96,6 +96,10 @@
             <version>${kusto.sdk.version}</version>
             <exclusions>
                 <exclusion>
+                    <groupId>com.microsoft.azure</groupId>
+                    <artifactId>msal4j</artifactId>
+                </exclusion>
+                <exclusion>
                     <groupId>com.fasterxml.jackson.core</groupId>
                     <artifactId>jackson-databind</artifactId>
                 </exclusion>
@@ -116,18 +120,6 @@
                     <artifactId>azure-storage-blob</artifactId>
                 </exclusion>
                 <exclusion>
-                    <groupId>io.netty</groupId>
-                    <artifactId>netty-codec</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>io.projectreactor.netty</groupId>
-                    <artifactId>reactor-netty-http</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>io.projectreactor.netty</groupId>
-                    <artifactId>reactor-netty-core</artifactId>
-                </exclusion>
-                <exclusion>
                     <groupId>com.azure</groupId>
                     <artifactId>azure-storage-queue</artifactId>
                 </exclusion>
@@ -144,21 +136,6 @@
         <dependency>
             <groupId>com.azure</groupId>
             <artifactId>azure-storage-common</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>io.netty</groupId>
-            <artifactId>netty-codec</artifactId>
-            <version>${netty.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>io.projectreactor.netty</groupId>
-            <artifactId>reactor-netty-core</artifactId>
-            <version>${reactor.netty.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>io.projectreactor.netty</groupId>
-            <artifactId>reactor-netty-http</artifactId>
-            <version>${reactor.netty.version}</version>
         </dependency>
         <dependency>
             <groupId>com.azure</groupId>
@@ -460,27 +437,304 @@
                 </executions>
             </plugin>
             <plugin>
-                <artifactId>maven-assembly-plugin</artifactId>
-                <version>3.2.0</version>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>${maven.shade.plugin.version}</version>
                 <executions>
                     <execution>
-                        <id>make-assembly</id> <!-- this is used for inheritance merges -->
-                        <phase>package</phase> <!-- bind to the packaging phase -->
+                        <phase>package</phase>
                         <goals>
-                            <goal>single</goal>
+                            <goal>shade</goal>
                         </goals>
+                        <configuration>
+                            <relocations>
+                                <relocation>
+                                    <pattern>io.netty</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}_netty.io.netty</shadedPattern>
+                                </relocation>
+                                <!-- COM -->
+                                <relocation>
+                                    <pattern>com.microsoft.kusto</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.com.microsoft.kusto</shadedPattern>
+                                    <excludes>
+                                        <exclude>com.microsoft.kusto.spark.authentication.*</exclude>
+                                        <exclude>com.microsoft.kusto.spark.common.*</exclude>
+                                        <exclude>com.microsoft.kusto.spark.datasink.*</exclude>
+                                        <exclude>com.microsoft.kusto.spark.datasource.*</exclude>
+                                        <exclude>com.microsoft.kusto.spark.exceptions.*</exclude>
+                                        <exclude>com.microsoft.kusto.spark.sql.*</exclude>
+                                        <exclude>com.microsoft.kusto.spark.sql.extension.*</exclude>
+                                        <exclude>com.microsoft.kusto.spark.utils.*</exclude>
+                                    </excludes>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.microsoft.azure</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.com.microsoft.azure</shadedPattern>
+                                    <excludes>
+                                        <exclude>com.microsoft.azure.kusto.data.ClientRequestProperties</exclude>
+                                    </excludes>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.microsoft.spark</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.com.microsoft.spark</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.microsoft.aad</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.com.microsoft.aad</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.azure.storage</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.com.azure.storage</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.azure.security</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.com.azure.security</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.azure.json</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.com.azure.json</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.azure.identity</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.com.azure.identity</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.azure.data</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.com.azure.data</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.azure.core</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.com.azure.core</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.thoughtworks.paranamer</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.com.thoughtworks.paranamer</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.sun.jna</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.com.sun.jna</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.nimbusds.openid</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.com.nimbusds.openid</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.nimbusds.oauth2</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.com.nimbusds.oauth2</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.nimbusds.jwt</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.com.nimbusds.jwt</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.nimbusds.jose</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.com.nimbusds.jose</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.nimbusds.common</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.com.nimbusds.common</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.google.common</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.com.google.common</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.fasterxml.jackson.module</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.com.fasterxml.jackson.module</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.fasterxml.jackson.datatype</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.com.fasterxml.jackson.datatype</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.fasterxml.jackson.dataformat</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.com.fasterxml.jackson.dataformat</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.fasterxml.jackson.databind</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.com.fasterxml.jackson.databind</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.fasterxml.jackson.core</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.com.fasterxml.jackson.core</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.fasterxml.jackson.annotation</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.com.fasterxml.jackson.annotation</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.ctc.wstx</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.com.ctc.wstx</shadedPattern>
+                                </relocation>
+                                <!-- ORG -->
+                                <relocation>
+                                    <pattern>org.slf4j</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.org.slf4j</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>org.reactivestreams</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.org.reactivestreams</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>org.objectweb</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.org.objectweb</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>org.jetbrains</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.org.jetbrains</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>org.codehaus</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.org.codehaus</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>org.apache.http</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.org.apache.http</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>org.apache.common</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.org.apache.common</shadedPattern>
+                                </relocation>
+                                <!-- IO -->
+                                <relocation>
+                                    <pattern>io.vavr</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.io.vavr</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>io.github</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.io.github</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>net.minidev</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.net.minidev</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>net.jcip</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.net.jcip</shadedPattern>
+                                </relocation>
+                                <!-- Reactor -->
+                                <relocation>
+                                    <pattern>reactor.util</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.reactor.util</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>reactor.netty</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.reactor.netty</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>reactor.adapter</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.reactor.adapter</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>reactor.core</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.reactor.core</shadedPattern>
+                                </relocation>
+                                <!-- JAVAX -->
+                                <relocation>
+                                    <pattern>javax.annotation</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.javax.annotation</shadedPattern>
+                                </relocation>
+                            </relocations>
+                            <filters>
+                                <filter>
+                                    <artifact>*:*</artifact>
+                                    <excludes>
+                                        <exclude>META-INF/services/javax.annotation.processing.Processor</exclude>
+                                        <exclude>META-INF/*.MF</exclude>
+                                        <exclude>META-INF/*.SF</exclude>
+                                        <exclude>META-INF/*.DSA</exclude>
+                                        <exclude>META-INF/*.RSA</exclude>
+                                    </excludes>
+                                </filter>
+                                <filter>
+                                    <artifact>commons-logging:commons-logging</artifact>
+                                    <includes>
+                                        <include>**</include>
+                                    </includes>
+                                </filter>
+                            </filters>
+                            <artifactSet>
+                                <excludes>
+                                    <exclude>org.tachyonproject:tachyon-client</exclude>
+                                    <exclude>org.apache.hadoop:*</exclude>
+                                    <exclude>org.apache.spark:*</exclude>
+                                    <exclude>org.scala-lang:*</exclude>
+                                    <exclude>org.apache.tinkerpop:*</exclude>
+                                </excludes>
+                            </artifactSet>
+                            <transformers>
+                                <!-- prevents apache license duplication -->
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheLicenseResourceTransformer"/>
+                                <!-- Some licenses (including the Apache License, Version 2)
+                                require that notices are preserved by downstream distributors.
+                                ApacheNoticeResourceTransformer automates the assembly of an appropriate NOTICE. -->
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheNoticeResourceTransformer">
+                                    <addHeader>false</addHeader>
+                                </transformer>
+                                <!-- The PropertiesTransformer allows a set of properties files to be merged
+                                and to resolve conflicts based on an ordinal giving the priority of each file.
+                                An optional alreadyMergedKey enables to have a boolean flag in the file which,
+                                if set to true, request to use the file as it as the result of the merge.
+                                If two files are considered complete in the merge process then the shade will fail.-->
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.properties.PropertiesTransformer">
+                                    <!-- required configuration -->
+                                    <!-- merges all netty lib version files into one file -->
+                                    <resource>META-INF/io.netty.versions.properties</resource>
+                                    <ordinalKey>ordinal</ordinalKey>
+                                    <!-- optional configuration -->
+                                    <alreadyMergedKey>already_merged</alreadyMergedKey>
+                                    <defaultOrdinal>0</defaultOrdinal>
+                                    <reverseOrder>false</reverseOrder>
+                                </transformer>
+                                <!-- this handles and properly merges the content of META-INF/services in the dependencies -->
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                                    <!-- once 3.3.0 shade plugin is release upgrade the maven plugin and remove AppendingTransformer
+                                        https://issues.apache.org/jira/browse/MSHADE-371 -->
+                                    <resource>META-INF/NOTICE.md</resource>
+                                </transformer>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                                    <!-- once 3.3.0 shade plugin is release upgrade the maven plugin and remove AppendingTransformer
+                                    https://issues.apache.org/jira/browse/MSHADE-371 -->
+                                    <resource>META-INF/LICENSE.md</resource>
+                                </transformer>
+                                <!-- TODO moderakh validate that netty native libs e.g, boringssl actually is used. -->
+                            </transformers>
+                            <!-- When true, it will attempt to shade the contents of the java source files when creating the sources jar. -->
+                            <shadeSourcesContent>true</shadeSourcesContent>
+                            <minimizeJar>true</minimizeJar>
+                        </configuration>
+                    </execution>
+               </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.1.0</version> <!-- {x-version-update;org.apache.maven.plugins:maven-antrun-plugin;external_dependency} -->
+                <executions>
+                    <execution>
+                        <id>03-repack</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <unzip src="${project.build.directory}/${project.build.finalName}.jar" dest="${project.build.directory}/tmp" />
+                                <move file="${project.build.directory}/tmp/META-INF/native/libnetty_resolver_dns_native_macos_x86_64.jnilib" tofile="${project.build.directory}/tmp/META-INF/native/libazurecosmosspark_netty_resolver_dns_native_macos_x86_64.jnilib" />
+                                <move file="${project.build.directory}/tmp/META-INF/native/libnetty_tcnative_linux_aarch_64.so" tofile="${project.build.directory}/tmp/META-INF/native/libazurecosmosspark_netty_tcnative_linux_aarch_64.so" />
+                                <move file="${project.build.directory}/tmp/META-INF/native/libnetty_tcnative_linux_x86_64.so" tofile="${project.build.directory}/tmp/META-INF/native/libazurecosmosspark_netty_tcnative_linux_x86_64.so" />
+                                <move file="${project.build.directory}/tmp/META-INF/native/libnetty_tcnative_osx_aarch_64.jnilib" tofile="${project.build.directory}/tmp/META-INF/native/libazurecosmosspark_netty_tcnative_osx_aarch_64.jnilib" />
+                                <move file="${project.build.directory}/tmp/META-INF/native/libnetty_tcnative_osx_x86_64.jnilib" tofile="${project.build.directory}/tmp/META-INF/native/libazurecosmosspark_netty_tcnative_osx_x86_64.jnilib" />
+                                <move file="${project.build.directory}/tmp/META-INF/native/libnetty_transport_native_epoll_x86_64.so" tofile="${project.build.directory}/tmp/META-INF/native/libazurecosmosspark_netty_transport_native_epoll_x86_64.so" />
+                                <move file="${project.build.directory}/tmp/META-INF/native/libnetty_transport_native_kqueue_x86_64.jnilib" tofile="${project.build.directory}/tmp/META-INF/native/libazurecosmosspark_netty_transport_native_kqueue_x86_64.jnilib" />
+                                <move file="${project.build.directory}/tmp/META-INF/native/netty_tcnative_windows_x86_64.dll" tofile="${project.build.directory}/tmp/META-INF/native/azurecosmosspark_netty_tcnative_windows_x86_64.dll" />
+                                <zip basedir="${project.build.directory}/tmp" destfile="${project.build.directory}/${project.build.finalName}.jar" />
+                                <delete dir="${project.build.directory}/tmp" />
+                            </target>
+                        </configuration>
                     </execution>
                 </executions>
-                <configuration>
-                    <archive>
-                        <manifest>
-                            <mainClass>fully.qualified.MainClass</mainClass>
-                        </manifest>
-                    </archive>
-                    <descriptorRefs>
-                        <descriptorRef>jar-with-dependencies</descriptorRef>
-                    </descriptorRefs>
-                </configuration>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -489,6 +743,32 @@
                 <configuration>
                     <source>${java.source.version}</source>
                     <target>${java.target.version}</target>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>xml-maven-plugin</artifactId>
+                <version>1.1.0</version> <!-- {x-version-update;org.codehaus.mojo:xml-maven-plugin;external_dependency} -->
+                <executions>
+                    <execution>
+                        <id>stripDependencyReducedPom</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>transform</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <transformationSets>
+                        <transformationSet>
+                            <dir>${project.basedir}</dir>
+                            <includes>dependency-reduced-pom.xml</includes>
+                            <stylesheet>./stripDependencyReducedPom.xsl</stylesheet>
+                            <outputDir>${project.basedir}</outputDir>
+                            <skipDefaultExcludes>true</skipDefaultExcludes>
+                            <addedToClasspath>false</addedToClasspath>
+                        </transformationSet>
+                    </transformationSets>
                 </configuration>
             </plugin>
         </plugins>

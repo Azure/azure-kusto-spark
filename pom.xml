@@ -8,7 +8,7 @@
     <packaging>pom</packaging>
     <version>${revision}</version>
     <properties>
-        <revision>5.1.0</revision>
+        <revision>5.2.0-SNAPSHOT</revision>
         <!-- Spark dependencies -->
         <scala.version.major>2.12</scala.version.major>
         <scalafmt.plugin.version>1.1.1640084764.9f463a9</scalafmt.plugin.version>
@@ -16,7 +16,7 @@
         <spark.version.major>3.0</spark.version.major>
         <spark.version.minor>1</spark.version.minor>
         <!-- other dependencies -->
-        <azure.bom.version>1.2.14</azure.bom.version>
+        <azure.bom.version>1.2.24</azure.bom.version>
         <!-- versions from https://learn.microsoft.com/en-us/azure/databricks/release-notes/runtime/13.2-->
         <fasterxml.jackson.jar.version>2.13.4</fasterxml.jackson.jar.version>
         <fasterxml.jackson.version>2.14.3</fasterxml.jackson.version>
@@ -37,19 +37,17 @@
         <maven.source.plugin.version>3.0.1</maven.source.plugin.version>
         <maven.surefire.plugin.version>3.0.0</maven.surefire.plugin.version>
         <mockito.version>4.11.0</mockito.version>
-        <netty.version>4.1.94.Final</netty.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <reactor.netty.version>1.0.39</reactor.netty.version>
         <scala.maven.plugin.version>4.8.1</scala.maven.plugin.version>
         <scalamock.version>5.2.0</scalamock.version>
         <scalastyle.maven.plugin.version>1.0.0</scalastyle.maven.plugin.version>
         <scalatest.maven.version>2.2.0</scalatest.maven.version>
         <scalatest.version>3.2.17</scalatest.version>
-        <shadingPrefix>azure_kusto_spark</shadingPrefix>
         <slf4j.version>1.8.0-beta4</slf4j.version>
         <specs2.version>3.6.5</specs2.version>
-        <msal4j.version>1.13.9</msal4j.version>
+        <msal4j.version>1.16.0</msal4j.version>
         <az.identity.version>1.12.0</az.identity.version>
+        <kusto.shade.prefix>kusto_connector_shaded</kusto.shade.prefix>
     </properties>
 
     <inceptionYear>2018</inceptionYear>
