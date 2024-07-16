@@ -75,10 +75,9 @@ object KustoSinkOptions extends KustoOptions {
   // Use this option if you want to persist partial write results (as the failure could be of a single partition)
   val KUSTO_TEMP_TABLE_NAME: String = newOption("tempTableName")
 
-  // The chunk size that we want to use for each "streaming batch". The default is 4MB. Every streaming ingest will be
-  // sent in in chunks of this size.
+  // The chunk size that we want to use while iterating over "streaming batch". The default is 4MB.
+  // Every streaming ingest will be sent in in chunks of this size.
   val KUSTO_STREAMING_INGEST_SIZE: String = newOption("kustoStreamingIngestSizeInMB")
-
 }
 
 object SinkTableCreationMode extends Enumeration {

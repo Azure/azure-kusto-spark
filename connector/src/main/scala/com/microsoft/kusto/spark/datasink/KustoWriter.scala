@@ -295,7 +295,7 @@ object KustoWriter {
   private def ingestRowsIntoKusto(
       rows: Iterator[InternalRow],
       ingestClient: IngestClient,
-      ingestionProperties: IngestionProperties, // TODO not used
+      ingestionProperties: IngestionProperties,
       partitionsResults: CollectionAccumulator[PartitionResult],
       batchIdForTracing: String,
       parameters: KustoWriteResource): Unit = {
@@ -484,7 +484,6 @@ object KustoWriter {
       partitionsResults: CollectionAccumulator[PartitionResult],
       ingestionProperties: IngestionProperties,
       parameters: KustoWriteResource): Unit = {
-
     val partitionId = TaskContext.getPartitionId
     KDSU.logInfo(
       className,
