@@ -38,6 +38,7 @@ import com.microsoft.kusto.spark.utils.{
 }
 import io.github.resilience4j.retry.RetryConfig
 import org.apache.commons.io.IOUtils
+import org.apache.commons.lang3.StringUtils
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.InternalRow
@@ -269,14 +270,7 @@ object KustoWriter {
         s"sink to Kusto table '${parameters.coordinates.table.get}' with no rows to write " +
           s"on partition ${TaskContext.getPartitionId} $batchIdForTracing")
     } else {
-      val ingestionProperties = getIngestionProperties(
-        parameters.writeOptions,
-        parameters.coordinates.database,
-        if (parameters.writeOptions.writeMode == WriteMode.Transactional) {
-          parameters.tmpTableName
-        } else {
-          parameters.coordinates.table.get
-        })
+      val ingestionProperties = getIngestionProperties(parameters)
       if (parameters.writeOptions.writeMode == WriteMode.KustoStreaming) {
         streamRowsIntoKustoByWorkers(batchIdForTracing, rows, ingestionProperties, parameters)
       } else {
@@ -293,17 +287,10 @@ object KustoWriter {
   private def ingestRowsIntoKusto(
       rows: Iterator[InternalRow],
       ingestClient: IngestClient,
-      ingestionProperties: IngestionProperties, // TODO not used
+      ingestionProperties: IngestionProperties,
       partitionsResults: CollectionAccumulator[PartitionResult],
       batchIdForTracing: String,
       parameters: KustoWriteResource): Unit = {
-    // Transactional mode write into the temp table instead of the destination table
-    if (parameters.writeOptions.writeMode == WriteMode.Transactional) {
-      ingestionProperties.setReportMethod(IngestionProperties.IngestionReportMethod.TABLE)
-      ingestionProperties.setReportLevel(
-        IngestionProperties.IngestionReportLevel.FAILURES_AND_SUCCESSES)
-    }
-    ingestionProperties.setDataFormat(DataFormat.CSV.name)
     /* A try block may be redundant here. An exception thrown has to be propagated depending on the exception */
     ingestRows(
       rows,
@@ -315,18 +302,44 @@ object KustoWriter {
     KDSU.logInfo(
       className,
       s"Ingesting from blob(s) partition: ${TaskContext.getPartitionId()} requestId: " +
-        s"'${parameters.writeOptions.requestId}' batch$batchIdForTracing")
+        s"'${parameters.writeOptions.requestId}' batch: $batchIdForTracing")
   }
 
-  private def getIngestionProperties(
-      writeOptions: WriteOptions,
-      database: String,
-      tableName: String): IngestionProperties = {
-    writeOptions.maybeSparkIngestionProperties match {
+  def getIngestionProperties(kustoWriteResource: KustoWriteResource): IngestionProperties = {
+    val writeOptions = kustoWriteResource.writeOptions
+    val database = kustoWriteResource.coordinates.database
+    val tableName = if (writeOptions.writeMode == WriteMode.Transactional) {
+      kustoWriteResource.tmpTableName
+    } else {
+      kustoWriteResource.coordinates.table match {
+        case Some(tableName) =>
+          if (StringUtils.isNotEmpty(tableName)) {
+            tableName
+          } else {
+            /*
+          The below 2 predicates should not get hit unless there is a major
+          issue upfront in validation.
+             */
+            throw new IllegalArgumentException(
+              "Table name is required for setting ingestion properties")
+          }
+        case None =>
+          throw new IllegalArgumentException(
+            "Table name is required for setting ingestion properties")
+      }
+    }
+    val ingestionProperties = writeOptions.maybeSparkIngestionProperties match {
       case Some(sparkIngestionProperties) =>
         sparkIngestionProperties.toIngestionProperties(database, tableName)
       case None => new IngestionProperties(database, tableName)
     }
+    if (writeOptions.writeMode == WriteMode.Transactional) {
+      ingestionProperties.setReportMethod(IngestionProperties.IngestionReportMethod.TABLE)
+      ingestionProperties.setReportLevel(
+        IngestionProperties.IngestionReportLevel.FAILURES_AND_SUCCESSES)
+    }
+    ingestionProperties.setDataFormat(DataFormat.CSV.name)
+    ingestionProperties
   }
 
   private def getSparkIngestionProperties(
@@ -505,7 +518,13 @@ object KustoWriter {
     ingestClient.setQueueRequestOptions(reqRetryOpts)
     // We force blocking here, since the driver can only complete the ingestion process
     // once all partitions are ingested into the temporary table
-    ingestRowsIntoKusto(rows, ingestClient, ingestionProperties, partitionsResults, batchIdForTracing, parameters)
+    ingestRowsIntoKusto(
+      rows,
+      ingestClient,
+      ingestionProperties,
+      partitionsResults,
+      batchIdForTracing,
+      parameters)
   }
 
   private def createBlobWriter(
