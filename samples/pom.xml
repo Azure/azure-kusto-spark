@@ -63,6 +63,13 @@
                     <target>8</target>
                 </configuration>
             </plugin>
+            <plugin>
+                <groupId>org.antipathy</groupId>
+                <artifactId>mvn-scalafmt_${scala.version.major}</artifactId>
+                <configuration>
+                    <configLocation>${project.parent.basedir}/.scalafmt.conf</configLocation> <!-- path to config -->
+                </configuration>
+            </plugin>            
         </plugins>
     </build>
 
