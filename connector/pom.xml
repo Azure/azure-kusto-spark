@@ -13,17 +13,6 @@
     <dependencies>
         <!-- Compile Scope -->
         <dependency>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-databind</artifactId>
-            <version>${fasterxml.jackson.version}</version>
-            <exclusions>
-                <exclusion>
-                    <artifactId>scala-library</artifactId>
-                    <groupId>org.scala-lang</groupId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-        <dependency>
             <groupId>com.fasterxml.jackson.module</groupId>
             <artifactId>jackson-module-scala_${scala.version.major}</artifactId>
             <version>${fasterxml.jackson.version}</version>
@@ -38,12 +27,12 @@
             <groupId>com.fasterxml.jackson.datatype</groupId>
             <artifactId>jackson-datatype-jsr310</artifactId>
             <version>${fasterxml.jackson.jar.version}</version>
-        </dependency>
+        </dependency>        
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-lang3</artifactId>
             <version>${commons.lang3.version}</version>
-        </dependency>
+        </dependency>        
         <dependency>
             <groupId>org.scala-lang</groupId>
             <artifactId>scala-library</artifactId>
@@ -60,28 +49,8 @@
             <version>${kusto.sdk.version}</version>
             <exclusions>
                 <exclusion>
-                    <artifactId>jackson-databind</artifactId>
-                    <groupId>com.fasterxml.jackson.core</groupId>
-                </exclusion>
-                <exclusion>
                     <groupId>com.microsoft.azure</groupId>
                     <artifactId>msal4j</artifactId>
-                </exclusion>
-                <exclusion>
-                    <artifactId>commons-codec</artifactId>
-                    <groupId>commons-codec</groupId>
-                </exclusion>
-                <exclusion>
-                    <artifactId>commons-lang3</artifactId>
-                    <groupId>org.apache.commons</groupId>
-                </exclusion>
-                <exclusion>
-                    <artifactId>annotations</artifactId>
-                    <groupId>org.jetbrains</groupId>
-                </exclusion>
-                <exclusion>
-                    <groupId>net.minidev</groupId>
-                    <artifactId>json-smart</artifactId>
                 </exclusion>
             </exclusions>
         </dependency>
@@ -99,35 +68,7 @@
                     <groupId>com.microsoft.azure</groupId>
                     <artifactId>msal4j</artifactId>
                 </exclusion>
-                <exclusion>
-                    <groupId>com.fasterxml.jackson.core</groupId>
-                    <artifactId>jackson-databind</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>com.univocity</groupId>
-                    <artifactId>univocity-parsers</artifactId>
-                </exclusion>
-                <exclusion>
-                    <artifactId>jackson-annotations</artifactId>
-                    <groupId>com.fasterxml.jackson.core</groupId>
-                </exclusion>
-                <exclusion>
-                    <artifactId>commons-lang3</artifactId>
-                    <groupId>org.apache.commons</groupId>
-                </exclusion>
-                <exclusion>
-                    <groupId>com.azure</groupId>
-                    <artifactId>azure-storage-blob</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>com.azure</groupId>
-                    <artifactId>azure-storage-queue</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>com.azure</groupId>
-                    <artifactId>azure-storage-common</artifactId>
-                </exclusion>
-            </exclusions>
+            </exclusions>            
         </dependency>
         <dependency>
             <groupId>com.azure</groupId>
@@ -140,20 +81,6 @@
         <dependency>
             <groupId>com.azure</groupId>
             <artifactId>azure-storage-blob</artifactId>
-            <exclusions>
-                <exclusion>
-                    <artifactId>commons-lang3</artifactId>
-                    <groupId>org.apache.commons</groupId>
-                </exclusion>
-                <exclusion>
-                    <artifactId>jackson-core</artifactId>
-                    <groupId>com.fasterxml.jackson.core</groupId>
-                </exclusion>
-                <exclusion>
-                    <artifactId>guava</artifactId>
-                    <groupId>com.google.guava</groupId>
-                </exclusion>
-            </exclusions>
         </dependency>
         <dependency>
             <groupId>com.microsoft.azure</groupId>
@@ -163,16 +90,6 @@
         <dependency>
             <groupId>com.azure</groupId>
             <artifactId>azure-security-keyvault-secrets</artifactId>
-            <exclusions>
-                <exclusion>
-                    <artifactId>azure-core-http-netty</artifactId>
-                    <groupId>com.azure</groupId>
-                </exclusion>
-                <exclusion>
-                    <artifactId>azure-core</artifactId>
-                    <groupId>com.azure</groupId>
-                </exclusion>
-            </exclusions>
         </dependency>
         <!-- Added to avoid ADB issue, ClassNotFoundException: net.minidev.json.JSONAware -->
         <dependency>
@@ -214,48 +131,12 @@
             <artifactId>spark-sql_${scala.version.major}</artifactId>
             <version>${spark.version.major}.${spark.version.minor}</version>
             <scope>provided</scope>
-            <exclusions>
-                <exclusion>
-                    <artifactId>jackson-annotations</artifactId>
-                    <groupId>com.fasterxml.jackson.core</groupId>
-                </exclusion>
-                <exclusion>
-                    <artifactId>jackson-core</artifactId>
-                    <groupId>com.fasterxml.jackson.core</groupId>
-                </exclusion>
-                <exclusion>
-                    <artifactId>jackson-databind</artifactId>
-                    <groupId>com.fasterxml.jackson.core</groupId>
-                </exclusion>
-                <exclusion>
-                    <artifactId>jackson-module-scala_${scala.version.major}</artifactId>
-                    <groupId>com.fasterxml.jackson.module</groupId>
-                </exclusion>
-                <exclusion>
-                    <artifactId>scala-library</artifactId>
-                    <groupId>org.scala-lang</groupId>
-                </exclusion>
-            </exclusions>
         </dependency>
         <dependency>
             <groupId>org.apache.spark</groupId>
             <artifactId>spark-catalyst_${scala.version.major}</artifactId>
             <version>${spark.version.major}.${spark.version.minor}</version>
             <scope>provided</scope>
-            <exclusions>
-                <exclusion>
-                    <artifactId>jackson-core</artifactId>
-                    <groupId>com.fasterxml.jackson.core</groupId>
-                </exclusion>
-                <exclusion>
-                    <artifactId>jsr305</artifactId>
-                    <groupId>com.google.code.findbugs</groupId>
-                </exclusion>
-                <exclusion>
-                    <artifactId>scala-library</artifactId>
-                    <groupId>org.scala-lang</groupId>
-                </exclusion>
-            </exclusions>
         </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>
@@ -471,9 +352,36 @@
                                     <pattern>com.microsoft.azure</pattern>
                                     <shadedPattern>${kusto.shade.prefix}.com.microsoft.azure</shadedPattern>
                                     <excludes>
-                                        <exclude>com.microsoft.azure.kusto.data.ClientRequestProperties</exclude>
+                                        <exclude>com.microsoft.azure.kusto.data.*</exclude>
+                                        <exclude>com.microsoft.azure.kusto.data.auth.*</exclude>
+                                        <exclude>com.microsoft.azure.kusto.data.exceptions.*</exclude>
+                                        <exclude>com.microsoft.azure.kusto.data.format.*</exclude>
+                                        <exclude>com.microsoft.azure.kusto.data.http.*</exclude>
+                                        <exclude>com.microsoft.azure.kusto.data.instrumentation.*</exclude>
+                                        <exclude>com.microsoft.azure.kusto.ingest.*</exclude>
+                                        <exclude>com.microsoft.azure.kusto.ingest.exceptions.*</exclude>
+                                        <exclude>com.microsoft.azure.kusto.ingest.resources.*</exclude>
+                                        <exclude>com.microsoft.azure.kusto.ingest.result.*</exclude>
+                                        <exclude>com.microsoft.azure.kusto.ingest.source.*</exclude>
+                                        <exclude>com.microsoft.azure.kusto.ingest.utils.*</exclude>
                                     </excludes>
                                 </relocation>
+                                <relocation>
+                                    <pattern>com.azure.xml</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.com.microsoft.xml</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.google</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.com.google</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.univocity.parsers</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.com.univocity.parsers</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.nimbusds</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.com.nimbusds</shadedPattern>
+                                </relocation>                                                                                                       
                                 <relocation>
                                     <pattern>com.microsoft.spark</pattern>
                                     <shadedPattern>${kusto.shade.prefix}.com.microsoft.spark</shadedPattern>
@@ -639,6 +547,7 @@
                                 <filter>
                                     <artifact>*:*</artifact>
                                     <excludes>
+                                        <exclude>module-info.class</exclude>
                                         <exclude>META-INF/services/javax.annotation.processing.Processor</exclude>
                                         <exclude>META-INF/*.MF</exclude>
                                         <exclude>META-INF/*.SF</exclude>
@@ -702,7 +611,6 @@
                             </transformers>
                             <!-- When true, it will attempt to shade the contents of the java source files when creating the sources jar. -->
                             <shadeSourcesContent>true</shadeSourcesContent>
-                            <minimizeJar>true</minimizeJar>
                         </configuration>
                     </execution>
                </executions>
