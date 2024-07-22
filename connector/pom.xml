@@ -34,16 +34,6 @@
             <version>${commons.lang3.version}</version>
         </dependency>        
         <dependency>
-            <groupId>org.scala-lang</groupId>
-            <artifactId>scala-library</artifactId>
-            <version>${scala.version.major}.${scala.version.minor}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.scala-lang</groupId>
-            <artifactId>scala-reflect</artifactId>
-            <version>${scala.version.major}.${scala.version.minor}</version>
-        </dependency>
-        <dependency>
             <groupId>com.microsoft.azure.kusto</groupId>
             <artifactId>kusto-data</artifactId>
             <version>${kusto.sdk.version}</version>
@@ -72,14 +62,6 @@
         </dependency>
         <dependency>
             <groupId>com.azure</groupId>
-            <artifactId>azure-storage-queue</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.azure</groupId>
-            <artifactId>azure-storage-common</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.azure</groupId>
             <artifactId>azure-storage-blob</artifactId>
         </dependency>
         <dependency>
@@ -91,13 +73,24 @@
             <groupId>com.azure</groupId>
             <artifactId>azure-security-keyvault-secrets</artifactId>
         </dependency>
-        <!-- Added to avoid ADB issue, ClassNotFoundException: net.minidev.json.JSONAware -->
         <dependency>
-            <groupId>net.minidev</groupId>
-            <artifactId>json-smart</artifactId>
-            <version>${jsonsmart.version}</version>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <version>${slf4j.version}</version>
         </dependency>
         <!--might need 3.2.0 here for local run query-->
+        <dependency>
+            <groupId>org.scala-lang</groupId>
+            <artifactId>scala-library</artifactId>
+            <version>${scala.version.major}.${scala.version.minor}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.scala-lang</groupId>
+            <artifactId>scala-reflect</artifactId>
+            <version>${scala.version.major}.${scala.version.minor}</version>
+            <scope>provided</scope>
+        </dependency>
         <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-common</artifactId>
@@ -137,11 +130,6 @@
             <artifactId>spark-catalyst_${scala.version.major}</artifactId>
             <version>${spark.version.major}.${spark.version.minor}</version>
             <scope>provided</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-api</artifactId>
-            <version>${slf4j.version}</version>
         </dependency>
         <!-- Test Scope -->
         <dependency>
@@ -561,6 +549,12 @@
                                         <include>**</include>
                                     </includes>
                                 </filter>
+                                <filter>
+                                    <artifact>com.fasterxml.woodstox:woodstox-core</artifact>
+                                    <includes>
+                                        <include>**</include>
+                                    </includes>
+                                </filter>
                             </filters>
                             <artifactSet>
                                 <excludes>
@@ -607,10 +601,10 @@
                                     https://issues.apache.org/jira/browse/MSHADE-371 -->
                                     <resource>META-INF/LICENSE.md</resource>
                                 </transformer>
-                                <!-- TODO moderakh validate that netty native libs e.g, boringssl actually is used. -->
                             </transformers>
                             <!-- When true, it will attempt to shade the contents of the java source files when creating the sources jar. -->
                             <shadeSourcesContent>true</shadeSourcesContent>
+                            <minimizeJar>true</minimizeJar>
                         </configuration>
                     </execution>
                </executions>
