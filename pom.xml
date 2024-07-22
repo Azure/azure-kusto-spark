@@ -8,7 +8,7 @@
     <packaging>pom</packaging>
     <version>${revision}</version>
     <properties>
-        <revision>5.2.0-SNAPSHOT</revision>
+        <revision>5.2.1-SNAPSHOT</revision>
         <!-- Spark dependencies -->
         <scala.version.major>2.12</scala.version.major>
         <scalafmt.plugin.version>1.1.1640084764.9f463a9</scalafmt.plugin.version>
@@ -164,4 +164,22 @@
             </dependency>
         </dependencies>
     </dependencyManagement>
+    <!-- create a profile for distribution to BBC-VHD for Synapse tests -->
+    <profiles>
+        <profile>
+            <id>Synapse</id>
+            <distributionManagement>
+                <repository>
+                    <id>BBC-VHD_PublicPackages</id>
+                    <url>https://pkgs.dev.azure.com/msdata/A365/_packaging/BBC-VHD_PublicPackages/maven/v1</url>
+                    <releases>
+                        <enabled>true</enabled>
+                    </releases>
+                    <snapshots>
+                        <enabled>true</enabled>
+                    </snapshots>
+                </repository>
+            </distributionManagement>
+        </profile>
+    </profiles>    
 </project>
