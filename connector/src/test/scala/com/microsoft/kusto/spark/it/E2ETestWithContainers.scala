@@ -21,8 +21,8 @@ class E2ETestWithContainers extends AnyFlatSpec with Matchers with BeforeAndAfte
   private lazy val kustoTestConnectionOptions = getSystemTestOptions
   private val targetFolderName = "/opt/bitnami/spark/examples/jars/"
   private val jarFileBaseName = s"kusto-spark_3.0_2.12-${KustoDataSourceUtils.Version}"
-  private val testJarFileToSubmit = s"$jarFileBaseName-tests.jar";
-  private val jarFileClasspath = s"$jarFileBaseName.jar";
+  private val testJarFileToSubmit = s"$jarFileBaseName-tests.jar"
+  private val jarFileClasspath = s"$jarFileBaseName.jar"
 
   override def beforeAll(): Unit = {
     sparkContainer.start()
@@ -48,7 +48,6 @@ class E2ETestWithContainers extends AnyFlatSpec with Matchers with BeforeAndAfte
         s"--class com.microsoft.kusto.spark.it.KustoE2EMain $targetFolderName$testJarFileToSubmit " +
         s"${kustoTestConnectionOptions.cluster}  ${kustoTestConnectionOptions.database}   ${kustoTestConnectionOptions.accessToken} > /tmp/results.txt 2>&1"
     val execResult = sparkContainer.execInContainer("/bin/sh", "-c", commandToExec)
-    println(execResult.getStdout)
     Thread.sleep(30000)
     execResult.getStdout should include("Pi is roughly")
   }
