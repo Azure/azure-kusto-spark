@@ -49,7 +49,7 @@ class E2ETestWithContainers extends AnyFlatSpec with Matchers with BeforeAndAfte
         s"${kustoTestConnectionOptions.cluster}  ${kustoTestConnectionOptions.database}   ${kustoTestConnectionOptions.accessToken} > /tmp/results.txt 2>&1"
     val execResult = sparkContainer.execInContainer("/bin/sh", "-c", commandToExec)
     println(execResult.getStdout)
-    Thread.sleep(300000)
+    Thread.sleep(30000)
     execResult.getStdout should include("Pi is roughly")
   }
 
