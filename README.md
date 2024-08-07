@@ -21,6 +21,8 @@ This connector works with the following spark environments:
 
 ## Changelog
 
+**Breaking changes in versions 5.2.x** - From these versions, the published packages are shaded and packaged as a self contained jar. This is to avoid issues with common OSS libraries, spark runtimes and/or application dependencies.
+
 For major changes from previous releases, please refer to [Releases](https://github.com/Azure/azure-kusto-spark/releases).
 For known or new issues, please refer to the [issues](https://github.com/Azure/azure-kusto-spark/issues) section.
 > Note: Use the 4.x series only if you are using JDK 11. Versions 3.x and 5.x will work with JDK8 and all versions up
@@ -39,14 +41,14 @@ link your application with the artifact below to use the Azure Data Explorer Con
 ```
 groupId = com.microsoft.azure.kusto
 artifactId = kusto-spark_3.0_2.12
-version = 5.2.0-SNAPSHOT
+version = 5.2.2
 ```
 
 **In Maven**:
 
 Look for the following coordinates: 
 ```
-com.microsoft.azure.kusto:kusto-spark_3.0_2.12:5.2.0-SNAPSHOT
+com.microsoft.azure.kusto:kusto-spark_3.0_2.12:5.2.2
 ```
 
 Or clone this repository and build it locally to add it to your local maven repository,.
@@ -56,7 +58,7 @@ The jar can also be found under the [released package](https://github.com/Azure/
     <dependency>
         <groupId>com.microsoft.azure.kusto</groupId>
         <artifactId>kusto-spark_3.0_2.12</artifactId>
-        <version>5.2.0-SNAPSHOT</version>
+        <version>5.2.2</version>
     </dependency>
 ```
 
@@ -64,7 +66,7 @@ The jar can also be found under the [released package](https://github.com/Azure/
 
 ```scala
 libraryDependencies ++= Seq(
-  "com.microsoft.azure.kusto" %% "kusto-spark_3.0" % "5.2.0-SNAPSHOT"
+  "com.microsoft.azure.kusto" %% "kusto-spark_3.0" % "5.2.2"
 )
 ```
 
@@ -73,7 +75,7 @@ libraryDependencies ++= Seq(
 Libraries -> Install New -> Maven -> copy the following coordinates:
 
 ```
-com.microsoft.azure.kusto:kusto-spark_3.0_2.12:5.2.0-SNAPSHOT
+com.microsoft.azure.kusto:kusto-spark_3.0_2.12:5.2.2
 ```
 
 #### Building Samples Module
