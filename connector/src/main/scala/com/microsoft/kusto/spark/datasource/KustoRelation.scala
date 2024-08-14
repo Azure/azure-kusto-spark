@@ -255,6 +255,7 @@ private[kusto] case class KustoRelation(
       data,
       kustoCoordinates,
       authentication,
+      // TODO revisit this block and refactor
       writeOptions = WriteOptions.apply(),
       clientRequestProperties.get)
   }

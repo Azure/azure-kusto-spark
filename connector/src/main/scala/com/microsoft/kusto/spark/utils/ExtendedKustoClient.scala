@@ -9,12 +9,18 @@ import com.microsoft.azure.kusto.data._
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.exceptions.KustoDataExceptionBase
 import com.microsoft.azure.kusto.ingest.resources.ResourceWithSas
-import com.microsoft.azure.kusto.ingest.{IngestClientFactory, QueuedIngestClient}
+import com.microsoft.azure.kusto.ingest.{
+  IngestClientFactory,
+  ManagedStreamingIngestClient,
+  QueuedIngestClient,
+  StreamingIngestClient
+}
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.KustoWriter.DelayPeriodBetweenCalls
 import com.microsoft.kusto.spark.datasink.{
   SinkTableCreationMode,
   SparkIngestionProperties,
+  WriteMode,
   WriteOptions
 }
 import com.microsoft.kusto.spark.datasource.{
@@ -51,6 +57,8 @@ class ExtendedKustoClient(
   // Reading process does not require ingest client to start working
   lazy val dmClient: Client = ClientFactory.createClient(ingestKcsb)
   lazy val ingestClient: QueuedIngestClient = IngestClientFactory.createClient(ingestKcsb)
+  lazy val streamingClient: ManagedStreamingIngestClient =
+    IngestClientFactory.createManagedStreamingIngestClient(ingestKcsb, engineKcsb)
   private lazy val ingestContainersContainerProvider =
     new ContainerProvider(this, clusterAlias, generateCreateTmpStorageCommand())
   private lazy val exportContainersContainerProvider =
@@ -89,6 +97,10 @@ class ExtendedKustoClient(
         }
         tmpTableSchema = tableSchemaBuilder.toString
         executeEngine(database, generateTableCreateCommand(table, tmpTableSchema), crp)
+        if (writeOptions.writeMode == WriteMode.KustoStreaming) {
+          executeEngine(database, generateTableAlterStreamIngestionCommand(table), crp)
+          executeEngine(database, generateClearStreamingIngestionCacheCommand(table), crp)
+        }
       }
     } else {
       // Table exists. Parse kusto table schema and check if it matches the dataframes schema
@@ -101,7 +113,7 @@ class ExtendedKustoClient(
       tmpTableSchema = extractSchemaFromResultTable(transformedTargetSchema)
     }
 
-    if (writeOptions.isTransactionalMode) {
+    if (writeOptions.writeMode == WriteMode.Transactional) {
       // Create a temporary table with the kusto or dataframe parsed schema with retention and delete set to after the
       // write operation times out. Engine recommended keeping the retention although we use auto delete.
       executeEngine(database, generateTempTableCreateCommand(tmpTableName, tmpTableSchema), crp)
@@ -431,31 +443,26 @@ class ExtendedKustoClient(
 
   def shouldIngestData(
       tableCoordinates: KustoCoordinates,
-      ingestionProperties: Option[String],
+      maybeSparkIngestionProperties: Option[SparkIngestionProperties],
       tableExists: Boolean,
       crp: ClientRequestProperties): Boolean = {
-    var shouldIngest = true
-
-    if (tableExists && ingestionProperties.isDefined) {
-      val ingestIfNotExistsTags =
-        SparkIngestionProperties.fromString(ingestionProperties.get).ingestIfNotExists
+    if (tableExists && maybeSparkIngestionProperties.isDefined) {
+      val ingestIfNotExistsTags = maybeSparkIngestionProperties.orNull.ingestIfNotExists
       if (ingestIfNotExistsTags != null && !ingestIfNotExistsTags.isEmpty) {
         val ingestIfNotExistsTagsSet = ingestIfNotExistsTags.asScala.toSet
-
         val res =
           fetchTableExtentsTags(tableCoordinates.database, tableCoordinates.table.get, crp)
         if (res.next()) {
           val tagsArray = res.getObject(0).asInstanceOf[ArrayNode]
           for (i <- 0 until tagsArray.size()) {
             if (ingestIfNotExistsTagsSet.contains(tagsArray.get(i).asText())) {
-              shouldIngest = false
+              return false
             }
           }
         }
       }
     }
-
-    shouldIngest
+    true
   }
 
   def fetchTableExtentsTags(
