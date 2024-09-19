@@ -461,8 +461,8 @@ object KustoWriter {
       val tag = KDSU.getDedupTagsPrefix(parameters.writeOptions.requestId, s"${blobIndexInBatch.toString}_$partitionId")
       KDSU.logInfo(
         className,
-        s"With ensureNoDupBlobs in ${TaskContext.getPartitionId.toString} " +
-          s"for requestId: '${parameters.writeOptions.requestId}, the tag is $tag")
+        s"With ensureNoDupBlobs in partition: ${TaskContext.getPartitionId}, " +
+          s"for requestId: '${parameters.writeOptions.requestId}, tag: $tag")
       val ingestIfNotExist = new util.ArrayList[String]
       ingestIfNotExist.addAll(props.getIngestIfNotExists)
       val ingestBy: util.List[String] = new util.ArrayList[String]
