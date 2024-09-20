@@ -444,7 +444,6 @@ object KustoWriter {
     val size = blobResource.csvWriter.getCounter
     val sas = blobResource.sas
     val partitionId = TaskContext.getPartitionId
-    val taskAttempt = TaskContext.get().taskAttemptId()
     var props = ingestionProperties
     val blobUri = blobResource.blob.getStorageUri.getPrimaryUri.toString
     if (parameters.writeOptions.ensureNoDupBlobs || (!props.getFlushImmediately && flushImmediately)) {
