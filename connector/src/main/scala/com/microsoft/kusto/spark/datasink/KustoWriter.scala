@@ -28,6 +28,7 @@ import com.microsoft.kusto.spark.utils.{
   KustoDataSourceUtils => KDSU
 }
 import io.github.resilience4j.retry.RetryConfig
+import org.apache.commons.lang3.StringUtils
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.InternalRow
@@ -48,6 +49,7 @@ import scala.util.{Failure, Success, Try}
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 
 object KustoWriter {
   private val className = this.getClass.getSimpleName
@@ -374,8 +376,7 @@ object KustoWriter {
       parameters.authentication,
       parameters.coordinates.ingestionUrl,
       parameters.coordinates.clusterAlias)
-    val blobIdMap = new ConcurrentHashMap[String, Int]()
-    blobIdMap.put(parameters.writeOptions.requestId, 0)
+    val currentBlobIndex = new AtomicInteger(0)
     val maxBlobSize = parameters.writeOptions.batchLimit * KCONST.OneMegaByte
     var curBlobUUID = UUID.randomUUID().toString
     // This blobWriter will be used later to write the rows to blob storage from which it will be ingested to Kusto
@@ -390,8 +391,6 @@ object KustoWriter {
       if (shouldNotCommitBlockBlob) {
         blobWriter
       } else {
-        val blobIndexInBatch = blobIdMap.getOrDefault(parameters.writeOptions.requestId, 0)
-        blobIdMap.put(parameters.writeOptions.requestId, blobIndexInBatch + 1)
         KDSU.logInfo(
           className,
           s"Sealing blob in partition $partitionIdString for requestId: '${parameters.writeOptions.requestId}', " +
@@ -402,11 +401,10 @@ object KustoWriter {
           parameters,
           ingestionProperties,
           flushImmediately = !parameters.writeOptions.disableFlushImmediately,
-          curBlobUUID,
           kustoClient,
           partitionsResults,
           batchIdForTracing,
-          blobIndexInBatch)
+          currentBlobIndex.incrementAndGet())
         curBlobUUID = UUID.randomUUID().toString
         createBlobWriter(
           parameters.coordinates,
@@ -422,18 +420,15 @@ object KustoWriter {
       s"Finished serializing rows in partition $partitionIdString for requestId:'${parameters.writeOptions.requestId}'")
     finalizeBlobWrite(lastBlobWriter)
     if (lastBlobWriter.csvWriter.getCounter > 0) {
-      val blobIndexInBatch = blobIdMap.getOrDefault(parameters.writeOptions.requestId, 0)
-      blobIdMap.put(parameters.writeOptions.requestId, blobIndexInBatch + 1)
       ingest(
         lastBlobWriter,
         parameters,
         ingestionProperties,
         flushImmediately = false,
-        curBlobUUID,
         kustoClient,
         partitionsResults,
         batchIdForTracing,
-        blobIndexInBatch)
+        currentBlobIndex.incrementAndGet())
     }
   }
 
@@ -442,7 +437,6 @@ object KustoWriter {
       parameters: KustoWriteResource,
       ingestionProperties: IngestionProperties,
       flushImmediately: Boolean = false,
-      blobUUID: String,
       kustoClient: ExtendedKustoClient,
       partitionsResults: CollectionAccumulator[PartitionResult],
       batchIdForTracing: String,
@@ -450,6 +444,7 @@ object KustoWriter {
     val size = blobResource.csvWriter.getCounter
     val sas = blobResource.sas
     val partitionId = TaskContext.getPartitionId
+    val taskAttempt = TaskContext.get().taskAttemptId()
     var props = ingestionProperties
     val blobUri = blobResource.blob.getStorageUri.getPrimaryUri.toString
     if (parameters.writeOptions.ensureNoDupBlobs || (!props.getFlushImmediately && flushImmediately)) {
@@ -458,11 +453,14 @@ object KustoWriter {
     }
     if (parameters.writeOptions.ensureNoDupBlobs) {
       // The Key change is here
-      val tag = KDSU.getDedupTagsPrefix(parameters.writeOptions.requestId, s"${blobIndexInBatch.toString}_$partitionId")
+      val tag = KDSU.getDedupTagsPrefix(
+        parameters.writeOptions.requestId,
+        s"${blobIndexInBatch.toString}_${partitionId}_${StringUtils.defaultIfBlank(batchIdForTracing, "0")}")
       KDSU.logInfo(
         className,
         s"With ensureNoDupBlobs in partition: ${TaskContext.getPartitionId}, " +
-          s"for requestId: '${parameters.writeOptions.requestId}, tag: $tag")
+          s"for requestId: '${parameters.writeOptions.requestId}, tag: $tag , blobIndexInBatch: $blobIndexInBatch " +
+          s"and batchIdForTracing: ${StringUtils.defaultIfBlank(batchIdForTracing, "0")}")
       val ingestIfNotExist = new util.ArrayList[String]
       ingestIfNotExist.addAll(props.getIngestIfNotExists)
       val ingestBy: util.List[String] = new util.ArrayList[String]
