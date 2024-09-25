@@ -19,10 +19,12 @@ case class CountingWriter(out: java.io.Writer) extends Writer {
 //    new sun.security.action.GetPropertyAction("line.separator"))
   private val newLineSepLength: Int = newLineSep.length
   private var bytesCounter: Long = 0L
+  private var rowsCounter: Long = 0L
 
   def newLine(): Unit = {
     out.write(newLineSep)
     bytesCounter += newLineSepLength
+    rowsCounter += 1
   }
 
   def write(c: Char): Unit = {
@@ -53,6 +55,7 @@ case class CountingWriter(out: java.io.Writer) extends Writer {
 
   def getCounter: Long = bytesCounter
 
+  def getRowsWritten: Long = rowsCounter
   def resetCounter(): Unit = {
     bytesCounter = 0
   }
