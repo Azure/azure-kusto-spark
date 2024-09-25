@@ -150,7 +150,13 @@ object KustoWriter {
       }
       val cloudInfo = CloudInfo.retrieveCloudInfoForCluster(kustoClient.ingestKcsb.getClusterUrl)
       val rdd = data.queryExecution.toRdd
-      val partitionsResults = rdd.sparkContext.collectionAccumulator[PartitionResult]
+      val isRddAlreadyCached = rdd.getStorageLevel.useMemory
+      val maybeCachedRdd = if (writeOptions.ensureNoDupBlobs && !isRddAlreadyCached) {
+        rdd.cache()
+      } else {
+        rdd
+      }
+      val partitionsResults = maybeCachedRdd.sparkContext.collectionAccumulator[PartitionResult]
       val parameters = KustoWriteResource(
         authentication = authentication,
         coordinates = tableCoordinates,
@@ -160,10 +166,12 @@ object KustoWriter {
         cloudInfo = cloudInfo)
       val sinkStartTime = getCreationTime(stagingTableIngestionProperties)
       // Cache this RDD created so that it is not evaluated multiple times from source
-      val cachedRdd = rdd.cache()
+
+      val updatedParameters = parameters.copy(isAlreadyCached = isRddAlreadyCached)
+
       if (writeOptions.isAsync) {
-        val asyncWork = cachedRdd.foreachPartitionAsync { rows =>
-          ingestRowsIntoTempTbl(rows, batchIdIfExists, partitionsResults, parameters)
+        val asyncWork = maybeCachedRdd.foreachPartitionAsync { rows =>
+          ingestRowsIntoTempTbl(rows, batchIdIfExists, partitionsResults, updatedParameters)
         }
         KDSU.logInfo(className, s"asynchronous write to Kusto table '$table' in progress")
         // This part runs back on the driver
@@ -178,7 +186,7 @@ object KustoWriter {
                 writeOptions,
                 crp,
                 tableExists,
-                rdd.sparkContext,
+                maybeCachedRdd.sparkContext,
                 authentication,
                 kustoClient,
                 sinkStartTime)
@@ -199,8 +207,8 @@ object KustoWriter {
         }
       } else {
         try
-          cachedRdd.foreachPartition { rows =>
-            ingestRowsIntoTempTbl(rows, batchIdIfExists, partitionsResults, parameters)
+          maybeCachedRdd.foreachPartition { rows =>
+            ingestRowsIntoTempTbl(rows, batchIdIfExists, partitionsResults, updatedParameters)
           }
         catch {
           case exception: Exception =>
@@ -221,11 +229,14 @@ object KustoWriter {
             writeOptions,
             crp,
             tableExists,
-            rdd.sparkContext,
+            maybeCachedRdd.sparkContext,
             authentication,
             kustoClient,
             sinkStartTime)
         }
+      }
+      if (parameters.writeOptions.ensureNoDupBlobs && !parameters.isAlreadyCached) {
+        maybeCachedRdd.unpersist()
       }
     }
   }
@@ -536,6 +547,7 @@ final case class KustoWriteResource(
     schema: StructType,
     writeOptions: WriteOptions,
     tmpTableName: String,
-    cloudInfo: CloudInfo)
+    cloudInfo: CloudInfo,
+    isAlreadyCached: Boolean = false)
 
 final case class PartitionResult(ingestionResult: IngestionResult, partitionId: Int)
