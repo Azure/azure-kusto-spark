@@ -511,14 +511,14 @@ object KustoWriter {
       props = SparkIngestionProperties.cloneIngestionProperties(ingestionProperties)
     }
     if (parameters.writeOptions.ensureNoDupBlobs) {
-      if (blobIndexInBatch == 2 && TaskContext.get().taskAttemptId() % 2 == 0 && exceptionCount
-          .get() < 2) {
-        exceptionCount.incrementAndGet()
-        KDSU.logWarn(
-          className,
-          "********************************************Forcing an exception to test the retry mechanism********************************************")
-        throw new Exception("***Test Exception****")
-      }
+//      if (blobIndexInBatch == 2 && TaskContext.get().taskAttemptId() % 2 == 0 && exceptionCount
+//          .get() < 2) {
+//        exceptionCount.incrementAndGet()
+//        KDSU.logWarn(
+//          className,
+//          "********************************************Forcing an exception to test the retry mechanism********************************************")
+//        throw new Exception("***Test Exception****")
+//      }
       // The Key change is here
       val tag = KDSU.getDedupTagsPrefix(
         parameters.writeOptions.requestId,
