@@ -425,8 +425,10 @@ object KustoWriter {
             s"Sealing blob in partition $partitionIdString for requestId: '${parameters.writeOptions.requestId}', " +
               s"blob number ${row._2}, blobname ${blobWriter.blob.getName} with size $count.Rows written: $rowsWritten")
           finalizeBlobWrite(blobWriter)
+          val nextBlobId = UUID.randomUUID().toString
           if (parameters.writeOptions.ensureNoDupBlobs) {
             taskMap.put(curBlobUUID, blobWriter)
+            curBlobUUID = nextBlobId
           } else {
             ingest(
               blobWriter,
@@ -438,7 +440,7 @@ object KustoWriter {
               batchIdForTracing,
               currentBlobIndex.incrementAndGet())
           }
-          curBlobUUID = UUID.randomUUID().toString
+          curBlobUUID = nextBlobId
           createBlobWriter(
             parameters.coordinates,
             parameters.tmpTableName,
