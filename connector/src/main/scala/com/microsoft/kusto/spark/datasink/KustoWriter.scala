@@ -53,7 +53,6 @@ import scala.collection.JavaConverters.asScalaBufferConverter
 
 object KustoWriter {
   private val className = this.getClass.getSimpleName
-  private val exceptionCount = new AtomicInteger(0)
   val TempIngestionTablePrefix = "sparkTempTable_"
   val DelayPeriodBetweenCalls: Int = KCONST.DefaultPeriodicSamplePeriod.toMillis.toInt
   private val GzipBufferSize: Int = 1000 * KCONST.DefaultBufferSize
@@ -170,8 +169,6 @@ object KustoWriter {
         tmpTableName = tmpTableName,
         cloudInfo = cloudInfo)
       val sinkStartTime = getCreationTime(stagingTableIngestionProperties)
-      // Cache this RDD created so that it is not evaluated multiple times from source
-
       if (writeOptions.isAsync) {
         val asyncWork = rdd.foreachPartitionAsync { rows =>
           ingestRowsIntoTempTbl(rows, batchIdIfExists, partitionsResults, parameters)
@@ -478,7 +475,7 @@ object KustoWriter {
       }
     }
     if (parameters.writeOptions.ensureNoDupBlobs && taskMap.size() > 0) {
-      taskMap.forEach((blobUUID, blobWriter) => {
+      taskMap.forEach((_, blobWriter) => {
         ingest(
           blobWriter,
           parameters,
@@ -511,14 +508,6 @@ object KustoWriter {
       props = SparkIngestionProperties.cloneIngestionProperties(ingestionProperties)
     }
     if (parameters.writeOptions.ensureNoDupBlobs) {
-//      if (blobIndexInBatch == 2 && TaskContext.get().taskAttemptId() % 2 == 0 && exceptionCount
-//          .get() < 2) {
-//        exceptionCount.incrementAndGet()
-//        KDSU.logWarn(
-//          className,
-//          "********************************************Forcing an exception to test the retry mechanism********************************************")
-//        throw new Exception("***Test Exception****")
-//      }
       // The Key change is here
       val tag = KDSU.getDedupTagsPrefix(
         parameters.writeOptions.requestId,
@@ -540,13 +529,7 @@ object KustoWriter {
     if (!props.getFlushImmediately && flushImmediately) {
       props.setFlushImmediately(true)
     }
-    val ingestClient = KustoClientCache
-      .getClient(
-        parameters.coordinates.clusterUrl,
-        parameters.authentication,
-        parameters.coordinates.ingestionUrl,
-        parameters.coordinates.clusterAlias)
-      .ingestClient
+    val ingestClient = kustoClient.ingestClient
     // write the data here
     val blobUrlWithSas =
       s"${blobResource.blob.getStorageUri.getPrimaryUri.toString}${blobResource.sas}"
