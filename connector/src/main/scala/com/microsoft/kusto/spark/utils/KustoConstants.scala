@@ -34,7 +34,10 @@ object KustoConstants {
   val DefaultTimeoutQueueing: Int = TimeUnit.SECONDS.toMillis(40).toInt
   val MaxIngestRetryAttempts = 2
   val MaxCommandsRetryAttempts = 4
-  val MaxStreamingBytes: Int = 4 * OneMegaByte
+  // val MaxStreamingBytes: Int = 4 * OneMegaByte
+  // This is just a temporary value until we actually count compressed bytes. GZIP is about 25-40% of the original size.
+  val MaxStreamingBytesUnCompressed: Int = 4 * OneMegaByte
+  val WarnStreamingBytes: Long = 100 * OneMegaByte
   val EmptyString = ""
   val DefaultMaximumIngestionTime: FiniteDuration = FiniteDuration.apply(
     MaxIngestRetryAttempts * (DefaultExecutionQueueing + DefaultTimeoutQueueing) + 2000,
