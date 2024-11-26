@@ -8,7 +8,6 @@ import com.microsoft.kusto.spark.datasource.{
   TransientStorageCredentials,
   TransientStorageParameters
 }
-import java.util
 
 private[kusto] object CslCommandsGenerator {
   private final val defaultKeySet =
@@ -192,6 +191,7 @@ private[kusto] object CslCommandsGenerator {
         s"""$k="$v""""
       }
       .mkString(",", ",", "")
+
     // Values in the map will override,We could have chosen sizeLimit option as the default.
     // Chosen the one in the map for consistency
     val compressionFormat = additionalExportOptions.getOrElse("compressionType", "snappy")
@@ -205,13 +205,10 @@ private[kusto] object CslCommandsGenerator {
       .map(b => s"useNativeParquetWriter=$b, ")
       .getOrElse(if (!supportNewParquetWriter) "useNativeParquetWriter=false, " else "")
 
-    var command =
       s""".export async $compress to parquet ("${storageParameters.storageCredentials
           .map(getFullUrlFromParams)
           .reduce((s, s1) => s + ",\"" + s1)})""" +
         s""" with ($sizeLimitOverride$nativeParquetString namePrefix="$namePrefix", compressionType="$compressionFormat"$additionalOptionsString) <| $query"""
-
-    command
   }
 
   def generateCountQuery(query: String): String = {

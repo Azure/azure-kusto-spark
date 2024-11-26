@@ -115,6 +115,5 @@ object TransientStorageParameters {
 }
 
 object TransientStorageCredentials {
-  private val SasPattern: Regex =
-    raw"https:\/\/([^.]+)(\.[^.]+)?\.blob\.([^\/]+)\/([^?]+)(\?.+)".r
+  val SasPattern: Regex = raw"https:\/\/([^.]+)(\.[^.]+)?\.blob\.([^\/]+)\/([^?]+)(;impersonate|[\?].+)".r
 }

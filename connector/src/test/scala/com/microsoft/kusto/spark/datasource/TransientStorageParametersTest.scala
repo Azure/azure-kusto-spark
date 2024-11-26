@@ -28,4 +28,15 @@ class TransientStorageParametersTest extends AnyFlatSpec {
         "?sp=racwdlmeop&st=2020-03-15T04:26:19Z&se=2020-03-16T12:26:19Z&spr=https&sv=2019-12-02&sr=c&sig=xxxxxx")
     transientStorageCredentials.toString shouldEqual "BlobContainer: kusto2 ,Storage: ateststorage2 , IsSasKeyDefined: true"
   }
+
+  "TransientStorageCredentials ToString with impersonate" should "parse and deserialize " in {
+    val transientStorageCredentials =
+      new TransientStorageParameters(
+        Array(
+          new TransientStorageCredentials(
+            "https://ateststorage.blob.core.windows.net/kusto;impersonate")))
+
+    transientStorageCredentials.toString shouldEqual s"[BlobContainer: kusto ,Storage: ateststorage , IsSasKeyDefined: true, domain: core.windows.net]"
+    TransientStorageParameters.fromString(transientStorageCredentials.toInsecureString).toString shouldEqual "[BlobContainer: kusto ,Storage: ateststorage , IsSasKeyDefined: true, domain: core.windows.net]"
+  }
 }
