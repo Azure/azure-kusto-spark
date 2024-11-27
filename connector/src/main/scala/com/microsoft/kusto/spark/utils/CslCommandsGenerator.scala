@@ -4,10 +4,7 @@
 package com.microsoft.kusto.spark.utils
 
 import java.time.Instant
-import com.microsoft.kusto.spark.datasource.{
-  TransientStorageCredentials,
-  TransientStorageParameters
-}
+import com.microsoft.kusto.spark.datasource.{AuthMethod, TransientStorageCredentials, TransientStorageParameters}
 
 private[kusto] object CslCommandsGenerator {
   private final val defaultKeySet =
@@ -172,7 +169,7 @@ private[kusto] object CslCommandsGenerator {
       supportNewParquetWriter: Boolean = true): String = {
     val getFullUrlFromParams = (storage: TransientStorageCredentials) => {
       val secretString =
-        if (!storage.sasDefined) s""";" h@"${storage.storageAccountKey}""""
+        if (storage.authMethod == AuthMethod.Key) s""";" h@"${storage.storageAccountKey}""""
         else if (storage.sasKey(0) == '?') s"""" h@"${storage.sasKey}""""
         else s"""?" h@"${storage.sasKey}""""
       val blobUri =

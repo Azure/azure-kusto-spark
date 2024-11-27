@@ -169,28 +169,28 @@ private[kusto] object KustoReader {
   }
 
   private def dirExist(params: TransientStorageCredentials, directory: String, endpointSuffix: String): Boolean = {
-    if (params.sasKey == ";impersonate") {
-      // TODO maybe we can use spark methods for that
-
+    if (params.authMethod == AuthMethod.Impersonation) {
+      // TODO maybe we can use hadoop fs lib to check dir existence
       true
     } else {
       val endpoint = s"https://${params.storageAccountName}.blob.${endpointSuffix}"
-      val container = if (params.sasDefined) {
-        val sas = if (params.sasKey(0) == '?') params.sasKey else s"?${params.sasKey}"
-        new BlobContainerClientBuilder()
-          .endpoint(endpoint)
-          .containerName(params.blobContainer)
-          .credential(new AzureSasCredential(sas))
-          .buildClient()
-      } else {
-        new BlobContainerClientBuilder()
-          .endpoint(endpoint)
-          .containerName(params.blobContainer)
-          .credential(
-            new StorageSharedKeyCredential(params.storageAccountName, params.storageAccountKey))
-          .buildClient()
-      }
-
+      val container = params.authMethod match {
+        case AuthMethod.Sas =>
+          val sas = if (params.sasKey(0) == '?') params.sasKey else s"?${params.sasKey}"
+          new BlobContainerClientBuilder()
+            .endpoint(endpoint)
+            .containerName(params.blobContainer)
+            .credential(new AzureSasCredential(sas))
+            .buildClient()
+        case AuthMethod.Key =>
+          new BlobContainerClientBuilder ()
+          .endpoint (endpoint)
+          .containerName (params.blobContainer)
+          .credential (
+          new StorageSharedKeyCredential (params.storageAccountName, params.storageAccountKey) )
+          .buildClient ()
+        case _ => throw new InvalidParameterException("")
+    }
       val exists = container.listBlobsByHierarchy(directory).stream().count() > 0
       // Existing logic container.exists() && container.getDirectoryReference(directory).listBlobsSegmented().getLength > 0
       exists
@@ -225,7 +225,7 @@ private[kusto] object KustoReader {
     }
 
     val paths = storage.storageCredentials
-      .filter((params) => dirExist(params, directory, storage.endpointSuffix))
+      .filter(params => dirExist(params, directory, storage.endpointSuffix))
       .map(params =>
         s"wasbs://${params.blobContainer}" +
           s"@${params.storageAccountName}.blob.${storage.endpointSuffix}/$directory")
@@ -242,30 +242,32 @@ private[kusto] object KustoReader {
     val config = request.sparkSession.sparkContext.hadoopConfiguration
     val now = Instant.now(Clock.systemUTC())
     for (storage <- storageParameters.storageCredentials) {
-      if (!storage.sasDefined) {
-        if (!KustoAzureFsSetupCache.updateAndGetPrevStorageAccountAccess(
+      storage.authMethod match {
+        case AuthMethod.Sas =>
+          if (!KustoAzureFsSetupCache.updateAndGetPrevStorageAccountAccess(
             storage.storageAccountName,
             storage.storageAccountKey,
             now)) {
-          config.set(
-            s"fs.azure.account.key.${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}",
-            s"${storage.storageAccountKey}")
-        }
-      } else if (storage.sasKey != ";impersonate") {
-        if (!KustoAzureFsSetupCache.updateAndGetPrevSas(
+            config.set(
+              s"fs.azure.account.key.${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}",
+              s"${storage.storageAccountKey}")
+          }
+        case AuthMethod.Key =>
+          if (!KustoAzureFsSetupCache.updateAndGetPrevSas(
             storage.blobContainer,
             storage.storageAccountName,
             storage.sasKey,
             now)) {
-          config.set(
-            s"fs.azure.sas.${storage.blobContainer}.${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}",
-            s"${storage.sasKey}")
-        }
+            config.set(
+              s"fs.azure.sas.${storage.blobContainer}.${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}",
+              s"${storage.sasKey}")
+          }
+        case _ =>
       }
+    }
 
-      if (!KustoAzureFsSetupCache.updateAndGetPrevNativeAzureFs(now)) {
-        config.set("fs.azure", "org.apache.hadoop.fs.azure.NativeAzureFileSystem")
-      }
+    if (!KustoAzureFsSetupCache.updateAndGetPrevNativeAzureFs(now)) {
+      config.set("fs.azure", "org.apache.hadoop.fs.azure.NativeAzureFileSystem")
     }
   }
 
