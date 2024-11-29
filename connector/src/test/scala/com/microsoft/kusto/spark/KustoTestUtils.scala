@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
-
 package com.microsoft.kusto.spark
 
 import com.azure.core.credential.{AccessToken, TokenRequestContext}
@@ -9,18 +8,10 @@ import com.azure.identity.AzureCliCredentialBuilder
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.{Client, ClientFactory}
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
-import com.microsoft.kusto.spark.datasink.{
-  KustoSinkOptions,
-  SinkTableCreationMode,
-  SparkIngestionProperties
-}
-import com.microsoft.kusto.spark.datasource.KustoSourceOptions
+import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode, SparkIngestionProperties}
+import com.microsoft.kusto.spark.datasource.{KustoSourceOptions, TransientStorageCredentials}
 import com.microsoft.kusto.spark.sql.extension.SparkExtension.DataFrameReaderExtension
-import com.microsoft.kusto.spark.utils.CslCommandsGenerator.{
-  generateDropTablesCommand,
-  generateFindCurrentTempTablesCommand,
-  generateTempTableCreateCommand
-}
+import com.microsoft.kusto.spark.utils.CslCommandsGenerator.{generateDropTablesCommand, generateFindCurrentTempTablesCommand, generateTempTableCreateCommand}
 import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
 import reactor.core.publisher.Mono
@@ -189,11 +180,14 @@ private[kusto] object KustoTestUtils {
 
   }
 
-  def getSystemTestOptions: KustoConnectionOptions = {
+  def getSystemTestOptions(isSourceE2E: Boolean = false): KustoConnectionOptions = {
     val cluster: String = clusterToKustoFQDN(getSystemVariable(KustoSinkOptions.KUSTO_CLUSTER))
     val database: String = getSystemVariable(KustoSinkOptions.KUSTO_DATABASE)
-    val table: String = Option(getSystemVariable(KustoSinkOptions.KUSTO_TABLE)).getOrElse("SparkTestTable")
-    KDSU.logInfo(className, s"Getting AZCli token for cluster $cluster , database $database & table $table")
+    val table: String =
+      Option(getSystemVariable(KustoSinkOptions.KUSTO_TABLE)).getOrElse("SparkTestTable")
+    KDSU.logInfo(
+      className,
+      s"Getting AZCli token for cluster $cluster , database $database & table $table")
     val key = s"$cluster"
     if (cachedToken.contains(key)) {
       cachedToken(key)
@@ -202,16 +196,18 @@ private[kusto] object KustoTestUtils {
       val authority: String = getSystemVariable(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID)
       val clusterScope = s"$cluster/.default"
       KDSU.logWarn(className, s"Using scope $clusterScope and authority $authority")
-      val accessToken = maybeAccessTokenEnv match {
+      val accessToken: String = maybeAccessTokenEnv match {
         case Some(at) =>
           KDSU.logInfo(
             className,
             s"Using access token from environment variable ${KustoSinkOptions.KUSTO_ACCESS_TOKEN}")
           at
         case None =>
-          val tokenRequestContext = new TokenRequestContext().setScopes(Collections.singletonList(clusterScope))
+          val tokenRequestContext = new TokenRequestContext()
+            .setScopes(Collections.singletonList(clusterScope))
             .setTenantId(authority)
-          val value = new AzureCliCredentialBuilder().build().getToken(tokenRequestContext).block()
+          val value =
+            new AzureCliCredentialBuilder().build().getToken(tokenRequestContext).block()
           Try(value) match {
             case scala.util.Success(token: AccessToken) =>
               val azCliToken: AccessToken = token
@@ -220,15 +216,57 @@ private[kusto] object KustoTestUtils {
               KDSU.reportExceptionAndThrow(
                 s"Failed to get access token for cluster $cluster, database $database & table $table at scope $clusterScope",
                 exception)
-              throw new RuntimeException(
-                s"Failed to get access token for cluster $cluster, database $database & table $table at scope $clusterScope",
-                exception)
+              throw exception
           }
       }
-      val kco = KustoConnectionOptions(cluster, database, accessToken, authority)
-      cachedToken.put(key, kco)
-      kco
+      if (isSourceE2E) {
+        setVariablesForSourceE2EToCashByKey(cluster, database, accessToken, authority, key)
+      } else {
+        cachedToken.put(key, KustoConnectionOptions(
+          cluster,
+          database,
+          accessToken,
+          authority))
+      }
+      cachedToken(key)
     }
+  }
+
+  private def setVariablesForSourceE2EToCashByKey(cluster: String, database: String, accessToken: String,
+                                                  authority: String, key: String) = {
+    val maybeAccessTokenEnv2 = Option(
+      getSystemVariable(KustoSinkOptions.KUSTO_ACCESS_TOKEN + 2))
+    val storageAccessToken = maybeAccessTokenEnv2 match {
+      case Some(at) =>
+        at
+      case None =>
+        val storageScope = "https://storage.azure.com/.default"
+        val tokenRequestContext = new TokenRequestContext()
+          .setScopes(Collections.singletonList(storageScope))
+          .setTenantId(authority)
+        val value =
+          new AzureCliCredentialBuilder().build().getToken(tokenRequestContext).block()
+        Try(value) match {
+          case scala.util.Success(token: AccessToken) =>
+            val azCliToken: AccessToken = token
+            azCliToken.getToken
+          case scala.util.Failure(exception) =>
+            KDSU.reportExceptionAndThrow(
+              s"Failed to get access token for storage at scope $storageScope",
+              exception)
+            throw exception
+        }
+    }
+
+    val storageAccountUrl: String = getSystemVariable("storageAccountUrl")
+    storageAccountUrl match {
+      case TransientStorageCredentials.SasPattern(
+      storageAccountName, _, _, _, _) =>
+        cachedToken.put(key, KustoConnectionOptions(cluster, database, accessToken, authority,
+          storageAccessToken = Some(storageAccessToken), storageAccountName = Some(storageAccountName)))
+      case _ => throw new InvalidParameterException("Storage url is invalid")
+    }
+
   }
 
   private def getSystemVariable(key: String) = {
@@ -252,5 +290,8 @@ private[kusto] object KustoTestUtils {
       database: String,
       accessToken: String,
       tenantId: String,
-      createTableIfNotExists: SinkTableCreationMode = SinkTableCreationMode.CreateIfNotExist)
+      createTableIfNotExists: SinkTableCreationMode = SinkTableCreationMode.CreateIfNotExist,
+      storageAccessToken: Option[String] = None, // Used in SourceE2E
+      storageContainerUrl: Option[String] = None,
+      storageAccountName: Option[String] = None)
 }

@@ -8,20 +8,11 @@ import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.{Client, ClientFactory, ClientRequestProperties}
 import com.microsoft.kusto.spark.KustoTestUtils.{KustoConnectionOptions, getSystemTestOptions}
 import com.microsoft.kusto.spark.common.KustoDebugOptions
-import com.microsoft.kusto.spark.datasink.{
-  KustoSinkOptions,
-  SinkTableCreationMode,
-  SparkIngestionProperties
-}
-import com.microsoft.kusto.spark.datasource.{
-  KustoSourceOptions,
-  ReadMode,
-  TransientStorageCredentials,
-  TransientStorageParameters
-}
+import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode, SparkIngestionProperties}
+import com.microsoft.kusto.spark.datasource.{KustoSourceOptions, ReadMode, TransientStorageCredentials, TransientStorageParameters}
 import com.microsoft.kusto.spark.sql.extension.SparkExtension._
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
-import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.{KustoAzureFsSetupCache, KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.hadoop.util.ComparableVersion
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode, SparkSession}
@@ -37,7 +28,7 @@ import scala.util.{Failure, Random, Success, Try}
 
 class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
   private lazy val kustoConnectionOptions: KustoConnectionOptions =
-    getSystemTestOptions
+    getSystemTestOptions(true)
   private val nofExecutors = 4
   private val spark: SparkSession = SparkSession
     .builder()
@@ -213,17 +204,21 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
   "KustoSource" should "execute a read query on Kusto cluster in distributed mode" in {
     maybeKustoDmClient match {
       case Some(kustoIngestClient) =>
-        val storageWithKey = kustoIngestClient
-          .execute(kustoConnectionOptions.database, generateGetExportContainersCommand())
-          .getPrimaryResults
-          .getData
-          .get(0)
-          .get(0)
-          .toString
-        KDSU.logDebug(className, s"storageWithKey: $storageWithKey")
+        if (kustoConnectionOptions.storageAccessToken != null){
+          new org.apache.hadoop.fs.azurebfs.oauth2.ClientCredsTokenProvider
+          // Grant access for the appid over the storage account
+          spark.conf.set("fs.azure.account.auth.type.kustotest.blob.core.windows.net", "OAuth")
+          spark.conf.set("fs.azure.account.auth.type.kustotest.dfs.core.windows.net", "OAuth")
+          spark.conf.set("fs.azure.account.oauth.provider.type.kustotest.blob.core.windows.net", "org.apache.hadoop.fs.azurebfs.oauth2.ClientCredsTokenProvider")
+          spark.conf.set("fs.azure.account.oauth2.access.token.kustotest.blob.core.windows.net", kustoConnectionOptions.storageAccessToken.get)
+        } else {
+          //TODO fail?
+        }
+
 
         val storage =
-          new TransientStorageParameters(Array(new TransientStorageCredentials(storageWithKey)))
+          new TransientStorageParameters(Array(new TransientStorageCredentials("" +
+            "https://kustotest.blob.core.windows.net/spark-e2e-test;impersonate")))
 
         val conf: Map[String, String] = Map(
           KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceDistributedMode.toString,

@@ -31,8 +31,7 @@ class KustoSinkSchemaAdjustmentE2E
   private val expectedNumberOfRows = 3
   private def newRow(index: Int): String = s"row-$index"
 
-  private lazy val kustoConnectionOptions: KustoConnectionOptions = getSystemTestOptions
-
+  private lazy val kustoConnectionOptions: KustoConnectionOptions = getSystemTestOptions()
   override def afterAll(): Unit = {
     cleanup(kustoConnectionOptions, testTablePrefix)
     spark.sparkContext.stop()

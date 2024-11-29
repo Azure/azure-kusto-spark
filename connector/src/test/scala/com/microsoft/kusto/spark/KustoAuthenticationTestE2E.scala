@@ -22,7 +22,7 @@ class KustoAuthenticationTestE2E extends AnyFlatSpec {
     .appName("KustoSink")
     .master(f"local[2]")
     .getOrCreate()
-  private lazy val kustoConnectionOptions: KustoConnectionOptions = KustoTestUtils.getSystemTestOptions
+  private lazy val kustoConnectionOptions: KustoConnectionOptions = KustoTestUtils.getSystemTestOptions()
 
   val keyVaultAppId: String = System.getProperty(KustoSinkOptions.KEY_VAULT_APP_ID)
   val keyVaultAppKey: String = System.getProperty(KustoSinkOptions.KEY_VAULT_APP_KEY)
