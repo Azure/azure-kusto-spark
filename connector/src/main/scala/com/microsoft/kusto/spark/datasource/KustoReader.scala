@@ -10,13 +10,8 @@ import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties, KustoRes
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasource.ReadMode.ReadMode
-import com.microsoft.kusto.spark.utils.{
-  CslCommandsGenerator,
-  ExtendedKustoClient,
-  KustoAzureFsSetupCache,
-  KustoBlobStorageUtils,
-  KustoDataSourceUtils => KDSU
-}
+import com.microsoft.kusto.spark.utils.{CslCommandsGenerator, ExtendedKustoClient, KustoAzureFsSetupCache, KustoBlobStorageUtils, KustoDataSourceUtils => KDSU}
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.util.ComparableVersion
 import org.apache.spark.Partition
 import org.apache.spark.rdd.RDD
@@ -168,12 +163,17 @@ private[kusto] object KustoReader {
     rdd
   }
 
-  private def dirExist(params: TransientStorageCredentials, directory: String, endpointSuffix: String): Boolean = {
+  private def dirExist(spark:SparkSession, params: TransientStorageCredentials, directory: String, endpointSuffix: String): Boolean = {
     if (params.authMethod == AuthMethod.Impersonation) {
-      // TODO maybe we can use hadoop fs lib to check dir existence
-      true
+      val url = s"wasbs://${params.blobContainer}" +
+        s"@${params.storageAccountName}.blob.$endpointSuffix"
+      val hadoopConf = spark.sparkContext.hadoopConfiguration
+      val fs = FileSystem.get(new URI(url), hadoopConf)
+
+      val path = new Path(url + s"/$directory")
+      fs.exists(path)
     } else {
-      val endpoint = s"https://${params.storageAccountName}.blob.${endpointSuffix}"
+      val endpoint = s"https://${params.storageAccountName}.blob.$endpointSuffix"
       val container = params.authMethod match {
         case AuthMethod.Sas =>
           val sas = if (params.sasKey(0) == '?') params.sasKey else s"?${params.sasKey}"
@@ -225,7 +225,7 @@ private[kusto] object KustoReader {
     }
 
     val paths = storage.storageCredentials
-      .filter(params => dirExist(params, directory, storage.endpointSuffix))
+      .filter(params => dirExist(request.sparkSession, params, directory, storage.endpointSuffix))
       .map(params =>
         s"wasbs://${params.blobContainer}" +
           s"@${params.storageAccountName}.blob.${storage.endpointSuffix}/$directory")

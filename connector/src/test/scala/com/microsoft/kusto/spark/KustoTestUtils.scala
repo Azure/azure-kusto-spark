@@ -262,7 +262,6 @@ private[kusto] object KustoTestUtils {
     }
 
     val storageAccountUrl: String = getSystemVariable("storageAccountUrl")
-
     cachedToken.put(key, KustoConnectionOptions(cluster, database, accessToken, authority,
       storageAccessToken = Some(storageAccessToken), storageContainerUrl = Some(storageAccountUrl)))
   }
@@ -303,7 +302,7 @@ private[kusto] object KustoTestUtils {
 
     // Get the user delegation key
     val userDelegationKey = blobServiceClient.getUserDelegationKey(
-      OffsetDateTime.now(), OffsetDateTime.now().plusHours(1));
+      OffsetDateTime.now(), OffsetDateTime.now().plusHours(1))
 
     val blobSasPermission = new BlobSasPermission()
       .setReadPermission(true)
