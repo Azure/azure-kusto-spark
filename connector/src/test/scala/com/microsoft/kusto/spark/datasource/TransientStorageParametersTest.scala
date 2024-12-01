@@ -36,7 +36,7 @@ class TransientStorageParametersTest extends AnyFlatSpec {
           new TransientStorageCredentials(
             "https://ateststorage.blob.core.windows.net/kusto;impersonate")))
 
-    transientStorageCredentials.toString shouldEqual s"[BlobContainer: kusto ,Storage: ateststorage , IsSasKeyDefined: true, domain: core.windows.net]"
-    TransientStorageParameters.fromString(transientStorageCredentials.toInsecureString).toString shouldEqual "[BlobContainer: kusto ,Storage: ateststorage , IsSasKeyDefined: true, domain: core.windows.net]"
+    transientStorageCredentials.toString shouldEqual s"[BlobContainer: kusto ,Storage: ateststorage , IsSasKeyDefined: false, domain: core.windows.net]"
+    TransientStorageParameters.fromString(transientStorageCredentials.toInsecureString).toString shouldEqual "[BlobContainer: kusto ,Storage: ateststorage , IsSasKeyDefined: false, domain: core.windows.net]"
   }
 }
