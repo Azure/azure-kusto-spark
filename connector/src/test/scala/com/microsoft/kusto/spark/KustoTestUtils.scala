@@ -3,8 +3,10 @@
 
 package com.microsoft.kusto.spark
 
-import com.azure.core.credential.{AccessToken, TokenRequestContext}
-import com.azure.identity.AzureCliCredentialBuilder
+import com.azure.core.credential.{AccessToken, TokenCredential, TokenRequestContext}
+import com.azure.identity.{AzureCliCredentialBuilder, ClientAssertionCredentialBuilder}
+import com.azure.storage.blob.BlobServiceClientBuilder
+import com.azure.storage.blob.sas.{BlobSasPermission, BlobServiceSasSignatureValues}
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.{Client, ClientFactory}
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
@@ -17,6 +19,7 @@ import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
 import reactor.core.publisher.Mono
 
 import java.security.InvalidParameterException
+import java.time.OffsetDateTime
 import java.util.{Collections, UUID}
 import scala.collection.JavaConverters.asScalaBufferConverter
 import scala.collection.mutable
@@ -259,14 +262,9 @@ private[kusto] object KustoTestUtils {
     }
 
     val storageAccountUrl: String = getSystemVariable("storageAccountUrl")
-    storageAccountUrl match {
-      case TransientStorageCredentials.SasPattern(
-      storageAccountName, _, _, _, _) =>
-        cachedToken.put(key, KustoConnectionOptions(cluster, database, accessToken, authority,
-          storageAccessToken = Some(storageAccessToken), storageAccountName = Some(storageAccountName)))
-      case _ => throw new InvalidParameterException("Storage url is invalid")
-    }
 
+    cachedToken.put(key, KustoConnectionOptions(cluster, database, accessToken, authority,
+      storageAccessToken = Some(storageAccessToken), storageContainerUrl = Some(storageAccountUrl)))
   }
 
   private def getSystemVariable(key: String) = {
@@ -285,6 +283,48 @@ private[kusto] object KustoTestUtils {
     }
   }
 
+
+  def generateSasDelegationFromToken(token:String, storageContainerUrl: String): String = {
+    val clientId = getSystemVariable(KustoSinkOptions.KUSTO_AAD_APP_ID)
+    val tenantId = getSystemVariable(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID)
+    val tokenCredential = new ClientAssertionCredentialBuilder()
+      .tenantId(tenantId)
+      .clientId(clientId)
+      .clientAssertion(() => token)
+      .build()
+
+    val  (storageAccountName, container) = storageContainerUrl match {
+      case TransientStorageCredentials.SasPattern(
+      storageAccountName, _, _, container, _) =>
+        (storageAccountName, container)
+      case _ => throw new InvalidParameterException("Storage url is invalid")
+    }
+
+    val blobServiceClient = new BlobServiceClientBuilder()
+      .endpoint(storageContainerUrl)
+      .credential(tokenCredential)
+      .buildClient();
+    // Specify the container name // Specify the container name
+    KustoSourceOptions.KUSTO_AAD_APP_ID
+    // Get the BlobContainerClient
+    val containerClient = blobServiceClient.getBlobContainerClient(container)
+    // Get the user delegation key
+    val userDelegationKey = blobServiceClient.getUserDelegationKey(
+      OffsetDateTime.now(), OffsetDateTime.now().plusHours(1));
+
+    val blobSasPermission = new BlobSasPermission()
+      .setReadPermission(true)
+      .setWritePermission(true)
+
+    val sasSignatureValues = new BlobServiceSasSignatureValues(
+      OffsetDateTime.now().plusDays(1), blobSasPermission)
+      .setStartTime(OffsetDateTime.now().minusMinutes(5))
+
+    containerClient.generateUserDelegationSas(sasSignatureValues, userDelegationKey)
+
+
+  }
+
   final case class KustoConnectionOptions(
       cluster: String,
       database: String,
@@ -292,6 +332,5 @@ private[kusto] object KustoTestUtils {
       tenantId: String,
       createTableIfNotExists: SinkTableCreationMode = SinkTableCreationMode.CreateIfNotExist,
       storageAccessToken: Option[String] = None, // Used in SourceE2E
-      storageContainerUrl: Option[String] = None,
-      storageAccountName: Option[String] = None)
+      storageContainerUrl: Option[String] = None)
 }
