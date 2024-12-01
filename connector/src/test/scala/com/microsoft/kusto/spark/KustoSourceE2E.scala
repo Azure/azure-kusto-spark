@@ -21,6 +21,7 @@ import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode, SparkSession}
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.flatspec.AnyFlatSpec
 
+import java.security.InvalidParameterException
 import java.time.temporal.ChronoUnit
 import java.time.{Clock, Instant}
 import java.util.{Date, UUID}
@@ -136,44 +137,44 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
     })
   val dfOrig: DataFrame = rows.toDF("name", "value", "dec")
 
-//  "KustoConnector" should "write to a kusto table and read it back in default mode" in {
-//    // Create a new table.
-//    KDSU.logInfo("e2e", "running KustoConnector")
-//    val crp = new ClientRequestProperties
-//    crp.setTimeoutInMilliSec(60000)
-//    val ingestByTags = new java.util.ArrayList[String]
-//    val tag = "dammyTag"
-//    ingestByTags.add(tag)
-//    val sp = new SparkIngestionProperties()
-//    sp.ingestByTags = ingestByTags
-//    sp.creationTime = Instant.now(Clock.systemUTC())
-//
-//    dfOrig.write
-//      .format("com.microsoft.kusto.spark.datasource")
-//      .option(KustoSinkOptions.KUSTO_CLUSTER, kustoConnectionOptions.cluster)
-//      .option(KustoSinkOptions.KUSTO_DATABASE, kustoConnectionOptions.database)
-//      .option(KustoSinkOptions.KUSTO_TABLE, table)
-//      .option(KustoSinkOptions.KUSTO_ACCESS_TOKEN, kustoConnectionOptions.accessToken)
-//      .option(KustoSinkOptions.KUSTO_CLIENT_REQUEST_PROPERTIES_JSON, crp.toString)
-//      .option(
-//        KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS,
-//        SinkTableCreationMode.CreateIfNotExist.toString)
-//      .option(KustoDebugOptions.KUSTO_ENSURE_NO_DUPLICATED_BLOBS, true.toString)
-//      .option(KustoDebugOptions.KUSTO_DISABLE_FLUSH_IMMEDIATELY, true.toString)
-//      .option(KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON, sp.toString)
-//      .mode(SaveMode.Append)
-//      .save()
-//
-//    val instant = Instant.now.plus(1, ChronoUnit.HOURS)
-//    maybeKustoAdminClient.get.execute(
-//      kustoConnectionOptions.database,
-//      generateTableAlterAutoDeletePolicy(table, instant))
-//
-//    val conf: Map[String, String] =
-//      Map(KustoSinkOptions.KUSTO_ACCESS_TOKEN -> kustoConnectionOptions.accessToken)
-//    validateRead(conf)
-//  }
-//
+  "KustoConnector" should "write to a kusto table and read it back in default mode" in {
+    // Create a new table.
+    KDSU.logInfo("e2e", "running KustoConnector")
+    val crp = new ClientRequestProperties
+    crp.setTimeoutInMilliSec(60000)
+    val ingestByTags = new java.util.ArrayList[String]
+    val tag = "dammyTag"
+    ingestByTags.add(tag)
+    val sp = new SparkIngestionProperties()
+    sp.ingestByTags = ingestByTags
+    sp.creationTime = Instant.now(Clock.systemUTC())
+
+    dfOrig.write
+      .format("com.microsoft.kusto.spark.datasource")
+      .option(KustoSinkOptions.KUSTO_CLUSTER, kustoConnectionOptions.cluster)
+      .option(KustoSinkOptions.KUSTO_DATABASE, kustoConnectionOptions.database)
+      .option(KustoSinkOptions.KUSTO_TABLE, table)
+      .option(KustoSinkOptions.KUSTO_ACCESS_TOKEN, kustoConnectionOptions.accessToken)
+      .option(KustoSinkOptions.KUSTO_CLIENT_REQUEST_PROPERTIES_JSON, crp.toString)
+      .option(
+        KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS,
+        SinkTableCreationMode.CreateIfNotExist.toString)
+      .option(KustoDebugOptions.KUSTO_ENSURE_NO_DUPLICATED_BLOBS, true.toString)
+      .option(KustoDebugOptions.KUSTO_DISABLE_FLUSH_IMMEDIATELY, true.toString)
+      .option(KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON, sp.toString)
+      .mode(SaveMode.Append)
+      .save()
+
+    val instant = Instant.now.plus(1, ChronoUnit.HOURS)
+    maybeKustoAdminClient.get.execute(
+      kustoConnectionOptions.database,
+      generateTableAlterAutoDeletePolicy(table, instant))
+
+    val conf: Map[String, String] =
+      Map(KustoSinkOptions.KUSTO_ACCESS_TOKEN -> kustoConnectionOptions.accessToken)
+    validateRead(conf)
+  }
+
   val minimalParquetWriterVersion: String = "3.3.0"
   private def validateRead(conf: Map[String, String]) = {
     val dfResult = spark.read.kusto(
@@ -195,63 +196,50 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
       .sortBy(_._2)
     assert(orig.deep == result.deep)
   }
-//
-//  "KustoSource" should "execute a read query on Kusto cluster in single mode" in {
-//    val conf: Map[String, String] = Map(
-//      KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceSingleMode.toString,
-//      KustoSourceOptions.KUSTO_ACCESS_TOKEN -> kustoConnectionOptions.accessToken)
-//    validateRead(conf)
-//  }
 
-  "KustoSource" should "execute a read query on Kusto cluster in distributed mode" in {
-    maybeKustoDmClient match {
-      case Some(kustoIngestClient) =>
-        if (kustoConnectionOptions.storageAccessToken != null){
-         KustoTestUtils.generateSasDelegationFromToken(kustoConnectionOptions.storageAccessToken.get, kustoConnectionOptions.storageContainerUrl.get)
-        } else {
-          //TODO fail?
-        }
+  "KustoSource" should "execute a read query on Kusto cluster in single mode" in {
+    val conf: Map[String, String] = Map(
+      KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceSingleMode.toString,
+      KustoSourceOptions.KUSTO_ACCESS_TOKEN -> kustoConnectionOptions.accessToken)
+    validateRead(conf)
+  }
 
+  "KustoSource" should "execute a read query with transient storage and impersonation in distributed mode" in {
+    // Use sas delegation to create a SAS key for the test storage
+    val sas = KustoTestUtils.generateSasDelegationWithAzCli(kustoConnectionOptions.storageAccessToken.get, kustoConnectionOptions.storageContainerUrl.get)
+    kustoConnectionOptions.storageContainerUrl.get match {
+      case TransientStorageCredentials.SasPattern(
+      storageAccountName, _, domainSuffix, container, _) =>
 
+        spark.sparkContext.hadoopConfiguration.set(
+          s"fs.azure.sas.$container.$storageAccountName.blob.$domainSuffix",
+          sas)
+      case _ => throw new InvalidParameterException("Storage url is invalid")
+    }
 
-//        for (st <- storage.storageCredentials){
-//          KustoAzureFsSetupCache.updateAndGetPrevSas(
-//            st.blobContainer,
-//            st.storageAccountName,
-//            st.sasKey,
-//            Instant.now(Clock.systemUTC()))
-//          spark.conf.set(
-//            s"fs.azure.sas.${st.blobContainer}.${st.storageAccountName}.blob.${storage.endpointSuffix}",
-//            s"${st.sasKey}")
-//        }
+    // Use impersonation to read to the storage, the identity used for testing should be granted permissions over it
+    assert(kustoConnectionOptions.storageContainerUrl.get.endsWith(";impersonate"))
+    val storage =
+      new TransientStorageParameters(Array(new TransientStorageCredentials(kustoConnectionOptions.storageContainerUrl.get)))
 
-        val storage =
-          new TransientStorageParameters(Array(new TransientStorageCredentials("" +
-            kustoConnectionOptions.storageContainerUrl.get+";impersonate")))
-
-        val conf: Map[String, String] = Map(
-          KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceDistributedMode.toString,
-          KustoSourceOptions.KUSTO_TRANSIENT_STORAGE -> storage.toInsecureString,
-          KustoSourceOptions.KUSTO_ACCESS_TOKEN -> kustoConnectionOptions.accessToken)
-        val supportNewParquetWriter = new ComparableVersion(spark.version)
-          .compareTo(new ComparableVersion(minimalParquetWriterVersion)) > 0
-        if (supportNewParquetWriter) {
-          validateRead(conf)
-        } else {
-          val dfResult = spark.read.kusto(
-            kustoConnectionOptions.cluster,
-            kustoConnectionOptions.database,
-            table,
-            conf)
-          assert(dfResult.count() == expectedNumberOfRows)
-        }
-      case None =>
-        KDSU.logError(className, s"DM client is null & tests are skipped")
-        fail
+    val conf: Map[String, String] = Map(
+      KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceDistributedMode.toString,
+      KustoSourceOptions.KUSTO_TRANSIENT_STORAGE -> storage.toInsecureString,
+      KustoSourceOptions.KUSTO_ACCESS_TOKEN -> kustoConnectionOptions.accessToken)
+    val supportNewParquetWriter = new ComparableVersion(spark.version)
+      .compareTo(new ComparableVersion(minimalParquetWriterVersion)) > 0
+    if (supportNewParquetWriter) {
+      validateRead(conf)
+    } else {
+      val dfResult = spark.read.kusto(
+        kustoConnectionOptions.cluster,
+        kustoConnectionOptions.database,
+        table,
+        conf)
+      assert(dfResult.count() == expectedNumberOfRows)
     }
   }
 
-  // TODO make this UT
   "KustoSource" should "read distributed, transient cache change the filter but execute once" taggedAs KustoE2E in {
     import spark.implicits._
     val table = KustoQueryUtils.simplifyName(s"KustoSparkReadWriteTest_${UUID.randomUUID()}")

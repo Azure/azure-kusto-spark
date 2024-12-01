@@ -283,31 +283,24 @@ private[kusto] object KustoTestUtils {
     }
   }
 
-
-  def generateSasDelegationFromToken(token:String, storageContainerUrl: String): String = {
+  def generateSasDelegationWithAzCli(token:String, storageContainerUrl: String): String = {
     val clientId = getSystemVariable(KustoSinkOptions.KUSTO_AAD_APP_ID)
     val tenantId = getSystemVariable(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID)
-    val tokenCredential = new ClientAssertionCredentialBuilder()
-      .tenantId(tenantId)
-      .clientId(clientId)
-      .clientAssertion(() => token)
-      .build()
 
-    val  (storageAccountName, container) = storageContainerUrl match {
+    val containerName = storageContainerUrl match {
       case TransientStorageCredentials.SasPattern(
-      storageAccountName, _, _, container, _) =>
-        (storageAccountName, container)
+      _, _, _, container, _) =>
+        container
       case _ => throw new InvalidParameterException("Storage url is invalid")
     }
 
     val blobServiceClient = new BlobServiceClientBuilder()
       .endpoint(storageContainerUrl)
-      .credential(tokenCredential)
-      .buildClient();
-    // Specify the container name // Specify the container name
-    KustoSourceOptions.KUSTO_AAD_APP_ID
-    // Get the BlobContainerClient
-    val containerClient = blobServiceClient.getBlobContainerClient(container)
+      .credential(new AzureCliCredentialBuilder().build())
+      .buildClient()
+
+    val containerClient = blobServiceClient.getBlobContainerClient(containerName)
+
     // Get the user delegation key
     val userDelegationKey = blobServiceClient.getUserDelegationKey(
       OffsetDateTime.now(), OffsetDateTime.now().plusHours(1));
@@ -315,14 +308,13 @@ private[kusto] object KustoTestUtils {
     val blobSasPermission = new BlobSasPermission()
       .setReadPermission(true)
       .setWritePermission(true)
+      .setListPermission(true)
 
     val sasSignatureValues = new BlobServiceSasSignatureValues(
       OffsetDateTime.now().plusDays(1), blobSasPermission)
       .setStartTime(OffsetDateTime.now().minusMinutes(5))
 
     containerClient.generateUserDelegationSas(sasSignatureValues, userDelegationKey)
-
-
   }
 
   final case class KustoConnectionOptions(

@@ -169,9 +169,11 @@ private[kusto] object CslCommandsGenerator {
       supportNewParquetWriter: Boolean = true): String = {
     val getFullUrlFromParams = (storage: TransientStorageCredentials) => {
       val secretString =
-        if (storage.authMethod == AuthMethod.Key) s""";" h@"${storage.storageAccountKey}""""
-        else if (storage.sasKey(0) == '?') s"""" h@"${storage.sasKey}""""
-        else s"""?" h@"${storage.sasKey}""""
+        storage.authMethod match {
+          case AuthMethod.Key => s""";" h@"${storage.storageAccountKey}""""
+          case AuthMethod.Sas => if (storage.sasKey(0) == '?') s"""" h@"${storage.sasKey}"""" else s"""?" h@"${storage.sasKey}""""
+          case AuthMethod.Impersonation => s"""${TransientStorageParameters.ImpersoantionString}""""
+      }
       val blobUri =
         s"https://${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}"
       s"$blobUri/${storage.blobContainer}$secretString"
