@@ -223,7 +223,8 @@ private[kusto] object KustoTestUtils {
           }
       }
       if (isSourceE2E) {
-        setVariablesForSourceE2EToCashByKey(cluster, database, accessToken, authority, key)
+        val storageAccountUrl: String = getSystemVariable("storageAccountUrl")
+        cachedToken.put(key, KustoConnectionOptions(cluster, database, accessToken, authority, storageContainerUrl = Some(storageAccountUrl)))
       } else {
         cachedToken.put(key, KustoConnectionOptions(
           cluster,
@@ -233,37 +234,6 @@ private[kusto] object KustoTestUtils {
       }
       cachedToken(key)
     }
-  }
-
-  private def setVariablesForSourceE2EToCashByKey(cluster: String, database: String, accessToken: String,
-                                                  authority: String, key: String) = {
-    val maybeAccessTokenEnv2 = Option(
-      getSystemVariable(KustoSinkOptions.KUSTO_ACCESS_TOKEN + 2))
-    val storageAccessToken = maybeAccessTokenEnv2 match {
-      case Some(at) =>
-        at
-      case None =>
-        val storageScope = "https://storage.azure.com/.default"
-        val tokenRequestContext = new TokenRequestContext()
-          .setScopes(Collections.singletonList(storageScope))
-          .setTenantId(authority)
-        val value =
-          new AzureCliCredentialBuilder().build().getToken(tokenRequestContext).block()
-        Try(value) match {
-          case scala.util.Success(token: AccessToken) =>
-            val azCliToken: AccessToken = token
-            azCliToken.getToken
-          case scala.util.Failure(exception) =>
-            KDSU.reportExceptionAndThrow(
-              s"Failed to get access token for storage at scope $storageScope",
-              exception)
-            throw exception
-        }
-    }
-
-    val storageAccountUrl: String = getSystemVariable("storageAccountUrl")
-    cachedToken.put(key, KustoConnectionOptions(cluster, database, accessToken, authority,
-      storageAccessToken = Some(storageAccessToken), storageContainerUrl = Some(storageAccountUrl)))
   }
 
   private def getSystemVariable(key: String) = {
@@ -282,10 +252,7 @@ private[kusto] object KustoTestUtils {
     }
   }
 
-  def generateSasDelegationWithAzCli(token:String, storageContainerUrl: String): String = {
-    val clientId = getSystemVariable(KustoSinkOptions.KUSTO_AAD_APP_ID)
-    val tenantId = getSystemVariable(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID)
-
+  def generateSasDelegationWithAzCli(storageContainerUrl: String): String = {
     val containerName = storageContainerUrl match {
       case TransientStorageCredentials.SasPattern(
       _, _, _, container, _) =>
@@ -310,7 +277,7 @@ private[kusto] object KustoTestUtils {
       .setListPermission(true)
 
     val sasSignatureValues = new BlobServiceSasSignatureValues(
-      OffsetDateTime.now().plusDays(1), blobSasPermission)
+      OffsetDateTime.now().plusHours(1), blobSasPermission)
       .setStartTime(OffsetDateTime.now().minusMinutes(5))
 
     containerClient.generateUserDelegationSas(sasSignatureValues, userDelegationKey)
@@ -322,6 +289,5 @@ private[kusto] object KustoTestUtils {
       accessToken: String,
       tenantId: String,
       createTableIfNotExists: SinkTableCreationMode = SinkTableCreationMode.CreateIfNotExist,
-      storageAccessToken: Option[String] = None, // Used in SourceE2E
       storageContainerUrl: Option[String] = None)
 }

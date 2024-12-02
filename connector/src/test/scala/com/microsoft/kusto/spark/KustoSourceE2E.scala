@@ -206,7 +206,7 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
 
   "KustoSource" should "execute a read query with transient storage and impersonation in distributed mode" in {
     // Use sas delegation to create a SAS key for the test storage
-    val sas = KustoTestUtils.generateSasDelegationWithAzCli(kustoConnectionOptions.storageAccessToken.get, kustoConnectionOptions.storageContainerUrl.get)
+    val sas = KustoTestUtils.generateSasDelegationWithAzCli(kustoConnectionOptions.storageContainerUrl.get)
     kustoConnectionOptions.storageContainerUrl.get match {
       case TransientStorageCredentials.SasPattern(
       storageAccountName, _, domainSuffix, container, _) =>

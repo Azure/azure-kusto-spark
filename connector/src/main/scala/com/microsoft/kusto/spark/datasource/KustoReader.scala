@@ -165,8 +165,7 @@ private[kusto] object KustoReader {
 
   private def dirExist(spark:SparkSession, params: TransientStorageCredentials, directory: String, endpointSuffix: String): Boolean = {
     if (params.authMethod == AuthMethod.Impersonation) {
-      val url = s"wasbs://${params.blobContainer}" +
-        s"@${params.storageAccountName}.blob.$endpointSuffix"
+      val url = s"wasbs://${params.blobContainer}@${params.storageAccountName}.blob.$endpointSuffix"
       val hadoopConf = spark.sparkContext.hadoopConfiguration
       val fs = FileSystem.get(new URI(url), hadoopConf)
 
