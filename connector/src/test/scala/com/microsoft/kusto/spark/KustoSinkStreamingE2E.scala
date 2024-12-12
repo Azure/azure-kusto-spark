@@ -43,8 +43,7 @@ class KustoSinkStreamingE2E extends AnyFlatSpec with BeforeAndAfterAll {
     sc.stop()
   }
   private lazy val kustoConnectionOptions: KustoConnectionOptions =
-    getSystemTestOptions
-
+    getSystemTestOptions()
   val csvPath: String = System.getProperty("path", "connector/src/test/resources/TestData/csv")
   val customSchema: StructType = new StructType()
     .add("colA", StringType, nullable = true)
