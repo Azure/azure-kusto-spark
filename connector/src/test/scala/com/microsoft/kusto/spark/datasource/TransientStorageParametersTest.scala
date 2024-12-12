@@ -37,6 +37,23 @@ class TransientStorageParametersTest extends AnyFlatSpec {
             "https://ateststorage.blob.core.windows.net/kusto;impersonate")))
 
     transientStorageCredentials.toString shouldEqual s"[BlobContainer: kusto ,Storage: ateststorage , IsSasKeyDefined: false, domain: core.windows.net]"
-    TransientStorageParameters.fromString(transientStorageCredentials.toInsecureString).toString shouldEqual "[BlobContainer: kusto ,Storage: ateststorage , IsSasKeyDefined: false, domain: core.windows.net]"
+    TransientStorageParameters
+      .fromString(transientStorageCredentials.toInsecureString)
+      .toString shouldEqual "[BlobContainer: kusto ,Storage: ateststorage , IsSasKeyDefined: false, domain: core.windows.net]"
+  }
+
+  "TransientStorageParameters" should "should get parsed for impersonate string" in {
+    val transientStorage =
+      "{\"storageCredentials\": [{\"storageAccountName\": \"ateststorage\",\"blobContainer\": \"kusto\"," +
+        "\"sasUrl\": \"https://ateststorage.blob.core.windows.net/kusto;impersonate\"}," +
+        "{\"storageAccountName\": \"ateststorage2\",\"blobContainer\": \"kusto2\"," +
+        "\"sasUrl\": \"https://ateststorage2.blob.core.windows.net/kusto2;impersonate\"}],\"endpointSuffix\": \"core.windows.net\"}"
+    val transientStorageParameters = TransientStorageParameters.fromString(transientStorage)
+    val tsString = transientStorageParameters.toString()
+    transientStorageParameters.storageCredentials.length shouldEqual 2
+
+    tsString shouldEqual s"[BlobContainer: kusto ,Storage: ateststorage , IsSasKeyDefined: false${System
+        .lineSeparator()}" +
+      s"BlobContainer: kusto2 ,Storage: ateststorage2 , IsSasKeyDefined: false, domain: core.windows.net]"
   }
 }

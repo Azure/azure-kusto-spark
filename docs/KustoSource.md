@@ -153,6 +153,20 @@ transientStorage = "{ \"storageCredentials\" : [ { \
 >Note:
 Creating `transientStorage` string by using `TransientStorageParameters.toString` will not work. Either it can be created manually or by using `TransientStorageParameters.toInsecureString`.
 
+>Note:
+`transientStorage` string now supports [impersonate](https://learn.microsoft.com/en-us/kusto/api/connection-strings/storage-connection-strings?view=microsoft-fabric#impersonation) access to storage. The application id needs to have __Blob Storage Access Contributor__ for the impersonate access to work.
+
+```scala
+val transientStorage = new TransientStorageCredentials(
+            "https://ateststorage.blob.core.windows.net/kusto;impersonate")
+```
+
+```python
+transientStorage = "{\"storageCredentials\": [{\"storageAccountName\": \"ateststorage\",\"blobContainer\": \"kusto\",\"sasUrl\": \"https://ateststorage.blob.core.windows.net/kusto;impersonate\"},{\"storageAccountName\": \"ateststorage2\",\"blobContainer\": \"kusto2\",\"sasUrl\": \"https://ateststorage2.blob.core.windows.net/kusto2;impersonate\"}],  \"endpointSuffix\": \"core.windows.net\"}"
+  ...
+  option("transientStorage", transientStorage). \
+```
+
 ### Examples
  
  **Using simplified syntax**

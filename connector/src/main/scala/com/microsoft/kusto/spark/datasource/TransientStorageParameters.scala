@@ -63,7 +63,7 @@ final case class TransientStorageCredentials() {
   def authMethod: AuthMethod.AuthMethod = {
     sasKey match {
       case null => AuthMethod.Key
-      case TransientStorageParameters.ImpersoantionString => AuthMethod.Impersonation
+      case TransientStorageParameters.ImpersonationString => AuthMethod.Impersonation
       case _ => AuthMethod.Sas
     }
   }
@@ -112,7 +112,7 @@ final case class TransientStorageCredentials() {
 }
 
 object TransientStorageParameters {
-  val ImpersoantionString = ";impersonate"
+  val ImpersonationString = ";impersonate"
   private[kusto] def fromString(json: String): TransientStorageParameters = {
     new ObjectMapper()
       .registerModule(new JavaTimeModule())
@@ -123,7 +123,8 @@ object TransientStorageParameters {
 }
 
 object TransientStorageCredentials {
-  val SasPattern: Regex = raw"https:\/\/([^.]+)(\.[^.]+)?\.blob\.([^\/]+)\/([^?]+)(;impersonate|[\?].+)".r
+  val SasPattern: Regex =
+    raw"https:\/\/([^.]+)(\.[^.]+)?\.blob\.([^\/]+)\/([^?]+)(;impersonate|[\?].+)".r
 }
 
 object AuthMethod extends Enumeration {
