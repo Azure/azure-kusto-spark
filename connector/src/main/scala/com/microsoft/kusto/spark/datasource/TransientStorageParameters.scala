@@ -41,6 +41,8 @@ final case class TransientStorageCredentials() {
   var storageAccountName: String = _
   var storageAccountKey: String = _
   var sasKey: String = _
+
+  // TODO next breaking - change to Option[String]
   var sasUrl: String = _
   var domainSuffix: String = _
 
@@ -58,25 +60,29 @@ final case class TransientStorageCredentials() {
     parseSas(sas)
   }
 
-  def sasDefined: Boolean = {
-    sasUrl != null
+  def authMethod: AuthMethod.AuthMethod = {
+    sasKey match {
+      case null => AuthMethod.Key
+      case TransientStorageParameters.ImpersonationString => AuthMethod.Impersonation
+      case _ => AuthMethod.Sas
+    }
   }
 
   def validate(): Unit = {
-    if (sasDefined) {
-      if (sasUrl.isEmpty) {
-        throw new InvalidParameterException("sasUrl is null or empty")
-      }
-    } else {
-      if (StringUtils.isBlank(storageAccountName)) {
-        throw new InvalidParameterException("storageAccount name is null or empty")
-      }
-      if (StringUtils.isBlank(storageAccountKey)) {
-        throw new InvalidParameterException("storageAccount key is null or empty")
-      }
-      if (StringUtils.isBlank(blobContainer)) {
-        throw new InvalidParameterException("blob container name is null or empty")
-      }
+    authMethod match {
+      case AuthMethod.Sas =>
+        if (sasUrl.isEmpty) throw new InvalidParameterException("sasUrl is null or empty")
+      case AuthMethod.Key =>
+        if (StringUtils.isBlank(storageAccountName)) {
+          throw new InvalidParameterException("storageAccount name is null or empty")
+        }
+        if (StringUtils.isBlank(storageAccountKey)) {
+          throw new InvalidParameterException("storageAccount key is null or empty")
+        }
+        if (StringUtils.isBlank(blobContainer)) {
+          throw new InvalidParameterException("blob container name is null or empty")
+        }
+      case _ =>
     }
   }
 
@@ -99,12 +105,14 @@ final case class TransientStorageCredentials() {
   }
 
   override def toString: String = {
-    s"BlobContainer: $blobContainer ,Storage: $storageAccountName , IsSasKeyDefined: $sasDefined"
+    // TODO next breaking - change to "authMethod:"
+    s"BlobContainer: $blobContainer ,Storage: $storageAccountName , IsSasKeyDefined: ${authMethod == AuthMethod.Sas}"
   }
 
 }
 
 object TransientStorageParameters {
+  val ImpersonationString = ";impersonate"
   private[kusto] def fromString(json: String): TransientStorageParameters = {
     new ObjectMapper()
       .registerModule(new JavaTimeModule())
@@ -115,6 +123,11 @@ object TransientStorageParameters {
 }
 
 object TransientStorageCredentials {
-  private val SasPattern: Regex =
-    raw"https:\/\/([^.]+)(\.[^.]+)?\.blob\.([^\/]+)\/([^?]+)(\?.+)".r
+  val SasPattern: Regex =
+    raw"https:\/\/([^.]+)(\.[^.]+)?\.blob\.([^\/]+)\/([^?]+)(;impersonate|[\?].+)".r
+}
+
+object AuthMethod extends Enumeration {
+  type AuthMethod = Value
+  val Sas, Key, Impersonation = Value
 }

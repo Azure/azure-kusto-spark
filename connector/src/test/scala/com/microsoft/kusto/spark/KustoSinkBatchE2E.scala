@@ -65,7 +65,7 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
     .master(f"local[$nofExecutors]")
     .getOrCreate()
 
-  private lazy val kustoTestConnectionOptions = getSystemTestOptions
+  private lazy val kustoTestConnectionOptions = getSystemTestOptions()
   private var sc: SparkContext = _
   private var sqlContext: SQLContext = _
 

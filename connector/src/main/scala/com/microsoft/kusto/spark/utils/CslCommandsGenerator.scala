@@ -5,10 +5,10 @@ package com.microsoft.kusto.spark.utils
 
 import java.time.Instant
 import com.microsoft.kusto.spark.datasource.{
+  AuthMethod,
   TransientStorageCredentials,
   TransientStorageParameters
 }
-import java.util
 
 private[kusto] object CslCommandsGenerator {
   private final val defaultKeySet =
@@ -173,9 +173,14 @@ private[kusto] object CslCommandsGenerator {
       supportNewParquetWriter: Boolean = true): String = {
     val getFullUrlFromParams = (storage: TransientStorageCredentials) => {
       val secretString =
-        if (!storage.sasDefined) s""";" h@"${storage.storageAccountKey}""""
-        else if (storage.sasKey(0) == '?') s"""" h@"${storage.sasKey}""""
-        else s"""?" h@"${storage.sasKey}""""
+        storage.authMethod match {
+          case AuthMethod.Key => s""";" h@"${storage.storageAccountKey}""""
+          case AuthMethod.Sas =>
+            if (storage.sasKey(0) == '?') s"""" h@"${storage.sasKey}""""
+            else s"""?" h@"${storage.sasKey}""""
+          case AuthMethod.Impersonation =>
+            s"""${TransientStorageParameters.ImpersonationString}""""
+        }
       val blobUri =
         s"https://${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}"
       s"$blobUri/${storage.blobContainer}$secretString"
@@ -192,6 +197,7 @@ private[kusto] object CslCommandsGenerator {
         s"""$k="$v""""
       }
       .mkString(",", ",", "")
+
     // Values in the map will override,We could have chosen sizeLimit option as the default.
     // Chosen the one in the map for consistency
     val compressionFormat = additionalExportOptions.getOrElse("compressionType", "snappy")
@@ -205,13 +211,10 @@ private[kusto] object CslCommandsGenerator {
       .map(b => s"useNativeParquetWriter=$b, ")
       .getOrElse(if (!supportNewParquetWriter) "useNativeParquetWriter=false, " else "")
 
-    var command =
-      s""".export async $compress to parquet ("${storageParameters.storageCredentials
-          .map(getFullUrlFromParams)
-          .reduce((s, s1) => s + ",\"" + s1)})""" +
-        s""" with ($sizeLimitOverride$nativeParquetString namePrefix="$namePrefix", compressionType="$compressionFormat"$additionalOptionsString) <| $query"""
-
-    command
+    s""".export async $compress to parquet ("${storageParameters.storageCredentials
+        .map(getFullUrlFromParams)
+        .reduce((s, s1) => s + ",\"" + s1)})""" +
+      s""" with ($sizeLimitOverride$nativeParquetString namePrefix="$namePrefix", compressionType="$compressionFormat"$additionalOptionsString) <| $query"""
   }
 
   def generateCountQuery(query: String): String = {
