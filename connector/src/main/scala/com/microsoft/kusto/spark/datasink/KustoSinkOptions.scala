@@ -61,7 +61,7 @@ object KustoSinkOptions extends KustoOptions {
   // after which it will move the data to the destination table (the last part is a metadata operation only)
   // If set to 'Queued', the write operation finishes after data is processed by the workers, the data may not be completely
   // available up until the service finishes loading it and failures on the service side will not propagate to Spark.
-  // If set to 'Stream', Kusto streaming ingestion will be used. Streaming ingestion should be used if latency of less than a few seconds is required
+  // If set to 'KustoStreaming', Kusto streaming ingestion will be used. Streaming ingestion should be used if latency of less than a few seconds is required
   // or To optimize operational processing of many tables where the stream of data into each table is relatively small (a few records per second).
   // If a batch exceeds 4 MB, it will be broken into multiple appropriately sized chunks.
   val KUSTO_WRITE_MODE: String = newOption("writeMode")
@@ -76,8 +76,8 @@ object KustoSinkOptions extends KustoOptions {
   val KUSTO_TEMP_TABLE_NAME: String = newOption("tempTableName")
 
   // The chunk size that we want to use while iterating over "streaming batch". The default is 4MB.
-  // Every streaming ingest will be sent in in chunks of this size.
-  val KUSTO_STREAMING_INGEST_SIZE: String = newOption("kustoStreamingIngestSizeInMB")
+  // Every streaming ingest will be sent in chunks of this size.
+  val KUSTO_STREAMING_INGEST_SIZE_IN_MB: String = newOption("kustoStreamingIngestSizeInMB")
 }
 
 object SinkTableCreationMode extends Enumeration {
@@ -96,25 +96,25 @@ object WriteMode extends Enumeration {
 }
 
 case class WriteOptions(
-    pollingOnDriver: Boolean = false,
-    tableCreateOptions: SinkTableCreationMode.SinkTableCreationMode =
+                         pollingOnDriver: Boolean = false,
+                         tableCreateOptions: SinkTableCreationMode.SinkTableCreationMode =
       SinkTableCreationMode.FailIfNotExist,
-    isAsync: Boolean = false,
-    writeResultLimit: String = KustoSinkOptions.NONE_RESULT_LIMIT,
-    timeZone: String = "UTC",
-    timeout: FiniteDuration = new FiniteDuration(
+                         isAsync: Boolean = false,
+                         writeResultLimit: String = KustoSinkOptions.NONE_RESULT_LIMIT,
+                         timeZone: String = "UTC",
+                         timeout: FiniteDuration = new FiniteDuration(
       KustoConstants.DefaultWaitingIntervalLongRunning.toInt,
       TimeUnit.SECONDS),
-    maybeSparkIngestionProperties: Option[SparkIngestionProperties] = None,
-    batchLimit: Int = KustoConstants.DefaultBatchingLimit,
-    requestId: String = UUID.randomUUID().toString,
-    autoCleanupTime: FiniteDuration =
+                         maybeSparkIngestionProperties: Option[SparkIngestionProperties] = None,
+                         batchLimit: Int = KustoConstants.DefaultBatchingLimit,
+                         requestId: String = UUID.randomUUID().toString,
+                         autoCleanupTime: FiniteDuration =
       new FiniteDuration(KustoConstants.DefaultCleaningInterval.toInt, TimeUnit.SECONDS),
-    maxRetriesOnMoveExtents: Int = 10,
-    minimalExtentsCountForSplitMerge: Int = 400,
-    adjustSchema: SchemaAdjustmentMode.SchemaAdjustmentMode = SchemaAdjustmentMode.NoAdjustment,
-    writeMode: WriteMode.WriteMode = WriteMode.Transactional,
-    userTempTableName: Option[String] = None,
-    disableFlushImmediately: Boolean = false,
-    ensureNoDupBlobs: Boolean = false,
-    streamIngestCompressedMaxSize: Int = KustoConstants.DefaultMaxStreamingBytesUncompressed)
+                         maxRetriesOnMoveExtents: Int = 10,
+                         minimalExtentsCountForSplitMerge: Int = 400,
+                         adjustSchema: SchemaAdjustmentMode.SchemaAdjustmentMode = SchemaAdjustmentMode.NoAdjustment,
+                         writeMode: WriteMode.WriteMode = WriteMode.Transactional,
+                         userTempTableName: Option[String] = None,
+                         disableFlushImmediately: Boolean = false,
+                         ensureNoDupBlobs: Boolean = false,
+                         streamIngestUncompressedMaxSize: Int = KustoConstants.DefaultMaxStreamingBytesUncompressed)

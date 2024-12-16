@@ -65,28 +65,32 @@ All the options that can be used in the Kusto Sink can be found in KustoSinkOpti
 **Important Optional Parameters:**
 * **KUSTO_WRITE_MODE**
   'writeMode' - For production big loads it is most suggested to move to Queued mode !    
-  'Transactional' mode (default) - guarantees write operation to either completely succeed or fail together
+  **'Transactional'** mode (default) - guarantees write operation to either completely succeed or fail together
   this will include the following additional work: create a temporary table and after processing the data - poll on the ingestion result
   after which the operation move the data to the destination table (the last part is a metadata operation only).  
-  'Queued' mode - The write operation finishes after data is processed by the workers, the data may not be completely
+  
+  **'Queued'** mode - The write operation finishes after data is processed by the workers, the data may not be completely
   available up until the service finishes loading it, failures on the service side will not propagate to Spark but can still be seen.
   'Queued' mode scales better than the Transactional mode as it doesn't need to do track each individual ingestion created by the workers.
-  This can also solve many problems faced when using Transactional mode intermediate table and better work with Materialized views.
-  *Note - Both modes above are using Kusto native queued ingestion as described [here](https://learn.microsoft.com/azure/data-explorer/kusto/api/netfx/about-kusto-ingest#queued-ingestion).  
-  'KustoStreaming' mode - uses [stream ingestion](https://learn.microsoft.com/azure/data-explorer/ingest-data-streaming?tabs=azure-portal%2Cjava) 
+  Queued mode can also solve many problems faced when using Transactional mode intermediate table and better work with Materialized views.
+  > **Note** - Both Transactional and Queued modes use Kusto native queued ingestion as described [here](https://learn.microsoft.com/azure/data-explorer/kusto/api/netfx/about-kusto-ingest#queued-ingestion).  
+  
+  **'KustoStreaming'** mode - uses [stream ingestion](https://learn.microsoft.com/azure/data-explorer/ingest-data-streaming?tabs=azure-portal%2Cjava) 
   to load data into Kusto. Streaming ingestion is useful for loading data when you need low latency between ingestion and query.
-  *Note - [Streaming ingestion policy](https://learn.microsoft.com/en-us/azure/data-explorer/kusto/management/streamingingestionpolicy) must be enabled on the destination table or database and enabled on cluster configuration (see [documentation](https://learn.microsoft.com/azure/data-explorer/ingest-data-streaming?tabs=azure-portal%2Cjava) for details).
-  As ADX Streaming ingestion has a [data size limit](https://learn.microsoft.com/azure/data-explorer/ingest-data-streaming) of 4 MB, for each partition over a batched rdd the connector will ingest 4MB chunks of data, ingesting each individually. For each such batch - The connector will try 3 times to stream the data and if fails it will fallback to uploading it to blob storage and queue the ingestion. 
-  It is therefore recommended to configure the rate of Spark stream to produce around 10mb of data per batch and avoid using Stream.
+  As ADX Streaming ingestion has a [data size limit](https://learn.microsoft.com/azure/data-explorer/ingest-data-streaming) of 4 MB, for each partition over a batched rdd the connector will ingest **4MB** chunks of data, ingesting each individually. For each such batch - The connector will try 3 times to stream the data and if fails it will fallback to uploading it to blob storage and queue the ingestion. 
+  It is therefore recommended to configure the rate of Spark stream to produce around 10MB of data per batch and avoid using Stream.
   It is also recommended to tune the target table [ingestion batching policy](https://learn.microsoft.com/azure/data-explorer/kusto/management/batching-policy) as this will effect the fallback flow latency.
-  **note : Do not use Stream mode for the sake of streaming as ADX streaming has additional cost and may not be what you need. Spark streaming goes well with Queued mode when developing continuous integration.
+
+  > **Note** - [Streaming ingestion policy](https://learn.microsoft.com/en-us/azure/data-explorer/kusto/management/streamingingestionpolicy) must be enabled on the destination table or database and enabled on cluster configuration (see [documentation](https://learn.microsoft.com/azure/data-explorer/ingest-data-streaming?tabs=azure-portal%2Cjava) for details).
+
+  > **Note** : Do not use Stream mode for the sake of streaming as ADX streaming has additional cost and may not be what you need. Spark streaming goes well with Queued mode when developing continuous integration.
   If a request exceeds this size, it will be broken into multiple appropriately sized chunks.
 
 * **KUSTO_POLLING_ON_DRIVER**:
   'pollingOnDriver' - If set to false (default) Kusto Spark will create a new job for the final two ingestion steps done after processing the data, so that the write operation doesn't seem to 'hang' on the Spark UI.
   It's recommended to set this flag to true in production scenarios, so that the worker node doesn't occupy a core while completing the final ingestion steps.
   This is irrelevant for 'Queued' mode
-  >Note:By default (or if polling is false) the logs for progress of the polling operations are available on worker nodes logs, else (if true) these are part of the driver log4j logs and are on debug verbosity.
+  > **Note**: By default (or if polling is false) the logs for progress of the polling operations are available on worker nodes logs, else (if true) these are part of the driver log4j logs and are on debug verbosity.
 
 * **KUSTO_TABLE_CREATE_OPTIONS**:
   'tableCreateOptions' - If set to 'FailIfNotExist' (default), the operation will fail if the table is not found

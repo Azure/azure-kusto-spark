@@ -365,10 +365,10 @@ object KustoWriter {
     var lastIndex = 0
     for ((row, index) <- rows.zipWithIndex) {
       RowCSVWriterUtils.writeRowAsCSV(row, parameters.schema, timeZone, csvWriter)
-      if (csvWriter.getCounter >= parameters.writeOptions.streamIngestCompressedMaxSize) {
+      if (csvWriter.getCounter >= parameters.writeOptions.streamIngestUncompressedMaxSize) {
         KDSU.logWarn(
           className,
-          s"Batch $batchIdForTracing exceeds the max streaming size ${parameters.writeOptions.streamIngestCompressedMaxSize} " +
+          s"Batch $batchIdForTracing exceeds the max streaming size ${parameters.writeOptions.streamIngestUncompressedMaxSize} " +
             s"MB compressed!.Streaming ${csvWriter.getCounter} bytes from batch $batchIdForTracing." +
             s"Index of the batch ($index).")
         writer.flush()

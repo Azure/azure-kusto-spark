@@ -416,8 +416,8 @@ object KustoDataSourceUtils {
         throw new InvalidParameterException(s"No such WriteMode option: '${writeModeParam.get}'")
     }
 
-    val streamIngestCompressedMaxSize =
-      parameters.get(KustoSinkOptions.KUSTO_STREAMING_INGEST_SIZE) match {
+    val streamIngestMaxSize =
+      parameters.get(KustoSinkOptions.KUSTO_STREAMING_INGEST_SIZE_IN_MB) match {
         case Some(value) => value.toInt * OneMegaByte
         case None => DefaultMaxStreamingBytesUncompressed
       }
@@ -504,7 +504,7 @@ object KustoDataSourceUtils {
       userTempTableName,
       disableFlushImmediately,
       ensureNoDupBlobs,
-      streamIngestCompressedMaxSize)
+      streamIngestMaxSize)
 
     if (sourceParameters.kustoCoordinates.table.isEmpty) {
       throw new InvalidParameterException(
