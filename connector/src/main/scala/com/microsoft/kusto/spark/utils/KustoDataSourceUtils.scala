@@ -9,11 +9,13 @@ import com.fasterxml.jackson.databind.node.ArrayNode
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import com.microsoft.azure.kusto.data.exceptions.{DataClientException, DataServiceException}
 import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties, KustoResultSetTable}
+import com.microsoft.azure.kusto.ingest.IngestionProperties
 import com.microsoft.kusto.spark.authentication._
 import com.microsoft.kusto.spark.common.{KustoCoordinates, KustoDebugOptions}
 import com.microsoft.kusto.spark.datasink.KustoWriter.TempIngestionTablePrefix
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
-import com.microsoft.kusto.spark.datasink._
+import com.microsoft.kusto.spark.datasink.WriteMode.WriteMode
+import com.microsoft.kusto.spark.datasink.{SchemaAdjustmentMode, _}
 import com.microsoft.kusto.spark.datasource.ReadMode.ReadMode
 import com.microsoft.kusto.spark.datasource._
 import com.microsoft.kusto.spark.exceptions.{
@@ -24,7 +26,9 @@ import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.KustoConstants.{
   DefaultBatchingLimit,
   DefaultExtentsCountForSplitMergePerNode,
-  DefaultMaxRetriesOnMoveExtents
+  DefaultMaxRetriesOnMoveExtents,
+  DefaultMaxStreamingBytesUncompressed,
+  OneMegaByte
 }
 import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
 import io.github.resilience4j.retry.{Retry, RetryConfig}
@@ -363,9 +367,11 @@ object KustoDataSourceUtils {
       clientRequestProperties)
   }
 
-  case class SinkParameters(writeOptions: WriteOptions, sourceParametersResults: SourceParameters)
+  final case class SinkParameters(
+      writeOptions: WriteOptions,
+      sourceParametersResults: SourceParameters)
 
-  case class SourceParameters(
+  final case class SourceParameters(
       authenticationParameters: KustoAuthentication,
       kustoCoordinates: KustoCoordinates,
       keyVaultAuth: Option[KeyVaultAuthentication],
@@ -385,7 +391,7 @@ object KustoDataSourceUtils {
     var tableCreation: SinkTableCreationMode = SinkTableCreationMode.FailIfNotExist
     var tableCreationParam: Option[String] = None
     var isAsync: Boolean = false
-    var isTransactionalMode: Boolean = false
+    var writeMode: WriteMode = WriteMode.Queued
     var writeModeParam: Option[String] = None
     var batchLimit: Int = 0
     var minimalExtentsCountForSplitMergePerNode: Int = 0
@@ -402,17 +408,23 @@ object KustoDataSourceUtils {
     }
     try {
       writeModeParam = parameters.get(KustoSinkOptions.KUSTO_WRITE_MODE)
-      isTransactionalMode =
-        if (writeModeParam.isEmpty) true
-        else WriteMode.withName(writeModeParam.get) == WriteMode.Transactional
+      writeMode =
+        if (writeModeParam.isEmpty) WriteMode.Transactional
+        else WriteMode.withName(writeModeParam.get)
     } catch {
       case _: NoSuchElementException =>
         throw new InvalidParameterException(s"No such WriteMode option: '${writeModeParam.get}'")
     }
+
+    val streamIngestMaxSize =
+      parameters.get(KustoSinkOptions.KUSTO_STREAMING_INGEST_SIZE_IN_MB) match {
+        case Some(value) => value.toInt * OneMegaByte
+        case None => DefaultMaxStreamingBytesUncompressed
+      }
     val userTempTableName = parameters.get(KustoSinkOptions.KUSTO_TEMP_TABLE_NAME)
-    if (userTempTableName.isDefined && (tableCreation == SinkTableCreationMode.CreateIfNotExist || !isTransactionalMode)) {
+    if (userTempTableName.isDefined && (tableCreation == SinkTableCreationMode.CreateIfNotExist || writeMode != WriteMode.Transactional)) {
       throw new InvalidParameterException(
-        "tempTableName can't be used with CreateIfNotExist or Queued write mode.")
+        "tempTableName can only be used with FailIfNotExists table create mode and Transactional write mode.")
     }
     isAsync =
       parameters.getOrElse(KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC, "false").trim.toBoolean
@@ -436,10 +448,17 @@ object KustoDataSourceUtils {
       .trim
       .toInt
 
-    val adjustSchemaParam = parameters.get(KustoSinkOptions.KUSTO_ADJUST_SCHEMA)
-    val adjustSchema =
-      if (adjustSchemaParam.isEmpty) SchemaAdjustmentMode.NoAdjustment
-      else SchemaAdjustmentMode.withName(adjustSchemaParam.get)
+    val maybeSchemaAdjustmentParam = parameters.get(KustoSinkOptions.KUSTO_ADJUST_SCHEMA)
+    val adjustSchema = maybeSchemaAdjustmentParam match {
+      case Some(param) =>
+        SchemaAdjustmentMode.withName(param)
+      case None => SchemaAdjustmentMode.NoAdjustment
+    }
+
+    if (adjustSchema == SchemaAdjustmentMode.GenerateDynamicCsvMapping && writeMode == WriteMode.KustoStreaming) {
+      throw new InvalidParameterException(
+        "GenerateDynamicCsvMapping cannot be used with Spark streaming ingestion")
+    }
 
     val timeout = new FiniteDuration(
       parameters
@@ -464,6 +483,9 @@ object KustoDataSourceUtils {
 
     val sourceParameters = parseSourceParameters(parameters, allowProxy = false)
 
+    val maybeSparkIngestionProperties =
+      getIngestionProperties(writeMode == WriteMode.KustoStreaming, ingestionPropertiesAsJson)
+
     val writeOptions = WriteOptions(
       pollingOnDriver,
       tableCreation,
@@ -471,17 +493,18 @@ object KustoDataSourceUtils {
       parameters.getOrElse(KustoSinkOptions.KUSTO_WRITE_RESULT_LIMIT, "1"),
       parameters.getOrElse(DateTimeUtils.TIMEZONE_OPTION, "UTC"),
       timeout,
-      ingestionPropertiesAsJson,
+      maybeSparkIngestionProperties = maybeSparkIngestionProperties,
       batchLimit,
       sourceParameters.requestId,
       autoCleanupTime,
       maxRetriesOnMoveExtents,
       minimalExtentsCountForSplitMergePerNode,
       adjustSchema,
-      isTransactionalMode,
+      writeMode,
       userTempTableName,
       disableFlushImmediately,
-      ensureNoDupBlobs)
+      ensureNoDupBlobs,
+      streamIngestMaxSize)
 
     if (sourceParameters.kustoCoordinates.table.isEmpty) {
       throw new InvalidParameterException(
@@ -490,10 +513,10 @@ object KustoDataSourceUtils {
 
     logInfo(
       "parseSinkParameters",
-      s"Parsed write options for sink: {'table': '${sourceParameters.kustoCoordinates.table}', 'timeout': '${writeOptions.timeout}, 'async': ${writeOptions.isAsync}, " +
+      s"Parsed write options for sink: {'table': '${sourceParameters.kustoCoordinates.table}', 'timeout': '${writeOptions.timeout}, 'async': ${writeOptions.isAsync}, 'writeMode': ${writeOptions.writeMode}, " +
         s"'tableCreationMode': ${writeOptions.tableCreateOptions}, 'writeLimit': ${writeOptions.writeResultLimit}, 'batchLimit': ${writeOptions.batchLimit}" +
         s", 'timeout': ${writeOptions.timeout}, 'timezone': ${writeOptions.timeZone}, " +
-        s"'ingestionProperties': $ingestionPropertiesAsJson, 'requestId': '${sourceParameters.requestId}', 'pollingOnDriver': ${writeOptions.pollingOnDriver}," +
+        s"'maybeSparkIngestionProperties': $ingestionPropertiesAsJson, 'requestId': '${sourceParameters.requestId}', 'pollingOnDriver': ${writeOptions.pollingOnDriver}," +
         s"'maxRetriesOnMoveExtents':$maxRetriesOnMoveExtents, 'minimalExtentsCountForSplitMergePerNode':$minimalExtentsCountForSplitMergePerNode, " +
         s"'adjustSchema': $adjustSchema, 'autoCleanupTime': $autoCleanupTime${if (writeOptions.userTempTableName.isDefined)
             s", userTempTableName: ${userTempTableName.get}"
@@ -501,6 +524,20 @@ object KustoDataSourceUtils {
           else ""}")
 
     SinkParameters(writeOptions, sourceParameters)
+  }
+
+  private def getIngestionProperties(
+      isStreamingIngestion: Boolean,
+      mayBeIngestionPropertiesAsJson: Option[String]): Option[SparkIngestionProperties] = {
+    mayBeIngestionPropertiesAsJson match {
+      case Some(ingestionPropertiesAsJson) =>
+        val sip = SparkIngestionProperties.fromString(ingestionPropertiesAsJson)
+        if (isStreamingIngestion) {
+          sip.validateStreamingProperties()
+        }
+        Some(sip)
+      case None => Option.empty[SparkIngestionProperties]
+    }
   }
 
   def retryApplyFunction[T](func: () => T, retryConfig: RetryConfig, retryName: String): T = {
