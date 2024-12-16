@@ -8,7 +8,7 @@
     <packaging>pom</packaging>
     <version>${revision}</version>
     <properties>
-        <revision>5.2.0-SNAPSHOT</revision>
+        <revision>5.2.3</revision>
         <!-- Spark dependencies -->
         <scala.version.major>2.12</scala.version.major>
         <scalafmt.plugin.version>1.1.1640084764.9f463a9</scalafmt.plugin.version>
@@ -16,7 +16,7 @@
         <spark.version.major>3.0</spark.version.major>
         <spark.version.minor>1</spark.version.minor>
         <!-- other dependencies -->
-        <azure.bom.version>1.2.24</azure.bom.version>
+        <azure.bom.version>1.2.25</azure.bom.version>
         <!-- versions from https://learn.microsoft.com/en-us/azure/databricks/release-notes/runtime/13.2-->
         <fasterxml.jackson.jar.version>2.13.4</fasterxml.jackson.jar.version>
         <fasterxml.jackson.version>2.14.3</fasterxml.jackson.version>
@@ -24,9 +24,9 @@
         <azure-storage.version>8.6.6</azure-storage.version>
         <jsonsmart.version>2.4.10</jsonsmart.version>
         <junit4.version>4.13.2</junit4.version>
-        <commons.lang3.version>3.12.0</commons.lang3.version>
-        <hadoop.version>3.3.6</hadoop.version>
-        <kusto.sdk.version>5.1.0</kusto.sdk.version>
+        <commons.lang3.version>3.17.0</commons.lang3.version>
+        <hadoop.version>3.4.1</hadoop.version>
+        <kusto.sdk.version>5.2.0</kusto.sdk.version>
         <java.source.version>1.8</java.source.version>
         <java.target.version>1.8</java.target.version>
         <!-- test dependencies -->
@@ -38,15 +38,15 @@
         <maven.surefire.plugin.version>3.0.0</maven.surefire.plugin.version>
         <mockito.version>4.11.0</mockito.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <scala.maven.plugin.version>4.8.1</scala.maven.plugin.version>
-        <scalamock.version>5.2.0</scalamock.version>
+        <scala.maven.plugin.version>4.9.1</scala.maven.plugin.version>
+        <scalamock.version>6.0.0</scalamock.version>
         <scalastyle.maven.plugin.version>1.0.0</scalastyle.maven.plugin.version>
         <scalatest.maven.version>2.2.0</scalatest.maven.version>
         <scalatest.version>3.2.17</scalatest.version>
         <slf4j.version>1.8.0-beta4</slf4j.version>
         <specs2.version>3.6.5</specs2.version>
-        <msal4j.version>1.16.0</msal4j.version>
-        <az.identity.version>1.12.0</az.identity.version>
+        <msal4j.version>1.17.2</msal4j.version>
+        <az.identity.version>1.14.0</az.identity.version>
         <kusto.shade.prefix>kusto_connector_shaded</kusto.shade.prefix>
     </properties>
 
@@ -164,4 +164,22 @@
             </dependency>
         </dependencies>
     </dependencyManagement>
+    <!-- create a profile for distribution to BBC-VHD for Synapse tests -->
+    <profiles>
+        <profile>
+            <id>Synapse</id>
+            <distributionManagement>
+                <repository>
+                    <id>BBC-VHD_PublicPackages</id>
+                    <url>https://pkgs.dev.azure.com/msdata/A365/_packaging/BBC-VHD_PublicPackages/maven/v1</url>
+                    <releases>
+                        <enabled>true</enabled>
+                    </releases>
+                    <snapshots>
+                        <enabled>true</enabled>
+                    </snapshots>
+                </repository>
+            </distributionManagement>
+        </profile>
+    </profiles>    
 </project>

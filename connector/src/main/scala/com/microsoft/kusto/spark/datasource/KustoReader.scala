@@ -10,13 +10,8 @@ import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties, KustoRes
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasource.ReadMode.ReadMode
-import com.microsoft.kusto.spark.utils.{
-  CslCommandsGenerator,
-  ExtendedKustoClient,
-  KustoAzureFsSetupCache,
-  KustoBlobStorageUtils,
-  KustoDataSourceUtils => KDSU
-}
+import com.microsoft.kusto.spark.utils.{CslCommandsGenerator, ExtendedKustoClient, KustoAzureFsSetupCache, KustoBlobStorageUtils, KustoDataSourceUtils => KDSU}
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.util.ComparableVersion
 import org.apache.spark.Partition
 import org.apache.spark.rdd.RDD
@@ -96,6 +91,19 @@ private[kusto] object KustoReader {
     request.sparkSession.createDataFrame(serializer.toRows, serializer.getSchema.sparkSchema).rdd
   }
 
+  private def determineFilterPushDown(
+                               queryFilterPushDown: Option[Boolean],
+                               queryFilterPushDownDefault: Boolean,
+                               inputFilter: KustoFiltering): KustoFiltering = {
+    if (queryFilterPushDown.getOrElse(queryFilterPushDownDefault)) {
+      KDSU.logInfo(className, s"using ${KustoSourceOptions.KUSTO_QUERY_FILTER_PUSH_DOWN}")
+      inputFilter
+    } else {
+      KDSU.logInfo(className, s"not using ${KustoSourceOptions.KUSTO_QUERY_FILTER_PUSH_DOWN}")
+      KustoFiltering()
+    }
+  }
+
   private[kusto] def distributedBuildScan(
       kustoClient: ExtendedKustoClient,
       request: KustoReadRequest,
@@ -111,14 +119,10 @@ private[kusto] object KustoReader {
         request.kustoCoordinates,
         request.authentication)
       if (distributedReadModeTransientCache.contains(key)) {
-        KDSU.logInfo(
-          className,
-          "Fetching from distributedReadModeTransientCache: hit, reusing cached export paths")
+        KDSU.logInfo(className, "Fetching from distributedReadModeTransientCache: hit, reusing cached export paths")
         paths = distributedReadModeTransientCache(key)
       } else {
-        KDSU.logInfo(
-          className,
-          "distributedReadModeTransientCache: miss, exporting to cache paths")
+        KDSU.logInfo(className, "distributedReadModeTransientCache: miss, exporting to cache paths")
         val filter = determineFilterPushDown(
           options.queryFilterPushDown,
           queryFilterPushDownDefault = false,
@@ -132,19 +136,6 @@ private[kusto] object KustoReader {
         queryFilterPushDownDefault = true,
         filtering)
       paths = exportToStorage(kustoClient, request, storage, options, filter)
-    }
-
-    def determineFilterPushDown(
-        queryFilterPushDown: Option[Boolean],
-        queryFilterPushDownDefault: Boolean,
-        inputFilter: KustoFiltering): KustoFiltering = {
-      if (queryFilterPushDown.getOrElse(queryFilterPushDownDefault)) {
-        KDSU.logInfo(className, s"using ${KustoSourceOptions.KUSTO_QUERY_FILTER_PUSH_DOWN}")
-        inputFilter
-      } else {
-        KDSU.logInfo(className, s"not using ${KustoSourceOptions.KUSTO_QUERY_FILTER_PUSH_DOWN}")
-        KustoFiltering()
-      }
     }
 
     val rdd =
@@ -170,6 +161,39 @@ private[kusto] object KustoReader {
 
     KDSU.logInfo(className, "Transaction data read from blob storage, paths:" + paths)
     rdd
+  }
+
+  private def dirExist(spark:SparkSession, params: TransientStorageCredentials, directory: String, endpointSuffix: String): Boolean = {
+    if (params.authMethod == AuthMethod.Impersonation) {
+      val url = s"wasbs://${params.blobContainer}@${params.storageAccountName}.blob.$endpointSuffix"
+      val hadoopConf = spark.sparkContext.hadoopConfiguration
+      val fs = FileSystem.get(new URI(url), hadoopConf)
+
+      val path = new Path(url + s"/$directory")
+      fs.exists(path)
+    } else {
+      val endpoint = s"https://${params.storageAccountName}.blob.$endpointSuffix"
+      val container = params.authMethod match {
+        case AuthMethod.Sas =>
+          val sas = if (params.sasKey(0) == '?') params.sasKey else s"?${params.sasKey}"
+          new BlobContainerClientBuilder()
+            .endpoint(endpoint)
+            .containerName(params.blobContainer)
+            .credential(new AzureSasCredential(sas))
+            .buildClient()
+        case AuthMethod.Key =>
+          new BlobContainerClientBuilder ()
+          .endpoint (endpoint)
+          .containerName (params.blobContainer)
+          .credential (
+          new StorageSharedKeyCredential (params.storageAccountName, params.storageAccountKey) )
+          .buildClient ()
+        case _ => throw new InvalidParameterException("")
+    }
+      val exists = container.listBlobsByHierarchy(directory).stream().count() > 0
+      // Existing logic container.exists() && container.getDirectoryReference(directory).listBlobsSegmented().getLength > 0
+      exists
+    }
   }
 
   private def exportToStorage(
@@ -198,30 +222,9 @@ private[kusto] object KustoReader {
         options,
         filtering)
     }
-    val directoryExists = (params: TransientStorageCredentials) => {
-      val endpoint = s"https://${params.storageAccountName}.blob.${storage.endpointSuffix}"
-      val container = if (params.sasDefined) {
-        val sas = if (params.sasKey(0) == '?') params.sasKey else s"?${params.sasKey}"
-        new BlobContainerClientBuilder()
-          .endpoint(endpoint)
-          .containerName(params.blobContainer)
-          .credential(new AzureSasCredential(sas))
-          .buildClient()
-      } else {
-        new BlobContainerClientBuilder()
-          .endpoint(endpoint)
-          .containerName(params.blobContainer)
-          .credential(
-            new StorageSharedKeyCredential(params.storageAccountName, params.storageAccountKey))
-          .buildClient()
-      }
-      //
-      val exists = container.listBlobsByHierarchy(directory).stream().count() > 0
-// Existing logic container.exists() && container.getDirectoryReference(directory).listBlobsSegmented().getLength > 0
-      exists
-    }
+
     val paths = storage.storageCredentials
-      .filter(directoryExists)
+      .filter(params => dirExist(request.sparkSession, params, directory, storage.endpointSuffix))
       .map(params =>
         s"wasbs://${params.blobContainer}" +
           s"@${params.storageAccountName}.blob.${storage.endpointSuffix}/$directory")
@@ -238,30 +241,32 @@ private[kusto] object KustoReader {
     val config = request.sparkSession.sparkContext.hadoopConfiguration
     val now = Instant.now(Clock.systemUTC())
     for (storage <- storageParameters.storageCredentials) {
-      if (!storage.sasDefined) {
-        if (!KustoAzureFsSetupCache.updateAndGetPrevStorageAccountAccess(
+      storage.authMethod match {
+        case AuthMethod.Sas =>
+          if (!KustoAzureFsSetupCache.updateAndGetPrevStorageAccountAccess(
             storage.storageAccountName,
             storage.storageAccountKey,
             now)) {
-          config.set(
-            s"fs.azure.account.key.${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}",
-            s"${storage.storageAccountKey}")
-        }
-      } else {
-        if (!KustoAzureFsSetupCache.updateAndGetPrevSas(
+            config.set(
+              s"fs.azure.account.key.${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}",
+              s"${storage.storageAccountKey}")
+          }
+        case AuthMethod.Key =>
+          if (!KustoAzureFsSetupCache.updateAndGetPrevSas(
             storage.blobContainer,
             storage.storageAccountName,
             storage.sasKey,
             now)) {
-          config.set(
-            s"fs.azure.sas.${storage.blobContainer}.${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}",
-            s"${storage.sasKey}")
-        }
+            config.set(
+              s"fs.azure.sas.${storage.blobContainer}.${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}",
+              s"${storage.sasKey}")
+          }
+        case _ =>
       }
+    }
 
-      if (!KustoAzureFsSetupCache.updateAndGetPrevNativeAzureFs(now)) {
-        config.set("fs.azure", "org.apache.hadoop.fs.azure.NativeAzureFileSystem")
-      }
+    if (!KustoAzureFsSetupCache.updateAndGetPrevNativeAzureFs(now)) {
+      config.set("fs.azure", "org.apache.hadoop.fs.azure.NativeAzureFileSystem")
     }
   }
 
