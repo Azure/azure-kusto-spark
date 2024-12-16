@@ -81,7 +81,7 @@ All the options that can be used in the Kusto Sink can be found in KustoSinkOpti
   It is therefore recommended to configure the rate of Spark stream to produce around 10MB of data per batch and avoid using Stream.
   It is also recommended to tune the target table [ingestion batching policy](https://learn.microsoft.com/azure/data-explorer/kusto/management/batching-policy) as this will effect the fallback flow latency.
 
-  > **Note** - [Streaming ingestion policy](https://learn.microsoft.com/en-us/azure/data-explorer/kusto/management/streamingingestionpolicy) must be enabled on the destination table or database and enabled on cluster configuration (see [documentation](https://learn.microsoft.com/azure/data-explorer/ingest-data-streaming?tabs=azure-portal%2Cjava) for details).
+  > **Note** - [Streaming ingestion policy](https://learn.microsoft.com/en-us/azure/data-explorer/kusto/management/streamingingestionpolicy) must be enabled on the destination table or database and enabled on cluster configuration (see [documentation](https://learn.microsoft.com/azure/data-explorer/ingest-data-streaming?tabs=azure-portal%2Cjava) for details).  Streaming ingestion has certain [performance and operational considerations](https://learn.microsoft.com/en-us/azure/data-explorer/ingest-data-streaming?tabs=azure-portal%2Ccsharp#performance-and-operational-considerations) please validate that the scenario for KustoStreaming mode is inline with these limits.
 
   > **Note** : Do not use Stream mode for the sake of streaming as ADX streaming has additional cost and may not be what you need. Spark streaming goes well with Queued mode when developing continuous integration.
   If a request exceeds this size, it will be broken into multiple appropriately sized chunks.
