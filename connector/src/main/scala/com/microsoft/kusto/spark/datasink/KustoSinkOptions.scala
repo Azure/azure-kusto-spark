@@ -77,7 +77,7 @@ object KustoSinkOptions extends KustoOptions {
 
   // The chunk size that we want to use while iterating over "streaming batch". The default is 4MB.
   // Every streaming ingest will be sent in chunks of this size.
-  val KUSTO_STREAMING_INGEST_SIZE_IN_MB: String = newOption("kustoStreamingIngestSizeInMB")
+  val KUSTO_STREAMING_INGEST_SIZE_IN_MB: String = newOption("streamingIngestSizeInMB")
 }
 
 object SinkTableCreationMode extends Enumeration {
