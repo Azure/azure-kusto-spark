@@ -1,14 +1,18 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
-
 package com.microsoft.kusto.spark
 
 import com.microsoft.azure.kusto.data.ClientFactory
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
-import com.microsoft.kusto.spark.KustoTestUtils.{KustoConnectionOptions, getSystemTestOptions}
+import com.microsoft.kusto.spark.KustoTestUtils.getSystemTestOptions
 import com.microsoft.kusto.spark.common.KustoDebugOptions
-import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode, SparkIngestionProperties}
+import com.microsoft.kusto.spark.datasink.{
+  KustoSinkOptions,
+  SinkTableCreationMode,
+  SparkIngestionProperties,
+  WriteMode
+}
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.streaming.Trigger
@@ -18,6 +22,7 @@ import org.apache.spark.sql.{SQLContext, SparkSession}
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.flatspec.AnyFlatSpec
 
+import java.security.InvalidParameterException
 import java.util.UUID
 
 class KustoSinkStreamingE2E extends AnyFlatSpec with BeforeAndAfterAll {
@@ -42,8 +47,7 @@ class KustoSinkStreamingE2E extends AnyFlatSpec with BeforeAndAfterAll {
     super.afterAll()
     sc.stop()
   }
-  private lazy val kustoConnectionOptions: KustoConnectionOptions =
-    getSystemTestOptions()
+  private lazy val kustoTestConnectionOptions = getSystemTestOptions()
   val csvPath: String = System.getProperty("path", "connector/src/test/resources/TestData/csv")
   val customSchema: StructType = new StructType()
     .add("colA", StringType, nullable = true)
@@ -53,8 +57,8 @@ class KustoSinkStreamingE2E extends AnyFlatSpec with BeforeAndAfterAll {
     val prefix = "KustoStreamingSparkE2E_Ingest"
     val table = s"${prefix}_${UUID.randomUUID().toString.replace("-", "_")}"
     val engineKcsb = ConnectionStringBuilder.createWithAadAccessTokenAuthentication(
-      kustoConnectionOptions.cluster,
-      kustoConnectionOptions.accessToken)
+      kustoTestConnectionOptions.cluster,
+      kustoTestConnectionOptions.accessToken)
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
 
     val csvDf = spark.readStream
@@ -77,10 +81,10 @@ class KustoSinkStreamingE2E extends AnyFlatSpec with BeforeAndAfterAll {
     val kustoQ = csvDf.writeStream
       .format("com.microsoft.kusto.spark.datasink.KustoSinkProvider")
       .options(Map(
-        KustoSinkOptions.KUSTO_CLUSTER -> kustoConnectionOptions.cluster,
+        KustoSinkOptions.KUSTO_CLUSTER -> kustoTestConnectionOptions.cluster,
         KustoSinkOptions.KUSTO_TABLE -> table,
-        KustoSinkOptions.KUSTO_DATABASE -> kustoConnectionOptions.database,
-        KustoSinkOptions.KUSTO_ACCESS_TOKEN -> kustoConnectionOptions.accessToken,
+        KustoSinkOptions.KUSTO_DATABASE -> kustoTestConnectionOptions.database,
+        KustoSinkOptions.KUSTO_ACCESS_TOKEN -> kustoTestConnectionOptions.accessToken,
         KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS -> SinkTableCreationMode.CreateIfNotExist.toString,
         KustoDebugOptions.KUSTO_ENSURE_NO_DUPLICATED_BLOBS -> true.toString,
         KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON -> sp.toString))
@@ -93,7 +97,7 @@ class KustoSinkStreamingE2E extends AnyFlatSpec with BeforeAndAfterAll {
     KustoTestUtils.validateResultsAndCleanup(
       kustoAdminClient,
       table,
-      kustoConnectionOptions.database,
+      kustoTestConnectionOptions.database,
       expectedNumberOfRows,
       timeoutMs - sleepTimeTillTableCreate,
       tableCleanupPrefix = prefix)
@@ -103,12 +107,12 @@ class KustoSinkStreamingE2E extends AnyFlatSpec with BeforeAndAfterAll {
     val prefix = "KustoStreamingSparkE2EAsync_Ingest"
     val table = s"${prefix}_${UUID.randomUUID().toString.replace("-", "_")}"
     val engineKcsb = ConnectionStringBuilder.createWithAadAccessTokenAuthentication(
-      kustoConnectionOptions.cluster,
-      kustoConnectionOptions.accessToken)
+      kustoTestConnectionOptions.cluster,
+      kustoTestConnectionOptions.accessToken)
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
 
     kustoAdminClient.execute(
-      kustoConnectionOptions.database,
+      kustoTestConnectionOptions.database,
       generateTempTableCreateCommand(table, columnsTypesAndNames = "ColA:string, ColB:int"))
 
     val csvDf = spark.readStream
@@ -126,10 +130,10 @@ class KustoSinkStreamingE2E extends AnyFlatSpec with BeforeAndAfterAll {
     val kustoQ = csvDf.writeStream
       .format("com.microsoft.kusto.spark.datasink.KustoSinkProvider")
       .options(Map(
-        KustoSinkOptions.KUSTO_CLUSTER -> kustoConnectionOptions.cluster,
+        KustoSinkOptions.KUSTO_CLUSTER -> kustoTestConnectionOptions.cluster,
         KustoSinkOptions.KUSTO_TABLE -> table,
-        KustoSinkOptions.KUSTO_DATABASE -> kustoConnectionOptions.database,
-        KustoSinkOptions.KUSTO_AAD_APP_ID -> kustoConnectionOptions.accessToken,
+        KustoSinkOptions.KUSTO_DATABASE -> kustoTestConnectionOptions.database,
+        KustoSinkOptions.KUSTO_AAD_APP_ID -> kustoTestConnectionOptions.accessToken,
         KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC -> "true"))
       .trigger(Trigger.Once)
 
@@ -138,9 +142,84 @@ class KustoSinkStreamingE2E extends AnyFlatSpec with BeforeAndAfterAll {
     KustoTestUtils.validateResultsAndCleanup(
       kustoAdminClient,
       table,
-      kustoConnectionOptions.database,
+      kustoTestConnectionOptions.database,
       expectedNumberOfRows,
       timeoutMs,
+      tableCleanupPrefix = prefix)
+  }
+
+  "KustoStreamingSinkStreamingIngestion" should "ingest structured data to a Kusto cluster using stream ingestion" taggedAs KustoE2E in {
+    val prefix = "KustoStreamingSparkE2E_StreamIngest"
+    val table = s"${prefix}_${UUID.randomUUID().toString.replace("-", "_")}"
+    val engineKcsb = ConnectionStringBuilder.createWithAadAccessTokenAuthentication(
+      s"https://${kustoTestConnectionOptions.cluster}.kusto.windows.net",
+      kustoTestConnectionOptions.accessToken)
+    val kustoAdminClient = ClientFactory.createClient(engineKcsb)
+    kustoAdminClient.execute(
+      kustoTestConnectionOptions.database,
+      generateTempTableCreateCommand(table, columnsTypesAndNames = "ColA:string, ColB:int"))
+    kustoAdminClient.execute(
+      kustoTestConnectionOptions.database,
+      generateTableAlterStreamIngestionCommand(table))
+    kustoAdminClient.execute(
+      kustoTestConnectionOptions.database,
+      generateClearStreamingIngestionCacheCommand(table))
+
+    val csvDf = spark.readStream
+      .schema(customSchema)
+      .csv(csvPath)
+
+    spark.conf.set("spark.sql.streaming.checkpointLocation", "target/temp/checkpoint")
+
+    val kustoQ = csvDf.writeStream
+      .format("com.microsoft.kusto.spark.datasink.KustoSinkProvider")
+      .options(Map(
+        KustoSinkOptions.KUSTO_CLUSTER -> kustoTestConnectionOptions.cluster,
+        KustoSinkOptions.KUSTO_TABLE -> table,
+        KustoSinkOptions.KUSTO_DATABASE -> kustoTestConnectionOptions.database,
+        KustoSinkOptions.KUSTO_ACCESS_TOKEN -> kustoTestConnectionOptions.accessToken,
+        KustoSinkOptions.KUSTO_WRITE_MODE -> WriteMode.KustoStreaming.toString))
+      .trigger(Trigger.Once)
+
+    kustoQ.start().awaitTermination()
+
+    KustoTestUtils.validateResultsAndCleanup(
+      kustoAdminClient,
+      table,
+      kustoTestConnectionOptions.database,
+      expectedNumberOfRows,
+      10,
+      tableCleanupPrefix = prefix)
+  }
+
+  "KustoStreamingSinkStreamingIngestionWithCreate" should "ingest structured data to a Kusto cluster using stream ingestion" taggedAs KustoE2E in {
+    val prefix = "KustoStreamingSparkE2E_StreamIngest"
+    val table = s"${prefix}_${UUID.randomUUID().toString.replace("-", "_")}"
+    val engineKcsb = ConnectionStringBuilder.createWithAadAccessTokenAuthentication(
+      s"https://${kustoTestConnectionOptions.cluster}.kusto.windows.net",
+      kustoTestConnectionOptions.accessToken)
+    val kustoAdminClient = ClientFactory.createClient(engineKcsb)
+    val csvDf = spark.readStream
+      .schema(customSchema)
+      .csv(csvPath)
+    spark.conf.set("spark.sql.streaming.checkpointLocation", "target/temp/checkpoint")
+    val kustoQ = csvDf.writeStream
+      .format("com.microsoft.kusto.spark.datasink.KustoSinkProvider")
+      .options(Map(
+        KustoSinkOptions.KUSTO_CLUSTER -> kustoTestConnectionOptions.cluster,
+        KustoSinkOptions.KUSTO_TABLE -> table,
+        KustoSinkOptions.KUSTO_DATABASE -> kustoTestConnectionOptions.database,
+        KustoSinkOptions.KUSTO_ACCESS_TOKEN -> kustoTestConnectionOptions.accessToken,
+        KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS -> SinkTableCreationMode.CreateIfNotExist.toString,
+        KustoSinkOptions.KUSTO_WRITE_MODE -> WriteMode.KustoStreaming.toString))
+      .trigger(Trigger.Once)
+    kustoQ.start().awaitTermination()
+    KustoTestUtils.validateResultsAndCleanup(
+      kustoAdminClient,
+      table,
+      kustoTestConnectionOptions.database,
+      expectedNumberOfRows,
+      10,
       tableCleanupPrefix = prefix)
   }
 }

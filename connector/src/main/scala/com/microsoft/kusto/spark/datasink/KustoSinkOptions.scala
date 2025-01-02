@@ -3,12 +3,11 @@
 
 package com.microsoft.kusto.spark.datasink
 
-import java.util.UUID
-import java.util.concurrent.TimeUnit
-
 import com.microsoft.kusto.spark.common.KustoOptions
 import com.microsoft.kusto.spark.utils.KustoConstants
 
+import java.util.UUID
+import java.util.concurrent.TimeUnit
 import scala.concurrent.duration.FiniteDuration
 
 object KustoSinkOptions extends KustoOptions {
@@ -62,6 +61,9 @@ object KustoSinkOptions extends KustoOptions {
   // after which it will move the data to the destination table (the last part is a metadata operation only)
   // If set to 'Queued', the write operation finishes after data is processed by the workers, the data may not be completely
   // available up until the service finishes loading it and failures on the service side will not propagate to Spark.
+  // If set to 'KustoStreaming', Kusto streaming ingestion will be used. Streaming ingestion should be used if latency of less than a few seconds is required
+  // or To optimize operational processing of many tables where the stream of data into each table is relatively small (a few records per second).
+  // If a batch exceeds 4 MB, it will be broken into multiple appropriately sized chunks.
   val KUSTO_WRITE_MODE: String = newOption("writeMode")
 
   // Provide a temporary table name that will be used for this write operation to achieve transactional write and move
@@ -72,6 +74,10 @@ object KustoSinkOptions extends KustoOptions {
   // https://docs.microsoft.com/azure/data-explorer/kusto/management/auto-delete-policy
   // Use this option if you want to persist partial write results (as the failure could be of a single partition)
   val KUSTO_TEMP_TABLE_NAME: String = newOption("tempTableName")
+
+  // The chunk size that we want to use while iterating over "streaming batch". The default is 4MB.
+  // Every streaming ingest will be sent in chunks of this size.
+  val KUSTO_STREAMING_INGEST_SIZE_IN_MB: String = newOption("streamingIngestSizeInMB")
 }
 
 object SinkTableCreationMode extends Enumeration {
@@ -86,28 +92,29 @@ object SchemaAdjustmentMode extends Enumeration {
 
 object WriteMode extends Enumeration {
   type WriteMode = Value
-  val Transactional, Queued = Value
+  val Transactional, Queued, KustoStreaming = Value
 }
 
 case class WriteOptions(
-    pollingOnDriver: Boolean = false,
-    tableCreateOptions: SinkTableCreationMode.SinkTableCreationMode =
+                         pollingOnDriver: Boolean = false,
+                         tableCreateOptions: SinkTableCreationMode.SinkTableCreationMode =
       SinkTableCreationMode.FailIfNotExist,
-    isAsync: Boolean = false,
-    writeResultLimit: String = KustoSinkOptions.NONE_RESULT_LIMIT,
-    timeZone: String = "UTC",
-    timeout: FiniteDuration = new FiniteDuration(
+                         isAsync: Boolean = false,
+                         writeResultLimit: String = KustoSinkOptions.NONE_RESULT_LIMIT,
+                         timeZone: String = "UTC",
+                         timeout: FiniteDuration = new FiniteDuration(
       KustoConstants.DefaultWaitingIntervalLongRunning.toInt,
       TimeUnit.SECONDS),
-    ingestionProperties: Option[String] = None,
-    batchLimit: Int = KustoConstants.DefaultBatchingLimit,
-    requestId: String = UUID.randomUUID().toString,
-    autoCleanupTime: FiniteDuration =
+                         maybeSparkIngestionProperties: Option[SparkIngestionProperties] = None,
+                         batchLimit: Int = KustoConstants.DefaultBatchingLimit,
+                         requestId: String = UUID.randomUUID().toString,
+                         autoCleanupTime: FiniteDuration =
       new FiniteDuration(KustoConstants.DefaultCleaningInterval.toInt, TimeUnit.SECONDS),
-    maxRetriesOnMoveExtents: Int = 10,
-    minimalExtentsCountForSplitMerge: Int = 400,
-    adjustSchema: SchemaAdjustmentMode.SchemaAdjustmentMode = SchemaAdjustmentMode.NoAdjustment,
-    isTransactionalMode: Boolean = true,
-    userTempTableName: Option[String] = None,
-    disableFlushImmediately: Boolean = false,
-    ensureNoDupBlobs: Boolean = false)
+                         maxRetriesOnMoveExtents: Int = 10,
+                         minimalExtentsCountForSplitMerge: Int = 400,
+                         adjustSchema: SchemaAdjustmentMode.SchemaAdjustmentMode = SchemaAdjustmentMode.NoAdjustment,
+                         writeMode: WriteMode.WriteMode = WriteMode.Transactional,
+                         userTempTableName: Option[String] = None,
+                         disableFlushImmediately: Boolean = false,
+                         ensureNoDupBlobs: Boolean = false,
+                         streamIngestUncompressedMaxSize: Int = KustoConstants.DefaultMaxStreamingBytesUncompressed)

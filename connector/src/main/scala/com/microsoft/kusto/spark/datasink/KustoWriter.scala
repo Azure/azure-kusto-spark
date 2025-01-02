@@ -11,15 +11,24 @@ import com.microsoft.azure.kusto.ingest.IngestionProperties.DataFormat
 import com.microsoft.azure.kusto.ingest.exceptions.IngestionServiceException
 import com.microsoft.azure.kusto.ingest.resources.ContainerWithSas
 import com.microsoft.azure.kusto.ingest.result.IngestionResult
-import com.microsoft.azure.kusto.ingest.source.BlobSourceInfo
-import com.microsoft.azure.kusto.ingest.{IngestClient, IngestionProperties}
+import com.microsoft.azure.kusto.ingest.source.{BlobSourceInfo, StreamSourceInfo}
+import com.microsoft.azure.kusto.ingest.{
+  IngestClient,
+  IngestionProperties,
+  ManagedStreamingIngestClient
+}
 import com.microsoft.azure.storage.blob.{BlobRequestOptions, CloudBlockBlob}
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.FinalizeHelper.finalizeIngestionWhenWorkersSucceeded
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator.generateTableGetSchemaAsRowsCommand
-import com.microsoft.kusto.spark.utils.KustoConstants.{IngestSkippedTrace, MaxIngestRetryAttempts}
+import com.microsoft.kusto.spark.utils.KustoConstants.{
+  IngestSkippedTrace,
+  MaxIngestRetryAttempts,
+  WarnStreamingBytes
+}
 import com.microsoft.kusto.spark.utils.{
+  ByteArrayOutputStreamWithOffset,
   ExtendedKustoClient,
   KustoClientCache,
   KustoIngestionUtils,
@@ -28,6 +37,7 @@ import com.microsoft.kusto.spark.utils.{
   KustoDataSourceUtils => KDSU
 }
 import io.github.resilience4j.retry.RetryConfig
+import org.apache.commons.io.IOUtils
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.InternalRow
@@ -48,6 +58,7 @@ import scala.util.{Failure, Success, Try}
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
 
 object KustoWriter {
   private val className = this.getClass.getSimpleName
@@ -103,12 +114,12 @@ object KustoWriter {
       writeOptions.tableCreateOptions)
 
     val rebuiltOptions =
-      writeOptions.copy(ingestionProperties = Some(stagingTableIngestionProperties.toString()))
+      writeOptions.copy(maybeSparkIngestionProperties = Some(stagingTableIngestionProperties))
 
     val tableExists = schemaShowCommandResult.count() > 0
     val shouldIngest = kustoClient.shouldIngestData(
       tableCoordinates,
-      writeOptions.ingestionProperties,
+      writeOptions.maybeSparkIngestionProperties,
       tableExists,
       crp)
 
@@ -174,7 +185,7 @@ object KustoWriter {
         KDSU.logInfo(className, s"asynchronous write to Kusto table '$table' in progress")
         // This part runs back on the driver
 
-        if (writeOptions.isTransactionalMode) {
+        if (writeOptions.writeMode == WriteMode.Transactional) {
           asyncWork.onSuccess { case _ =>
             finalizeIngestionWhenWorkersSucceeded(
               tableCoordinates,
@@ -213,7 +224,7 @@ object KustoWriter {
           }
         catch {
           case exception: Exception =>
-            if (writeOptions.isTransactionalMode) {
+            if (writeOptions.writeMode == WriteMode.Transactional) {
               if (writeOptions.userTempTableName.isEmpty) {
                 kustoClient.cleanupIngestionByProducts(
                   tableCoordinates.database,
@@ -224,7 +235,7 @@ object KustoWriter {
             /* Throwing the exception will abort the job (explicitly on the driver) */
             throw exception
         }
-        if (writeOptions.isTransactionalMode) {
+        if (writeOptions.writeMode == WriteMode.Transactional) {
           finalizeIngestionWhenWorkersSucceeded(
             tableCoordinates,
             batchIdIfExists,
@@ -260,24 +271,36 @@ object KustoWriter {
         s"sink to Kusto table '${parameters.coordinates.table.get}' with no rows to write " +
           s"on partition ${TaskContext.getPartitionId} $batchIdForTracing")
     } else {
-      ingestToTemporaryTableByWorkers(batchIdForTracing, rows, partitionsResults, parameters)
+      val ingestionProperties = getIngestionProperties(
+        parameters.writeOptions,
+        parameters.coordinates.database,
+        if (parameters.writeOptions.writeMode == WriteMode.Transactional) {
+          parameters.tmpTableName
+        } else {
+          parameters.coordinates.table.get
+        })
+      if (parameters.writeOptions.writeMode == WriteMode.KustoStreaming) {
+        streamRowsIntoKustoByWorkers(batchIdForTracing, rows, ingestionProperties, parameters)
+      } else {
+        ingestToTemporaryTableByWorkers(
+          batchIdForTracing,
+          rows,
+          partitionsResults,
+          ingestionProperties,
+          parameters)
+      }
     }
   }
 
-  def ingestRowsIntoKusto(
+  private def ingestRowsIntoKusto(
       rows: Iterator[InternalRow],
       ingestClient: IngestClient,
+      ingestionProperties: IngestionProperties,
       partitionsResults: CollectionAccumulator[PartitionResult],
       batchIdForTracing: String,
       parameters: KustoWriteResource): Unit = {
     // Transactional mode write into the temp table instead of the destination table
-    val ingestionProperties = getIngestionProperties(
-      parameters.writeOptions,
-      parameters.coordinates.database,
-      if (parameters.writeOptions.isTransactionalMode) parameters.tmpTableName
-      else parameters.coordinates.table.get)
-
-    if (parameters.writeOptions.isTransactionalMode) {
+    if (parameters.writeOptions.writeMode == WriteMode.Transactional) {
       ingestionProperties.setReportMethod(IngestionProperties.IngestionReportMethod.TABLE)
       ingestionProperties.setReportLevel(
         IngestionProperties.IngestionReportLevel.FAILURES_AND_SUCCESSES)
@@ -301,34 +324,166 @@ object KustoWriter {
       writeOptions: WriteOptions,
       database: String,
       tableName: String): IngestionProperties = {
-    if (writeOptions.ingestionProperties.isDefined) {
-      val ingestionProperties = SparkIngestionProperties
-        .fromString(writeOptions.ingestionProperties.get)
-        .toIngestionProperties(database, tableName)
-      ingestionProperties
-    } else {
-      new IngestionProperties(database, tableName)
+    writeOptions.maybeSparkIngestionProperties match {
+      case Some(sparkIngestionProperties) =>
+        sparkIngestionProperties.toIngestionProperties(database, tableName)
+      case None => new IngestionProperties(database, tableName)
     }
   }
 
   private def getSparkIngestionProperties(
       writeOptions: WriteOptions): SparkIngestionProperties = {
-    val ingestionProperties =
-      if (writeOptions.ingestionProperties.isDefined)
-        SparkIngestionProperties.fromString(writeOptions.ingestionProperties.get)
-      else
-        new SparkIngestionProperties()
-    ingestionProperties.ingestIfNotExists = new util.ArrayList()
+    val sparkIngestionProperties =
+      writeOptions.maybeSparkIngestionProperties.getOrElse(new SparkIngestionProperties())
+    sparkIngestionProperties.ingestIfNotExists = new util.ArrayList()
+    sparkIngestionProperties
+  }
 
-    ingestionProperties
+  private def streamRowsIntoKustoByWorkers(
+      batchIdForTracing: String,
+      rows: Iterator[InternalRow],
+      ingestionProperties: IngestionProperties,
+      parameters: KustoWriteResource): Unit = {
+    val streamingClient = KustoClientCache
+      .getClient(
+        parameters.coordinates.clusterUrl,
+        parameters.authentication,
+        parameters.coordinates.ingestionUrl,
+        parameters.coordinates.clusterAlias)
+      .streamingClient
+
+    val timeZone = TimeZone.getTimeZone(parameters.writeOptions.timeZone).toZoneId
+    // TODO - use a pool of two streams?
+    //    var curBbId = 0
+    //    val byteArrayPool = Array[ByteArrayOutputStream](new ByteArrayOutputStream(), null)// Init the 2nd lazy.
+    //    val byteArrayOutputStream = byteArrayPool[]
+    var byteArrayOutputStream = new ByteArrayOutputStreamWithOffset()
+    var streamWriter = new OutputStreamWriter(byteArrayOutputStream)
+    var writer = new BufferedWriter(streamWriter)
+    var csvWriter = CountingWriter(writer)
+    var totalSize = 0L
+    var lastIndex = 0
+    for ((row, index) <- rows.zipWithIndex) {
+      RowCSVWriterUtils.writeRowAsCSV(row, parameters.schema, timeZone, csvWriter)
+      if (csvWriter.getCounter >= parameters.writeOptions.streamIngestUncompressedMaxSize) {
+        KDSU.logWarn(
+          className,
+          s"Batch $batchIdForTracing exceeds the max streaming size ${parameters.writeOptions.streamIngestUncompressedMaxSize} " +
+            s"MB compressed!.Streaming ${csvWriter.getCounter} bytes from batch $batchIdForTracing." +
+            s"Index of the batch ($index).")
+        writer.flush()
+        streamWriter.flush()
+        if (lastIndex != 0) {
+          // Split the byteArrayOutputStream into two - i need actually that the one we write to will be reset
+          val firstBB = byteArrayOutputStream.toByteArray
+          val bb2 = byteArrayOutputStream.createNewFromOffset(lastIndex)
+          byteArrayOutputStream = bb2
+          totalSize += lastIndex
+
+          streamBytesIntoKusto(
+            batchIdForTracing,
+            firstBB,
+            ingestionProperties,
+            parameters.writeOptions,
+            streamingClient,
+            lastIndex
+          ) // =4mb-size(last row)
+          lastIndex = bb2.size()
+          // TODO Is it really better > (other option is to copy the data from the stream to a new stream - which i try to avoid)?
+          streamWriter = new OutputStreamWriter(byteArrayOutputStream)
+          writer = new BufferedWriter(streamWriter)
+          csvWriter = CountingWriter(writer, bb2.size())
+        } else {
+          KDSU.logInfo(
+            className,
+            s"Streaming one line as individual byte as the row size is ${csvWriter.getCounter}. Batch id: $batchIdForTracing.")
+          streamBytesIntoKusto(
+            batchIdForTracing,
+            byteArrayOutputStream.getByteArrayOrCopy,
+            ingestionProperties,
+            parameters.writeOptions,
+            streamingClient,
+            byteArrayOutputStream.size())
+          byteArrayOutputStream.reset()
+          totalSize += csvWriter.getCounter
+          csvWriter.resetCounter()
+        }
+      } else {
+        // flush before counting output size
+        writer.flush()
+        lastIndex = byteArrayOutputStream
+          .size() // TODO Can i simply use csvWriter.getCounter without flush? (we count all bytes and no transformation is done)
+      }
+    }
+
+    // Close all resources
+    writer.flush()
+    byteArrayOutputStream.flush()
+    IOUtils.close(writer, byteArrayOutputStream)
+    if (csvWriter.getCounter > 0) {
+      KDSU.logInfo(
+        className,
+        s"Streaming final batch of ${csvWriter.getCounter} bytes from batch $batchIdForTracing.")
+      totalSize += csvWriter.getCounter
+
+      streamBytesIntoKusto(
+        batchIdForTracing,
+        byteArrayOutputStream.getByteArrayOrCopy,
+        ingestionProperties,
+        parameters.writeOptions,
+        streamingClient,
+        byteArrayOutputStream.size())
+    }
+    if (totalSize > WarnStreamingBytes) {
+      KDSU.logWarn(
+        className,
+        s"Total of $totalSize bytes were ingested in the batch. Please consider 'Queued' writeMode for ingestion.")
+    }
+  }
+
+  private def streamBytesIntoKusto(
+      batchIdForTracing: String,
+      bytes: Array[Byte],
+      ingestionProperties: IngestionProperties,
+      writeOptions: WriteOptions,
+      streamingClient: ManagedStreamingIngestClient,
+      inputStreamLastIdx: Int): Unit = {
+    KDSU.retryApplyFunction(
+      () => {
+        val inputStream = new ByteArrayInputStream(bytes, 0, inputStreamLastIdx)
+        // The SDK will compress the stream by default.
+        val streamSourceInfo = new StreamSourceInfo(inputStream)
+        Try(streamingClient.ingestFromStream(streamSourceInfo, ingestionProperties)) match {
+          case Success(status) =>
+            status.getIngestionStatusCollection.forEach(ingestionStatus => {
+              KDSU.logInfo(
+                className,
+                s"BatchId $batchIdForTracing IngestionStatus { " +
+                  s"status: '${ingestionStatus.status.toString}', " +
+                  s"details: ${ingestionStatus.details}, " +
+                  s"activityId: ${ingestionStatus.activityId}, " +
+                  s"errorCode: ${ingestionStatus.errorCode}, " +
+                  s"errorCodeString: ${ingestionStatus.errorCodeString}" +
+                  "}")
+            })
+          case Failure(e: Throwable) =>
+            KDSU.reportExceptionAndThrow(
+              className,
+              e,
+              "Streaming ingestion in partition " +
+                s"${TaskContext.getPartitionId.toString} for requestId: '${writeOptions.requestId} failed")
+        }
+      },
+      this.retryConfig,
+      "Streaming ingest to Kusto")
   }
 
   private def ingestToTemporaryTableByWorkers(
       batchIdForTracing: String,
       rows: Iterator[InternalRow],
       partitionsResults: CollectionAccumulator[PartitionResult],
+      ingestionProperties: IngestionProperties,
       parameters: KustoWriteResource): Unit = {
-
     val partitionId = TaskContext.getPartitionId
     KDSU.logInfo(
       className,
@@ -339,7 +494,7 @@ object KustoWriter {
       parameters.coordinates.ingestionUrl,
       parameters.coordinates.clusterAlias)
     val ingestClient = clientCache.ingestClient
-    CloudInfo.manuallyAddToCache(clientCache.ingestKcsb.getClusterUrl, parameters.cloudInfo);
+    CloudInfo.manuallyAddToCache(clientCache.ingestKcsb.getClusterUrl, parameters.cloudInfo)
 
     val reqRetryOpts = new RequestRetryOptions(
       RetryPolicyType.FIXED,
@@ -351,7 +506,7 @@ object KustoWriter {
     ingestClient.setQueueRequestOptions(reqRetryOpts)
     // We force blocking here, since the driver can only complete the ingestion process
     // once all partitions are ingested into the temporary table
-    ingestRowsIntoKusto(rows, ingestClient, partitionsResults, batchIdForTracing, parameters)
+    ingestRowsIntoKusto(rows, ingestClient, ingestionProperties, partitionsResults, batchIdForTracing, parameters)
   }
 
   private def createBlobWriter(
@@ -405,7 +560,7 @@ object KustoWriter {
       var props = ingestionProperties
       val blobUri = blobResource.blob.getStorageUri.getPrimaryUri.toString
       if (parameters.writeOptions.ensureNoDupBlobs || (!props.getFlushImmediately && flushImmediately)) {
-        // Need to copy the ingestionProperties so that only this blob ingestion will be effected
+        // Need to copy the maybeSparkIngestionProperties so that only this blob ingestion will be effected
         props = SparkIngestionProperties.cloneIngestionProperties(ingestionProperties)
       }
 
@@ -455,7 +610,7 @@ object KustoWriter {
         },
         this.retryConfig,
         "Ingest into Kusto")
-      if (parameters.writeOptions.isTransactionalMode) {
+      if (parameters.writeOptions.writeMode == WriteMode.Transactional) {
         partitionsResults.add(PartitionResult(partitionsResult, partitionId))
       }
       KDSU.logInfo(
