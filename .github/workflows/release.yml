@@ -78,9 +78,9 @@ jobs:
           scalaversion=${{steps.get_version.outputs.SCALA_VERSION}}
           sparkversion=${{steps.get_version.outputs.SPARK_VERSION}}
           mkdir staging
-          echo ${{steps.get_version.outputs.SPARK_VERSION}}_$scalaversion-$version
+          echo ${{steps.get_version.outputs.SPARK_VERSION}}_${{steps.get_version.outputs.SPARK_VERSION}}_${{steps.get_version.outputs.SCALA_VERSION}}-$version
           cp connector/target/*.jar staging
-          cp connector/.flattened-pom.xml staging/kusto-spark_$sparkversion_$scalaversion-$version.pom
+          cp connector/.flattened-pom.xml staging/kusto-spark_${{steps.get_version.outputs.SPARK_VERSION}}_${{steps.get_version.outputs.SCALA_VERSION}}-$version.pom
       - name: Github Release
         uses: docker://antonyurchenko/git-release:v6
         env:
