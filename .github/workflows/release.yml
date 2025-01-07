@@ -9,8 +9,6 @@ permissions:
 
 on:
   push:
-    branches:
-        - "bugfix/releasefix"
     tags:
       - "v(2.4|3.0)_[0-9]+.[0-9]+.[0-9]+"
   workflow_dispatch:
@@ -78,7 +76,7 @@ jobs:
           scalaversion=${{steps.get_version.outputs.SCALA_VERSION}}
           sparkversion=${{steps.get_version.outputs.SPARK_VERSION}}
           mkdir staging
-          echo ${{steps.get_version.outputs.SPARK_VERSION}}_${{steps.get_version.outputs.SPARK_VERSION}}_${{steps.get_version.outputs.SCALA_VERSION}}-$version
+          echo ${{steps.get_version.outputs.SPARK_VERSION}}_${{steps.get_version.outputs.SCALA_VERSION}}-$version
           cp connector/target/*.jar staging
           cp connector/.flattened-pom.xml staging/kusto-spark_${{steps.get_version.outputs.SPARK_VERSION}}_${{steps.get_version.outputs.SCALA_VERSION}}-$version.pom
       - name: Github Release
