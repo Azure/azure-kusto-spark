@@ -78,7 +78,7 @@ jobs:
           scalaversion=${{steps.get_version.outputs.SCALA_VERSION}}
           sparkversion=${{steps.get_version.outputs.SPARK_VERSION}}
           mkdir staging
-          echo $sparkversion_$scalaversion-$version
+          echo ${{steps.get_version.outputs.SPARK_VERSION}}_$scalaversion-$version
           cp connector/target/*.jar staging
           cp connector/.flattened-pom.xml staging/kusto-spark_$sparkversion_$scalaversion-$version.pom
       - name: Github Release
