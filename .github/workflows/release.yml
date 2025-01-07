@@ -78,6 +78,7 @@ jobs:
           scalaversion=${{steps.get_version.outputs.SCALA_VERSION}}
           sparkversion=${{steps.get_version.outputs.SPARK_VERSION}}
           mkdir staging
+          echo $sparkversion_$scalaversion-$version
           cp connector/target/*.jar staging
           cp connector/.flattened-pom.xml staging/kusto-spark_$sparkversion_$scalaversion-$version.pom
       - name: Github Release
@@ -101,7 +102,7 @@ jobs:
         run: |
           az storage blob upload-batch \
             --account-name ${{ secrets.AZURE_RELEASE_STORAGE_ACCOUNT }} \
-            --destination ${{ secrets.AZURE_STORAGE_CONTAINER }}/kusto/spark/${{ steps.get_version.outputs.VERSION }} \
+            --destination ${{ secrets.AZURE_STORAGE_CONTAINER }}/kusto/spark/${{ steps.get_version.outputs.SPARK_VERSION }}_${{ steps.get_version.outputs.VERSION }} \
             --source staging \
             --auth-mode login
         if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.upload_to_azure == 'true') }}
