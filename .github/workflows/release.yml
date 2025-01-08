@@ -1,45 +1,67 @@
 name: release
+permissions:
+  checks: write
+  pull-requests: write
+  packages: write
+  deployments: write
+  contents: write
+  id-token: write
 
 on:
   push:
     tags:
       - "v(2.4|3.0)_[0-9]+.[0-9]+.[0-9]+"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag'
+        required: true
+        default: 'refs/tags/v0.0.0'
+      upload_to_azure:
+        description: 'Upload to Azure storage'
+        required: false
+        default: false
+      github_release:
+        description: 'Create Github release'
+        required: false
+        default: false
 
 jobs:
   release:
     runs-on: ubuntu-latest
+    environment: build
     strategy:
       matrix:
         java: [ '8' ]
     name: Java ${{ matrix.java }}
     steps:
-      - uses: actions/checkout@v2
-      - name: Setup java ${{ matrix.java }}
-        uses: actions/setup-java@v3
+      - uses: actions/checkout@v4
         with:
-          distribution: 'adopt'
-          java-version: ${{ matrix.java }}
-          cache: 'maven'
+          ref: ${{ github.event.inputs.tag || github.ref }}
       - name: Azure login
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.APP_ID }}
           tenant-id: ${{ secrets.TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Setup java ${{ matrix.java }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'adopt'
+          java-version: ${{ matrix.java }}
+          cache: 'maven'
       - name: "Run az commands"
         run: |
           access_token=$(az account get-access-token --resource=${{ secrets.APP_ID }} --scope=${{ secrets.CLUSTER }}/.default --query accessToken -o tsv)
           echo "ACCESS_TOKEN=$access_token" >> $GITHUB_ENV
       - name: Run the Maven verify phase
-        run: mvn clean verify -DkustoAadAppId=${{ secrets.APP_ID }} -DkustoAadAuthorityID=${{ secrets.TENANT_ID }} -DkustoAadAppSecret=${{ secrets.APP_SECRET }} -DkustoDatabase=${{ secrets.DATABASE }} -DkustoCluster=${{ secrets.CLUSTER }}
         env:
-          kustoAadAppId: ${{ secrets.APP_ID }}
           kustoAadAuthorityID: ${{ secrets.TENANT_ID }}
-          kustoAadAppSecret: ${{ secrets.APP_SECRET }}
           kustoDatabase: ${{ secrets.DATABASE }}
           kustoCluster: ${{ secrets.CLUSTER }}
           kustoAadAppId: ${{secrets.APP_ID}}
           accessToken: ${{env.ACCESS_TOKEN}}
+          storageAccountUrl: ${{ secrets.STORAGE_CONTAINER_URL }}
         run: |
           mvn clean verify -DkustoAadAppId=${{ secrets.APP_ID }} -DkustoAadAuthorityID=${{ secrets.TENANT_ID }} -DkustoDatabase=${{ secrets.DATABASE }} -DkustoCluster=${{ secrets.CLUSTER }} -DaccessToken=${{env.ACCESS_TOKEN}}
       - name: Get versions
@@ -54,10 +76,11 @@ jobs:
           scalaversion=${{steps.get_version.outputs.SCALA_VERSION}}
           sparkversion=${{steps.get_version.outputs.SPARK_VERSION}}
           mkdir staging
+          echo ${{steps.get_version.outputs.SPARK_VERSION}}_${{steps.get_version.outputs.SCALA_VERSION}}-$version
           cp connector/target/*.jar staging
-          cp connector/.flattened-pom.xml staging/kusto-spark_$sparkversion_$scalaversion-$version.pom
+          cp connector/.flattened-pom.xml staging/kusto-spark_${{steps.get_version.outputs.SPARK_VERSION}}_${{steps.get_version.outputs.SCALA_VERSION}}-$version.pom
       - name: Github Release
-        uses: anton-yurchenko/git-release@v5.0.1
+        uses: docker://antonyurchenko/git-release:v6
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -65,11 +88,19 @@ jobs:
             staging/kusto-spark_${{ steps.get_version.outputs.SPARK_VERSION }}_${{ steps.get_version.outputs.SCALA_VERSION }}-${{ steps.get_version.outputs.VERSION }}-jar-with-dependencies.jar
             staging/kusto-spark_${{ steps.get_version.outputs.SPARK_VERSION }}_${{ steps.get_version.outputs.SCALA_VERSION }}-${{ steps.get_version.outputs.VERSION }}-sources.jar
         continue-on-error: true
-      - uses: LanceMcCarthy/Action-AzureBlobUpload@v2
-        name: Uploading to Azure storage
+        if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.github_release == 'true') }}
+      - name: Azure login for azuresdkpartnerdrops SA
+        uses: azure/login@v2
         with:
-          connection_string: ${{ secrets.AZURE_STORAGE_CONNECTION_STRING}}
-          container_name: ${{ secrets.AZURE_STORAGE_CONTAINER}}
-          source_folder: staging
-          destination_folder: kusto/spark/${{ steps.get_version.outputs.SPARK_VERSION }}_${{ steps.get_version.outputs.SCALA_VERSION }}-${{ steps.get_version.outputs.VERSION }}
-          delete_if_exists: true
+          client-id: ${{ secrets.AZURESDKPARTNERDROPS_CLIENT_ID }}
+          tenant-id: ${{ secrets.TENANT_ID }}
+          subscription-id:
+            ${{ secrets.AZURESDKPARTNERDROPS_SUBSCRIPTION_ID }}
+      - name: Upload file to Blob Storage
+        run: |
+          az storage blob upload-batch \
+            --account-name ${{ secrets.AZURE_RELEASE_STORAGE_ACCOUNT }} \
+            --destination ${{ secrets.AZURE_STORAGE_CONTAINER }}/kusto/spark/${{ steps.get_version.outputs.SPARK_VERSION }}_${{ steps.get_version.outputs.VERSION }} \
+            --source staging \
+            --auth-mode login
+        if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.upload_to_azure == 'true') }}
