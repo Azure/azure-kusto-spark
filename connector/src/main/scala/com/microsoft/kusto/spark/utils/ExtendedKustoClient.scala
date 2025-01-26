@@ -158,7 +158,7 @@ class ExtendedKustoClient(
       maybeCrp: Option[ClientRequestProperties],
       retryConfig: Option[RetryConfig] = None): KustoOperationResult = {
     KDSU.retryApplyFunction(
-      () => dmClient.execute(ExtendedKustoClient.DefaultDb, command, maybeCrp.orNull),
+      () => dmClient.executeMgmt(ExtendedKustoClient.DefaultDb, command, maybeCrp.orNull),
       retryConfig.getOrElse(this.retryConfig),
       "Execute DM command with retries")
   }
@@ -553,8 +553,12 @@ class ExtendedKustoClient(
       crp: ClientRequestProperties,
       retryConfig: Option[RetryConfig] = None): KustoOperationResult = {
     // TODO - CID should reflect retries
+    val isMgmtCommand = command.startsWith(".")
     KDSU.retryApplyFunction(
-      () => engineClient.execute(database, command, crp),
+      () =>
+        if (isMgmtCommand) {
+          engineClient.executeMgmt(database, command, crp)
+        } else { engineClient.executeQuery(database, command, crp) },
       retryConfig.getOrElse(this.retryConfig),
       "Execute engine command with retries")
   }

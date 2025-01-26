@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
-
 package com.microsoft.kusto.spark
 
 import com.microsoft.azure.kusto.data.ClientFactory
@@ -129,7 +128,7 @@ class KustoPruneAndFilterE2E extends AnyFlatSpec with BeforeAndAfterAll {
       kustoTestConnectionOptions.cluster,
       kustoTestConnectionOptions.accessToken)
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
-    kustoAdminClient.execute(
+    kustoAdminClient.executeMgmt(
       kustoTestConnectionOptions.database,
       generateTempTableCreateCommand(query, columnsTypesAndNames = "ColA:string, ColB:int"))
 
@@ -226,7 +225,7 @@ class KustoPruneAndFilterE2E extends AnyFlatSpec with BeforeAndAfterAll {
       kustoTestConnectionOptions.cluster,
       kustoTestConnectionOptions.accessToken)
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
-    kustoAdminClient.execute(
+    kustoAdminClient.executeMgmt(
       kustoTestConnectionOptions.database,
       generateTempTableCreateCommand(query, columnsTypesAndNames = "ColA:string, ColB:int"))
 

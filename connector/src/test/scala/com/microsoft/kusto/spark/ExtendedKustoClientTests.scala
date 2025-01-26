@@ -80,6 +80,6 @@ class ExtendedKustoClientTests extends AnyFlatSpec with Matchers {
       WriteOptions(writeMode = WriteMode.Queued),
       null,
       true)
-    verify(stubbedClient.engineClient, times(0)).execute(any(), any(), any())
+    verify(stubbedClient.engineClient, times(0)).executeMgmt(any(), any(), any())
   }
 }

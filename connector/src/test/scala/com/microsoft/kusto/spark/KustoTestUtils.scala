@@ -3,20 +3,27 @@
 
 package com.microsoft.kusto.spark
 
-import com.azure.core.credential.{AccessToken, TokenCredential, TokenRequestContext}
-import com.azure.identity.{AzureCliCredentialBuilder, ClientAssertionCredentialBuilder}
+import com.azure.core.credential.{AccessToken, TokenRequestContext}
+import com.azure.identity.AzureCliCredentialBuilder
 import com.azure.storage.blob.BlobServiceClientBuilder
 import com.azure.storage.blob.sas.{BlobSasPermission, BlobServiceSasSignatureValues}
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.{Client, ClientFactory}
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
-import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode, SparkIngestionProperties}
+import com.microsoft.kusto.spark.datasink.{
+  KustoSinkOptions,
+  SinkTableCreationMode,
+  SparkIngestionProperties
+}
 import com.microsoft.kusto.spark.datasource.{KustoSourceOptions, TransientStorageCredentials}
 import com.microsoft.kusto.spark.sql.extension.SparkExtension.DataFrameReaderExtension
-import com.microsoft.kusto.spark.utils.CslCommandsGenerator.{generateDropTablesCommand, generateFindCurrentTempTablesCommand, generateTempTableCreateCommand}
+import com.microsoft.kusto.spark.utils.CslCommandsGenerator.{
+  generateDropTablesCommand,
+  generateFindCurrentTempTablesCommand,
+  generateTempTableCreateCommand
+}
 import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
-import reactor.core.publisher.Mono
 
 import java.security.InvalidParameterException
 import java.time.OffsetDateTime
@@ -53,7 +60,7 @@ private[kusto] object KustoTestUtils {
     val query = s"$table | count"
 
     while (rowCount < expectedNumberOfRows && timeElapsedMs < timeoutMs) {
-      val result = kustoAdminClient.execute(database, query).getPrimaryResults
+      val result = kustoAdminClient.executeQuery(database, query).getPrimaryResults
       result.next()
       rowCount = result.getInt(0)
       Thread.sleep(sleepPeriodMs)
@@ -67,7 +74,7 @@ private[kusto] object KustoTestUtils {
       }
       tryDropAllTablesByPrefix(kustoAdminClient, database, tableCleanupPrefix)
     } else {
-      kustoAdminClient.execute(database, generateDropTablesCommand(table))
+      kustoAdminClient.executeMgmt(database, generateDropTablesCommand(table))
     }
 
     if (expectedNumberOfRows >= 0) {
@@ -89,13 +96,13 @@ private[kusto] object KustoTestUtils {
       database: String,
       tablePrefix: String): Unit = {
     try {
-      val res = kustoAdminClient.execute(
+      val res = kustoAdminClient.executeMgmt(
         database,
         generateFindCurrentTempTablesCommand(Array(tablePrefix)))
       val tablesToCleanup = res.getPrimaryResults.getData.asScala.map(row => row.get(0))
 
       if (tablesToCleanup.nonEmpty) {
-        kustoAdminClient.execute(
+        kustoAdminClient.executeMgmt(
           database,
           generateDropTablesCommand(tablesToCleanup.mkString(",")))
       }
@@ -118,7 +125,7 @@ private[kusto] object KustoTestUtils {
       kustoConnectionOptions.accessToken)
 
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
-    kustoAdminClient.execute(
+    kustoAdminClient.executeMgmt(
       kustoConnectionOptions.database,
       generateTempTableCreateCommand(table, targetSchema))
     table
@@ -224,13 +231,16 @@ private[kusto] object KustoTestUtils {
       }
       if (isSourceE2E) {
         val storageAccountUrl: String = getSystemVariable("storageAccountUrl")
-        cachedToken.put(key, KustoConnectionOptions(cluster, database, accessToken, authority, storageContainerUrl = Some(storageAccountUrl)))
+        cachedToken.put(
+          key,
+          KustoConnectionOptions(
+            cluster,
+            database,
+            accessToken,
+            authority,
+            storageContainerUrl = Some(storageAccountUrl)))
       } else {
-        cachedToken.put(key, KustoConnectionOptions(
-          cluster,
-          database,
-          accessToken,
-          authority))
+        cachedToken.put(key, KustoConnectionOptions(cluster, database, accessToken, authority))
       }
       cachedToken(key)
     }
@@ -254,8 +264,7 @@ private[kusto] object KustoTestUtils {
 
   def generateSasDelegationWithAzCli(storageContainerUrl: String): String = {
     val containerName = storageContainerUrl match {
-      case TransientStorageCredentials.SasPattern(
-      _, _, _, container, _) =>
+      case TransientStorageCredentials.SasPattern(_, _, _, container, _) =>
         container
       case _ => throw new InvalidParameterException("Storage url is invalid")
     }
@@ -269,16 +278,17 @@ private[kusto] object KustoTestUtils {
 
     // Get the user delegation key
     val userDelegationKey = blobServiceClient.getUserDelegationKey(
-      OffsetDateTime.now(), OffsetDateTime.now().plusHours(1))
+      OffsetDateTime.now(),
+      OffsetDateTime.now().plusHours(1))
 
     val blobSasPermission = new BlobSasPermission()
       .setReadPermission(true)
       .setWritePermission(true)
       .setListPermission(true)
 
-    val sasSignatureValues = new BlobServiceSasSignatureValues(
-      OffsetDateTime.now().plusHours(1), blobSasPermission)
-      .setStartTime(OffsetDateTime.now().minusMinutes(5))
+    val sasSignatureValues =
+      new BlobServiceSasSignatureValues(OffsetDateTime.now().plusHours(1), blobSasPermission)
+        .setStartTime(OffsetDateTime.now().minusMinutes(5))
 
     containerClient.generateUserDelegationSas(sasSignatureValues, userDelegationKey)
   }
