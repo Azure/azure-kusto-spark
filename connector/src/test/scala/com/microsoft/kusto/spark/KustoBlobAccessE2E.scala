@@ -34,7 +34,8 @@ import scala.collection.JavaConverters._
 
 class KustoBlobAccessE2E extends AnyFlatSpec with BeforeAndAfterAll {
   private val myName = this.getClass.getSimpleName
-
+  private val hadoopProviderClass: String =
+    "org.apache.hadoop.fs.azure.NativeAzureFileSystem"
   private val nofExecutors = 4
   private val spark: SparkSession = SparkSession
     .builder()
@@ -147,6 +148,9 @@ class KustoBlobAccessE2E extends AnyFlatSpec with BeforeAndAfterAll {
       .map(row => row.get(0))
 
     blobs.foreach(blob => KDSU.logInfo(myName, s"Exported to blob: $blob"))
+    spark.conf.set(
+      "fs.wasbs.impl",
+      "kusto_connector_shaded.org.apache.hadoop.fs.azure.NativeAzureFileSystem")
     if (useKeyNotSas) {
       spark.conf.set(s"fs.azure.account.key.$storageAccount.blob.core.windows.net", s"$secret")
     } else {
@@ -156,8 +160,9 @@ class KustoBlobAccessE2E extends AnyFlatSpec with BeforeAndAfterAll {
       }
       spark.conf.set(s"fs.azure.sas.$container.$storageAccount.blob.core.windows.net", s"$secret")
     }
-    spark.conf.set("fs.azure", "org.apache.hadoop.fs.azure.NativeAzureFileSystem")
-
+    spark.conf.set("fs.azure", hadoopProviderClass)
+    spark.conf.set("spark.hadoop.fs.wasb.impl", hadoopProviderClass)
+    spark.conf.set("spark.hadoop.fs.azure", hadoopProviderClass)
     val df =
       spark.read.parquet(s"wasbs://$container@$storageAccount.blob.core.windows.net/$directory")
 

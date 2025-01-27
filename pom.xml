@@ -14,7 +14,7 @@
         <commons.lang3.version>3.17.0</commons.lang3.version>
         <fasterxml.jackson.jar.version>2.16.0</fasterxml.jackson.jar.version>
         <fasterxml.jackson.version>2.16.0</fasterxml.jackson.version>
-        <hadoop.version>3.4.1</hadoop.version>
+        <hadoop.version>3.3.6</hadoop.version>
         <java.source.version>1.8</java.source.version>
         <java.target.version>1.8</java.target.version>
         <jsonsmart.version>2.4.10</jsonsmart.version>
