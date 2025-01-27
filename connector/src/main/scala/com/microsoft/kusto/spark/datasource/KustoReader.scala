@@ -242,7 +242,7 @@ private[kusto] object KustoReader {
     val now = Instant.now(Clock.systemUTC())
     for (storage <- storageParameters.storageCredentials) {
       storage.authMethod match {
-        case AuthMethod.Sas =>
+        case AuthMethod.Key =>
           if (!KustoAzureFsSetupCache.updateAndGetPrevStorageAccountAccess(
             storage.storageAccountName,
             storage.storageAccountKey,
@@ -251,7 +251,7 @@ private[kusto] object KustoReader {
               s"fs.azure.account.key.${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}",
               s"${storage.storageAccountKey}")
           }
-        case AuthMethod.Key =>
+        case AuthMethod.Sas =>
           if (!KustoAzureFsSetupCache.updateAndGetPrevSas(
             storage.blobContainer,
             storage.storageAccountName,

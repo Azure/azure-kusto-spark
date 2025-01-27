@@ -240,7 +240,7 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
     }
   }
 
-  "KustoSource" should "read distributed, transient cache change the filter but execute once" taggedAs KustoE2E in {
+  "KustoSource" should "read distributed, transient cache change the filter but execute once" in {
     import spark.implicits._
     val table = KustoQueryUtils.simplifyName(s"KustoSparkReadWriteTest_${UUID.randomUUID()}")
 
