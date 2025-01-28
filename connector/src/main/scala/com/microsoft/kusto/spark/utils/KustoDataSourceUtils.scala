@@ -221,7 +221,7 @@ object KustoDataSourceUtils {
       clientRequestProperties: Option[ClientRequestProperties]): KustoSchema = {
     KustoResponseDeserializer(
       client
-        .executeEngine(database, query, clientRequestProperties.orNull)
+        .executeEngine(database, query, "schemaGet", clientRequestProperties.orNull)
         .getPrimaryResults).getSchema
   }
 
@@ -540,10 +540,14 @@ object KustoDataSourceUtils {
     }
   }
 
-  def retryApplyFunction[T](func: () => T, retryConfig: RetryConfig, retryName: String): T = {
+  def retryApplyFunction[T](func: Int => T, retryConfig: RetryConfig, retryName: String): T = {
     val retry = Retry.of(retryName, retryConfig)
     val f: CheckedFunction0[T] = new CheckedFunction0[T]() {
-      override def apply(): T = func()
+      var retry = 0
+      override def apply(): T = {
+        retry += 1
+        func(retry)
+      }
     }
 
     retry.executeCheckedSupplier(f)

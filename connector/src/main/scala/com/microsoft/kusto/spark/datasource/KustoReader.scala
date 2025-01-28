@@ -84,6 +84,7 @@ private[kusto] object KustoReader {
       .executeEngine(
         request.kustoCoordinates.database,
         filteredQuery,
+        "executeQuery",
         request.clientRequestProperties.orNull)
       .getPrimaryResults
 
@@ -329,6 +330,7 @@ private[kusto] class KustoReader(client: ExtendedKustoClient) {
       .executeEngine(
         request.kustoCoordinates.database,
         exportCommand,
+        "exportPartitionToBlob",
         request.clientRequestProperties.orNull)
       .getPrimaryResults
     KDSU.verifyAsyncCommandCompletion(
