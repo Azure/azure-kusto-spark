@@ -103,6 +103,7 @@ object FinalizeHelper {
                   tmpTableName,
                   allowMerge = false,
                   allowRebuild = false),
+                "alterMergePolicyCommand",
                 crp)
               // Drop dedup tags
               if (writeOptions.ensureNoDupBlobs) {
@@ -112,6 +113,7 @@ object FinalizeHelper {
                   crp,
                   writeOptions.timeout,
                   s"drops extents from temp table '$tmpTableName' ",
+                  "extentsDrop",
                   writeOptions.requestId)
               }
               client.moveExtents(

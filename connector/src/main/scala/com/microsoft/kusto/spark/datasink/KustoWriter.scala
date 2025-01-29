@@ -101,6 +101,7 @@ object KustoWriter {
       .executeEngine(
         tableCoordinates.database,
         generateTableGetSchemaAsRowsCommand(tableCoordinates.table.get),
+        "schemaShow",
         crp)
       .getPrimaryResults
 
@@ -131,6 +132,7 @@ object KustoWriter {
             .executeEngine(
               tableCoordinates.database,
               generateTableGetSchemaAsRowsCommand(writeOptions.userTempTableName.get),
+              "schemaShow",
               crp)
             .getPrimaryResults
             .count() <= 0 ||
@@ -449,7 +451,7 @@ object KustoWriter {
       streamingClient: ManagedStreamingIngestClient,
       inputStreamLastIdx: Int): Unit = {
     KDSU.retryApplyFunction(
-      () => {
+      i => {
         val inputStream = new ByteArrayInputStream(bytes, 0, inputStreamLastIdx)
         // The SDK will compress the stream by default.
         val streamSourceInfo = new StreamSourceInfo(inputStream)
@@ -463,7 +465,8 @@ object KustoWriter {
                   s"details: ${ingestionStatus.details}, " +
                   s"activityId: ${ingestionStatus.activityId}, " +
                   s"errorCode: ${ingestionStatus.errorCode}, " +
-                  s"errorCodeString: ${ingestionStatus.errorCodeString}" +
+                  s"errorCodeString: ${ingestionStatus.errorCodeString}," +
+                  s"retry: $i" +
                   "}")
             })
           case Failure(e: Throwable) =>
@@ -583,7 +586,7 @@ object KustoWriter {
       }
       // write the data here
       val partitionsResult = KDSU.retryApplyFunction(
-        () => {
+        i => {
           Try(
             ingestClient.ingestFromBlob(
               new BlobSourceInfo(blobUri + sas, size, UUID.randomUUID()),
@@ -599,7 +602,7 @@ object KustoWriter {
               KDSU.reportExceptionAndThrow(
                 className,
                 e,
-                "Queueing blob for ingestion in partition " +
+                s"Queueing blob for ingestion, retry number '$i', in partition " +
                   s"$partitionIdString for requestId: '${parameters.writeOptions.requestId}")
               val blobUrlWithSas =
                 s"${blobResource.blob.getStorageUri.getPrimaryUri.toString}${blobResource.sas}"

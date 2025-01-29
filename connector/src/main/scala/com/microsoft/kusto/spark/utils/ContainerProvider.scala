@@ -83,7 +83,7 @@ class ContainerProvider(
 
   private def refresh(exportContainer: Boolean = false): ContainerAndSas = {
     if (exportContainer) {
-      Try(client.executeDM(command, None, Some(retryConfigExportContainers))) match {
+      Try(client.executeDM(command, None, "refreshContainers", Some(retryConfigExportContainers))) match {
         case Success(res) =>
           val storage = res.getPrimaryResults.getData.asScala.map(row => {
             val parts = row.get(0).toString.split('?')
