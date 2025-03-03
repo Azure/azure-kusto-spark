@@ -137,8 +137,7 @@ All the options that can be used in the Kusto Sink can be found in KustoSinkOpti
 
 * **KUSTO_CLIENT_BATCHING_LIMIT**:
   'clientBatchingLimit' - A limit indicating the size in MB of the aggregated data before ingested to Kusto. Note that
-  this is done for each partition. The Kusto ingestion endpoint also aggregates data with a default of 1GB, but here
-  we suggest a maximum of 100MB to adjust it to Spark pulling of data.
+  this is done for each partition. For production purposes we suggest to set the value to 1024. 
 
 * **KUSTO_REQUEST_ID**:
   'requestId' - A unique identifier UUID for this ingestion command. Will be used as part of the staging table name as well.
