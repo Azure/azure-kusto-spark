@@ -136,8 +136,8 @@ All the options that can be used in the Kusto Sink can be found in KustoSinkOpti
   If set to 'FailIfNotMatch' - fails if schemas don't agree on names and order.
 
 * **KUSTO_CLIENT_BATCHING_LIMIT**:
-  'clientBatchingLimit' - A limit indicating the size in MB of the aggregated data before ingested to Kusto. Note that
-  this is done for each partition. For production purposes we suggest to set the value to 1024. 
+  'clientBatchingLimit' - A limit indicating the size in MB of the aggregated data before ingested to Kusto, default is '300'. Note that
+  this is done for each partition. For production purposes we suggest to set the value to '1024'. 
 
 * **KUSTO_REQUEST_ID**:
   'requestId' - A unique identifier UUID for this ingestion command. Will be used as part of the staging table name as well.
