@@ -3,6 +3,7 @@
 
 package com.microsoft.kusto.spark.datasink
 
+import com.microsoft.kusto.spark.{KustoSparkMetricsListener, KustoSparkMetricsListenerExtended}
 import com.microsoft.kusto.spark.utils.{KeyVaultUtils, KustoDataSourceUtils}
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.execution.streaming.Sink
@@ -19,18 +20,28 @@ class KustoSinkProvider extends StreamSinkProvider with DataSourceRegister {
       partitionColumns: Seq[String],
       outputMode: OutputMode): Sink = {
     val sinkParameters = KustoDataSourceUtils.parseSinkParameters(parameters)
-
+    val kustoAuthParameters = getAuthParameters(sinkParameters)
+    sqlContext.sparkContext.addSparkListener(
+      new KustoSparkMetricsListenerExtended(
+        sinkParameters.sourceParametersResults.kustoCoordinates,
+        kustoAuthParameters))
     new KustoSink(
       sqlContext,
       sinkParameters.sourceParametersResults.kustoCoordinates,
-      if (sinkParameters.sourceParametersResults.keyVaultAuth.isDefined) {
-        val paramsFromKeyVault = KeyVaultUtils.getAadAppParametersFromKeyVault(
-          sinkParameters.sourceParametersResults.keyVaultAuth.get)
-        KustoDataSourceUtils.mergeKeyVaultAndOptionsAuthentication(
-          paramsFromKeyVault,
-          Some(sinkParameters.sourceParametersResults.authenticationParameters))
-      } else sinkParameters.sourceParametersResults.authenticationParameters,
+      kustoAuthParameters,
       sinkParameters.writeOptions,
       sinkParameters.sourceParametersResults.clientRequestProperties)
+  }
+
+  private def getAuthParameters(sinkParameters: KustoDataSourceUtils.SinkParameters) = {
+    if (sinkParameters.sourceParametersResults.keyVaultAuth.isDefined) {
+      val paramsFromKeyVault = KeyVaultUtils.getAadAppParametersFromKeyVault(
+        sinkParameters.sourceParametersResults.keyVaultAuth.get)
+      KustoDataSourceUtils.mergeKeyVaultAndOptionsAuthentication(
+        paramsFromKeyVault,
+        Some(sinkParameters.sourceParametersResults.authenticationParameters))
+    } else {
+      sinkParameters.sourceParametersResults.authenticationParameters
+    }
   }
 }

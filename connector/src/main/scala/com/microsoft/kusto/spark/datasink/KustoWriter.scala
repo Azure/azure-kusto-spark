@@ -509,7 +509,13 @@ object KustoWriter {
     ingestClient.setQueueRequestOptions(reqRetryOpts)
     // We force blocking here, since the driver can only complete the ingestion process
     // once all partitions are ingested into the temporary table
-    ingestRowsIntoKusto(rows, ingestClient, ingestionProperties, partitionsResults, batchIdForTracing, parameters)
+    ingestRowsIntoKusto(
+      rows,
+      ingestClient,
+      ingestionProperties,
+      partitionsResults,
+      batchIdForTracing,
+      parameters)
   }
 
   private def createBlobWriter(
@@ -592,7 +598,7 @@ object KustoWriter {
               new BlobSourceInfo(blobUri + sas, size, UUID.randomUUID()),
               props)) match {
             case Success(x) =>
-              <!-- The statuses of the ingestion operations are now set in the ingestion result -->
+//              <!-- The statuses of the ingestion operations are now set in the ingestion result -->
               val blobUrlWithSas =
                 s"${blobResource.blob.getStorageUri.getPrimaryUri.toString}${blobResource.sas}"
               val containerWithSas = new ContainerWithSas(blobUrlWithSas, null)

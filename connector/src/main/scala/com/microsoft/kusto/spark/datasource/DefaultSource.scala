@@ -6,6 +6,7 @@ package com.microsoft.kusto.spark.datasource
 import java.security.InvalidParameterException
 import java.util.concurrent.TimeUnit
 import com.microsoft.azure.kusto.data.ClientRequestProperties
+import com.microsoft.kusto.spark.{KustoSparkMetricsListener, KustoSparkMetricsListenerExtended}
 import com.microsoft.kusto.spark.authentication.{KeyVaultAuthentication, KustoAuthentication}
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, KustoWriter}
@@ -155,6 +156,8 @@ class DefaultSource
       myName,
       s"Finished serializing parameters for reading: {requestId: $requestId, timeout: $timeout, readMode: ${readOptions.readMode
           .getOrElse("Default")}, clientRequestProperties: $clientRequestProperties")
+    sqlContext.sparkContext.addSparkListener(
+      new KustoSparkMetricsListenerExtended(kustoCoordinates, kustoAuthentication.get))
     KustoRelation(
       kustoCoordinates,
       kustoAuthentication.get,
