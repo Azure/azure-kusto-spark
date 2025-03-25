@@ -486,6 +486,11 @@ object KustoDataSourceUtils {
     val maybeSparkIngestionProperties =
       getIngestionProperties(writeMode == WriteMode.KustoStreaming, ingestionPropertiesAsJson)
 
+    val maybeIngestionStorageParameters: Option[Array[IngestionStorageParameters]] =
+      parameters
+        .get(KustoSinkOptions.KUSTO_INGESTION_STORAGE)
+        .map(is => IngestionStorageParameters.fromString(is))
+
     val writeOptions = WriteOptions(
       pollingOnDriver,
       tableCreation,
@@ -504,7 +509,8 @@ object KustoDataSourceUtils {
       userTempTableName,
       disableFlushImmediately,
       ensureNoDupBlobs,
-      streamIngestMaxSize)
+      streamIngestMaxSize,
+      maybeIngestionStorageParameters)
 
     if (sourceParameters.kustoCoordinates.table.isEmpty) {
       throw new InvalidParameterException(

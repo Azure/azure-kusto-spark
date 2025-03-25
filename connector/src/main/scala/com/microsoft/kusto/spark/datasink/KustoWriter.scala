@@ -509,23 +509,31 @@ object KustoWriter {
     ingestClient.setQueueRequestOptions(reqRetryOpts)
     // We force blocking here, since the driver can only complete the ingestion process
     // once all partitions are ingested into the temporary table
-    ingestRowsIntoKusto(rows, ingestClient, ingestionProperties, partitionsResults, batchIdForTracing, parameters)
+    ingestRowsIntoKusto(
+      rows,
+      ingestClient,
+      ingestionProperties,
+      partitionsResults,
+      batchIdForTracing,
+      parameters)
   }
 
   private def createBlobWriter(
-      tableCoordinates: KustoCoordinates,
-      tmpTableName: String,
+      kustoParameters: KustoWriteResource,
       client: ExtendedKustoClient,
       partitionId: String,
       blobNumber: Int,
       blobUUID: String): BlobWriteResource = {
     val now = Instant.now()
-
+    val tmpTableName = kustoParameters.tmpTableName
+    val tableCoordinates = kustoParameters.coordinates
     val blobName = s"${KustoQueryUtils.simplifyName(
         tableCoordinates.database)}_${tmpTableName}_${blobUUID}_${partitionId}_${blobNumber}_${formatter
         .format(now)}_spark.csv.gz"
 
-    val containerAndSas = client.getTempBlobForIngestion
+    val containerAndSas =
+      client.getTempBlobForIngestion(kustoParameters.writeOptions.maybeIngestionBlobStorage)
+
     val currentBlob = new CloudBlockBlob(
       new URI(s"${containerAndSas.containerUrl}/$blobName${containerAndSas.sas}"))
     val currentSas = containerAndSas.sas
@@ -629,13 +637,8 @@ object KustoWriter {
     val maxBlobSize = parameters.writeOptions.batchLimit * KCONST.OneMegaByte
     var curBlobUUID = UUID.randomUUID().toString
     // This blobWriter will be used later to write the rows to blob storage from which it will be ingested to Kusto
-    val initialBlobWriter: BlobWriteResource = createBlobWriter(
-      parameters.coordinates,
-      parameters.tmpTableName,
-      kustoClient,
-      partitionIdString,
-      0,
-      curBlobUUID)
+    val initialBlobWriter: BlobWriteResource =
+      createBlobWriter(parameters, kustoClient, partitionIdString, 0, curBlobUUID)
     val timeZone = TimeZone.getTimeZone(parameters.writeOptions.timeZone).toZoneId
     // Serialize rows to ingest and send to blob storage.
     val lastBlobWriter = rows.zipWithIndex.foldLeft[BlobWriteResource](initialBlobWriter) {
@@ -663,13 +666,7 @@ object KustoWriter {
               curBlobUUID,
               kustoClient)
             curBlobUUID = UUID.randomUUID().toString
-            createBlobWriter(
-              parameters.coordinates,
-              parameters.tmpTableName,
-              kustoClient,
-              partitionIdString,
-              row._2,
-              curBlobUUID)
+            createBlobWriter(parameters, kustoClient, partitionIdString, row._2, curBlobUUID)
           }
         }
     }

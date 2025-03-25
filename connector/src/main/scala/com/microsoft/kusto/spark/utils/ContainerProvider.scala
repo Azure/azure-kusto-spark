@@ -3,24 +3,35 @@
 
 package com.microsoft.kusto.spark.utils
 
+import com.azure.identity.{
+  DefaultAzureCredential,
+  DefaultAzureCredentialBuilder,
+  ManagedIdentityCredential,
+  ManagedIdentityCredentialBuilder
+}
+import com.azure.storage.blob.BlobServiceClientBuilder
+import com.azure.storage.blob.sas.{BlobContainerSasPermission, BlobServiceSasSignatureValues}
 import com.microsoft.azure.kusto.data.exceptions.{DataServiceException, KustoDataExceptionBase}
 import com.microsoft.azure.kusto.ingest.exceptions.{
   IngestionClientException,
   IngestionServiceException
 }
+import com.microsoft.kusto.spark.datasink.IngestionStorageParameters
 import com.microsoft.kusto.spark.exceptions.NoStorageContainersException
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import io.github.resilience4j.core.IntervalFunction
 import io.github.resilience4j.retry.{Retry, RetryConfig}
 import io.vavr.CheckedFunction0
+import org.apache.commons.lang3.StringUtils
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.http.conn.HttpHostConnectException
 
-import java.time.{Clock, Instant}
+import java.time.temporal.ChronoUnit
+import java.time.{Clock, Instant, OffsetDateTime}
 import java.util.function.Predicate
 import scala.collection.JavaConverters.asScalaBufferConverter
 import scala.collection.mutable
-import scala.util.{Failure, Success, Try}
+import scala.util.{Failure, Random, Success, Try}
 
 class ContainerProvider(
     val client: ExtendedKustoClient,
@@ -57,17 +68,23 @@ class ContainerProvider(
       .build
   }
 
-  def getContainer: ContainerAndSas = {
+  def getContainer(maybeIngestionStorageParams: Option[Array[IngestionStorageParameters]] = None)
+      : ContainerAndSas = {
     // Refresh if storageExpiryMinutes have passed since last refresh for this cluster as SAS should be valid for at least 120 minutes
     val now = Instant.now(Clock.systemUTC())
     val secondsElapsed =
       now.getEpochSecond - lastRefresh.getEpochSecond // get the seconds between now and last refresh
-    if (storageUris.isEmpty ||
-      secondsElapsed > cacheExpirySeconds /* If the cache has elapsed , refresh */ ) {
-      refresh()
-    } else {
-      roundRobinIdx = (roundRobinIdx + 1) % storageUris.size
-      storageUris(roundRobinIdx)
+    maybeIngestionStorageParams match {
+      case Some(ingestionStorageParams) =>
+        refreshUserSas(ingestionStorageParams)
+      case None =>
+        if (storageUris.isEmpty ||
+          secondsElapsed > cacheExpirySeconds /* If the cache has elapsed , refresh */ ) {
+          refresh()
+        } else {
+          roundRobinIdx = (roundRobinIdx + 1) % storageUris.size
+          storageUris(roundRobinIdx)
+        }
     }
   }
 
@@ -81,9 +98,57 @@ class ContainerProvider(
     storageUris
   }
 
+  private def refreshUserSas(
+      ingestionStorageParams: Array[IngestionStorageParameters]): ContainerAndSas = {
+    val ingestionStorageParameter =
+      IngestionStorageParameters.getRandomIngestionStorage(ingestionStorageParams)
+    // Create a SAS token that's valid for 6 hours
+    val expiryTime = OffsetDateTime.now.plusSeconds(cacheExpirySeconds * 4) // Just to be sure
+    // Assign read permissions to the SAS token
+    val sasPermission = new BlobContainerSasPermission().setWritePermission(true)
+    val sasSignatureValues = new BlobServiceSasSignatureValues(expiryTime, sasPermission)
+      .setStartTime(OffsetDateTime.now.minusMinutes(5))
+
+    if (StringUtils.isEmpty(ingestionStorageParameter.containerName) || StringUtils.isEmpty(
+        ingestionStorageParameter.storageUrl)) {
+      throw new IllegalArgumentException(
+        "storageUrl and containerName must be set when supplying ingestion storage")
+    }
+    KDSU.logInfo(className, s"Using user supplied ingestion storage $ingestionStorageParameter")
+
+    val credential = if (StringUtils.isNotEmpty(ingestionStorageParameter.userMsi)) {
+      new ManagedIdentityCredentialBuilder().clientId(ingestionStorageParameter.userMsi).build()
+    } else {
+      // Use the default credential chain to authenticate
+      KDSU.logWarn(
+        className,
+        "Using default credential chain to authenticate to blob storage. " +
+          "This may not work if the environment is not set up correctly.")
+      new DefaultAzureCredentialBuilder().build()
+    }
+    val blobClient = new BlobServiceClientBuilder()
+      .endpoint(ingestionStorageParameter.storageUrl)
+      .credential(credential)
+      .buildClient
+    val containerClient =
+      blobClient.getBlobContainerClient(ingestionStorageParameter.containerName)
+
+    val sasToken = containerClient.generateSas(sasSignatureValues)
+    val storage = ContainerAndSas(
+      s"${ingestionStorageParameter.storageUrl}/${ingestionStorageParameter.containerName}",
+      s"?$sasToken",
+      isUserStorage = true)
+    processContainerResults(mutable.Buffer(storage))
+  }
+
   private def refresh(exportContainer: Boolean = false): ContainerAndSas = {
     if (exportContainer) {
-      Try(client.executeDM(command, None, "refreshContainers", Some(retryConfigExportContainers))) match {
+      Try(
+        client.executeDM(
+          command,
+          None,
+          "refreshContainers",
+          Some(retryConfigExportContainers))) match {
         case Success(res) =>
           val storage = res.getPrimaryResults.getData.asScala.map(row => {
             val parts = row.get(0).toString.split('?')
