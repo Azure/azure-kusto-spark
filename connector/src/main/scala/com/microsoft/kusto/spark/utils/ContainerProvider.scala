@@ -105,7 +105,7 @@ class ContainerProvider(
     // Create a SAS token that's valid for 6 hours
     val expiryTime = OffsetDateTime.now.plusSeconds(cacheExpirySeconds * 4) // Just to be sure
     // Assign read permissions to the SAS token
-    val sasPermission = new BlobContainerSasPermission().setWritePermission(true)
+    val sasPermission = new BlobContainerSasPermission().setWritePermission(true).setReadPermission(true)
     val sasSignatureValues = new BlobServiceSasSignatureValues(expiryTime, sasPermission)
       .setStartTime(OffsetDateTime.now.minusMinutes(5))
 
