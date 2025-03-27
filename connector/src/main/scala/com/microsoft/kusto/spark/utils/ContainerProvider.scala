@@ -102,12 +102,6 @@ class ContainerProvider(
       ingestionStorageParams: Array[IngestionStorageParameters]): ContainerAndSas = {
     val ingestionStorageParameter =
       IngestionStorageParameters.getRandomIngestionStorage(ingestionStorageParams)
-    // Create a SAS token that's valid for 6 hours
-    val expiryTime = OffsetDateTime.now.plusSeconds(cacheExpirySeconds * 4) // Just to be sure
-    // Assign read permissions to the SAS token
-    val sasPermission = new BlobContainerSasPermission().setWritePermission(true).setReadPermission(true)
-    val sasSignatureValues = new BlobServiceSasSignatureValues(expiryTime, sasPermission)
-      .setStartTime(OffsetDateTime.now.minusMinutes(5))
 
     if (StringUtils.isEmpty(ingestionStorageParameter.containerName) || StringUtils.isEmpty(
         ingestionStorageParameter.storageUrl)) {
@@ -126,14 +120,26 @@ class ContainerProvider(
           "This may not work if the environment is not set up correctly.")
       new DefaultAzureCredentialBuilder().build()
     }
-    val blobClient = new BlobServiceClientBuilder()
+
+    // Create a SAS token that's valid for 6 hours
+    val startTime = OffsetDateTime.now.minusMinutes(5)
+
+    val expiryTime = OffsetDateTime.now.plusSeconds(cacheExpirySeconds * 4) // Just to be sure
+    // Assign read permissions to the SAS token
+    val sasPermission =
+      new BlobContainerSasPermission().setWritePermission(true).setReadPermission(true)
+    val sasSignatureValues = new BlobServiceSasSignatureValues(expiryTime, sasPermission)
+      .setStartTime(startTime)
+
+    val blobServiceClient = new BlobServiceClientBuilder()
       .endpoint(ingestionStorageParameter.storageUrl)
       .credential(credential)
       .buildClient
     val containerClient =
-      blobClient.getBlobContainerClient(ingestionStorageParameter.containerName)
-
-    val sasToken = containerClient.generateSas(sasSignatureValues)
+      blobServiceClient.getBlobContainerClient(ingestionStorageParameter.containerName)
+    val userDelegationKey = blobServiceClient.getUserDelegationKey(startTime, expiryTime)
+    val sasToken = containerClient
+      .generateUserDelegationSas(sasSignatureValues, userDelegationKey)
     val storage = ContainerAndSas(
       s"${ingestionStorageParameter.storageUrl}/${ingestionStorageParameter.containerName}",
       s"?$sasToken",
