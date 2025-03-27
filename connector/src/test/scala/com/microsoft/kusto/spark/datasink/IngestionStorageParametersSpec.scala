@@ -46,7 +46,7 @@ class IngestionStorageParametersSpec extends AnyFlatSpec with Matchers {
 
   "toString" should "return a string representation of IngestionStorageParameters" in {
     val params = new IngestionStorageParameters("url","c1", "msi")
-    params.toString should be ("storageUrl: url, containerName: container, userMsi: msi")
+    params.toString should be ("storageUrl: url, containerName: c1, userMsi: msi")
   }
 
   it should "handle empty fields" in {
