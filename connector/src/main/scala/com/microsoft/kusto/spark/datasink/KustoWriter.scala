@@ -12,32 +12,17 @@ import com.microsoft.azure.kusto.ingest.exceptions.IngestionServiceException
 import com.microsoft.azure.kusto.ingest.resources.ContainerWithSas
 import com.microsoft.azure.kusto.ingest.result.IngestionResult
 import com.microsoft.azure.kusto.ingest.source.{BlobSourceInfo, StreamSourceInfo}
-import com.microsoft.azure.kusto.ingest.{
-  IngestClient,
-  IngestionProperties,
-  ManagedStreamingIngestClient
-}
+import com.microsoft.azure.kusto.ingest.{IngestClient, IngestionProperties, ManagedStreamingIngestClient}
 import com.microsoft.azure.storage.blob.{BlobRequestOptions, CloudBlockBlob}
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.FinalizeHelper.finalizeIngestionWhenWorkersSucceeded
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator.generateTableGetSchemaAsRowsCommand
-import com.microsoft.kusto.spark.utils.KustoConstants.{
-  IngestSkippedTrace,
-  MaxIngestRetryAttempts,
-  WarnStreamingBytes
-}
-import com.microsoft.kusto.spark.utils.{
-  ByteArrayOutputStreamWithOffset,
-  ExtendedKustoClient,
-  KustoClientCache,
-  KustoIngestionUtils,
-  KustoQueryUtils,
-  KustoConstants => KCONST,
-  KustoDataSourceUtils => KDSU
-}
+import com.microsoft.kusto.spark.utils.KustoConstants.{IngestSkippedTrace, MaxIngestRetryAttempts, WarnStreamingBytes}
+import com.microsoft.kusto.spark.utils.{ByteArrayOutputStreamWithOffset, ExtendedKustoClient, KustoClientCache, KustoIngestionUtils, KustoQueryUtils, KustoConstants => KCONST, KustoDataSourceUtils => KDSU}
 import io.github.resilience4j.retry.RetryConfig
 import org.apache.commons.io.IOUtils
+import org.apache.commons.io.output.CountingOutputStream
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.InternalRow
@@ -539,11 +524,9 @@ object KustoWriter {
     val currentSas = containerAndSas.sas
     val options = new BlobRequestOptions()
     options.setConcurrentRequestCount(4) // Should be configured from outside
-    val gzip: GZIPOutputStream = new GZIPOutputStream(
-      currentBlob.openOutputStream(null, options, null))
-
+    val countingOutputStream = new CountingOutputStream(currentBlob.openOutputStream(null, options, null))
+    val gzip: GZIPOutputStream = new GZIPOutputStream(countingOutputStream)
     val writer = new OutputStreamWriter(gzip, StandardCharsets.UTF_8)
-
     val buffer: BufferedWriter = new BufferedWriter(writer, GzipBufferSize)
     val csvWriter = CountingWriter(buffer)
     BlobWriteResource(buffer, gzip, csvWriter, currentBlob, currentSas)
@@ -704,12 +687,7 @@ object KustoWriter {
   }
 }
 
-final case class BlobWriteResource(
-    writer: BufferedWriter,
-    gzip: GZIPOutputStream,
-    csvWriter: CountingWriter,
-    blob: CloudBlockBlob,
-    sas: String)
+final case class BlobWriteResource(writer: BufferedWriter, gzip: OutputStream, csvWriter: CountingWriter, blob: CloudBlockBlob, sas: String)
 final case class KustoWriteResource(
     authentication: KustoAuthentication,
     coordinates: KustoCoordinates,
