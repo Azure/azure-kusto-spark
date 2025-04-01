@@ -248,7 +248,7 @@ private[kusto] object KustoTestUtils {
     }
   }
 
-  private def getSystemVariable(key: String) = {
+  def getSystemVariable(key: String) = {
     var value = System.getenv(key)
     if (value == null) {
       value = System.getProperty(key)

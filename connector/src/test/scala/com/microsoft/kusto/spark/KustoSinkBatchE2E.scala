@@ -370,14 +370,13 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
           .save()
       } else {
         // Use custom storage
-        val storageUrl = System.getProperty("ingestStorageUrl")
-        val containerName = System.getProperty("ingestStorageContainer")
+        val storageUrl = KustoTestUtils.getSystemVariable("ingestStorageUrl")
+        val containerName = KustoTestUtils.getSystemVariable("ingestStorageContainer")
         if (StringUtils.isEmpty(storageUrl) || StringUtils.isEmpty(containerName)) {
           skipAssertions = true
           KDSU.logWarn(
             className,
             "No ingestion storage URL or container name provided. Skipping ingestion test.")
-
         } else {
           KDSU.logInfo(className, s"Using ingestion storage container: $containerName")
           val ingestionstorage =
