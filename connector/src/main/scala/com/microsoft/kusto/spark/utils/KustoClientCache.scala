@@ -113,6 +113,14 @@ object KustoClientCache {
           ConnectionStringBuilder.createWithAadTokenProviderAuthentication(
             clusterAndAuth.ingestUri,
             tokenProvider.tokenProviderCallback))
+      case _ =>
+        KustoDataSourceUtils.logWarn(
+          "KustoTestUtils.getClient",
+          "No authentication method was provided. Using Azure CLI authentication. " +
+            "This is usually a misconfiguration and should not be used in production.")
+        (
+          ConnectionStringBuilder.createWithAzureCli(clusterAndAuth.engineUri),
+          ConnectionStringBuilder.createWithAzureCli(clusterAndAuth.ingestUri))
     }
 
     engineKcsb.setConnectorDetails(

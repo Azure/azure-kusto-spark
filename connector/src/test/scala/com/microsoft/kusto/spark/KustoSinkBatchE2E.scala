@@ -94,7 +94,7 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
   private val loggingLevel: Option[String] = Option(System.getProperty("logLevel"))
   if (loggingLevel.isDefined) KDSU.setLoggingLevel(loggingLevel.get)
 
-  "KustoConnectorLogger" should "log to console according to the level set"  in {
+  "KustoConnectorLogger" should "log to console according to the level set" taggedAs KustoE2E in {
     KDSU.logInfo(className, "******** info ********")
     KDSU.logError(className, "******** error ********")
     KDSU.logFatal(
@@ -102,7 +102,7 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
       "******** fatal  ********. Use a 'logLevel' system variable to change the logging level.")
   }
 
-  "KustoBatchSinkDataTypesTest" should "ingest structured data of all types to a Kusto cluster"  in {
+  "KustoBatchSinkDataTypesTest" should "ingest structured data of all types to a Kusto cluster" taggedAs KustoE2E in {
     import spark.implicits._
 
     val prefix = "KustoBatchSinkDataTypesTest_Ingest"
@@ -408,7 +408,7 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
     }
   }
 
-  "KustoBatchSinkAsync" should "ingest structured data to a Kusto cluster in async mode"  in {
+  "KustoBatchSinkAsync" should "ingest structured data to a Kusto cluster in async mode" taggedAs KustoE2E in {
     import spark.implicits._
     val df = rows.toDF("name", "value")
     val prefix = "KustoBatchSinkE2EIngestAsync"
@@ -440,7 +440,7 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
       tableCleanupPrefix = prefix)
   }
 
-  "KustoBatchSinkStreaming" should "ingest structured data to a Kusto cluster in stream ingestion mode"  in {
+  "KustoBatchSinkStreaming" should "ingest structured data to a Kusto cluster in stream ingestion mode" taggedAs KustoE2E in {
     import spark.implicits._
     val df = rows.toDF("name", "value")
     val prefix = "KustoBatchSinkE2EIngestStreamIngestion"
