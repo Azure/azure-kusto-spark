@@ -3,12 +3,7 @@
 
 package com.microsoft.kusto.spark.utils
 
-import com.azure.identity.{
-  DefaultAzureCredential,
-  DefaultAzureCredentialBuilder,
-  ManagedIdentityCredential,
-  ManagedIdentityCredentialBuilder
-}
+import com.azure.identity.{DefaultAzureCredentialBuilder, ManagedIdentityCredentialBuilder}
 import com.azure.storage.blob.BlobServiceClientBuilder
 import com.azure.storage.blob.sas.{BlobContainerSasPermission, BlobServiceSasSignatureValues}
 import com.microsoft.azure.kusto.data.exceptions.{DataServiceException, KustoDataExceptionBase}
@@ -26,12 +21,11 @@ import org.apache.commons.lang3.StringUtils
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.http.conn.HttpHostConnectException
 
-import java.time.temporal.ChronoUnit
 import java.time.{Clock, Instant, OffsetDateTime}
 import java.util.function.Predicate
 import scala.collection.JavaConverters.asScalaBufferConverter
 import scala.collection.mutable
-import scala.util.{Failure, Random, Success, Try}
+import scala.util.{Failure, Success, Try}
 
 class ContainerProvider(
     val client: ExtendedKustoClient,
@@ -76,7 +70,9 @@ class ContainerProvider(
       now.getEpochSecond - lastRefresh.getEpochSecond // get the seconds between now and last refresh
     maybeIngestionStorageParams match {
       case Some(ingestionStorageParams) =>
-        refreshUserSas(ingestionStorageParams)
+        processContainerResults(
+          mutable.Buffer(
+            ContainerProvider.refreshUserSas(ingestionStorageParams, cacheExpirySeconds)))
       case None =>
         if (storageUris.isEmpty ||
           secondsElapsed > cacheExpirySeconds /* If the cache has elapsed , refresh */ ) {
@@ -96,55 +92,6 @@ class ContainerProvider(
       refresh(true)
     }
     storageUris
-  }
-
-  private def refreshUserSas(
-      ingestionStorageParams: Array[IngestionStorageParameters]): ContainerAndSas = {
-    val ingestionStorageParameter =
-      IngestionStorageParameters.getRandomIngestionStorage(ingestionStorageParams)
-
-    if (StringUtils.isEmpty(ingestionStorageParameter.containerName) || StringUtils.isEmpty(
-        ingestionStorageParameter.storageUrl)) {
-      throw new IllegalArgumentException(
-        "storageUrl and containerName must be set when supplying ingestion storage")
-    }
-    KDSU.logInfo(className, s"Using user supplied ingestion storage $ingestionStorageParameter")
-
-    val credential = if (StringUtils.isNotEmpty(ingestionStorageParameter.userMsi)) {
-      new ManagedIdentityCredentialBuilder().clientId(ingestionStorageParameter.userMsi).build()
-    } else {
-      // Use the default credential chain to authenticate
-      KDSU.logWarn(
-        className,
-        "Using default credential chain to authenticate to blob storage. " +
-          "This may not work if the environment is not set up correctly.")
-      new DefaultAzureCredentialBuilder().build()
-    }
-
-    // Create a SAS token that's valid for 6 hours
-    val startTime = OffsetDateTime.now.minusMinutes(5)
-
-    val expiryTime = OffsetDateTime.now.plusSeconds(cacheExpirySeconds * 4) // Just to be sure
-    // Assign read permissions to the SAS token
-    val sasPermission =
-      new BlobContainerSasPermission().setWritePermission(true).setReadPermission(true)
-    val sasSignatureValues = new BlobServiceSasSignatureValues(expiryTime, sasPermission)
-      .setStartTime(startTime)
-
-    val blobServiceClient = new BlobServiceClientBuilder()
-      .endpoint(ingestionStorageParameter.storageUrl)
-      .credential(credential)
-      .buildClient
-    val containerClient =
-      blobServiceClient.getBlobContainerClient(ingestionStorageParameter.containerName)
-    val userDelegationKey = blobServiceClient.getUserDelegationKey(startTime, expiryTime)
-    val sasToken = containerClient
-      .generateUserDelegationSas(sasSignatureValues, userDelegationKey)
-    val storage = ContainerAndSas(
-      s"${ingestionStorageParameter.storageUrl}/${ingestionStorageParameter.containerName}",
-      s"?$sasToken",
-      isUserStorage = true)
-    processContainerResults(mutable.Buffer(storage))
   }
 
   private def refresh(exportContainer: Boolean = false): ContainerAndSas = {
@@ -211,5 +158,56 @@ class ContainerProvider(
     storageUris = scala.util.Random.shuffle(storage)
     roundRobinIdx = 0
     storage(roundRobinIdx)
+  }
+}
+
+object ContainerProvider {
+  private val className = this.getClass.getSimpleName
+  def refreshUserSas(
+      ingestionStorageParams: Array[IngestionStorageParameters],
+      cacheExpirySeconds: Long): ContainerAndSas = {
+    val ingestionStorageParameter =
+      IngestionStorageParameters.getRandomIngestionStorage(ingestionStorageParams)
+
+    if (StringUtils.isEmpty(ingestionStorageParameter.containerName) || StringUtils.isEmpty(
+        ingestionStorageParameter.storageUrl)) {
+      throw new IllegalArgumentException(
+        "storageUrl and containerName must be set when supplying ingestion storage")
+    }
+    KDSU.logInfo(className, s"Using user supplied ingestion storage $ingestionStorageParameter")
+
+    val credential = if (StringUtils.isNotEmpty(ingestionStorageParameter.userMsi)) {
+      new ManagedIdentityCredentialBuilder().clientId(ingestionStorageParameter.userMsi).build()
+    } else {
+      // Use the default credential chain to authenticate
+      KDSU.logWarn(
+        className,
+        "Using default credential chain to authenticate to blob storage. " +
+          "This may not work if the environment is not set up correctly.")
+      new DefaultAzureCredentialBuilder().build()
+    }
+
+    // Create a SAS token that's valid for 6 hours
+    val startTime = OffsetDateTime.now.minusMinutes(5)
+
+    val expiryTime = OffsetDateTime.now.plusSeconds(cacheExpirySeconds * 4) // Just to be sure
+    // Assign read permissions to the SAS token
+    val sasPermission =
+      new BlobContainerSasPermission().setWritePermission(true).setReadPermission(true)
+    val sasSignatureValues = new BlobServiceSasSignatureValues(expiryTime, sasPermission)
+      .setStartTime(startTime)
+
+    val blobServiceClient = new BlobServiceClientBuilder()
+      .endpoint(ingestionStorageParameter.storageUrl)
+      .credential(credential)
+      .buildClient
+    val containerClient =
+      blobServiceClient.getBlobContainerClient(ingestionStorageParameter.containerName)
+    val userDelegationKey = blobServiceClient.getUserDelegationKey(startTime, expiryTime)
+    val sasToken = containerClient
+      .generateUserDelegationSas(sasSignatureValues, userDelegationKey)
+    ContainerAndSas(
+      s"${ingestionStorageParameter.storageUrl}/${ingestionStorageParameter.containerName}",
+      s"?$sasToken")
   }
 }

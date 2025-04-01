@@ -682,4 +682,4 @@ object ExtendedKustoClient {
   val MaxRetryIntervalMs: Long = 1000L * 10
 }
 
-case class ContainerAndSas(containerUrl: String, sas: String, isUserStorage: Boolean = false)
+case class ContainerAndSas(containerUrl: String, sas: String)

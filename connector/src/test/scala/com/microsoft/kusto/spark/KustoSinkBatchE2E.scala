@@ -9,13 +9,16 @@ import com.microsoft.kusto.spark.KustoTestUtils.getSystemTestOptions
 import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode}
 import com.microsoft.kusto.spark.datasource.{KustoSourceOptions, ReadMode}
 import com.microsoft.kusto.spark.sql.extension.SparkExtension.DataFrameReaderExtension
-import com.microsoft.kusto.spark.utils.CslCommandsGenerator.{generateTableAlterStreamIngestionCommand, generateTempTableCreateCommand}
+import com.microsoft.kusto.spark.utils.CslCommandsGenerator.{
+  generateTableAlterStreamIngestionCommand,
+  generateTempTableCreateCommand
+}
 import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.commons.lang3.StringUtils
 import org.apache.spark.SparkContext
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.scalatest.{BeforeAndAfterAll, Succeeded}
+import org.scalatest.BeforeAndAfterAll
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.prop.TableDrivenPropertyChecks
 import org.scalatest.prop.Tables.Table
@@ -81,7 +84,7 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
 
   override def afterAll(): Unit = {
     super.afterAll()
-    sc.stop()
+    // sc.stop()
   }
 
   val expectedNumberOfRows: Int = 1 * 1000
@@ -337,19 +340,14 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
   }
 
   private val ingestTests =
-    Table(
-      "testName",
-      "DMStorage",
-      "CustomStorage"
-    )
+    Table("testName", "DMStorage", "CustomStorage")
 
-
-  TableDrivenPropertyChecks.forAll (ingestTests) { testName =>
-    "KustoBatchSinkSync" should s"also ingest simple data to a Kusto cluster for $testName" taggedAs KustoE2E in {
+  TableDrivenPropertyChecks.forAll(ingestTests) { testName =>
+    "KustoBatchSinkSync" should s"also ingest simple data to a Kusto cluster for $testName" in {
       import spark.implicits._
       var skipAssertions = false
       val df = rows.toDF("name", "value")
-      val prefix = s"KustoBatchSinkE2E_Ingest_${testName}"
+      val prefix = s"KustoBatchSinkE2E_Ingest_$testName"
       val table = KustoQueryUtils.simplifyName(s"${prefix}_${UUID.randomUUID()}")
       val engineKcsb = ConnectionStringBuilder.createWithAadAccessTokenAuthentication(
         kustoTestConnectionOptions.cluster,
@@ -372,9 +370,9 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
           .save()
       } else {
         // Use custom storage
-        val storageUrl = System.getProperty("INGEST_STORAGE_URL")
-        val containerName = System.getProperty("INGEST_STORAGE_CONTAINER")
-        if(StringUtils.isEmpty(storageUrl) || StringUtils.isEmpty(containerName)) {
+        val storageUrl = System.getProperty("ingestStorageUrl")
+        val containerName = System.getProperty("ingestStorageContainer")
+        if (StringUtils.isEmpty(storageUrl) || StringUtils.isEmpty(containerName)) {
           skipAssertions = true
           KDSU.logWarn(
             className,
@@ -399,7 +397,7 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
         }
       }
 
-      if(!skipAssertions) {
+      if (!skipAssertions) {
         KustoTestUtils.validateResultsAndCleanup(
           kustoAdminClient,
           table,
@@ -467,7 +465,7 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
       .option(KustoSinkOptions.KUSTO_DATABASE, kustoTestConnectionOptions.database)
       .option(KustoSinkOptions.KUSTO_TABLE, table)
       .option(KustoSinkOptions.KUSTO_ACCESS_TOKEN, kustoTestConnectionOptions.accessToken)
-      .option(KustoSinkOptions.KUSTO_WRITE_MODE, "Stream")
+      .option(KustoSinkOptions.KUSTO_WRITE_MODE, "KustoStreaming")
       .mode(SaveMode.Append)
       .save()
 

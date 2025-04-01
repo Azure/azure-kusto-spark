@@ -3,23 +3,32 @@
 
 package com.microsoft.kusto.spark
 
-import com.azure.core.credential.{AccessToken, TokenCredential, TokenRequestContext}
-import com.azure.identity.{AzureCliCredentialBuilder, ClientAssertionCredentialBuilder}
-import com.azure.storage.blob.BlobServiceClientBuilder
-import com.azure.storage.blob.sas.{BlobSasPermission, BlobServiceSasSignatureValues}
+import com.azure.core.credential.{AccessToken, TokenRequestContext}
+import com.azure.identity.AzureCliCredentialBuilder
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.{Client, ClientFactory}
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
-import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode, SparkIngestionProperties}
+import com.microsoft.kusto.spark.datasink.{
+  IngestionStorageParameters,
+  KustoSinkOptions,
+  SinkTableCreationMode,
+  SparkIngestionProperties
+}
 import com.microsoft.kusto.spark.datasource.{KustoSourceOptions, TransientStorageCredentials}
 import com.microsoft.kusto.spark.sql.extension.SparkExtension.DataFrameReaderExtension
-import com.microsoft.kusto.spark.utils.CslCommandsGenerator.{generateDropTablesCommand, generateFindCurrentTempTablesCommand, generateTempTableCreateCommand}
-import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.CslCommandsGenerator.{
+  generateDropTablesCommand,
+  generateFindCurrentTempTablesCommand,
+  generateTempTableCreateCommand
+}
+import com.microsoft.kusto.spark.utils.{
+  ContainerProvider,
+  KustoQueryUtils,
+  KustoDataSourceUtils => KDSU
+}
 import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
-import reactor.core.publisher.Mono
 
 import java.security.InvalidParameterException
-import java.time.OffsetDateTime
 import java.util.{Collections, UUID}
 import scala.collection.JavaConverters.asScalaBufferConverter
 import scala.collection.mutable
@@ -224,13 +233,16 @@ private[kusto] object KustoTestUtils {
       }
       if (isSourceE2E) {
         val storageAccountUrl: String = getSystemVariable("storageAccountUrl")
-        cachedToken.put(key, KustoConnectionOptions(cluster, database, accessToken, authority, storageContainerUrl = Some(storageAccountUrl)))
+        cachedToken.put(
+          key,
+          KustoConnectionOptions(
+            cluster,
+            database,
+            accessToken,
+            authority,
+            storageContainerUrl = Some(storageAccountUrl)))
       } else {
-        cachedToken.put(key, KustoConnectionOptions(
-          cluster,
-          database,
-          accessToken,
-          authority))
+        cachedToken.put(key, KustoConnectionOptions(cluster, database, accessToken, authority))
       }
       cachedToken(key)
     }
@@ -254,33 +266,13 @@ private[kusto] object KustoTestUtils {
 
   def generateSasDelegationWithAzCli(storageContainerUrl: String): String = {
     val containerName = storageContainerUrl match {
-      case TransientStorageCredentials.SasPattern(
-      _, _, _, container, _) =>
+      case TransientStorageCredentials.SasPattern(_, _, _, container, _) =>
         container
       case _ => throw new InvalidParameterException("Storage url is invalid")
     }
-
-    val blobServiceClient = new BlobServiceClientBuilder()
-      .endpoint(storageContainerUrl)
-      .credential(new AzureCliCredentialBuilder().build())
-      .buildClient()
-
-    val containerClient = blobServiceClient.getBlobContainerClient(containerName)
-
-    // Get the user delegation key
-    val userDelegationKey = blobServiceClient.getUserDelegationKey(
-      OffsetDateTime.now(), OffsetDateTime.now().plusHours(1))
-
-    val blobSasPermission = new BlobSasPermission()
-      .setReadPermission(true)
-      .setWritePermission(true)
-      .setListPermission(true)
-
-    val sasSignatureValues = new BlobServiceSasSignatureValues(
-      OffsetDateTime.now().plusHours(1), blobSasPermission)
-      .setStartTime(OffsetDateTime.now().minusMinutes(5))
-
-    containerClient.generateUserDelegationSas(sasSignatureValues, userDelegationKey)
+    val ingestionStorageParam =
+      new IngestionStorageParameters(storageContainerUrl, containerName, "")
+    ContainerProvider.refreshUserSas(Array(ingestionStorageParam), 1 * 60 * 60).sas
   }
 
   final case class KustoConnectionOptions(

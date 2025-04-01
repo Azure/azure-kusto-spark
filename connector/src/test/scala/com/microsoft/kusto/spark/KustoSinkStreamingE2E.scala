@@ -45,7 +45,7 @@ class KustoSinkStreamingE2E extends AnyFlatSpec with BeforeAndAfterAll {
 
   override def afterAll(): Unit = {
     super.afterAll()
-    sc.stop()
+    // sc.stop()
   }
   private lazy val kustoTestConnectionOptions = getSystemTestOptions()
   val csvPath: String = System.getProperty("path", "connector/src/test/resources/TestData/csv")

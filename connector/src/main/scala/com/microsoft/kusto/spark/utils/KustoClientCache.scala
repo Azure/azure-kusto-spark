@@ -153,7 +153,13 @@ object KustoClientCache {
       case _ => false
     }
 
-    override def hashCode(): Int =
-      engineUri.hashCode + authentication.hashCode + ingestUri.hashCode
+    override def hashCode(): Int = {
+      val authenticationHash = if (authentication == null) {
+        0
+      } else {
+        authentication.hashCode()
+      }
+      engineUri.hashCode + authenticationHash + ingestUri.hashCode
+    }
   }
 }

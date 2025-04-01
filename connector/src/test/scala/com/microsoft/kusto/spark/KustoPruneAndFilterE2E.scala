@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
-
 package com.microsoft.kusto.spark
 
 import com.microsoft.azure.kusto.data.ClientFactory
@@ -49,7 +48,7 @@ class KustoPruneAndFilterE2E extends AnyFlatSpec with BeforeAndAfterAll {
   override def afterAll(): Unit = {
     super.afterAll()
 
-    sc.stop()
+    // sc.stop()
   }
 
   private val loggingLevel: Option[String] = Option(System.getProperty("logLevel"))
