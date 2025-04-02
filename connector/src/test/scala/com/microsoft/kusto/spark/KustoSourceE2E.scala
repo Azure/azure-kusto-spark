@@ -6,27 +6,12 @@ package com.microsoft.kusto.spark
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.{Client, ClientFactory, ClientRequestProperties}
 import com.microsoft.kusto.spark.KustoTestUtils.{KustoConnectionOptions, getSystemTestOptions}
-import com.microsoft.kusto.spark.authentication.AzureTokenTokenProvider
 import com.microsoft.kusto.spark.common.KustoDebugOptions
-import com.microsoft.kusto.spark.datasink.{
-  KustoSinkOptions,
-  SinkTableCreationMode,
-  SparkIngestionProperties
-}
-import com.microsoft.kusto.spark.datasource.{
-  KustoSourceOptions,
-  ReadMode,
-  TransientStorageCredentials,
-  TransientStorageParameters
-}
+import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode, SparkIngestionProperties}
+import com.microsoft.kusto.spark.datasource.{KustoSourceOptions, ReadMode, TransientStorageCredentials, TransientStorageParameters}
 import com.microsoft.kusto.spark.sql.extension.SparkExtension._
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
-import com.microsoft.kusto.spark.utils.{
-  KustoAzureFsSetupCache,
-  KustoQueryUtils,
-  KustoDataSourceUtils => KDSU
-}
-import org.apache.hadoop.fs.azurebfs.oauth2.AzureADToken
+import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.hadoop.util.ComparableVersion
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode, SparkSession}
@@ -36,7 +21,7 @@ import org.scalatest.flatspec.AnyFlatSpec
 import java.security.InvalidParameterException
 import java.time.temporal.ChronoUnit
 import java.time.{Clock, Instant}
-import java.util.{Date, UUID}
+import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.immutable
 import scala.util.{Failure, Random, Success, Try}
@@ -210,7 +195,7 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
 
   "KustoSource" should "execute a read query on Kusto cluster in single mode" in {
     val conf: Map[String, String] = Map(
-      KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceSingleMode.toString,
+      KustoSourceOptions.KUSTO_READ_MODE -> "ForceSingleMode",
       KustoSourceOptions.KUSTO_ACCESS_TOKEN -> kustoConnectionOptions.accessToken)
     validateRead(conf)
   }

@@ -5,30 +5,20 @@ package com.microsoft.kusto.spark
 
 import com.azure.core.credential.{AccessToken, TokenRequestContext}
 import com.azure.identity.AzureCliCredentialBuilder
+import com.azure.storage.blob.BlobServiceClientBuilder
+import com.azure.storage.blob.sas.{BlobSasPermission, BlobServiceSasSignatureValues}
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.{Client, ClientFactory}
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
-import com.microsoft.kusto.spark.datasink.{
-  IngestionStorageParameters,
-  KustoSinkOptions,
-  SinkTableCreationMode,
-  SparkIngestionProperties
-}
+import com.microsoft.kusto.spark.datasink.{IngestionStorageParameters, KustoSinkOptions, SinkTableCreationMode, SparkIngestionProperties}
 import com.microsoft.kusto.spark.datasource.{KustoSourceOptions, TransientStorageCredentials}
 import com.microsoft.kusto.spark.sql.extension.SparkExtension.DataFrameReaderExtension
-import com.microsoft.kusto.spark.utils.CslCommandsGenerator.{
-  generateDropTablesCommand,
-  generateFindCurrentTempTablesCommand,
-  generateTempTableCreateCommand
-}
-import com.microsoft.kusto.spark.utils.{
-  ContainerProvider,
-  KustoQueryUtils,
-  KustoDataSourceUtils => KDSU
-}
+import com.microsoft.kusto.spark.utils.CslCommandsGenerator.{generateDropTablesCommand, generateFindCurrentTempTablesCommand, generateTempTableCreateCommand}
+import com.microsoft.kusto.spark.utils.{ContainerAndSas, ContainerProvider, KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
 
 import java.security.InvalidParameterException
+import java.time.OffsetDateTime
 import java.util.{Collections, UUID}
 import scala.collection.JavaConverters.asScalaBufferConverter
 import scala.collection.mutable
@@ -210,7 +200,7 @@ private[kusto] object KustoTestUtils {
       KDSU.logWarn(className, s"Using scope $clusterScope and authority $authority")
       val accessToken: String = maybeAccessTokenEnv match {
         case Some(at) =>
-          KDSU.logInfo(
+          KDSU.logDebug(
             className,
             s"Using access token from environment variable ${KustoSinkOptions.KUSTO_ACCESS_TOKEN}")
           at
@@ -272,7 +262,11 @@ private[kusto] object KustoTestUtils {
     }
     val ingestionStorageParam =
       new IngestionStorageParameters(storageContainerUrl, containerName, "")
-    ContainerProvider.refreshUserSas(Array(ingestionStorageParam), 1 * 60 * 60).sas
+    val containerAndSas:ContainerAndSas = ContainerProvider.refreshUserSas(Array(ingestionStorageParam), 1 * 60 * 60,
+      listPermissions = true)
+    KDSU.logDebug(className,
+      s"Generated SAS for container ${containerAndSas.containerUrl} with SAS ${containerAndSas.sas.substring(0,4)}")
+    containerAndSas.sas
   }
 
   final case class KustoConnectionOptions(
