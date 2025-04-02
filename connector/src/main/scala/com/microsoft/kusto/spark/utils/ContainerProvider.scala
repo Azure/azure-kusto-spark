@@ -177,11 +177,6 @@ object ContainerProvider {
         s"${ingestionStorageParameter.storageUrl}/${ingestionStorageParameter.containerName}",
         s"?${ingestionStorageParameter.sas}")
     } else {
-      if (StringUtils.isEmpty(ingestionStorageParameter.containerName) || StringUtils.isEmpty(
-        ingestionStorageParameter.storageUrl)) {
-        throw new IllegalArgumentException(
-          "storageUrl and containerName must be set when supplying ingestion storage")
-      }
       KDSU.logInfo(className, s"Using user supplied ingestion storage $ingestionStorageParameter.Expires at " +
         s"${OffsetDateTime.now.plusSeconds(cacheExpirySeconds)}")
 
