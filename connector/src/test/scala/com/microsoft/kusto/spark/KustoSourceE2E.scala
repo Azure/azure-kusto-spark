@@ -60,10 +60,6 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
         kustoConnectionOptions.cluster,
         kustoConnectionOptions.accessToken)))
 
-  private lazy val maybeKustoDmClient: Option[Client] = Some(
-    ClientFactory.createClient(ConnectionStringBuilder
-      .createWithAadAccessTokenAuthentication(ingestUrl, kustoConnectionOptions.accessToken)))
-
   private val loggingLevel: Option[String] = Option(System.getProperty("logLevel"))
   loggingLevel match {
     case Some(level) => KDSU.setLoggingLevel(level)
