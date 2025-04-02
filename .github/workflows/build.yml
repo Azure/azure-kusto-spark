@@ -49,7 +49,7 @@ jobs:
           ingestStorageUrl: ${{ secrets.INGEST_STORAGE_URL }}
           ingestStorageContainer: ${{ secrets.INGEST_STORAGE_CONTAINER }}
         run: |
-          mvn clean verify -DkustoAadAppId=${{ secrets.APP_ID }} -DkustoAadAuthorityID=${{ secrets.TENANT_ID }} -DkustoDatabase=${{ secrets.DATABASE }} -DkustoCluster=${{ secrets.CLUSTER }} -DaccessToken=${{env.ACCESS_TOKEN}} -DingestStorageUrl=${{secrets.INGEST_STORAGE_URL}} -DingestStorageContainer=${{secrets.INGEST_STORAGE_CONTAINER}} -DstorageAccountUrl='${{secrets.STORAGE_CONTAINER_URL}}'
+          mvn clean verify -DkustoAadAppId=${{ secrets.APP_ID }} -DkustoAadAuthorityID=${{ secrets.TENANT_ID }} -DkustoDatabase=${{ secrets.DATABASE }} -DkustoCluster=${{ secrets.CLUSTER }} -DaccessToken=${{env.ACCESS_TOKEN}} -DingestStorageUrl=${{secrets.INGEST_STORAGE_URL}} -DingestStorageContainer=${{secrets.INGEST_STORAGE_CONTAINER}}
           
       - name: Publish Unit Test Results
         uses: EnricoMi/publish-unit-test-result-action@v2
