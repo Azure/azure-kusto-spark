@@ -11,7 +11,6 @@ import scala.Seq
 class IngestionStorageParametersSpec extends AnyFlatSpec with Matchers {
 
   "fromString" should "deserialize JSON string to IngestionStorageParameters array" in {
-
     val url1 = "https://ateststorage.blob.core.windows.net/container1"
     val url2 = "https://ateststorage2.blob.core.windows.net/container2"
     val json =
@@ -45,12 +44,12 @@ class IngestionStorageParametersSpec extends AnyFlatSpec with Matchers {
   }
 
   "toString" should "return a string representation of IngestionStorageParameters" in {
-    val params = new IngestionStorageParameters("url","c1", "msi")
-    params.toString should be ("storageUrl: url, containerName: c1, userMsi: msi")
+    val params = new IngestionStorageParameters("url","c1", "msi","sas")
+    params.toString should be ("storageUrl: url, containerName: c1, userMsi: msi, is-sas: true")
   }
 
   it should "handle empty fields" in {
-    val params = new IngestionStorageParameters("", "", "")
-    params.toString should be ("storageUrl: , containerName: , userMsi: ")
+    val params = new IngestionStorageParameters("", "", "","")
+    params.toString should be ("storageUrl: , containerName: , userMsi: , is-sas: false")
   }
 }

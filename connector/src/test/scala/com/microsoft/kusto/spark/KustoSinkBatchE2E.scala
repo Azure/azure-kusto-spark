@@ -384,7 +384,7 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
         } else {
           KDSU.logInfo(className, s"Using ingestion storage container: $containerName")
           val ingestionStorageString = IngestionStorageParameters.toJsonString(
-            Array(new IngestionStorageParameters(storageUrl, containerName, "")))
+            Array(new IngestionStorageParameters(storageUrl, containerName, "", "")))
 //            s"""[{"storageUrl":"$storageUrl" , "
 //              |containerName": "$containerName"}]""".stripMargin
           df.write

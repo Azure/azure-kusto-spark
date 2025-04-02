@@ -5,8 +5,6 @@ package com.microsoft.kusto.spark
 
 import com.azure.core.credential.{AccessToken, TokenRequestContext}
 import com.azure.identity.AzureCliCredentialBuilder
-import com.azure.storage.blob.BlobServiceClientBuilder
-import com.azure.storage.blob.sas.{BlobSasPermission, BlobServiceSasSignatureValues}
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.{Client, ClientFactory}
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
@@ -32,7 +30,6 @@ import com.microsoft.kusto.spark.utils.{
 import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
 
 import java.security.InvalidParameterException
-import java.time.OffsetDateTime
 import java.util.{Collections, UUID}
 import scala.collection.JavaConverters.asScalaBufferConverter
 import scala.collection.mutable
@@ -273,7 +270,7 @@ private[kusto] object KustoTestUtils {
       case _ => throw new InvalidParameterException("Storage url is invalid")
     }
     val ingestionStorageParam =
-      new IngestionStorageParameters(storageContainerUrl, containerName, "")
+      new IngestionStorageParameters(storageContainerUrl, containerName, "", "")
     val containerAndSas: ContainerAndSas = ContainerProvider.refreshUserSas(
       Array(ingestionStorageParam),
       1 * 60 * 60,

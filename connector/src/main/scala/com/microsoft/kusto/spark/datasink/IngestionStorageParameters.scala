@@ -5,6 +5,7 @@ package com.microsoft.kusto.spark.datasink
 import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility
 import com.fasterxml.jackson.annotation.PropertyAccessor
 import com.fasterxml.jackson.databind.ObjectMapper
+import org.apache.commons.lang3.StringUtils
 
 import java.io.Serializable
 import java.util.Objects
@@ -39,17 +40,15 @@ object IngestionStorageParameters extends Serializable {
 class IngestionStorageParameters(
     val storageUrl: String,
     val containerName: String,
-    val userMsi: String)
+    val userMsi: String,
+    val sas:String)
     extends Serializable {
   // C'tor for serialization
   def this() {
-    this("", "", "")
+    this("", "", "","")
   }
 
-  def getStorageUrl: String = {
-    s"$storageUrl/$containerName"
-  }
   override def toString: String = {
-    s"storageUrl: $storageUrl, containerName: $containerName, userMsi: $userMsi"
+    s"storageUrl: $storageUrl, containerName: $containerName, userMsi: $userMsi, is-sas: ${StringUtils.isNotEmpty(sas)}"
   }
 }
