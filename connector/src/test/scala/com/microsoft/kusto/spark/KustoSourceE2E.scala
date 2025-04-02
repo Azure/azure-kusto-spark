@@ -7,8 +7,17 @@ import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.{Client, ClientFactory, ClientRequestProperties}
 import com.microsoft.kusto.spark.KustoTestUtils.{KustoConnectionOptions, getSystemTestOptions}
 import com.microsoft.kusto.spark.common.KustoDebugOptions
-import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode, SparkIngestionProperties}
-import com.microsoft.kusto.spark.datasource.{KustoSourceOptions, ReadMode, TransientStorageCredentials, TransientStorageParameters}
+import com.microsoft.kusto.spark.datasink.{
+  KustoSinkOptions,
+  SinkTableCreationMode,
+  SparkIngestionProperties
+}
+import com.microsoft.kusto.spark.datasource.{
+  KustoSourceOptions,
+  ReadMode,
+  TransientStorageCredentials,
+  TransientStorageParameters
+}
 import com.microsoft.kusto.spark.sql.extension.SparkExtension._
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils => KDSU}
@@ -28,7 +37,7 @@ import scala.util.{Failure, Random, Success, Try}
 
 class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
   private lazy val kustoConnectionOptions: KustoConnectionOptions =
-    getSystemTestOptions(true)
+    getSystemTestOptions
   private val nofExecutors = 4
   private val spark: SparkSession = SparkSession
     .builder()
@@ -139,7 +148,7 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
     val crp = new ClientRequestProperties
     crp.setTimeoutInMilliSec(60000)
     val ingestByTags = new java.util.ArrayList[String]
-    val tag = "dammyTag"
+    val tag = "dummyTag"
     ingestByTags.add(tag)
     val sp = new SparkIngestionProperties()
     sp.ingestByTags = ingestByTags

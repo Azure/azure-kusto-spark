@@ -56,7 +56,7 @@ class KustoBlobAccessE2E extends AnyFlatSpec with BeforeAndAfterAll {
     // sc.stop()
   }
 
-  private lazy val kustoTestConnectionOptions = getSystemTestOptions()
+  private lazy val kustoTestConnectionOptions = getSystemTestOptions
   private val table: String = System.getProperty(KustoSinkOptions.KUSTO_TABLE, "")
   private val storageAccount: String =
     System.getProperty("storageAccount", "sparkblobforkustomichael")

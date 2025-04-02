@@ -27,7 +27,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.immutable
 
 class KustoPruneAndFilterE2E extends AnyFlatSpec with BeforeAndAfterAll {
-  private lazy val kustoTestConnectionOptions = getSystemTestOptions()
+  private lazy val kustoTestConnectionOptions = getSystemTestOptions
   private val nofExecutors = 4
   private val spark: SparkSession = SparkSession
     .builder()

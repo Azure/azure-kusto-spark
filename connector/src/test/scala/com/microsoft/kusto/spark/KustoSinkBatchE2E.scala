@@ -6,10 +6,17 @@ package com.microsoft.kusto.spark
 import com.microsoft.azure.kusto.data.ClientFactory
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.kusto.spark.KustoTestUtils.getSystemTestOptions
-import com.microsoft.kusto.spark.datasink.{IngestionStorageParameters, KustoSinkOptions, SinkTableCreationMode}
+import com.microsoft.kusto.spark.datasink.{
+  IngestionStorageParameters,
+  KustoSinkOptions,
+  SinkTableCreationMode
+}
 import com.microsoft.kusto.spark.datasource.{KustoSourceOptions, ReadMode}
 import com.microsoft.kusto.spark.sql.extension.SparkExtension.DataFrameReaderExtension
-import com.microsoft.kusto.spark.utils.CslCommandsGenerator.{generateTableAlterStreamIngestionCommand, generateTempTableCreateCommand}
+import com.microsoft.kusto.spark.utils.CslCommandsGenerator.{
+  generateTableAlterStreamIngestionCommand,
+  generateTempTableCreateCommand
+}
 import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.commons.lang3.StringUtils
 import org.apache.spark.SparkContext
@@ -68,7 +75,7 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
     .master(f"local[$nofExecutors]")
     .getOrCreate()
 
-  private lazy val kustoTestConnectionOptions = getSystemTestOptions()
+  private lazy val kustoTestConnectionOptions = getSystemTestOptions
   private var sc: SparkContext = _
   private var sqlContext: SQLContext = _
 
@@ -376,8 +383,8 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
             "No ingestion storage URL or container name provided. Skipping ingestion test.")
         } else {
           KDSU.logInfo(className, s"Using ingestion storage container: $containerName")
-          val ingestionStorageString = IngestionStorageParameters.
-            toJsonString(Array(new IngestionStorageParameters(storageUrl, containerName,"")))
+          val ingestionStorageString = IngestionStorageParameters.toJsonString(
+            Array(new IngestionStorageParameters(storageUrl, containerName, "")))
 //            s"""[{"storageUrl":"$storageUrl" , "
 //              |containerName": "$containerName"}]""".stripMargin
           df.write

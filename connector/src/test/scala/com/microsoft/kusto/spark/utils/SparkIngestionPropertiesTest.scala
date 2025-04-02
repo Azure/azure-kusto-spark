@@ -16,7 +16,7 @@ class SparkIngestionPropertiesTest extends AnyFlatSpec {
 
   "props" should "be same after clone" in {
     val ingestByTags = new java.util.ArrayList[String]
-    val tag = "dammyTag"
+    val tag = "dummyTag"
     ingestByTags.add(tag)
 
     val sp = new SparkIngestionProperties(
@@ -32,7 +32,7 @@ class SparkIngestionPropertiesTest extends AnyFlatSpec {
 
     assert(EqualsBuilder.reflectionEquals(spFromString, sp))
     val ingestByTags2 = new java.util.ArrayList[String]
-    val tag2 = "dammyTag2"
+    val tag2 = "dummyTag2"
     ingestByTags.add(tag2)
     sp.ingestByTags = ingestByTags2
     assert(!EqualsBuilder.reflectionEquals(spFromString, sp))

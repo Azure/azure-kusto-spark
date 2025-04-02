@@ -10,11 +10,25 @@ import com.azure.storage.blob.sas.{BlobSasPermission, BlobServiceSasSignatureVal
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.{Client, ClientFactory}
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
-import com.microsoft.kusto.spark.datasink.{IngestionStorageParameters, KustoSinkOptions, SinkTableCreationMode, SparkIngestionProperties}
+import com.microsoft.kusto.spark.datasink.{
+  IngestionStorageParameters,
+  KustoSinkOptions,
+  SinkTableCreationMode,
+  SparkIngestionProperties
+}
 import com.microsoft.kusto.spark.datasource.{KustoSourceOptions, TransientStorageCredentials}
 import com.microsoft.kusto.spark.sql.extension.SparkExtension.DataFrameReaderExtension
-import com.microsoft.kusto.spark.utils.CslCommandsGenerator.{generateDropTablesCommand, generateFindCurrentTempTablesCommand, generateTempTableCreateCommand}
-import com.microsoft.kusto.spark.utils.{ContainerAndSas, ContainerProvider, KustoQueryUtils, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.CslCommandsGenerator.{
+  generateDropTablesCommand,
+  generateFindCurrentTempTablesCommand,
+  generateTempTableCreateCommand
+}
+import com.microsoft.kusto.spark.utils.{
+  ContainerAndSas,
+  ContainerProvider,
+  KustoQueryUtils,
+  KustoDataSourceUtils => KDSU
+}
 import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
 
 import java.security.InvalidParameterException
@@ -182,7 +196,7 @@ private[kusto] object KustoTestUtils {
 
   }
 
-  def getSystemTestOptions(isSourceE2E: Boolean = false): KustoConnectionOptions = {
+  def getSystemTestOptions: KustoConnectionOptions = {
     val cluster: String = clusterToKustoFQDN(getSystemVariable(KustoSinkOptions.KUSTO_CLUSTER))
     val database: String = getSystemVariable(KustoSinkOptions.KUSTO_DATABASE)
     val table: String =
@@ -221,19 +235,17 @@ private[kusto] object KustoTestUtils {
               throw exception
           }
       }
-      if (isSourceE2E) {
-        val storageAccountUrl: String = getSystemVariable("storageAccountUrl")
-        cachedToken.put(
-          key,
-          KustoConnectionOptions(
-            cluster,
-            database,
-            accessToken,
-            authority,
-            storageContainerUrl = Some(storageAccountUrl)))
-      } else {
-        cachedToken.put(key, KustoConnectionOptions(cluster, database, accessToken, authority))
-      }
+      val storageAccountUrl: String = getSystemVariable("storageAccountUrl")
+      val connectionOptions = KustoConnectionOptions(
+        cluster,
+        database,
+        accessToken,
+        authority,
+        storageContainerUrl = Some(storageAccountUrl))
+      cachedToken.put(key, connectionOptions)
+      KDSU.logDebug(
+        className,
+        s"Generated token for cluster $cluster, database $database & table $table")
       cachedToken(key)
     }
   }
@@ -262,10 +274,14 @@ private[kusto] object KustoTestUtils {
     }
     val ingestionStorageParam =
       new IngestionStorageParameters(storageContainerUrl, containerName, "")
-    val containerAndSas:ContainerAndSas = ContainerProvider.refreshUserSas(Array(ingestionStorageParam), 1 * 60 * 60,
+    val containerAndSas: ContainerAndSas = ContainerProvider.refreshUserSas(
+      Array(ingestionStorageParam),
+      1 * 60 * 60,
       listPermissions = true)
-    KDSU.logDebug(className,
-      s"Generated SAS for container ${containerAndSas.containerUrl} with SAS ${containerAndSas.sas.substring(0,4)}")
+    KDSU.logDebug(
+      className,
+      s"Generated SAS for container ${containerAndSas.containerUrl} with SAS ${containerAndSas.sas
+          .substring(0, 4)}")
     containerAndSas.sas
   }
 

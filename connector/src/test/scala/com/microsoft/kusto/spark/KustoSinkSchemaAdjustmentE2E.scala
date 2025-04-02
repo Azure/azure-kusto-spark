@@ -1,10 +1,16 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
-
 package com.microsoft.kusto.spark
 
-import com.microsoft.kusto.spark.KustoTestUtils.{KustoConnectionOptions, cleanup, createTestTable, getSystemTestOptions, ingest, validateTargetTable}
+import com.microsoft.kusto.spark.KustoTestUtils.{
+  KustoConnectionOptions,
+  cleanup,
+  createTestTable,
+  getSystemTestOptions,
+  ingest,
+  validateTargetTable
+}
 import com.microsoft.kusto.spark.datasink.{SinkTableCreationMode, SparkIngestionProperties}
 import com.microsoft.kusto.spark.exceptions.SchemaMatchException
 import com.microsoft.kusto.spark.utils.KustoQueryUtils
@@ -31,7 +37,7 @@ class KustoSinkSchemaAdjustmentE2E
   private val expectedNumberOfRows = 3
   private def newRow(index: Int): String = s"row-$index"
 
-  private lazy val kustoConnectionOptions: KustoConnectionOptions = getSystemTestOptions()
+  private lazy val kustoConnectionOptions: KustoConnectionOptions = getSystemTestOptions
   override def afterAll(): Unit = {
     cleanup(kustoConnectionOptions, testTablePrefix)
     spark.sparkContext.stop()

@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
-
 package com.microsoft.kusto.spark
 
 import com.microsoft.azure.kusto.data.ClientFactory
@@ -22,7 +21,8 @@ class KustoAuthenticationTestE2E extends AnyFlatSpec {
     .appName("KustoSink")
     .master(f"local[2]")
     .getOrCreate()
-  private lazy val kustoConnectionOptions: KustoConnectionOptions = KustoTestUtils.getSystemTestOptions()
+  private lazy val kustoConnectionOptions: KustoConnectionOptions =
+    KustoTestUtils.getSystemTestOptions
 
   val keyVaultAppId: String = System.getProperty(KustoSinkOptions.KEY_VAULT_APP_ID)
   val keyVaultAppKey: String = System.getProperty(KustoSinkOptions.KEY_VAULT_APP_KEY)
@@ -38,19 +38,25 @@ class KustoAuthenticationTestE2E extends AnyFlatSpec {
     val prefix = "keyVaultAuthentication"
     val table = KustoQueryUtils.simplifyName(s"${prefix}_${UUID.randomUUID()}")
     val engineKcsb = ConnectionStringBuilder.createWithAadAccessTokenAuthentication(
-      kustoConnectionOptions.cluster,kustoConnectionOptions.accessToken)
+      kustoConnectionOptions.cluster,
+      kustoConnectionOptions.accessToken)
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
 
     val df = rows.toDF("name", "value")
     val conf: Map[String, String] = Map(
       KustoSinkOptions.KEY_VAULT_URI -> keyVaultUri,
       KustoSinkOptions.KEY_VAULT_APP_ID -> (if (keyVaultAppId == null) "" else keyVaultAppId),
-      KustoSinkOptions.KEY_VAULT_APP_KEY -> (if (keyVaultAppKey == null) {""} else keyVaultAppKey),
+      KustoSinkOptions.KEY_VAULT_APP_KEY -> (if (keyVaultAppKey == null) { "" }
+                                             else keyVaultAppKey),
       KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS -> SinkTableCreationMode.CreateIfNotExist.toString)
 
     df.write.kusto(kustoConnectionOptions.cluster, kustoConnectionOptions.database, table, conf)
 
-    val dfResult = spark.read.kusto(kustoConnectionOptions.cluster, kustoConnectionOptions.database, table, conf)
+    val dfResult = spark.read.kusto(
+      kustoConnectionOptions.cluster,
+      kustoConnectionOptions.database,
+      table,
+      conf)
     val result = dfResult.select("name", "value").rdd.collect().sortBy(x => x.getInt(1))
     val orig = df.select("name", "value").rdd.collect().sortBy(x => x.getInt(1))
 
@@ -75,7 +81,11 @@ class KustoAuthenticationTestE2E extends AnyFlatSpec {
 
     df.write.kusto(kustoConnectionOptions.cluster, kustoConnectionOptions.database, table, conf)
 
-    val dfResult = spark.read.kusto(kustoConnectionOptions.cluster, kustoConnectionOptions.database, table, conf)
+    val dfResult = spark.read.kusto(
+      kustoConnectionOptions.cluster,
+      kustoConnectionOptions.database,
+      table,
+      conf)
     val result = dfResult.select("name", "value").rdd.collect().sortBy(x => x.getInt(1))
     val orig = df.select("name", "value").rdd.collect().sortBy(x => x.getInt(1))
 
