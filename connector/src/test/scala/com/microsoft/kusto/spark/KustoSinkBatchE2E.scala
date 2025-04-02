@@ -157,7 +157,7 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
       KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceDistributedMode.toString)
 
     val conf2: Map[String, String] = Map(
-      KustoSinkOptions.KUSTO_AAD_APP_ID -> kustoTestConnectionOptions.accessToken,
+      KustoSinkOptions.KUSTO_ACCESS_TOKEN -> kustoTestConnectionOptions.accessToken,
       KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceSingleMode.toString)
 
     val dfResultDist: DataFrame = spark.read.kusto(

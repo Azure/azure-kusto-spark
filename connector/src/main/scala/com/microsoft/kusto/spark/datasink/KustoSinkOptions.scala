@@ -85,7 +85,7 @@ object KustoSinkOptions extends KustoOptions {
   // Every streaming ingest will be sent in chunks of this size.
   val KUSTO_STREAMING_INGEST_SIZE_IN_MB: String = newOption("streamingIngestSizeInMB")
 
-  // The ingestion storage to use. Refer IngestionStorageParameters for the string format for ingestion.
+  // The ingestion storage to use. This expects a serialized json of type Array[IngestionStorageParameters]
   val KUSTO_INGESTION_STORAGE: String = newOption("kustoIngestionStorageContainer")
 }
 
