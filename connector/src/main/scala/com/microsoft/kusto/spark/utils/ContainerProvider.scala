@@ -165,7 +165,8 @@ object ContainerProvider {
   private val className = this.getClass.getSimpleName
   def refreshUserSas(
       ingestionStorageParams: Array[IngestionStorageParameters],
-      cacheExpirySeconds: Long): ContainerAndSas = {
+      cacheExpirySeconds: Long,
+      listPermissions:Boolean=false): ContainerAndSas = {
     val ingestionStorageParameter =
       IngestionStorageParameters.getRandomIngestionStorage(ingestionStorageParams)
 
@@ -174,7 +175,8 @@ object ContainerProvider {
       throw new IllegalArgumentException(
         "storageUrl and containerName must be set when supplying ingestion storage")
     }
-    KDSU.logInfo(className, s"Using user supplied ingestion storage $ingestionStorageParameter")
+    KDSU.logInfo(className, s"Using user supplied ingestion storage $ingestionStorageParameter.Expires at " +
+      s"${OffsetDateTime.now.plusSeconds(cacheExpirySeconds)}")
 
     val credential = if (StringUtils.isNotEmpty(ingestionStorageParameter.userMsi)) {
       new ManagedIdentityCredentialBuilder().clientId(ingestionStorageParameter.userMsi).build()
@@ -187,13 +189,17 @@ object ContainerProvider {
       new DefaultAzureCredentialBuilder().build()
     }
 
-    // Create a SAS token that's valid for 6 hours
+    // Create a SAS token that's valid for 8 hours
     val startTime = OffsetDateTime.now.minusMinutes(5)
 
     val expiryTime = OffsetDateTime.now.plusSeconds(cacheExpirySeconds * 4) // Just to be sure
-    // Assign read permissions to the SAS token
+    // Assign read/write permissions to the SAS token
     val sasPermission =
       new BlobContainerSasPermission().setWritePermission(true).setReadPermission(true)
+
+    if(listPermissions){
+      sasPermission.setListPermission(true)
+    }
     val sasSignatureValues = new BlobServiceSasSignatureValues(expiryTime, sasPermission)
       .setStartTime(startTime)
 

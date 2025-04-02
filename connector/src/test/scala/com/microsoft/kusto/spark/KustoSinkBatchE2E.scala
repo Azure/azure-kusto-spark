@@ -6,13 +6,10 @@ package com.microsoft.kusto.spark
 import com.microsoft.azure.kusto.data.ClientFactory
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.kusto.spark.KustoTestUtils.getSystemTestOptions
-import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode}
+import com.microsoft.kusto.spark.datasink.{IngestionStorageParameters, KustoSinkOptions, SinkTableCreationMode}
 import com.microsoft.kusto.spark.datasource.{KustoSourceOptions, ReadMode}
 import com.microsoft.kusto.spark.sql.extension.SparkExtension.DataFrameReaderExtension
-import com.microsoft.kusto.spark.utils.CslCommandsGenerator.{
-  generateTableAlterStreamIngestionCommand,
-  generateTempTableCreateCommand
-}
+import com.microsoft.kusto.spark.utils.CslCommandsGenerator.{generateTableAlterStreamIngestionCommand, generateTempTableCreateCommand}
 import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.commons.lang3.StringUtils
 import org.apache.spark.SparkContext
@@ -379,9 +376,10 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
             "No ingestion storage URL or container name provided. Skipping ingestion test.")
         } else {
           KDSU.logInfo(className, s"Using ingestion storage container: $containerName")
-          val ingestionstorage =
-            s"""[{"storageUrl":"$storageUrl" , "
-              |containerName": "$containerName"}]""".stripMargin
+          val ingestionStorageString = IngestionStorageParameters.
+            toJsonString(Array(new IngestionStorageParameters(storageUrl, containerName,"")))
+//            s"""[{"storageUrl":"$storageUrl" , "
+//              |containerName": "$containerName"}]""".stripMargin
           df.write
             .format("com.microsoft.kusto.spark.datasource")
             .partitionBy("value")
@@ -389,7 +387,7 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
             .option(KustoSinkOptions.KUSTO_DATABASE, kustoTestConnectionOptions.database)
             .option(KustoSinkOptions.KUSTO_TABLE, table)
             .option(KustoSinkOptions.KUSTO_ACCESS_TOKEN, kustoTestConnectionOptions.accessToken)
-            .option(KustoSinkOptions.KUSTO_INGESTION_STORAGE, ingestionstorage)
+            .option(KustoSinkOptions.KUSTO_INGESTION_STORAGE, ingestionStorageString)
             .option(KustoSinkOptions.KUSTO_TIMEOUT_LIMIT, (8 * 60).toString)
             .mode(SaveMode.Append)
             .save()
