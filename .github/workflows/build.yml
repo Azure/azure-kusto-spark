@@ -45,6 +45,7 @@ jobs:
           kustoCluster: ${{ secrets.CLUSTER }}
           kustoAadAppId: ${{secrets.APP_ID}}
           accessToken: ${{env.ACCESS_TOKEN}}
+          storageAccountUrl: '${{secrets.STORAGE_CONTAINER_URL}}'
           ingestStorageUrl: ${{ secrets.INGEST_STORAGE_URL }}
           ingestStorageContainer: ${{ secrets.INGEST_STORAGE_CONTAINER }}
         run: |
