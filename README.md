@@ -41,14 +41,14 @@ link your application with the artifact below to use the Azure Data Explorer Con
 ```
 groupId = com.microsoft.azure.kusto
 artifactId = kusto-spark_3.0_2.12
-version = 5.2.2
+version = 5.3.0
 ```
 
 **In Maven**:
 
 Look for the following coordinates: 
 ```
-com.microsoft.azure.kusto:kusto-spark_3.0_2.12:5.2.2
+com.microsoft.azure.kusto:kusto-spark_3.0_2.12:5.3.0
 ```
 
 Or clone this repository and build it locally to add it to your local maven repository,.
@@ -103,14 +103,42 @@ To use the connector, you need:
 > Note: when working with Spark version 2.3 or lower, build the jar locally from branch "2.4" and 
 simply change the spark version in the pom file. 
 
+## Build Setup
+
+The newer options in the connector have tests pertaining to Blob storage, providing support for user impersonation based data export and also providing a custom blob storage for ingestion.
+
+These are set up on the CI already. To configure these on local machines, set up is required on the machine. The following are commands to be executed on AzCli, the setup can be done through the Azure portal as well.
+
+```
+az login
+az ad signed-in-user show --query "id" --output json
+```
+This will usually output a GUID 
+
+```
+"10ac405f-8d3f-4f95-a012-201801b257d2"
+```
+This ID can then be used to grant access to storage as follows
+
+```shell
+az role assignment create --assignee 10ac405f-8d3f-4f95-a012-201801b257d2 --role "Storage Blob Delegator" --scope /subscriptions/<sub-id>/resourceGroups/<rg-name>/providers/Microsoft.Storage/storageAccounts/<storageacc>
+ 
+az role assignment create --assignee 10ac405f-8d3f-4f95-a012-201801b257d2 --role "Storage Blob Data Contributor" --scope /subscriptions/<sub-id>/resourceGroups/<rg-name>/providers/Microsoft.Storage/storageAccounts/<storageacc>
+```
+
+These commands will set up test storage accounts required for tests.
+
+Once this is set up, you can use the following commands to build and run the tests
+
 ## Build Commands
    
 ```shell
-// Builds jar and runs all tests
-mvn clean package
+mvn clean package -DkustoCluster='https://cluster.westus2.kusto.windows.net' -DkustoDatabase='spark' -DkustoAadAuthorityID='72f988bf-86f1-41af-91ab-2d7cd011db47'  -DkustoIngestionUri='https://ingest-cluster.westus2.kusto.windows.net' -DingestStorageUrl='https://storageacc.blob.core.windows.net' -DingestStorageContainer='ingestcontainer' -DstorageAccountUrl='https://storageacc.blob.core.windows.net/synapseppe\;impersonate'
 
-// Builds jar, runs all tests, and installs jar to your local maven repository
-mvn clean install
+
+# You can pass all the properties as env variables too
+export kustoCluster="https://cluster.westus2.kusto.windows.net"
+
 ```
 
 ## Pre-Compiled Libraries

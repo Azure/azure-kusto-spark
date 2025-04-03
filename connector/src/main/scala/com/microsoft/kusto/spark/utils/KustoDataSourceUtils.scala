@@ -458,6 +458,8 @@ object KustoDataSourceUtils {
       throw new InvalidParameterException(
         "GenerateDynamicCsvMapping cannot be used with Spark streaming ingestion")
     }
+    val maybeIngestionStorageParameters: Option[Array[IngestionStorageParameters]] =
+      validateIngestionStorageParameters(parameters)
 
     val timeout = new FiniteDuration(
       parameters
@@ -485,7 +487,6 @@ object KustoDataSourceUtils {
     val maybeSparkIngestionProperties =
       getIngestionProperties(writeMode == WriteMode.KustoStreaming, ingestionPropertiesAsJson)
 
-    val maybeIngestionStorageParameters: Option[Array[IngestionStorageParameters]] = validateIngestionStorageParameters(parameters)
 
     val writeOptions = WriteOptions(
       pollingOnDriver,
@@ -531,7 +532,7 @@ object KustoDataSourceUtils {
     SinkParameters(writeOptions, sourceParameters)
   }
 
-  private def validateIngestionStorageParameters(parameters: Map[String, String]) = {
+  def validateIngestionStorageParameters(parameters: Map[String, String]): Option[Array[IngestionStorageParameters]] = {
     val maybeIngestionStorageParameters: Option[Array[IngestionStorageParameters]] =
       parameters
         .get(KustoSinkOptions.KUSTO_INGESTION_STORAGE)

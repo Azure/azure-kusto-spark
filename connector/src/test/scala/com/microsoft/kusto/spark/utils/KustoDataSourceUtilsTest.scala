@@ -3,7 +3,7 @@
 
 package com.microsoft.kusto.spark.utils
 
-import com.microsoft.kusto.spark.datasink.KustoSinkOptions.{KUSTO_CLUSTER, KUSTO_DATABASE, KUSTO_TABLE, KUSTO_TABLE_CREATE_OPTIONS}
+import com.microsoft.kusto.spark.datasink.KustoSinkOptions.{KUSTO_CLUSTER, KUSTO_DATABASE, KUSTO_INGESTION_STORAGE, KUSTO_TABLE, KUSTO_TABLE_CREATE_OPTIONS}
 import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SchemaAdjustmentMode}
 import com.microsoft.kusto.spark.datasource.ReadMode.ForceDistributedMode
 import com.microsoft.kusto.spark.datasource.{KustoReadOptions, KustoSourceOptions, PartitionOptions, ReadMode}
@@ -126,6 +126,26 @@ class KustoDataSourceUtilsTest extends AnyFlatSpec with MockFactory {
       }
     }
   }
+  "Parsing" should "fail for invalid ingestion storage strings" in {
+    val ingestionStorage =
+      s"""[{"storageUrl":"https://ateststorage.blob.core.windows.net/container1","containerName":"container1","userMsi":"msi1"},
+         |{"storageUrl":"https://ateststorage.blob.core.windows.net/container2","containerName":"","userMsi":"msi2"}]""".stripMargin
 
-
+    val conf: Map[String, String] = Map(
+      KUSTO_DATABASE -> "DB",
+      KUSTO_TABLE -> "Table",
+      KUSTO_CLUSTER -> "https://test-cluster.southeastasia.kusto.windows.net",
+      KustoSourceOptions.KUSTO_AAD_APP_ID -> "AppId",
+      KustoSourceOptions.KUSTO_AAD_APP_SECRET -> "AppKey",
+      KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID -> "Tenant",
+      KUSTO_TABLE_CREATE_OPTIONS -> "CreateIfNotExist",
+      KUSTO_INGESTION_STORAGE -> ingestionStorage
+    )
+    val illegalArgumentException = {
+      intercept[IllegalArgumentException](
+        KustoDataSourceUtils.parseSinkParameters(conf))
+    }
+    assert(
+      illegalArgumentException.getMessage == "storageUrl and containerName must be set when supplying ingestion storage")
+  }
 }
