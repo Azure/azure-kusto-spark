@@ -103,7 +103,7 @@ To use the connector, you need:
 > Note: when working with Spark version 2.3 or lower, build the jar locally from branch "2.4" and 
 simply change the spark version in the pom file. 
 
-## Build Setup
+## Local Run - Build Setup
 
 The newer options in the connector have tests pertaining to Blob storage, providing support for user impersonation based data export and also providing a custom blob storage for ingestion.
 

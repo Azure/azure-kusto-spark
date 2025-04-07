@@ -273,6 +273,7 @@ private[kusto] object KustoTestUtils {
       new IngestionStorageParameters(storageContainerUrl, containerName, "", "")
     val containerAndSas: ContainerAndSas = ContainerProvider.refreshUserSas(
       Array(ingestionStorageParam),
+      isCacheExpired=true,
       1 * 60 * 60,
       listPermissions = true)
     KDSU.logDebug(

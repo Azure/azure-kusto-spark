@@ -130,20 +130,18 @@ All the options that can be used in the Kusto Sink can be found in KustoSinkOpti
     {
       "storageUrl": "https://ateststorage.blob.core.windows.net",
       "containerName": "container1",
-      "userMsi": "msi1"
+      "userMsi": "msi1" //"sas":"<SAS token>"
     },
     {
       "storageUrl": "https://ateststorage2.blob.core.windows.net",
       "containerName": "container2",
-      "userMsi": "msi1"
+      "userMsi": "msi1" //"sas":"<SAS token>"
     }
   ]
   ```
-  > **Note** : The userMsi/SAS/DefaultCredential used in the storage will need "Storage Blob Delegator" and "Storage Blob Data Contributor" access on the storage account. These roles are internally leveraged by the connector for staging data for ingestion.
+  > **Note** : The principal of the userMsi or DefaultCredential needs "Storage Blob Delegator" permissions set on the storage account and at least "Storage Blob Data Contributor" access on the storage container. These roles are used to generate delegation SAS tokens for staging data used for the ingestion.
 
   > **Note** : Lifecycle management and data retention in the provided containers is under the responsibility of the client. This is not handled in scope of the connector.
-
-
 
 
 **Advanced User Parameters:**
