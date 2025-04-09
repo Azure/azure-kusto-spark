@@ -162,7 +162,7 @@ class ContainerProvider(
 
 object ContainerProvider {
   private val className = this.getClass.getSimpleName
-  private val sasKeyCacheMap = new ConcurrentHashMap[String,String]()
+  private val sasKeyCacheMap = new ConcurrentHashMap[String,ContainerAndSas]()
   def refreshUserSas(
       ingestionStorageParams: Array[IngestionStorageParameters],
       isCacheExpired:Boolean,
@@ -175,7 +175,8 @@ object ContainerProvider {
     val key = ingestionStorageParameter.toString
 
     // If the cache has not expired and the key is already in the cache, return the cached value
-    if(!isCacheExpired || sasKeyCacheMap.contains(key)) {
+    KDSU.logInfo("ContainerProvider",s" Checking cache for Key: $key")
+    if(!isCacheExpired && sasKeyCacheMap.contains(key)) {
       ContainerAndSas(
         s"${ingestionStorageParameter.storageUrl}/${ingestionStorageParameter.containerName}",
         s"?${sasKeyCacheMap.get(key)}")
@@ -224,10 +225,12 @@ object ContainerProvider {
         val sasToken = containerClient
           .generateUserDelegationSas(sasSignatureValues, userDelegationKey)
         // Cache the SAS token for future use
-        sasKeyCacheMap.put(key, sasToken)
-        ContainerAndSas(
+        val containerAndSas = ContainerAndSas(
           s"${ingestionStorageParameter.storageUrl}/${ingestionStorageParameter.containerName}",
           s"?$sasToken")
+        sasKeyCacheMap.put(key, containerAndSas)
+        KDSU.logInfo("ContainerProvider",s"Created SAS for Key: $key and stored in cache")
+        containerAndSas
       }
     }
   }
