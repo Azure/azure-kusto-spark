@@ -123,7 +123,7 @@ This ID can then be used to grant access to storage as follows
 ```shell
 az role assignment create --assignee 10ac405f-8d3f-4f95-a012-201801b257d2 --role "Storage Blob Delegator" --scope /subscriptions/<sub-id>/resourceGroups/<rg-name>/providers/Microsoft.Storage/storageAccounts/<storageacc>
  
-az role assignment create --assignee 10ac405f-8d3f-4f95-a012-201801b257d2 --role "Storage Blob Data Contributor" --scope /subscriptions/<sub-id>/resourceGroups/<rg-name>/providers/Microsoft.Storage/storageAccounts/<storageacc>
+az role assignment create --assignee 10ac405f-8d3f-4f95-a012-201801b257d2 --role "Storage Blob Data Contributor" --scope /subscriptions/<sub-id>/resourceGroups/<rg-name>/providers/Microsoft.Storage/storageAccounts/<storageacc>/containers/<container-name>
 ```
 
 These commands will set up test storage accounts required for tests.
