@@ -5,7 +5,7 @@ package com.microsoft.kusto.spark
 
 import com.microsoft.kusto.spark.utils.KustoQueryUtils
 import org.scalamock.scalatest.MockFactory
-import org.scalatest.BeforeAndAfterAll
+import org.scalatest.{BeforeAndAfterAll, ParallelTestExecution}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
@@ -13,7 +13,8 @@ class KustoQueryUtilsTest
     extends AnyFlatSpec
     with MockFactory
     with Matchers
-    with BeforeAndAfterAll {
+    with BeforeAndAfterAll
+    with ParallelTestExecution {
 
   "normalizeQuery" should "remove redundant query separator" in {
     val standardQuery = "Table | where column1 == 'abc';"

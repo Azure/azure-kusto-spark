@@ -98,7 +98,7 @@ All the options that can be used in the Kusto Sink can be found in KustoSinkOpti
   If set to 'CreateIfNotExist' and the table is not found in the requested cluster and database,
   it will be created, with a schema matching the DataFrame that is being written.
 
-* **KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON**:
+* **KUSTO_SPARK_INGESTION_PROPERTIES_JSON**:
   'sparkIngestionPropertiesJson' - A json representation of a `SparkIngestionProperties` (use `toString` to make a json of an instance).
 
   Properties:
@@ -115,7 +115,36 @@ All the options that can be used in the Kusto Sink can be found in KustoSinkOpti
 
     - flushImmediately: Boolean - use with caution - flushes the data immediately upon ingestion without aggregation.
 
-**Advanced Users Parameters:**
+* **KUSTO_INGESTION_STORAGE**:
+  'kustoIngestionStorageContainer' - A json representation of an array of `IngestionStorageParameters` (use `toJsonString` to make a json of an instance).
+  
+  This option allows users to use a storage account that they are already using for ingestion. This is very handy in scenarios where the user has a specific networking constraint and want to use a specific blob storage instance that they own instead of using the Kusto DM storage for ingestion.  
+
+  The recommended approach is to instantiate the IngestionStorageParameters as follows.
+  ```scala
+  val ingestionStorageString = IngestionStorageParameters.toJsonString(Array(new IngestionStorageParameters(storageUrl, containerName, "<USER-MSI>", "<SAS>")))
+  ```
+  The string representation is as follows:
+  ```
+  [
+    {
+      "storageUrl": "https://ateststorage.blob.core.windows.net",
+      "containerName": "container1",
+      "userMsi": "msi1" //"sas":"<SAS token>"
+    },
+    {
+      "storageUrl": "https://ateststorage2.blob.core.windows.net",
+      "containerName": "container2",
+      "userMsi": "msi1" //"sas":"<SAS token>"
+    }
+  ]
+  ```
+  > **Note** : The principal of the userMsi or DefaultCredential needs "Storage Blob Delegator" permissions set on the storage account and at least "Storage Blob Data Contributor" access on the storage container. These roles are used to generate delegation SAS tokens for staging data used for the ingestion.
+
+  > **Note** : Lifecycle management and data retention in the provided containers is under the responsibility of the client. This is not handled in scope of the connector.
+
+
+**Advanced User Parameters:**
 
 * **KUSTO_TIMEOUT_LIMIT**:
   'timeoutLimit' - After the dataframe is processed, a polling operation begins. This integer corresponds to the period in seconds after which the polling

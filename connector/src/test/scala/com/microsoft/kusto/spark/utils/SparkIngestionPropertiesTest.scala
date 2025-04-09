@@ -5,6 +5,7 @@ package com.microsoft.kusto.spark.utils
 
 import com.microsoft.kusto.spark.datasink.SparkIngestionProperties
 import org.apache.commons.lang3.builder.EqualsBuilder
+import org.scalatest.ParallelTestExecution
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.prop.TableDrivenPropertyChecks.forAll
 import org.scalatest.prop.Tables.Table
@@ -12,11 +13,11 @@ import org.scalatest.prop.Tables.Table
 import java.time.{Clock, Instant}
 import java.util.Collections
 
-class SparkIngestionPropertiesTest extends AnyFlatSpec {
+class SparkIngestionPropertiesTest extends AnyFlatSpec with ParallelTestExecution {
 
   "props" should "be same after clone" in {
     val ingestByTags = new java.util.ArrayList[String]
-    val tag = "dammyTag"
+    val tag = "dummyTag"
     ingestByTags.add(tag)
 
     val sp = new SparkIngestionProperties(
@@ -32,7 +33,7 @@ class SparkIngestionPropertiesTest extends AnyFlatSpec {
 
     assert(EqualsBuilder.reflectionEquals(spFromString, sp))
     val ingestByTags2 = new java.util.ArrayList[String]
-    val tag2 = "dammyTag2"
+    val tag2 = "dummyTag2"
     ingestByTags.add(tag2)
     sp.ingestByTags = ingestByTags2
     assert(!EqualsBuilder.reflectionEquals(spFromString, sp))

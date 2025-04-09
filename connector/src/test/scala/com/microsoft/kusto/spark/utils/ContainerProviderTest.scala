@@ -12,6 +12,7 @@ import com.microsoft.azure.kusto.ingest.{IngestionResourceManager, QueuedIngestC
 import com.microsoft.kusto.spark.exceptions.NoStorageContainersException
 import org.mockito.Mockito
 import org.scalamock.scalatest.MockFactory
+import org.scalatest.ParallelTestExecution
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
@@ -19,7 +20,11 @@ import java.util.Collections
 import scala.collection.JavaConverters.seqAsJavaListConverter
 import scala.io.Source
 
-class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
+class ContainerProviderTest
+    extends AnyFlatSpec
+    with Matchers
+    with MockFactory
+    with ParallelTestExecution {
   val CACHE_EXPIRY_SEC = 30
   val SLEEP_TIME_SEC = 10
 
@@ -98,25 +103,25 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
     val extendedMockClient = createExtendedKustoMockClient(mockDmClient = mockDmClient)
     val containerProvider =
       new ContainerProvider(extendedMockClient, clusterAlias, command, CACHE_EXPIRY_SEC)
-    containerProvider.getContainer.containerUrl should (not be "")
-    Some(containerProvider.getContainer.containerUrl) should contain oneOf
+    containerProvider.getContainer().containerUrl should (not be "")
+    Some(containerProvider.getContainer().containerUrl) should contain oneOf
       ("https://sacc1.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0",
       "https://sacc2.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0")
-    containerProvider.getContainer.sas should (not be "")
+    containerProvider.getContainer().sas should (not be "")
 
     /* Second test that returns from cache. The test will fail if the client is invoked again as expectation is to call once */
-    containerProvider.getContainer.containerUrl should (not be "")
-    Some(containerProvider.getContainer.containerUrl) should contain oneOf
+    containerProvider.getContainer().containerUrl should (not be "")
+    Some(containerProvider.getContainer().containerUrl) should contain oneOf
       ("https://sacc1.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0",
       "https://sacc2.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0")
-    containerProvider.getContainer.sas should (not be "")
+    containerProvider.getContainer().sas should (not be "")
     /* Third test where the cache expires and the invocation throws an exception */
     Thread.sleep(SLEEP_TIME_SEC * 1000) // Milliseconds
-    containerProvider.getContainer.containerUrl should (not be "")
-    Some(containerProvider.getContainer.containerUrl) should contain oneOf
+    containerProvider.getContainer().containerUrl should (not be "")
+    Some(containerProvider.getContainer().containerUrl) should contain oneOf
       ("https://sacc1.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0",
       "https://sacc2.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0")
-    containerProvider.getContainer.sas should (not be "")
+    containerProvider.getContainer().sas should (not be "")
 
     // The case where storageUris.nonEmpty is false. This will throw the exception as there is nothing to give from the cache
     Thread.sleep((SLEEP_TIME_SEC * 2) * 1000) // Milliseconds
@@ -130,7 +135,7 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
       new ContainerProvider(extendedMockClientEmptyFail, clusterAlias, command, CACHE_EXPIRY_SEC)
     val caught =
       intercept[NoStorageContainersException] { // Result type: Assertion
-        emptyStorageContainerProvider.getContainer
+        emptyStorageContainerProvider.getContainer()
       }
     assert(
       caught.getMessage.indexOf(
@@ -156,7 +161,8 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
      */
     val containerProvider =
       new ContainerProvider(extendedMockClient, clusterAlias, command, CACHE_EXPIRY_SEC)
-    the[NoStorageContainersException] thrownBy containerProvider.getContainer should have message "No storage containers received. Failed to allocate temporary storage"
+    the[NoStorageContainersException] thrownBy containerProvider
+      .getContainer() should have message "No storage containers received. Failed to allocate temporary storage"
   }
 
   "ContainerProvider" should "retry and return a container in case of a temporary HTTPException" in {
@@ -173,7 +179,8 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
       getRMOccurances = 8)
     val containerProvider =
       new ContainerProvider(extendedMockClient, clusterAlias, command, CACHE_EXPIRY_SEC)
-    the[IngestionServiceException] thrownBy containerProvider.getContainer should have message "IOError when trying to retrieve CloudInfo"
+    the[IngestionServiceException] thrownBy containerProvider
+      .getContainer() should have message "IOError when trying to retrieve CloudInfo"
   }
 
   private def readTestSource(fileName: String): String = {

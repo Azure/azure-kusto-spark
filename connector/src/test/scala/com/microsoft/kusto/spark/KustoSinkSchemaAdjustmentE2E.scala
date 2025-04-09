@@ -1,24 +1,31 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
-
 package com.microsoft.kusto.spark
 
-import com.microsoft.kusto.spark.KustoTestUtils.{KustoConnectionOptions, cleanup, createTestTable, getSystemTestOptions, ingest, validateTargetTable}
+import com.microsoft.kusto.spark.KustoTestUtils.{
+  KustoConnectionOptions,
+  cleanup,
+  createTestTable,
+  getSystemTestOptions,
+  ingest,
+  validateTargetTable
+}
 import com.microsoft.kusto.spark.datasink.{SinkTableCreationMode, SparkIngestionProperties}
 import com.microsoft.kusto.spark.exceptions.SchemaMatchException
 import com.microsoft.kusto.spark.utils.KustoQueryUtils
 import org.apache.spark.sql._
 import org.apache.spark.sql.types.StringType
 import org.scalatest.flatspec.AnyFlatSpec
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
+import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, ParallelTestExecution}
 
 import java.util.UUID
 
 class KustoSinkSchemaAdjustmentE2E
     extends AnyFlatSpec
     with BeforeAndAfterEach
-    with BeforeAndAfterAll {
+    with BeforeAndAfterAll
+    with ParallelTestExecution {
 
   private val nofExecutors = 4
   private val testTablePrefix = "KustoBatchSinkE2E_SchemaAdjust"
@@ -31,7 +38,7 @@ class KustoSinkSchemaAdjustmentE2E
   private val expectedNumberOfRows = 3
   private def newRow(index: Int): String = s"row-$index"
 
-  private lazy val kustoConnectionOptions: KustoConnectionOptions = getSystemTestOptions()
+  private lazy val kustoConnectionOptions: KustoConnectionOptions = getSystemTestOptions
   override def afterAll(): Unit = {
     cleanup(kustoConnectionOptions, testTablePrefix)
     spark.sparkContext.stop()

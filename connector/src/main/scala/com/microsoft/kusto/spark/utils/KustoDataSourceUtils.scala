@@ -9,7 +9,6 @@ import com.fasterxml.jackson.databind.node.ArrayNode
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import com.microsoft.azure.kusto.data.exceptions.{DataClientException, DataServiceException}
 import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties, KustoResultSetTable}
-import com.microsoft.azure.kusto.ingest.IngestionProperties
 import com.microsoft.kusto.spark.authentication._
 import com.microsoft.kusto.spark.common.{KustoCoordinates, KustoDebugOptions}
 import com.microsoft.kusto.spark.datasink.KustoWriter.TempIngestionTablePrefix
@@ -102,7 +101,7 @@ object KustoDataSourceUtils {
               exportOptionsJsonString,
               new TypeReference[Map[String, String]] {})) match {
             case Success(exportConfigMap) => exportConfigMap
-            case Failure(exception) =>
+            case Failure(_) =>
               val errorMessage =
                 s"The configuration for ${KustoSourceOptions.KUSTO_EXPORT_OPTIONS_JSON} has a value " +
                   s"$exportOptionsJsonString that cannot be parsed as Map"
@@ -459,6 +458,8 @@ object KustoDataSourceUtils {
       throw new InvalidParameterException(
         "GenerateDynamicCsvMapping cannot be used with Spark streaming ingestion")
     }
+    val maybeIngestionStorageParameters: Option[Array[IngestionStorageParameters]] =
+      validateIngestionStorageParameters(parameters)
 
     val timeout = new FiniteDuration(
       parameters
@@ -486,6 +487,7 @@ object KustoDataSourceUtils {
     val maybeSparkIngestionProperties =
       getIngestionProperties(writeMode == WriteMode.KustoStreaming, ingestionPropertiesAsJson)
 
+
     val writeOptions = WriteOptions(
       pollingOnDriver,
       tableCreation,
@@ -504,7 +506,8 @@ object KustoDataSourceUtils {
       userTempTableName,
       disableFlushImmediately,
       ensureNoDupBlobs,
-      streamIngestMaxSize)
+      streamIngestMaxSize,
+      maybeIngestionStorageParameters)
 
     if (sourceParameters.kustoCoordinates.table.isEmpty) {
       throw new InvalidParameterException(
@@ -513,17 +516,40 @@ object KustoDataSourceUtils {
 
     logInfo(
       "parseSinkParameters",
-      s"Parsed write options for sink: {'table': '${sourceParameters.kustoCoordinates.table}', 'timeout': '${writeOptions.timeout}, 'async': ${writeOptions.isAsync}, 'writeMode': ${writeOptions.writeMode}, " +
-        s"'tableCreationMode': ${writeOptions.tableCreateOptions}, 'writeLimit': ${writeOptions.writeResultLimit}, 'batchLimit': ${writeOptions.batchLimit}" +
+      s"Parsed write options for sink: {'table': '${sourceParameters.kustoCoordinates.table}', " +
+        s"'timeout': '${writeOptions.timeout}, 'async': ${writeOptions.isAsync}, 'writeMode': ${writeOptions.writeMode}, "+
+        s"'tableCreationMode': ${writeOptions.tableCreateOptions}, 'writeLimit': ${writeOptions.writeResultLimit}, " +
+        s"'batchLimit': ${writeOptions.batchLimit}" +
         s", 'timeout': ${writeOptions.timeout}, 'timezone': ${writeOptions.timeZone}, " +
-        s"'maybeSparkIngestionProperties': $ingestionPropertiesAsJson, 'requestId': '${sourceParameters.requestId}', 'pollingOnDriver': ${writeOptions.pollingOnDriver}," +
-        s"'maxRetriesOnMoveExtents':$maxRetriesOnMoveExtents, 'minimalExtentsCountForSplitMergePerNode':$minimalExtentsCountForSplitMergePerNode, " +
+        s"'maybeSparkIngestionProperties': $ingestionPropertiesAsJson, 'requestId': '${sourceParameters.requestId}', " +
+        s"'pollingOnDriver': ${writeOptions.pollingOnDriver}," +
+        s"'maxRetriesOnMoveExtents':$maxRetriesOnMoveExtents, 'minimalExtentsCountForSplitMergePerNode':" +
+        s"$minimalExtentsCountForSplitMergePerNode, " +
         s"'adjustSchema': $adjustSchema, 'autoCleanupTime': $autoCleanupTime${if (writeOptions.userTempTableName.isDefined)
             s", userTempTableName: ${userTempTableName.get}"
           else ""}, disableFlushImmediately: $disableFlushImmediately${if (ensureNoDupBlobs) "ensureNoDupBlobs: true"
           else ""}")
-
     SinkParameters(writeOptions, sourceParameters)
+  }
+
+  def validateIngestionStorageParameters(parameters: Map[String, String]): Option[Array[IngestionStorageParameters]] = {
+    val maybeIngestionStorageParameters: Option[Array[IngestionStorageParameters]] =
+      parameters
+        .get(KustoSinkOptions.KUSTO_INGESTION_STORAGE)
+        .map(is => IngestionStorageParameters.fromString(is))
+
+    maybeIngestionStorageParameters match {
+      case Some(arrayOfIngestionStorageParameters) => arrayOfIngestionStorageParameters.foreach(ingestionStorageParameter
+      => {
+        if (StringUtils.isEmpty(ingestionStorageParameter.containerName) || StringUtils.isEmpty(
+          ingestionStorageParameter.storageUrl)) {
+          throw new IllegalArgumentException(
+            "storageUrl and containerName must be set when supplying ingestion storage")
+        }
+      })
+      case None => logDebug("parseSinkParameters", "Using DM provided storage for ingestion")
+    }
+    maybeIngestionStorageParameters
   }
 
   private def getIngestionProperties(
