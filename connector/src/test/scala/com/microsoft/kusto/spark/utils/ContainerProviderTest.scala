@@ -196,9 +196,9 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
       hasEmptyResults = true,
       mockDmClient = mockDmClient,
       getRMOccurances = 0)
-
+    val cacheTimeoutSec = 3
     val containerProvider =
-      new ContainerProvider(extendedMockClient, clusterAlias, command, 3)
+      new ContainerProvider(extendedMockClient, clusterAlias, command, cacheTimeoutSec)
    val mockContainerProvider = spy(containerProvider)
    val mockedSasKey = "?mockedSasToken"
     var count = 0
@@ -210,7 +210,8 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
     // This will fail if it is not returned from the cache!
     mockContainerProvider.getContainer(Some(arrIngestionStorageParams)).sas should equal(s"$mockedSasKey-1")
     mockContainerProvider.getContainer(Some(arrIngestionStorageParams)).sas should equal(s"$mockedSasKey-1")
-    Thread.sleep(5000L)
+    // this is greater by 1s
+    Thread.sleep((cacheTimeoutSec + 1) * 1000  )
     mockContainerProvider.getContainer(Some(arrIngestionStorageParams)).sas should equal(s"$mockedSasKey-2")
   }
 
