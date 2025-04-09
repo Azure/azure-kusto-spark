@@ -13,15 +13,13 @@ import com.microsoft.kusto.spark.datasink.IngestionStorageParameters
 import com.microsoft.kusto.spark.exceptions.NoStorageContainersException
 import org.mockito.ArgumentMatchers.{any, anyBoolean, anyLong}
 import org.mockito.Mockito
-import org.mockito.Mockito.{doAnswer, doReturn, spy, times}
+import org.mockito.Mockito.{doAnswer, spy}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
-import org.scalatestplus.mockito.MockitoSugar
 
-import java.time.Instant
 import java.util.Collections
 import scala.collection.JavaConverters.seqAsJavaListConverter
 import scala.io.Source
@@ -146,8 +144,6 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
     val clusterAlias = "ingest-cluster"
     val command = ".create tempstorage"
 
-    val kustoOperationResult =
-      new KustoOperationResult(readTestSource("storage-result-empty.json"), "v1")
     val mockDmClient = mock[Client]
     /*
       Invoke and test
@@ -219,13 +215,5 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
     new Answer[T] {
       override def answer(invocation: InvocationOnMock): T = f(invocation)
     }
-  }
-
-  private def readTestSource(fileName: String): String = {
-    val queryResultsSource =
-      Source.fromFile(this.getClass.getResource(s"/TestData/json/$fileName").getPath)
-    val queryResults = queryResultsSource.getLines().mkString
-    queryResultsSource.close()
-    queryResults
   }
 }
