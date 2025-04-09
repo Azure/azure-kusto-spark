@@ -101,8 +101,10 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
     val containerProvider =
       new ContainerProvider(extendedMockClient, clusterAlias, command, CACHE_EXPIRY_SEC)
     containerProvider.getContainer().containerUrl should (not be "")
-    val ingestionContainer1 = "https://sacc1.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0"
-    val ingestionContainer2 = "https://sacc2.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0"
+    val ingestionContainer1 =
+      "https://sacc1.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0"
+    val ingestionContainer2 =
+      "https://sacc2.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0"
     Some(containerProvider.getContainer().containerUrl) should contain oneOf
       (ingestionContainer1,
       ingestionContainer2)
@@ -180,8 +182,10 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
   }
 
   it should "generate new SAS token when cache is expired" in {
-    val ingestionContainer1 = "https://custom.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0"
-    val ingestionStorageParam = new IngestionStorageParameters(ingestionContainer1, "container","msi","")
+    val ingestionContainer1 =
+      "https://custom.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0"
+    val ingestionStorageParam =
+      new IngestionStorageParameters(ingestionContainer1, "container", "msi", "")
     val arrIngestionStorageParams = Array(ingestionStorageParam)
     val mockDmClient = mock[Client]
     val command = ".create tempstorage"
@@ -195,23 +199,27 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
     val cacheTimeoutSec = 3
     val containerProvider =
       new ContainerProvider(extendedMockClient, clusterAlias, command, cacheTimeoutSec)
-   val mockContainerProvider = spy(containerProvider)
-   val mockedSasKey = "?mockedSasToken"
+    val mockContainerProvider = spy[ContainerProvider](containerProvider)
+    val mockedSasKey = "?mockedSasToken"
     var count = 0
-   doAnswer(answer(_ => {
-     count = count + 1
-     s"$mockedSasKey-$count"
-   })).when(mockContainerProvider)
-      .generateSasKey(anyLong(), anyBoolean(),any[IngestionStorageParameters]())
+    doAnswer(answer(_ => {
+      count = count + 1
+      s"$mockedSasKey-$count"
+    }))
+      .when(mockContainerProvider)
+      .generateSasKey(anyLong(), anyBoolean(), any[IngestionStorageParameters]())
     // This will fail if it is not returned from the cache!
-    mockContainerProvider.getContainer(Some(arrIngestionStorageParams)).sas should equal(s"$mockedSasKey-1")
-    mockContainerProvider.getContainer(Some(arrIngestionStorageParams)).sas should equal(s"$mockedSasKey-1")
+    mockContainerProvider.getContainer(Some(arrIngestionStorageParams)).sas should equal(
+      s"$mockedSasKey-1")
+    mockContainerProvider.getContainer(Some(arrIngestionStorageParams)).sas should equal(
+      s"$mockedSasKey-1")
     // this is greater by 1s
-    Thread.sleep((cacheTimeoutSec + 1) * 1000  )
-    mockContainerProvider.getContainer(Some(arrIngestionStorageParams)).sas should equal(s"$mockedSasKey-2")
+    Thread.sleep((cacheTimeoutSec + 1) * 1000)
+    mockContainerProvider.getContainer(Some(arrIngestionStorageParams)).sas should equal(
+      s"$mockedSasKey-2")
   }
 
-  def answer[T](f: InvocationOnMock => T): Answer[T] = {
-    (invocation: InvocationOnMock) => f(invocation)
+  def answer[T](f: InvocationOnMock => T): Answer[T] = { (invocation: InvocationOnMock) =>
+    f(invocation)
   }
 }
