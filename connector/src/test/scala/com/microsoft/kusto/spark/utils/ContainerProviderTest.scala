@@ -9,19 +9,27 @@ import com.microsoft.azure.kusto.data.{Client, KustoOperationResult}
 import com.microsoft.azure.kusto.ingest.exceptions.IngestionServiceException
 import com.microsoft.azure.kusto.ingest.resources.ContainerWithSas
 import com.microsoft.azure.kusto.ingest.{IngestionResourceManager, QueuedIngestClient}
+import com.microsoft.kusto.spark.datasink.IngestionStorageParameters
 import com.microsoft.kusto.spark.exceptions.NoStorageContainersException
+import org.mockito.ArgumentMatchers.{any, anyBoolean, anyLong}
 import org.mockito.Mockito
+import org.mockito.Mockito.{doAnswer, doReturn, spy, times}
+import org.mockito.invocation.InvocationOnMock
+import org.mockito.stubbing.Answer
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+import org.scalatestplus.mockito.MockitoSugar
 
+import java.time.Instant
 import java.util.Collections
 import scala.collection.JavaConverters.seqAsJavaListConverter
 import scala.io.Source
 
 class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
-  val CACHE_EXPIRY_SEC = 30
-  val SLEEP_TIME_SEC = 10
+  private val CACHE_EXPIRY_SEC = 30
+  private val SLEEP_TIME_SEC = 10
+  private val clusterAlias = "ingest-cluster"
 
   private def createExtendedKustoMockClient(
       hasEmptyResults: Boolean = false,
@@ -85,12 +93,8 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
   }
   // happy path
   "ContainerProvider returns a container" should "from RM" in {
-    val kustoOperationResult =
-      new KustoOperationResult(readTestSource("storage-result.json"), "v1")
     val mockDmClient = mock[Client]
-//    (mockDmClient.execute(_: String, _: String, _: ClientRequestProperties)).expects(*, *, *) returning(kustoOperationResult)
 
-    val clusterAlias = "ingest-cluster"
     val command = ".create tempstorage"
     /*
       Invoke and test
@@ -99,23 +103,24 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
     val containerProvider =
       new ContainerProvider(extendedMockClient, clusterAlias, command, CACHE_EXPIRY_SEC)
     containerProvider.getContainer().containerUrl should (not be "")
+    val ingestionContainer1 = "https://sacc1.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0"
+    val ingestionContainer2 = "https://sacc2.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0"
     Some(containerProvider.getContainer().containerUrl) should contain oneOf
-      ("https://sacc1.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0",
-      "https://sacc2.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0")
+      (ingestionContainer1,
+      ingestionContainer2)
     containerProvider.getContainer().sas should (not be "")
-
     /* Second test that returns from cache. The test will fail if the client is invoked again as expectation is to call once */
     containerProvider.getContainer().containerUrl should (not be "")
     Some(containerProvider.getContainer().containerUrl) should contain oneOf
-      ("https://sacc1.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0",
-      "https://sacc2.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0")
+      (ingestionContainer1,
+      ingestionContainer2)
     containerProvider.getContainer().sas should (not be "")
     /* Third test where the cache expires and the invocation throws an exception */
     Thread.sleep(SLEEP_TIME_SEC * 1000) // Milliseconds
     containerProvider.getContainer().containerUrl should (not be "")
     Some(containerProvider.getContainer().containerUrl) should contain oneOf
-      ("https://sacc1.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0",
-      "https://sacc2.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0")
+      (ingestionContainer1,
+      ingestionContainer2)
     containerProvider.getContainer().sas should (not be "")
 
     // The case where storageUris.nonEmpty is false. This will throw the exception as there is nothing to give from the cache
@@ -176,6 +181,43 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
       new ContainerProvider(extendedMockClient, clusterAlias, command, CACHE_EXPIRY_SEC)
     the[IngestionServiceException] thrownBy containerProvider
       .getContainer() should have message "IOError when trying to retrieve CloudInfo"
+  }
+
+  it should "generate new SAS token when cache is expired" in {
+    val ingestionContainer1 = "https://custom.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0"
+    val ingestionStorageParam = new IngestionStorageParameters(ingestionContainer1, "container","msi","")
+    val arrIngestionStorageParams = Array(ingestionStorageParam)
+    val mockDmClient = mock[Client]
+    val command = ".create tempstorage"
+    /*
+      Invoke and test
+     */
+    val extendedMockClient = createExtendedKustoMockClient(
+      hasEmptyResults = true,
+      mockDmClient = mockDmClient,
+      getRMOccurances = 0)
+
+    val containerProvider =
+      new ContainerProvider(extendedMockClient, clusterAlias, command, 3)
+   val mockContainerProvider = spy(containerProvider)
+   val mockedSasKey = "?mockedSasToken"
+    var count = 0
+   doAnswer(answer(_ => {
+     count = count + 1
+     s"$mockedSasKey-$count"
+   })).when(mockContainerProvider)
+      .generateSasKey(anyLong(), anyBoolean(),any[IngestionStorageParameters]())
+    // This will fail if it is not returned from the cache!
+    mockContainerProvider.getContainer(Some(arrIngestionStorageParams)).sas should equal(s"$mockedSasKey-1")
+    mockContainerProvider.getContainer(Some(arrIngestionStorageParams)).sas should equal(s"$mockedSasKey-1")
+    Thread.sleep(5000L)
+    mockContainerProvider.getContainer(Some(arrIngestionStorageParams)).sas should equal(s"$mockedSasKey-2")
+  }
+
+  def answer[T](f: InvocationOnMock => T): Answer[T] = {
+    new Answer[T] {
+      override def answer(invocation: InvocationOnMock): T = f(invocation)
+    }
   }
 
   private def readTestSource(fileName: String): String = {

@@ -247,7 +247,7 @@ private[kusto] object KustoTestUtils {
     }
   }
 
-  def getSystemVariable(key: String) = {
+  def getSystemVariable(key: String): String = {
     var value = System.getenv(key)
     if (value == null) {
       value = System.getProperty(key)
@@ -271,16 +271,9 @@ private[kusto] object KustoTestUtils {
     }
     val ingestionStorageParam =
       new IngestionStorageParameters(storageContainerUrl, containerName, "", "")
-    val containerAndSas: ContainerAndSas = ContainerProvider.refreshUserSas(
-      Array(ingestionStorageParam),
-      isCacheExpired=true,
-      1 * 60 * 60,
-      listPermissions = true)
-    KDSU.logDebug(
-      className,
-      s"Generated SAS for container ${containerAndSas.containerUrl} with SAS ${containerAndSas.sas
-          .substring(0, 4)}")
-    containerAndSas.sas
+    val sas = ContainerProvider.getUserDelegatedSas(
+      listPermissions = true, cacheExpirySeconds = 1*60*60, ingestionStorageParameter = ingestionStorageParam)
+    sas
   }
 
   final case class KustoConnectionOptions(
