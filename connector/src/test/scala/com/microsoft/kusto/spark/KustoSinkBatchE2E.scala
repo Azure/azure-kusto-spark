@@ -22,7 +22,7 @@ import org.apache.commons.lang3.StringUtils
 import org.apache.spark.SparkContext
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.scalatest.BeforeAndAfterAll
+import org.scalatest.{BeforeAndAfterAll, ParallelTestExecution}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.prop.TableDrivenPropertyChecks
 import org.scalatest.prop.Tables.Table
@@ -34,7 +34,7 @@ import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.immutable
 
-class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
+class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll with ParallelTestExecution {
   private val className = this.getClass.getSimpleName
   private val rowId = new AtomicInteger(1)
   private val rowId2 = new AtomicInteger(1)

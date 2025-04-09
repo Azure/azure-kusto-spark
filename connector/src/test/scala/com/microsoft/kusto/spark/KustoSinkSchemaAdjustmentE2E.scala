@@ -17,14 +17,15 @@ import com.microsoft.kusto.spark.utils.KustoQueryUtils
 import org.apache.spark.sql._
 import org.apache.spark.sql.types.StringType
 import org.scalatest.flatspec.AnyFlatSpec
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
+import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, ParallelTestExecution}
 
 import java.util.UUID
 
 class KustoSinkSchemaAdjustmentE2E
     extends AnyFlatSpec
     with BeforeAndAfterEach
-    with BeforeAndAfterAll {
+    with BeforeAndAfterAll
+    with ParallelTestExecution {
 
   private val nofExecutors = 4
   private val testTablePrefix = "KustoBatchSinkE2E_SchemaAdjust"

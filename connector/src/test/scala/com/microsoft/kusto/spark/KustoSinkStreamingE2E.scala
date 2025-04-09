@@ -19,13 +19,16 @@ import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.sql.types.DataTypes.IntegerType
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.sql.{SQLContext, SparkSession}
-import org.scalatest.BeforeAndAfterAll
+import org.scalatest.{BeforeAndAfterAll, ParallelTestExecution}
 import org.scalatest.flatspec.AnyFlatSpec
 
 import java.security.InvalidParameterException
 import java.util.UUID
 
-class KustoSinkStreamingE2E extends AnyFlatSpec with BeforeAndAfterAll {
+class KustoSinkStreamingE2E
+    extends AnyFlatSpec
+    with BeforeAndAfterAll
+    with ParallelTestExecution {
   val expectedNumberOfRows: Int = 300
   val timeoutMs: Int = 8 * 60 * 1000 // 8 minutes
   val sleepTimeTillTableCreate: Int = 3 * 60 * 1000 // 2 minutes

@@ -19,14 +19,17 @@ import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{Row, SQLContext, SaveMode, SparkSession}
-import org.scalatest.BeforeAndAfterAll
+import org.scalatest.{BeforeAndAfterAll, ParallelTestExecution}
 import org.scalatest.flatspec.AnyFlatSpec
 
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.immutable
 
-class KustoPruneAndFilterE2E extends AnyFlatSpec with BeforeAndAfterAll {
+class KustoPruneAndFilterE2E
+    extends AnyFlatSpec
+    with BeforeAndAfterAll
+    with ParallelTestExecution {
   private lazy val kustoTestConnectionOptions = getSystemTestOptions
   private val nofExecutors = 4
   private val spark: SparkSession = SparkSession

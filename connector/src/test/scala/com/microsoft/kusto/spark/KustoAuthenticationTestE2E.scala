@@ -10,12 +10,13 @@ import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMo
 import com.microsoft.kusto.spark.sql.extension.SparkExtension._
 import com.microsoft.kusto.spark.utils.KustoQueryUtils
 import org.apache.spark.sql.SparkSession
+import org.scalatest.ParallelTestExecution
 import org.scalatest.flatspec.AnyFlatSpec
 
 import java.util.UUID
 import scala.collection.immutable
 
-class KustoAuthenticationTestE2E extends AnyFlatSpec {
+class KustoAuthenticationTestE2E extends AnyFlatSpec with ParallelTestExecution {
   private val spark: SparkSession = SparkSession
     .builder()
     .appName("KustoSink")

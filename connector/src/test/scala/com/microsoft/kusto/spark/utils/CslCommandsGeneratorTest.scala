@@ -7,11 +7,12 @@ import com.microsoft.kusto.spark.datasource.{
   TransientStorageCredentials,
   TransientStorageParameters
 }
+import org.scalatest.ParallelTestExecution
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.prop.TableDrivenPropertyChecks.forAll
 import org.scalatest.prop.Tables.Table
 
-class CslCommandsGeneratorTest extends AnyFlatSpec {
+class CslCommandsGeneratorTest extends AnyFlatSpec with ParallelTestExecution {
   private val dataCombinations =
     Table(
       ("additionalExportOptions", "expectedOptions", "compressed", "iteration"),

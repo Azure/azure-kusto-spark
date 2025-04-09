@@ -12,6 +12,7 @@ import com.microsoft.azure.kusto.ingest.{IngestionResourceManager, QueuedIngestC
 import com.microsoft.kusto.spark.exceptions.NoStorageContainersException
 import org.mockito.Mockito
 import org.scalamock.scalatest.MockFactory
+import org.scalatest.ParallelTestExecution
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
@@ -19,7 +20,11 @@ import java.util.Collections
 import scala.collection.JavaConverters.seqAsJavaListConverter
 import scala.io.Source
 
-class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
+class ContainerProviderTest
+    extends AnyFlatSpec
+    with Matchers
+    with MockFactory
+    with ParallelTestExecution {
   val CACHE_EXPIRY_SEC = 30
   val SLEEP_TIME_SEC = 10
 

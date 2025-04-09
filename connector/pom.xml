@@ -237,7 +237,8 @@
                     <junitxml>.</junitxml>
                     <filereports>TestSuiteReport.txt</filereports>
                     <tagsToExclude>KustoE2E</tagsToExclude>
-                    <argLine>-Xms512m</argLine>
+                    <argLine>-Xms1024m</argLine>
+                    <parallel>true</parallel>
                     <!-- Comma separated list of JUnit test class names to execute -->
                     <!--jUnitClasses>samples.AppTest</jUnitClasses-->
                 </configuration>

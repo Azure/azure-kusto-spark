@@ -3,11 +3,22 @@
 
 package com.microsoft.kusto.spark.utils
 
-import com.microsoft.kusto.spark.datasink.KustoSinkOptions.{KUSTO_CLUSTER, KUSTO_DATABASE, KUSTO_INGESTION_STORAGE, KUSTO_TABLE, KUSTO_TABLE_CREATE_OPTIONS}
+import com.microsoft.kusto.spark.datasink.KustoSinkOptions.{
+  KUSTO_CLUSTER,
+  KUSTO_DATABASE,
+ KUSTO_INGESTION_STORAGE, KUSTO_TABLE,
+  KUSTO_TABLE_CREATE_OPTIONS
+}
 import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SchemaAdjustmentMode}
 import com.microsoft.kusto.spark.datasource.ReadMode.ForceDistributedMode
-import com.microsoft.kusto.spark.datasource.{KustoReadOptions, KustoSourceOptions, PartitionOptions, ReadMode}
+import com.microsoft.kusto.spark.datasource.{
+  KustoReadOptions,
+  KustoSourceOptions,
+  PartitionOptions,
+  ReadMode
+}
 import org.scalamock.scalatest.MockFactory
+import org.scalatest.ParallelTestExecution
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.prop.TableDrivenPropertyChecks.forAll
 import org.scalatest.prop.Tables.Table
@@ -15,7 +26,7 @@ import org.scalatest.prop.Tables.Table
 import java.security.InvalidParameterException
 import scala.collection.mutable
 
-class KustoDataSourceUtilsTest extends AnyFlatSpec with MockFactory {
+class KustoDataSourceUtilsTest extends AnyFlatSpec with MockFactory with ParallelTestExecution {
   "ReadParameters" should "KustoReadOptions with passed in options" in {
     val conf: Map[String, String] = Map(
       KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceDistributedMode.toString,
@@ -89,19 +100,38 @@ class KustoDataSourceUtilsTest extends AnyFlatSpec with MockFactory {
     val testCombinations =
       Table(
         ("map", "isInvalid", "error"),
-        (mutable.Map(KustoSinkOptions.KUSTO_WRITE_MODE -> "KustoStreaming",
-          KustoSinkOptions.KUSTO_ADJUST_SCHEMA -> SchemaAdjustmentMode.GenerateDynamicCsvMapping.toString), true,
+        (
+          mutable.Map(
+            KustoSinkOptions.KUSTO_WRITE_MODE -> "KustoStreaming",
+            KustoSinkOptions.KUSTO_ADJUST_SCHEMA -> SchemaAdjustmentMode.GenerateDynamicCsvMapping.toString),
+          true,
           "GenerateDynamicCsvMapping cannot be used with Spark streaming ingestion"),
-        (mutable.Map(KustoSinkOptions.KUSTO_WRITE_MODE -> "Queued",
-          KustoSinkOptions.KUSTO_ADJUST_SCHEMA -> SchemaAdjustmentMode.GenerateDynamicCsvMapping.toString), false, ""),
-        (mutable.Map(KustoSinkOptions.KUSTO_WRITE_MODE -> "Transactional",
-          KustoSinkOptions.KUSTO_ADJUST_SCHEMA -> SchemaAdjustmentMode.GenerateDynamicCsvMapping.toString), false, ""),
-        (mutable.Map(KustoSinkOptions.KUSTO_WRITE_MODE -> "KustoStreaming",
-          KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON ->
-            "{\"csvMappingNameReference\":\"a-mapping-ref\"}"), false, ""),
-        (mutable.Map(KustoSinkOptions.KUSTO_WRITE_MODE -> "KustoStreaming",
-          KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON ->
-            "{\"csvMapping\":\"(..a real mapping.)\"}"), true, "CSVMapping cannot be used with Spark streaming ingestion"),
+        (
+          mutable.Map(
+            KustoSinkOptions.KUSTO_WRITE_MODE -> "Queued",
+            KustoSinkOptions.KUSTO_ADJUST_SCHEMA -> SchemaAdjustmentMode.GenerateDynamicCsvMapping.toString),
+          false,
+          ""),
+        (
+          mutable.Map(
+            KustoSinkOptions.KUSTO_WRITE_MODE -> "Transactional",
+            KustoSinkOptions.KUSTO_ADJUST_SCHEMA -> SchemaAdjustmentMode.GenerateDynamicCsvMapping.toString),
+          false,
+          ""),
+        (
+          mutable.Map(
+            KustoSinkOptions.KUSTO_WRITE_MODE -> "KustoStreaming",
+            KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON ->
+              "{\"csvMappingNameReference\":\"a-mapping-ref\"}"),
+          false,
+          ""),
+        (
+          mutable.Map(
+            KustoSinkOptions.KUSTO_WRITE_MODE -> "KustoStreaming",
+            KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON ->
+              "{\"csvMapping\":\"(..a real mapping.)\"}"),
+          true,
+          "CSVMapping cannot be used with Spark streaming ingestion"),
         (mutable.Map("" -> ""), false, "") // falls back to transactional mode
       )
     forAll(testCombinations) { (map, isInvalid, errorMessage) =>
@@ -113,20 +143,19 @@ class KustoDataSourceUtilsTest extends AnyFlatSpec with MockFactory {
         KustoSourceOptions.KUSTO_AAD_APP_SECRET -> "AppKey",
         KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID -> "Tenant",
         KUSTO_TABLE_CREATE_OPTIONS -> "CreateIfNotExist")
-      map.foreach {
-        case (k, v) => conf.put(k, v)
+      map.foreach { case (k, v) =>
+        conf.put(k, v)
       }
       if (isInvalid) {
         val illegalArgumentException = {
           intercept[IllegalArgumentException](
             KustoDataSourceUtils.parseSinkParameters(conf.toMap))
         }
-        assert(
-          illegalArgumentException.getMessage == errorMessage)
+        assert(illegalArgumentException.getMessage == errorMessage)
       }
     }
   }
-  "Parsing" should "fail for invalid ingestion storage strings" in {
+"Parsing" should "fail for invalid ingestion storage strings" in {
     val ingestionStorage =
       s"""[{"storageUrl":"https://ateststorage.blob.core.windows.net/container1","containerName":"container1","userMsi":"msi1"},
          |{"storageUrl":"https://ateststorage.blob.core.windows.net/container2","containerName":"","userMsi":"msi2"}]""".stripMargin

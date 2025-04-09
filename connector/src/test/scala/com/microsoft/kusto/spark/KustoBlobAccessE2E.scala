@@ -25,14 +25,14 @@ import com.microsoft.kusto.spark.utils.{
 }
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{SQLContext, SparkSession}
-import org.scalatest.BeforeAndAfterAll
+import org.scalatest.{BeforeAndAfterAll, ParallelTestExecution}
 import org.scalatest.flatspec.AnyFlatSpec
 
 import java.security.InvalidParameterException
 import java.util.UUID
 import scala.collection.JavaConverters._
 
-class KustoBlobAccessE2E extends AnyFlatSpec with BeforeAndAfterAll {
+class KustoBlobAccessE2E extends AnyFlatSpec with BeforeAndAfterAll with ParallelTestExecution {
   private val myName = this.getClass.getSimpleName
 
   private val nofExecutors = 4

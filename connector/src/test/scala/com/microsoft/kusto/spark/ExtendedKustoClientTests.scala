@@ -17,13 +17,14 @@ import com.microsoft.kusto.spark.utils.ExtendedKustoClient
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{mock, times, verify}
+import org.scalatest.ParallelTestExecution
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
 import java.util
 import scala.collection.JavaConverters._
 
-class ExtendedKustoClientTests extends AnyFlatSpec with Matchers {
+class ExtendedKustoClientTests extends AnyFlatSpec with Matchers with ParallelTestExecution {
   private val kustoCoordinates = KustoCoordinates("", "", "database", Some("table"))
   class ExtendedKustoClientStub(
       override val engineKcsb: ConnectionStringBuilder,

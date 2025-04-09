@@ -80,7 +80,8 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
         generateAlterIngestionBatchingPolicyCommand(
           "database",
           kustoConnectionOptions.database,
-          "{\"\"MaximumBatchingTimeSpan\"\":\"\"00:00:10\"\", \"\"MaximumNumberOfItems\"\": 500, \"\"MaximumRawDataSizeMB\"\": 1024}"))) match {
+          "{\"\"MaximumBatchingTimeSpan\"\":\"\"00:00:10\"\", \"\"MaximumNumberOfItems\"\": 500, " +
+            "\"\"MaximumRawDataSizeMB\"\": 1024}"))) match {
       case Success(_) => KDSU.logDebug(className, "Ingestion policy applied")
       case Failure(exception: Throwable) =>
         KDSU.reportExceptionAndThrow(
