@@ -212,8 +212,6 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
   }
 
   def answer[T](f: InvocationOnMock => T): Answer[T] = {
-    new Answer[T] {
-      override def answer(invocation: InvocationOnMock): T = f(invocation)
-    }
+    (invocation: InvocationOnMock) => f(invocation)
   }
 }
