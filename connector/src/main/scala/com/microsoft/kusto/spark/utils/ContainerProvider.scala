@@ -184,9 +184,11 @@ class ContainerProvider(
     val key = ingestionStorageParameter.toString
 
     // If the cache has not expired and the key is already in the cache, return the cached value
-    KDSU.logInfo("ContainerProvider", s" Checking cache for Key: $key")
+    KDSU.logDebug("ContainerProvider", s" Checking cache for Key: $key")
     if (!isCacheExpired && sasKeyCacheMap.containsKey(key)) {
-      val normalizedSas = normalizeSasKey(sasKeyCacheMap.get(key).sas)
+      // we have populated this into the cache. It is already normalized
+      KDSU.logInfo(className, "Using SAS token from ingestion storage from cache")
+      val normalizedSas = sasKeyCacheMap.get(key).sas
       (
         false,
         ContainerAndSas(
@@ -195,7 +197,7 @@ class ContainerProvider(
     } else {
       if (StringUtils.isNotEmpty(ingestionStorageParameter.sas)) {
         KDSU.logInfo(className, "Using SAS token from ingestion storage parameter")
-        val normalizedSas = normalizeSasKey(ingestionStorageParameter.sas)
+        val normalizedSas = ingestionStorageParameter.sas
         (
           false,
           ContainerAndSas(
@@ -206,7 +208,6 @@ class ContainerProvider(
           className,
           s"Using user supplied ingestion storage $ingestionStorageParameter.Expires at " +
             s"${OffsetDateTime.now.plusSeconds(cacheExpirySeconds)}")
-
         val sasToken: String = normalizeSasKey(generateSasKey(cacheExpirySeconds, listPermissions, ingestionStorageParameter))
         // Cache the SAS token for future use
         val containerAndSas = ContainerAndSas(
