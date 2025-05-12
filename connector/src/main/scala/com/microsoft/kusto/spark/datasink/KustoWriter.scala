@@ -154,12 +154,14 @@ object KustoWriter {
           stagingTableIngestionProperties.creationTime == null)
       }
 
-      kustoClient.setMappingOnStagingTableIfNeeded(
-        stagingTableIngestionProperties,
-        tableCoordinates.database,
-        tmpTableName,
-        table,
-        crp)
+      if (writeOptions.writeMode == WriteMode.Transactional) {
+        kustoClient.setMappingOnStagingTableIfNeeded(
+          stagingTableIngestionProperties,
+          tableCoordinates.database,
+          tmpTableName,
+          table,
+          crp)
+      }
       if (stagingTableIngestionProperties.flushImmediately) {
         KDSU.logWarn(className, "It's not recommended to set flushImmediately to true")
       }
