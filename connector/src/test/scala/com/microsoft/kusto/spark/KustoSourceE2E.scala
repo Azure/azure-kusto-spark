@@ -1,20 +1,26 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
-
 package com.microsoft.kusto.spark
 
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.{Client, ClientFactory, ClientRequestProperties}
 import com.microsoft.kusto.spark.KustoTestUtils.{KustoConnectionOptions, getSystemTestOptions}
-import com.microsoft.kusto.spark.authentication.AzureTokenTokenProvider
 import com.microsoft.kusto.spark.common.KustoDebugOptions
-import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode, SparkIngestionProperties}
-import com.microsoft.kusto.spark.datasource.{KustoSourceOptions, ReadMode, TransientStorageCredentials, TransientStorageParameters}
+import com.microsoft.kusto.spark.datasink.{
+  KustoSinkOptions,
+  SinkTableCreationMode,
+  SparkIngestionProperties
+}
+import com.microsoft.kusto.spark.datasource.{
+  KustoSourceOptions,
+  ReadMode,
+  TransientStorageCredentials,
+  TransientStorageParameters
+}
 import com.microsoft.kusto.spark.sql.extension.SparkExtension._
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
-import com.microsoft.kusto.spark.utils.{KustoAzureFsSetupCache, KustoQueryUtils, KustoDataSourceUtils => KDSU}
-import org.apache.hadoop.fs.azurebfs.oauth2.AzureADToken
+import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.hadoop.util.ComparableVersion
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode, SparkSession}
@@ -24,14 +30,14 @@ import org.scalatest.flatspec.AnyFlatSpec
 import java.security.InvalidParameterException
 import java.time.temporal.ChronoUnit
 import java.time.{Clock, Instant}
-import java.util.{Date, UUID}
+import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.immutable
 import scala.util.{Failure, Random, Success, Try}
 
 class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
   private lazy val kustoConnectionOptions: KustoConnectionOptions =
-    getSystemTestOptions(true)
+    getSystemTestOptions
   private val nofExecutors = 4
   private val spark: SparkSession = SparkSession
     .builder()
@@ -45,8 +51,7 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
     KustoQueryUtils.simplifyName(s"KustoSparkReadWriteTest_${UUID.randomUUID()}")
   private val className = this.getClass.getSimpleName
   private lazy val ingestUrl =
-    new StringBuffer(KDSU.getEngineUrlFromAliasIfNeeded(kustoConnectionOptions.cluster))
-      .toString
+    new StringBuffer(KDSU.getEngineUrlFromAliasIfNeeded(kustoConnectionOptions.cluster)).toString
       .replace("https://", "https://ingest-")
 
   private lazy val maybeKustoAdminClient: Option[Client] = Some(
@@ -104,7 +109,7 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
         }
       case None => KDSU.logWarn(className, s"Admin client is null, could not drop table $table ")
     }
-    sc.stop()
+    // sc.stop()
   }
 
   // Init dataFrame
@@ -143,7 +148,7 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
     val crp = new ClientRequestProperties
     crp.setTimeoutInMilliSec(60000)
     val ingestByTags = new java.util.ArrayList[String]
-    val tag = "dammyTag"
+    val tag = "dummyTag"
     ingestByTags.add(tag)
     val sp = new SparkIngestionProperties()
     sp.ingestByTags = ingestByTags
@@ -199,28 +204,32 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
 
   "KustoSource" should "execute a read query on Kusto cluster in single mode" in {
     val conf: Map[String, String] = Map(
-      KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceSingleMode.toString,
+      KustoSourceOptions.KUSTO_READ_MODE -> "ForceSingleMode",
       KustoSourceOptions.KUSTO_ACCESS_TOKEN -> kustoConnectionOptions.accessToken)
     validateRead(conf)
   }
 
   "KustoSource" should "execute a read query with transient storage and impersonation in distributed mode" in {
     // Use sas delegation to create a SAS key for the test storage
-    val sas = KustoTestUtils.generateSasDelegationWithAzCli(kustoConnectionOptions.storageContainerUrl.get)
+    val sas = KustoTestUtils.generateSasDelegationWithAzCli(
+      kustoConnectionOptions.storageContainerUrl.get)
     kustoConnectionOptions.storageContainerUrl.get match {
       case TransientStorageCredentials.SasPattern(
-      storageAccountName, _, domainSuffix, container, _) =>
-
-        spark.sparkContext.hadoopConfiguration.set(
-          s"fs.azure.sas.$container.$storageAccountName.blob.$domainSuffix",
-          sas)
+            storageAccountName,
+            _,
+            domainSuffix,
+            container,
+            _) =>
+        spark.sparkContext.hadoopConfiguration
+          .set(s"fs.azure.sas.$container.$storageAccountName.blob.$domainSuffix", sas)
       case _ => throw new InvalidParameterException("Storage url is invalid")
     }
 
     // Use impersonation to read to the storage, the identity used for testing should be granted permissions over it
     assert(kustoConnectionOptions.storageContainerUrl.get.endsWith(";impersonate"))
     val storage =
-      new TransientStorageParameters(Array(new TransientStorageCredentials(kustoConnectionOptions.storageContainerUrl.get)))
+      new TransientStorageParameters(
+        Array(new TransientStorageCredentials(kustoConnectionOptions.storageContainerUrl.get)))
 
     val conf: Map[String, String] = Map(
       KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceDistributedMode.toString,

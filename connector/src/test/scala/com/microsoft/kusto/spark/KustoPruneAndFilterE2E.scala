@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
-
 package com.microsoft.kusto.spark
 
 import com.microsoft.azure.kusto.data.ClientFactory
@@ -28,7 +27,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.immutable
 
 class KustoPruneAndFilterE2E extends AnyFlatSpec with BeforeAndAfterAll {
-  private lazy val kustoTestConnectionOptions = getSystemTestOptions()
+  private lazy val kustoTestConnectionOptions = getSystemTestOptions
   private val nofExecutors = 4
   private val spark: SparkSession = SparkSession
     .builder()
@@ -49,7 +48,7 @@ class KustoPruneAndFilterE2E extends AnyFlatSpec with BeforeAndAfterAll {
   override def afterAll(): Unit = {
     super.afterAll()
 
-    sc.stop()
+    // sc.stop()
   }
 
   private val loggingLevel: Option[String] = Option(System.getProperty("logLevel"))

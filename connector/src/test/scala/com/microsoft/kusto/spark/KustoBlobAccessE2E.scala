@@ -1,19 +1,28 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
-
 package com.microsoft.kusto.spark
 
 import com.microsoft.azure.kusto.data.ClientFactory
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.kusto.spark.KustoTestUtils.getSystemTestOptions
 import com.microsoft.kusto.spark.datasink.KustoSinkOptions
-import com.microsoft.kusto.spark.datasource.{KustoResponseDeserializer, KustoSourceOptions, TransientStorageCredentials, TransientStorageParameters}
+import com.microsoft.kusto.spark.datasource.{
+  KustoResponseDeserializer,
+  KustoSourceOptions,
+  TransientStorageCredentials,
+  TransientStorageParameters
+}
 import com.microsoft.kusto.spark.sql.extension.SparkExtension._
 
 import java.util.concurrent.atomic.AtomicInteger
 import com.microsoft.kusto.spark.utils.KustoQueryUtils.getQuerySchemaQuery
-import com.microsoft.kusto.spark.utils.{CslCommandsGenerator, KustoBlobStorageUtils, KustoQueryUtils, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.{
+  CslCommandsGenerator,
+  KustoBlobStorageUtils,
+  KustoQueryUtils,
+  KustoDataSourceUtils => KDSU
+}
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{SQLContext, SparkSession}
 import org.scalatest.BeforeAndAfterAll
@@ -44,10 +53,10 @@ class KustoBlobAccessE2E extends AnyFlatSpec with BeforeAndAfterAll {
 
   override def afterAll(): Unit = {
     super.afterAll()
-    sc.stop()
+    // sc.stop()
   }
 
-  private lazy val kustoTestConnectionOptions = getSystemTestOptions()
+  private lazy val kustoTestConnectionOptions = getSystemTestOptions
   private val table: String = System.getProperty(KustoSinkOptions.KUSTO_TABLE, "")
   private val storageAccount: String =
     System.getProperty("storageAccount", "sparkblobforkustomichael")

@@ -4,6 +4,12 @@
 package com.microsoft.kusto.spark.datasink
 
 import com.microsoft.kusto.spark.common.KustoOptions
+import com.microsoft.kusto.spark.datasink.SchemaAdjustmentMode.{
+  NoAdjustment,
+  SchemaAdjustmentMode
+}
+import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
+import com.microsoft.kusto.spark.datasink.WriteMode.{Transactional, WriteMode}
 import com.microsoft.kusto.spark.utils.KustoConstants
 
 import java.util.UUID
@@ -78,6 +84,9 @@ object KustoSinkOptions extends KustoOptions {
   // The chunk size that we want to use while iterating over "streaming batch". The default is 4MB.
   // Every streaming ingest will be sent in chunks of this size.
   val KUSTO_STREAMING_INGEST_SIZE_IN_MB: String = newOption("streamingIngestSizeInMB")
+
+  // The ingestion storage to use. This expects a serialized json of type Array[IngestionStorageParameters]
+  val KUSTO_INGESTION_STORAGE: String = newOption("kustoIngestionStorageContainer")
 }
 
 object SinkTableCreationMode extends Enumeration {
@@ -95,26 +104,26 @@ object WriteMode extends Enumeration {
   val Transactional, Queued, KustoStreaming = Value
 }
 
-case class WriteOptions(
-                         pollingOnDriver: Boolean = false,
-                         tableCreateOptions: SinkTableCreationMode.SinkTableCreationMode =
-      SinkTableCreationMode.FailIfNotExist,
-                         isAsync: Boolean = false,
-                         writeResultLimit: String = KustoSinkOptions.NONE_RESULT_LIMIT,
-                         timeZone: String = "UTC",
-                         timeout: FiniteDuration = new FiniteDuration(
+final case class WriteOptions(
+    pollingOnDriver: Boolean = false,
+    tableCreateOptions: SinkTableCreationMode = SinkTableCreationMode.FailIfNotExist,
+    isAsync: Boolean = false,
+    writeResultLimit: String = KustoSinkOptions.NONE_RESULT_LIMIT,
+    timeZone: String = "UTC",
+    timeout: FiniteDuration = new FiniteDuration(
       KustoConstants.DefaultWaitingIntervalLongRunning.toInt,
       TimeUnit.SECONDS),
-                         maybeSparkIngestionProperties: Option[SparkIngestionProperties] = None,
-                         batchLimit: Int = KustoConstants.DefaultBatchingLimit,
-                         requestId: String = UUID.randomUUID().toString,
-                         autoCleanupTime: FiniteDuration =
+    maybeSparkIngestionProperties: Option[SparkIngestionProperties] = None,
+    batchLimit: Int = KustoConstants.DefaultBatchingLimit,
+    requestId: String = UUID.randomUUID().toString,
+    autoCleanupTime: FiniteDuration =
       new FiniteDuration(KustoConstants.DefaultCleaningInterval.toInt, TimeUnit.SECONDS),
-                         maxRetriesOnMoveExtents: Int = 10,
-                         minimalExtentsCountForSplitMerge: Int = 400,
-                         adjustSchema: SchemaAdjustmentMode.SchemaAdjustmentMode = SchemaAdjustmentMode.NoAdjustment,
-                         writeMode: WriteMode.WriteMode = WriteMode.Transactional,
-                         userTempTableName: Option[String] = None,
-                         disableFlushImmediately: Boolean = false,
-                         ensureNoDupBlobs: Boolean = false,
-                         streamIngestUncompressedMaxSize: Int = KustoConstants.DefaultMaxStreamingBytesUncompressed)
+    maxRetriesOnMoveExtents: Int = 10,
+    minimalExtentsCountForSplitMerge: Int = 400,
+    adjustSchema: SchemaAdjustmentMode = NoAdjustment,
+    writeMode: WriteMode = Transactional,
+    userTempTableName: Option[String] = None,
+    disableFlushImmediately: Boolean = false,
+    ensureNoDupBlobs: Boolean = false,
+    streamIngestUncompressedMaxSize: Int = KustoConstants.DefaultMaxStreamingBytesUncompressed,
+    maybeIngestionBlobStorage: Option[Array[IngestionStorageParameters]] = None)
