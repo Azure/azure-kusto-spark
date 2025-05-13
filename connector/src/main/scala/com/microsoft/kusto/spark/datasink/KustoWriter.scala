@@ -162,9 +162,6 @@ object KustoWriter {
           table,
           crp)
       }
-      if (stagingTableIngestionProperties.flushImmediately) {
-        KDSU.logWarn(className, "It's not recommended to set flushImmediately to true")
-      }
 
       if (stagingTableIngestionProperties.flushImmediately) {
         KDSU.logWarn(
