@@ -12,14 +12,30 @@ import com.microsoft.azure.kusto.ingest.exceptions.IngestionServiceException
 import com.microsoft.azure.kusto.ingest.resources.ContainerWithSas
 import com.microsoft.azure.kusto.ingest.result.IngestionResult
 import com.microsoft.azure.kusto.ingest.source.{BlobSourceInfo, StreamSourceInfo}
-import com.microsoft.azure.kusto.ingest.{IngestClient, IngestionProperties, ManagedStreamingIngestClient}
+import com.microsoft.azure.kusto.ingest.{
+  IngestClient,
+  IngestionProperties,
+  ManagedStreamingIngestClient
+}
 import com.microsoft.azure.storage.blob.{BlobRequestOptions, CloudBlockBlob}
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.FinalizeHelper.finalizeIngestionWhenWorkersSucceeded
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator.generateTableGetSchemaAsRowsCommand
-import com.microsoft.kusto.spark.utils.KustoConstants.{IngestSkippedTrace, MaxIngestRetryAttempts, WarnStreamingBytes}
-import com.microsoft.kusto.spark.utils.{ByteArrayOutputStreamWithOffset, ExtendedKustoClient, KustoClientCache, KustoIngestionUtils, KustoQueryUtils, KustoConstants => KCONST, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.KustoConstants.{
+  IngestSkippedTrace,
+  MaxIngestRetryAttempts,
+  WarnStreamingBytes
+}
+import com.microsoft.kusto.spark.utils.{
+  ByteArrayOutputStreamWithOffset,
+  ExtendedKustoClient,
+  KustoClientCache,
+  KustoIngestionUtils,
+  KustoQueryUtils,
+  KustoConstants => KCONST,
+  KustoDataSourceUtils => KDSU
+}
 import io.github.resilience4j.retry.RetryConfig
 import org.apache.commons.io.IOUtils
 import org.apache.commons.io.output.CountingOutputStream
@@ -345,18 +361,19 @@ object KustoWriter {
     //    val byteArrayPool = Array[ByteArrayOutputStream](new ByteArrayOutputStream(), null)// Init the 2nd lazy.
     //    val byteArrayOutputStream = byteArrayPool[]
     var byteArrayOutputStream = new ByteArrayOutputStreamWithOffset()
-    var streamWriter = new OutputStreamWriter(byteArrayOutputStream)
+    var countingOutputStream = new CountingOutputStream(byteArrayOutputStream)
+    var streamWriter = new OutputStreamWriter(countingOutputStream)
     var writer = new BufferedWriter(streamWriter)
-    var csvWriter = CountingWriter(writer)
+    var csvWriter = new CountingWriter(writer)
     var totalSize = 0L
     var lastIndex = 0
     for ((row, index) <- rows.zipWithIndex) {
       RowCSVWriterUtils.writeRowAsCSV(row, parameters.schema, timeZone, csvWriter)
-      if (csvWriter.getCounter >= parameters.writeOptions.streamIngestUncompressedMaxSize) {
+      if (countingOutputStream.getByteCount >= parameters.writeOptions.streamIngestUncompressedMaxSize) {
         KDSU.logWarn(
           className,
           s"Batch $batchIdForTracing exceeds the max streaming size ${parameters.writeOptions.streamIngestUncompressedMaxSize} " +
-            s"MB compressed!.Streaming ${csvWriter.getCounter} bytes from batch $batchIdForTracing." +
+            s"MB compressed!.Streaming ${countingOutputStream.getByteCount} bytes from batch $batchIdForTracing." +
             s"Index of the batch ($index).")
         writer.flush()
         streamWriter.flush()
@@ -378,8 +395,9 @@ object KustoWriter {
           lastIndex = bb2.size()
           // TODO Is it really better > (other option is to copy the data from the stream to a new stream - which i try to avoid)?
           streamWriter = new OutputStreamWriter(byteArrayOutputStream)
+          countingOutputStream = new CountingOutputStream(byteArrayOutputStream)
           writer = new BufferedWriter(streamWriter)
-          csvWriter = CountingWriter(writer, bb2.size())
+          csvWriter = new CountingWriter(writer, bb2.size())
         } else {
           KDSU.logInfo(
             className,
@@ -392,8 +410,9 @@ object KustoWriter {
             streamingClient,
             byteArrayOutputStream.size())
           byteArrayOutputStream.reset()
-          totalSize += csvWriter.getCounter
+          totalSize += countingOutputStream.getByteCount
           csvWriter.resetCounter()
+          countingOutputStream.resetByteCount()
         }
       } else {
         // flush before counting output size
@@ -524,12 +543,13 @@ object KustoWriter {
     val currentSas = containerAndSas.sas
     val options = new BlobRequestOptions()
     options.setConcurrentRequestCount(4) // Should be configured from outside
-    val countingOutputStream = new CountingOutputStream(currentBlob.openOutputStream(null, options, null))
+    val countingOutputStream = new CountingOutputStream(
+      currentBlob.openOutputStream(null, options, null))
     val gzip: GZIPOutputStream = new GZIPOutputStream(countingOutputStream)
     val writer = new OutputStreamWriter(gzip, StandardCharsets.UTF_8)
     val buffer: BufferedWriter = new BufferedWriter(writer, GzipBufferSize)
-    val csvWriter = CountingWriter(buffer)
-    BlobWriteResource(buffer, gzip, csvWriter, currentBlob, currentSas)
+    val csvWriter = new CountingWriter(buffer)
+    BlobWriteResource(buffer, gzip, csvWriter, currentBlob, currentSas, countingOutputStream)
   }
 
   @throws[IOException]
@@ -594,7 +614,7 @@ object KustoWriter {
                 className,
                 e,
                 s"Queueing blob for ingestion, retry number '$i', in partition " +
-                  s"$partitionIdString for requestId: '${parameters.writeOptions.requestId}")
+                  s"$partitionIdString for requestId: '${parameters.writeOptions.requestId} blob: $blobUUID")
               val blobUrlWithSas =
                 s"${blobResource.blob.getStorageUri.getPrimaryUri.toString}${blobResource.sas}"
               val containerWithSas = new ContainerWithSas(blobUrlWithSas, null)
@@ -626,21 +646,35 @@ object KustoWriter {
     // Serialize rows to ingest and send to blob storage.
     val lastBlobWriter = rows.zipWithIndex.foldLeft[BlobWriteResource](initialBlobWriter) {
       case (blobWriter, row) =>
+        println(
+          "--------------->>>>>> blob size before : " + blobWriter.csvWriter.getCounter + " : blobuuid: " + curBlobUUID);
         RowCSVWriterUtils.writeRowAsCSV(row._1, parameters.schema, timeZone, blobWriter.csvWriter)
 
-        val count = blobWriter.csvWriter.getCounter
+        val count =
+          blobWriter.countingOutputStream.getByteCount // blobWriter.csvWriter.getCounter
+        println(
+          "--------------->>>>>> blob size AFTER : " + blobWriter.csvWriter.getCounter + " : blobuuid: " + curBlobUUID + " : Maxsize; " + maxBlobSize);
         val shouldNotCommitBlockBlob = count < maxBlobSize
         if (shouldNotCommitBlockBlob) {
+          println("----------->>> Not committing blob yet, size: " + count);
           blobWriter
         } else {
+          println(
+            "--------------->>>>>> blob size: maxedout " + count + " : blobuuid: " + curBlobUUID);
+          KDSU.logInfo(
+            className,
+            s"ELSEEEEE  blob in partition $partitionIdString for requestId: '${parameters.writeOptions.requestId}', " +
+              s"blob number ${row._2}, with size $count blob: $curBlobUUID ${blobWriter.countingOutputStream.getByteCount}")
           if (parameters.writeOptions.ensureNoDupBlobs) {
             taskMap.put(curBlobUUID, blobWriter)
           } else {
             KDSU.logInfo(
               className,
               s"Sealing blob in partition $partitionIdString for requestId: '${parameters.writeOptions.requestId}', " +
-                s"blob number ${row._2}, with size $count")
+                s"blob number ${row._2}, with size $count blob: $curBlobUUID")
             finalizeBlobWrite(blobWriter)
+            println(
+              "--------------->>>>>> blob size: maxedout : ingest size: " + blobWriter.countingOutputStream.getByteCount);
             ingest(
               blobWriter,
               blobWriter.csvWriter.getCounter,
@@ -663,6 +697,8 @@ object KustoWriter {
       if (parameters.writeOptions.ensureNoDupBlobs) {
         taskMap.put(curBlobUUID, lastBlobWriter)
       } else {
+        println(
+          "------------->>>>>> ingesting the data ensure nodupes : " + lastBlobWriter.csvWriter.getCounter);
         ingest(
           lastBlobWriter,
           lastBlobWriter.csvWriter.getCounter,
@@ -676,6 +712,8 @@ object KustoWriter {
       taskMap.forEach((uuid, bw) => {
         ingest(bw, bw.csvWriter.getCounter, bw.sas, flushImmediately = false, uuid, kustoClient)
       })
+      println(
+        "------------->>>>>> finishing the ingestrows: " + lastBlobWriter.csvWriter.getCounter);
     }
   }
 
@@ -687,7 +725,13 @@ object KustoWriter {
   }
 }
 
-final case class BlobWriteResource(writer: BufferedWriter, gzip: OutputStream, csvWriter: CountingWriter, blob: CloudBlockBlob, sas: String)
+final case class BlobWriteResource(
+    writer: BufferedWriter,
+    gzip: OutputStream,
+    csvWriter: CountingWriter,
+    blob: CloudBlockBlob,
+    sas: String,
+    countingOutputStream: CountingOutputStream)
 final case class KustoWriteResource(
     authentication: KustoAuthentication,
     coordinates: KustoCoordinates,
