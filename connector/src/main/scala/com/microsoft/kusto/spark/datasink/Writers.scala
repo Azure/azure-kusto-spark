@@ -3,6 +3,10 @@
 
 package com.microsoft.kusto.spark.datasink
 
+import org.apache.commons.text.StringEscapeUtils
+
+import java.io
+
 trait Writer {
   val newLineSep: String = System.lineSeparator()
 
@@ -22,36 +26,37 @@ trait Writer {
   def resetCounter(): Unit = {}
 }
 
-case class CountingWriter(out: java.io.Writer, var bytesCounter: Long = 0L) extends Writer {
+class CountingWriter(outwriter: java.io.Writer, var bytesCounter: Long = 0L) extends Writer {
 
   override def newLine(): Unit = {
-    out.write(newLineSep)
+    outwriter.write(newLineSep)
     bytesCounter += newLineSepLength
   }
 
   override def write(c: Char): Unit = {
-    out.write(c)
+    outwriter.write(c)
     bytesCounter += 1
   }
   override def write(str: String): Unit = {
-    out.write(str)
+    outwriter.write(str)
     bytesCounter += str.length
   }
 
   override def writeStringField(str: String): Unit = {
     if (str.nonEmpty) {
-      out.write('"')
+      StringEscapeUtils.escapeJava(str)
+      /*outwriter.write('"')
       bytesCounter += 2
       for (c <- str) {
         if (c == '"') {
-          out.write("\"\"")
+          outwriter.write("\"\"")
           bytesCounter += 1
         } else {
-          out.write(c)
+          outwriter.write(c)
         }
       }
-      out.write('"')
-      bytesCounter += str.length
+      outwriter.write('"')
+      bytesCounter += str.length*/
     }
   }
 
@@ -60,9 +65,11 @@ case class CountingWriter(out: java.io.Writer, var bytesCounter: Long = 0L) exte
   override def resetCounter(): Unit = {
     bytesCounter = 0
   }
+
+  override val out: io.Writer = outwriter
 }
 
-case class EscapedWriter(out: java.io.Writer) extends Writer {
+case class EscapedWriter(out: java.io.Writer) extends Writer { // stringEscapUtils
   override def write(c: Char): Unit = {
     out.write(c)
   }
