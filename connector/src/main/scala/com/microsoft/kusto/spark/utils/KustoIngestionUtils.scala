@@ -6,7 +6,7 @@ package com.microsoft.kusto.spark.utils
 import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility
 import com.fasterxml.jackson.annotation.PropertyAccessor
 import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
-import com.microsoft.azure.kusto.ingest.ColumnMapping
+import com.microsoft.azure.kusto.ingest.{ColumnMapping, TransformationMethod}
 import com.microsoft.kusto.spark.datasink.{
   SchemaAdjustmentMode,
   SinkTableCreationMode,
@@ -27,15 +27,31 @@ object KustoIngestionUtils {
       sourceSchema: StructType,
       targetSchema: Array[JsonNode],
       ingestionProperties: SparkIngestionProperties,
-      tableCreationMode: SinkTableCreationMode): Unit = {
+      tableCreationMode: SinkTableCreationMode,
+      kustoCustomDebugWriteOptions: KustoCustomDebugWriteOptions): Unit = {
 
-    mode match {
+    val effectiveMode = if (kustoCustomDebugWriteOptions.addSourceLocationTransform) {
+      SchemaAdjustmentMode.GenerateDynamicCsvMapping
+    } else {
+      mode
+    }
+
+    effectiveMode match {
       case SchemaAdjustmentMode.NoAdjustment =>
       case SchemaAdjustmentMode.FailIfNotMatch => forceAdjustSchema(sourceSchema, targetSchema)
       case SchemaAdjustmentMode.GenerateDynamicCsvMapping =>
-        setCsvMapping(sourceSchema, targetSchema, ingestionProperties, tableCreationMode)
+        val columnMappings = setCsvMapping(
+          sourceSchema,
+          targetSchema,
+          ingestionProperties,
+          includeSourceTransforms = kustoCustomDebugWriteOptions.addSourceLocationTransform,
+          tableCreationMode)
+        val mapping = csvMappingToString(columnMappings.toArray)
+        KustoDataSourceUtils.logDebug(
+          this.getClass.getSimpleName,
+          s"Using CSV mapping : $mapping")
+        ingestionProperties.csvMapping = mapping
     }
-
   }
 
   private[kusto] def forceAdjustSchema(
@@ -57,10 +73,13 @@ object KustoIngestionUtils {
       sourceSchema: StructType,
       targetSchema: Array[JsonNode],
       ingestionProperties: SparkIngestionProperties,
-      tableCreationMode: SinkTableCreationMode): Unit = {
+      includeSourceTransforms: Boolean = false,
+      tableCreationMode: SinkTableCreationMode): Iterable[ColumnMapping] = {
     require(
-      ingestionProperties.csvMappingNameReference == null || ingestionProperties.csvMappingNameReference.isEmpty,
-      "Sink options SparkIngestionProperties.csvMappingNameReference and adjustSchema.GenerateDynamicCsvMapping are not compatible. Use only one.")
+      ingestionProperties.csvMappingNameReference == null
+        || ingestionProperties.csvMappingNameReference.isEmpty,
+      "Sink options SparkIngestionProperties.csvMappingNameReference and adjustSchema." +
+        "GenerateDynamicCsvMapping are not compatible. Use only one.")
 
     val targetSchemaColumns = targetSchema
       .map(c =>
@@ -69,15 +88,19 @@ object KustoIngestionUtils {
           c.get(KustoConstants.Schema.CSLTYPE).asText()))
       .toMap
     val sourceSchemaColumns = sourceSchema.fields.zipWithIndex.map(c => (c._1.name, c._2)).toMap
-    /* This was created for the case where CreateTable is used along with Create CSV mapping. There are 2 options
+    /* This was created for the case where CreateTable is used along with Create CSV mapping.
+    There are 2 options:
     either to not have a mapping or create an explicit identity mapping. Since GenerateCSVMapping is requested explicitly
-    creating an identity mapping made the most appropriate fit */
+    creating an identity mapping made the most appropriate fit
+     */
     val sourceSchemaColumnTypes =
-      if (tableCreationMode == SinkTableCreationMode.CreateIfNotExist)
+      if (tableCreationMode == SinkTableCreationMode.CreateIfNotExist) {
         sourceSchema.fields
           .map(field => (field.name, getSparkTypeToKustoTypeMap(field.dataType)))
           .toMap
-      else Map.empty[String, String]
+      } else {
+        Map.empty[String, String]
+      }
     val notFoundSourceColumns =
       sourceSchemaColumns.filter(c => !targetSchemaColumns.contains(c._1)).keys
     if (notFoundSourceColumns.nonEmpty && targetSchema != null && targetSchema.nonEmpty) {
@@ -85,7 +108,7 @@ object KustoIngestionUtils {
         s"Source schema has columns that are not present in the target: ${notFoundSourceColumns.mkString(", ")}.")
     }
 
-    val columnMappingReset = sourceSchemaColumns
+    val columnMappingsBase = sourceSchemaColumns
       .map(sourceColumn => {
         val targetDataType = targetSchemaColumns.get(sourceColumn._1)
         val columnMapping = targetDataType match {
@@ -99,9 +122,17 @@ object KustoIngestionUtils {
         columnMapping.setOrdinal(sourceColumn._2)
         columnMapping
       })
-    val mapping = csvMappingToString(columnMappingReset.toArray)
-    KustoDataSourceUtils.logDebug(this.getClass.getSimpleName, s"Using CSV mapping : $mapping")
-    ingestionProperties.csvMapping = mapping
+    if (includeSourceTransforms) {
+      val sourceLocationTransform =
+        new ColumnMapping(KustoConstants.SourceLocationColumnName, "string")
+      sourceLocationTransform.setTransform(TransformationMethod.SourceLocation)
+      val sourceLineTransform =
+        new ColumnMapping(KustoConstants.SourceLineNumberColumnName, "long")
+      sourceLineTransform.setTransform(TransformationMethod.SourceLineNumber)
+      columnMappingsBase ++ Seq(sourceLocationTransform, sourceLineTransform)
+    } else {
+      columnMappingsBase
+    }
   }
 
   // Returns the CSV mapping as string

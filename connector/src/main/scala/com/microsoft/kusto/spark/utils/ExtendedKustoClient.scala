@@ -97,6 +97,11 @@ class ExtendedKustoClient(
           val fieldType = DataTypeMapping.getSparkTypeToKustoTypeMap(field.dataType)
           tableSchemaBuilder.add(s"['${field.name}']:$fieldType")
         }
+        // Add the source transforms as well.
+        if (writeOptions.kustoCustomDebugWriteOptions.addSourceLocationTransform) {
+          tableSchemaBuilder.add(s"['${KustoConstants.SourceLocationColumnName}']:string")
+          tableSchemaBuilder.add(s"['${KustoConstants.SourceLineNumberColumnName}']:long")
+        }
         tmpTableSchema = tableSchemaBuilder.toString
         executeEngine(
           database,
@@ -272,13 +277,14 @@ class ExtendedKustoClient(
         crp).getPrimaryResults
     extentsCountQuery.next()
     val extentsCount = extentsCountQuery.getInt(0)
-    if (extentsCount > writeOptions.minimalExtentsCountForSplitMerge) {
+    if (extentsCount > writeOptions.kustoCustomDebugWriteOptions.minimalExtentsCountForSplitMergePerNode) {
       val nodeCountQuery =
         executeEngine(database, generateNodesCountCommand(), "nodesCount", crp).getPrimaryResults
       nodeCountQuery.next()
       val nodeCount = nodeCountQuery.getInt(0)
       moveExtentsWithRetries(
-        Some(nodeCount * writeOptions.minimalExtentsCountForSplitMerge),
+        Some(
+          nodeCount * writeOptions.kustoCustomDebugWriteOptions.minimalExtentsCountForSplitMergePerNode),
         extentsCount,
         database,
         tmpTableName,
@@ -314,8 +320,9 @@ class ExtendedKustoClient(
     var delayPeriodBetweenCalls = DelayPeriodBetweenCalls
     var consecutiveSuccesses = 0
     val useMaterializedViewFlag = shouldUseMaterializedViewFlag(database, targetTable, crp)
-    val firstMoveRetries = writeOptions.maxRetriesOnMoveExtents
-    val secondMovesRetries = Math.max(10, writeOptions.maxRetriesOnMoveExtents)
+    val firstMoveRetries = writeOptions.kustoCustomDebugWriteOptions.maxRetriesOnMoveExtents
+    val secondMovesRetries =
+      Math.max(10, writeOptions.kustoCustomDebugWriteOptions.maxRetriesOnMoveExtents)
     while (extentsProcessed < totalAmount) {
       var error: Object = null
       var res: Option[KustoResultSetTable] = None
