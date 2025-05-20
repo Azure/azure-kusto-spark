@@ -3,7 +3,6 @@
 
 package com.microsoft.kusto.spark.utils
 
-import com.azure.storage.blob.sas.{BlobContainerSasPermission, BlobServiceSasSignatureValues}
 import com.fasterxml.jackson.databind.node.ArrayNode
 import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import com.microsoft.azure.kusto.data._
@@ -14,7 +13,6 @@ import com.microsoft.azure.kusto.ingest.{
   IngestClientFactory,
   ManagedStreamingIngestClient,
   QueuedIngestClient,
-  StreamingIngestClient
 }
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.KustoWriter.DelayPeriodBetweenCalls
