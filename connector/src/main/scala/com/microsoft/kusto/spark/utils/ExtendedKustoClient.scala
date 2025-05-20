@@ -100,7 +100,6 @@ class ExtendedKustoClient(
         // Add the source transforms as well.
         if (writeOptions.kustoCustomDebugWriteOptions.addSourceLocationTransform) {
           tableSchemaBuilder.add(s"['${KustoConstants.SourceLocationColumnName}']:string")
-          tableSchemaBuilder.add(s"['${KustoConstants.SourceLineNumberColumnName}']:long")
         }
         tmpTableSchema = tableSchemaBuilder.toString
         executeEngine(

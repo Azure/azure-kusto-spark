@@ -47,9 +47,6 @@ object KustoConstants {
     "millis")
   val QueueRetryAttempts = 1
   val SourceLocationColumnName = "ingestion_source_location_url_blob_internal"
-  val SourceLineNumberColumnName = "ingestion_source_line_number_internal"
-  val SourceLocationTransform = "SourceLocation"
-  val SourceLineNumberTransform = "SourceLineNumber"
 
   object Schema {
     val NAME: String = "Name"

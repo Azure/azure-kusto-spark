@@ -126,10 +126,7 @@ object KustoIngestionUtils {
       val sourceLocationTransform =
         new ColumnMapping(KustoConstants.SourceLocationColumnName, "string")
       sourceLocationTransform.setTransform(TransformationMethod.SourceLocation)
-      val sourceLineTransform =
-        new ColumnMapping(KustoConstants.SourceLineNumberColumnName, "long")
-      sourceLineTransform.setTransform(TransformationMethod.SourceLineNumber)
-      columnMappingsBase ++ Seq(sourceLocationTransform, sourceLineTransform)
+      columnMappingsBase ++ Seq(sourceLocationTransform)
     } else {
       columnMappingsBase
     }
