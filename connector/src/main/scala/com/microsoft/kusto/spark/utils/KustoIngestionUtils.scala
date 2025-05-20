@@ -5,7 +5,9 @@ package com.microsoft.kusto.spark.utils
 
 import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility
 import com.fasterxml.jackson.annotation.PropertyAccessor
+import com.fasterxml.jackson.core.JsonParser
 import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
+import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import com.microsoft.azure.kusto.ingest.{ColumnMapping, TransformationMethod}
 import com.microsoft.kusto.spark.datasink.{
   SchemaAdjustmentMode,
@@ -19,9 +21,16 @@ import com.microsoft.kusto.spark.utils.DataTypeMapping.{
   SparkTypeToKustoTypeMap,
   getSparkTypeToKustoTypeMap
 }
+import org.apache.commons.lang3.StringUtils
 import org.apache.spark.sql.types.StructType
 
 object KustoIngestionUtils {
+  lazy private val objectMapper = new ObjectMapper()
+    .registerModule(DefaultScalaModule)
+    .configure(JsonParser.Feature.ALLOW_SINGLE_QUOTES, true)
+    .setVisibility(PropertyAccessor.ALL, Visibility.NONE)
+    .setVisibility(PropertyAccessor.FIELD, Visibility.ANY)
+
   private[kusto] def adjustSchema(
       mode: SchemaAdjustmentMode,
       sourceSchema: StructType,
@@ -30,7 +39,10 @@ object KustoIngestionUtils {
       tableCreationMode: SinkTableCreationMode,
       kustoCustomDebugWriteOptions: KustoCustomDebugWriteOptions): Unit = {
 
-    val effectiveMode = if (kustoCustomDebugWriteOptions.addSourceLocationTransform) {
+    val hasCustomTransforms =
+      StringUtils.isNotEmpty(kustoCustomDebugWriteOptions.customTransforms)
+
+    val effectiveMode = if (hasCustomTransforms) {
       SchemaAdjustmentMode.GenerateDynamicCsvMapping
     } else {
       mode
@@ -44,7 +56,8 @@ object KustoIngestionUtils {
           sourceSchema,
           targetSchema,
           ingestionProperties,
-          includeSourceTransforms = kustoCustomDebugWriteOptions.addSourceLocationTransform,
+          hasCustomTransforms,
+          customTransforms = kustoCustomDebugWriteOptions.customTransforms,
           tableCreationMode)
         val mapping = csvMappingToString(columnMappings.toArray)
         KustoDataSourceUtils.logDebug(
@@ -73,7 +86,8 @@ object KustoIngestionUtils {
       sourceSchema: StructType,
       targetSchema: Array[JsonNode],
       ingestionProperties: SparkIngestionProperties,
-      includeSourceTransforms: Boolean = false,
+      hasCustomTransforms: Boolean = false,
+      customTransforms: String = "",
       tableCreationMode: SinkTableCreationMode): Iterable[ColumnMapping] = {
     require(
       ingestionProperties.csvMappingNameReference == null
@@ -122,14 +136,18 @@ object KustoIngestionUtils {
         columnMapping.setOrdinal(sourceColumn._2)
         columnMapping
       })
-    if (includeSourceTransforms) {
-      val sourceLocationTransform =
-        new ColumnMapping(KustoConstants.SourceLocationColumnName, "string")
-      sourceLocationTransform.setTransform(TransformationMethod.SourceLocation)
-      val sourceLineTransform =
-        new ColumnMapping(KustoConstants.SourceLineNumberColumnName, "long")
-      sourceLineTransform.setTransform(TransformationMethod.SourceLineNumber)
-      columnMappingsBase ++ Seq(sourceLocationTransform, sourceLineTransform)
+    if (hasCustomTransforms) {
+      val customTransformsArr =
+        objectMapper.readValue(customTransforms, classOf[Array[CustomTransform]])
+      val additionalMappings = customTransformsArr.map(customTransform => {
+        val columnMapping =
+          new ColumnMapping(customTransform.targetColumnName, customTransform.cslDataType)
+        // columnMapping.setOrdinal(customTransform.ordinal)
+        columnMapping.setTransform(
+          TransformationMethod.valueOf(customTransform.transformationMethod))
+        columnMapping
+      })
+      columnMappingsBase ++ additionalMappings
     } else {
       columnMappingsBase
     }
@@ -140,9 +158,6 @@ object KustoIngestionUtils {
     if (columnMappings == null) {
       ""
     } else {
-      val objectMapper = new ObjectMapper
-      objectMapper.setVisibility(PropertyAccessor.ALL, Visibility.NONE)
-      objectMapper.setVisibility(PropertyAccessor.FIELD, Visibility.ANY)
       objectMapper.writeValueAsString(columnMappings)
     }
   }

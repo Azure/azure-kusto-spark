@@ -135,5 +135,5 @@ private[kusto] object KustoDebugOptions {
   // Needed only if your task produce big blobs in high volume
   val KUSTO_ENSURE_NO_DUPLICATED_BLOBS: String = newOption("ensureNoDuplicatedBlobs")
 
-  val KUSTO_ADD_SOURCE_LOCATION_TRANSFORM: String = newOption("addSourceLocationTransform")
+  val KUSTO_ADD_SOURCE_LOCATION_TRANSFORM: String = newOption("customTransforms")
 }

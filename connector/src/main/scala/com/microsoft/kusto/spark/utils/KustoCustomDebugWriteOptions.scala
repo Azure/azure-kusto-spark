@@ -13,6 +13,6 @@ final case class KustoCustomDebugWriteOptions(
     maxRetriesOnMoveExtents: Int = DefaultMaxRetriesOnMoveExtents,
     disableFlushImmediately: Boolean = false,
     ensureNoDuplicatedBlobs: Boolean = false,
-    addSourceLocationTransform: Boolean = false,
+    customTransforms: String = "",
     keyVaultPemFilePath: Option[String] = None,
     keyVaultPemFileKey: Option[String] = None)

@@ -4,8 +4,10 @@
 package com.microsoft.kusto.spark.utils
 
 import com.azure.storage.blob.sas.{BlobContainerSasPermission, BlobServiceSasSignatureValues}
+import com.fasterxml.jackson.core.JsonParser
 import com.fasterxml.jackson.databind.node.ArrayNode
 import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
+import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import com.microsoft.azure.kusto.data._
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.exceptions.KustoDataExceptionBase
@@ -55,6 +57,9 @@ class ExtendedKustoClient(
     val ingestKcsb: ConnectionStringBuilder,
     val clusterAlias: String) {
   lazy val engineClient: Client = ClientFactory.createClient(engineKcsb)
+  lazy private val objectMapper = new ObjectMapper()
+    .registerModule(DefaultScalaModule)
+    .configure(JsonParser.Feature.ALLOW_SINGLE_QUOTES, true)
 
   // Reading process does not require ingest client to start working
   lazy val dmClient: Client = ClientFactory.createClient(ingestKcsb)
@@ -98,9 +103,16 @@ class ExtendedKustoClient(
           tableSchemaBuilder.add(s"['${field.name}']:$fieldType")
         }
         // Add the source transforms as well.
-        if (writeOptions.kustoCustomDebugWriteOptions.addSourceLocationTransform) {
-          tableSchemaBuilder.add(s"['${KustoConstants.SourceLocationColumnName}']:string")
-          tableSchemaBuilder.add(s"['${KustoConstants.SourceLineNumberColumnName}']:long")
+        val hasCustomTransforms =
+          StringUtils.isNotEmpty(writeOptions.kustoCustomDebugWriteOptions.customTransforms)
+        if (hasCustomTransforms) {
+          val customTransforms = objectMapper.readValue(
+            writeOptions.kustoCustomDebugWriteOptions.customTransforms,
+            classOf[Array[CustomTransform]])
+          customTransforms.foreach(customTransform => {
+            tableSchemaBuilder.add(
+              s"['${customTransform.targetColumnName}']:${customTransform.cslDataType}")
+          })
         }
         tmpTableSchema = tableSchemaBuilder.toString
         executeEngine(

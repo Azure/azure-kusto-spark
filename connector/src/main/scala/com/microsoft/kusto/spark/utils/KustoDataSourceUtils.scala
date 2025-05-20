@@ -480,10 +480,9 @@ object KustoDataSourceUtils {
     val ensureNoDupBlobs =
       parameters.getOrElse(KustoDebugOptions.KUSTO_ENSURE_NO_DUPLICATED_BLOBS, "false").toBoolean
 
-    val addSourceLocationTransform =
+    val customTransforms =
       parameters
-        .getOrElse(KustoDebugOptions.KUSTO_ADD_SOURCE_LOCATION_TRANSFORM, "false")
-        .toBoolean
+        .getOrElse(KustoDebugOptions.KUSTO_ADD_SOURCE_LOCATION_TRANSFORM, "")
 
     val ingestionPropertiesAsJson =
       parameters.get(KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON)
@@ -498,7 +497,7 @@ object KustoDataSourceUtils {
       maxRetriesOnMoveExtents = maxRetriesOnMoveExtents,
       disableFlushImmediately = disableFlushImmediately,
       ensureNoDuplicatedBlobs = ensureNoDupBlobs,
-      addSourceLocationTransform = addSourceLocationTransform)
+      customTransforms = customTransforms)
 
     val writeOptions = WriteOptions(
       pollingOnDriver,
