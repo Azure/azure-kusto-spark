@@ -44,8 +44,7 @@ class CountingWriter(outwriter: java.io.Writer, var bytesCounter: Long = 0L) ext
 
   override def writeStringField(str: String): Unit = {
     if (str.nonEmpty) {
-      StringEscapeUtils.escapeJava(str)
-      /*outwriter.write('"')
+      outwriter.write('"')
       bytesCounter += 2
       for (c <- str) {
         if (c == '"') {
@@ -56,7 +55,7 @@ class CountingWriter(outwriter: java.io.Writer, var bytesCounter: Long = 0L) ext
         }
       }
       outwriter.write('"')
-      bytesCounter += str.length*/
+      bytesCounter += str.length
     }
   }
 
