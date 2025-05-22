@@ -68,7 +68,7 @@ class CountingWriter(outwriter: java.io.Writer, var bytesCounter: Long = 0L) ext
   override val out: io.Writer = outwriter
 }
 
-case class EscapedWriter(out: java.io.Writer) extends Writer { // stringEscapUtils
+case class EscapedWriter(out: java.io.Writer) extends Writer {
   override def write(c: Char): Unit = {
     out.write(c)
   }
