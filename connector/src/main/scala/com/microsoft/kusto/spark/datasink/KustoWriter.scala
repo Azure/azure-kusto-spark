@@ -645,21 +645,14 @@ object KustoWriter {
     // Serialize rows to ingest and send to blob storage.
     val lastBlobWriter = rows.zipWithIndex.foldLeft[BlobWriteResource](initialBlobWriter) {
       case (blobWriter, row) =>
-        println(
-          "--------------->>>>>> blob size before : " + blobWriter.csvWriter.getCounter + " : blobuuid: " + curBlobUUID);
         RowCSVWriterUtils.writeRowAsCSV(row._1, parameters.schema, timeZone, blobWriter.csvWriter)
 
         val count =
           blobWriter.countingOutputStream.getByteCount // blobWriter.csvWriter.getCounter
-        println(
-          "--------------->>>>>> blob size AFTER : " + blobWriter.csvWriter.getCounter + " : blobuuid: " + curBlobUUID + " : Maxsize; " + maxBlobSize);
         val shouldNotCommitBlockBlob = count < maxBlobSize
         if (shouldNotCommitBlockBlob) {
-          println("----------->>> Not committing blob yet, size: " + count);
           blobWriter
         } else {
-          println(
-            "--------------->>>>>> blob size: maxedout " + count + " : blobuuid: " + curBlobUUID);
           KDSU.logInfo(
             className,
             s"ELSEEEEE  blob in partition $partitionIdString for requestId: '${parameters.writeOptions.requestId}', " +
@@ -672,8 +665,6 @@ object KustoWriter {
               s"Sealing blob in partition $partitionIdString for requestId: '${parameters.writeOptions.requestId}', " +
                 s"blob number ${row._2}, with size $count blob: $curBlobUUID")
             finalizeBlobWrite(blobWriter)
-            println(
-              "--------------->>>>>> blob size: maxedout : ingest size: " + blobWriter.countingOutputStream.getByteCount);
             ingest(
               blobWriter,
               blobWriter.csvWriter.getCounter,
@@ -696,8 +687,6 @@ object KustoWriter {
       if (parameters.writeOptions.ensureNoDupBlobs) {
         taskMap.put(curBlobUUID, lastBlobWriter)
       } else {
-        println(
-          "------------->>>>>> ingesting the data ensure nodupes : " + lastBlobWriter.csvWriter.getCounter);
         ingest(
           lastBlobWriter,
           lastBlobWriter.csvWriter.getCounter,
@@ -711,8 +700,6 @@ object KustoWriter {
       taskMap.forEach((uuid, bw) => {
         ingest(bw, bw.csvWriter.getCounter, bw.sas, flushImmediately = false, uuid, kustoClient)
       })
-      println(
-        "------------->>>>>> finishing the ingestrows: " + lastBlobWriter.csvWriter.getCounter);
     }
   }
 
