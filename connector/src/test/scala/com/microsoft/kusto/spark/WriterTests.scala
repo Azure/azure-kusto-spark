@@ -62,7 +62,7 @@ class WriterTests extends AnyFlatSpec with Matchers {
     val byteArrayOutputStream = new ByteArrayOutputStream()
     val streamWriter = new OutputStreamWriter(byteArrayOutputStream)
     val writer = new BufferedWriter(streamWriter)
-    val csvWriter = CountingWriter(writer)
+    val csvWriter = new CountingWriter(writer)
     RowCSVWriterUtils.writeRowAsCSV(
       dfRow,
       df.schema,
@@ -83,7 +83,7 @@ class WriterTests extends AnyFlatSpec with Matchers {
     val byteArrayOutputStream = new ByteArrayOutputStream()
     val streamWriter = new OutputStreamWriter(byteArrayOutputStream)
     val writer = new BufferedWriter(streamWriter)
-    var csvWriter = CountingWriter(writer)
+    var csvWriter = new CountingWriter(writer)
     RowCSVWriterUtils.writeRowAsCSV(
       dfRow,
       df.schema,
@@ -102,7 +102,7 @@ class WriterTests extends AnyFlatSpec with Matchers {
     val byteArrayOutputStream = new ByteArrayOutputStream()
     val streamWriter = new OutputStreamWriter(byteArrayOutputStream)
     val writer = new BufferedWriter(streamWriter)
-    val csvWriter = CountingWriter(writer)
+    val csvWriter = new CountingWriter(writer)
 
     RowCSVWriterUtils.writeRowAsCSV(
       dfRow,
@@ -117,9 +117,9 @@ class WriterTests extends AnyFlatSpec with Matchers {
   "finalizeFileWrite" should "should flush and close buffers" in {
     val gzip = mock(classOf[GZIPOutputStream])
     val buffer = mock(classOf[BufferedWriter])
-    val csvWriter = CountingWriter(buffer)
+    val csvWriter = new CountingWriter(buffer)
 
-    val fileWriteResource = BlobWriteResource(buffer, gzip, csvWriter, null, null)
+    val fileWriteResource = BlobWriteResource(buffer, gzip, csvWriter, null, null, null)
     KustoWriter.finalizeBlobWrite(fileWriteResource)
 
     verify(gzip, times(1)).flush()
@@ -251,7 +251,7 @@ class WriterTests extends AnyFlatSpec with Matchers {
     val byteArrayOutputStream = new ByteArrayOutputStream()
     val streamWriter = new OutputStreamWriter(byteArrayOutputStream)
     val writer = new BufferedWriter(streamWriter)
-    val csvWriter = CountingWriter(writer)
+    val csvWriter = new CountingWriter(writer)
 
     RowCSVWriterUtils.writeRowAsCSV(dfRow, df.schema, tz.getZone, csvWriter)
 
@@ -307,14 +307,13 @@ class WriterTests extends AnyFlatSpec with Matchers {
     val byteArrayOutputStream = new ByteArrayOutputStream()
     val streamWriter = new OutputStreamWriter(byteArrayOutputStream)
     val writer = new BufferedWriter(streamWriter)
-    val csvWriter = CountingWriter(writer)
+    val csvWriter = new CountingWriter(writer)
 
     val someData =
       List(
         "Test string for spark binary".getBytes(),
         "A second test string for spark binary".getBytes(),
-        null
-      )
+        null)
 
     val someSchema = List(StructField("binaryString", BinaryType, nullable = true))
 
@@ -324,9 +323,21 @@ class WriterTests extends AnyFlatSpec with Matchers {
 
     val dfRows: Array[InternalRow] = df.queryExecution.toRdd.collect()
 
-    RowCSVWriterUtils.writeRowAsCSV(dfRows(0), df.schema, TimeZone.getTimeZone("UTC").toZoneId, csvWriter)
-    RowCSVWriterUtils.writeRowAsCSV(dfRows(1), df.schema, TimeZone.getTimeZone("UTC").toZoneId, csvWriter)
-    RowCSVWriterUtils.writeRowAsCSV(dfRows(2), df.schema, TimeZone.getTimeZone("UTC").toZoneId, csvWriter)
+    RowCSVWriterUtils.writeRowAsCSV(
+      dfRows(0),
+      df.schema,
+      TimeZone.getTimeZone("UTC").toZoneId,
+      csvWriter)
+    RowCSVWriterUtils.writeRowAsCSV(
+      dfRows(1),
+      df.schema,
+      TimeZone.getTimeZone("UTC").toZoneId,
+      csvWriter)
+    RowCSVWriterUtils.writeRowAsCSV(
+      dfRows(2),
+      df.schema,
+      TimeZone.getTimeZone("UTC").toZoneId,
+      csvWriter)
 
     writer.flush()
     val res1 = byteArrayOutputStream.toString
