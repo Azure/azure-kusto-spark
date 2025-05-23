@@ -13,7 +13,7 @@ import com.microsoft.azure.kusto.data.{
 }
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.{SparkIngestionProperties, WriteMode, WriteOptions}
-import com.microsoft.kusto.spark.utils.ExtendedKustoClient
+import com.microsoft.kusto.spark.utils.{ExtendedKustoClient, KustoCustomDebugWriteOptions}
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{mock, times, verify}
@@ -77,7 +77,9 @@ class ExtendedKustoClientTests extends AnyFlatSpec with Matchers {
       struct,
       Array(new ObjectMapper().readTree("""{"Type":"System.String",
       "CslType":"string", "Name":"name"}""")),
-      WriteOptions(writeMode = WriteMode.Queued),
+      WriteOptions(
+        writeMode = WriteMode.Queued,
+        kustoCustomDebugWriteOptions = KustoCustomDebugWriteOptions()),
       null,
       true)
     verify(stubbedClient.engineClient, times(0)).execute(any(), any(), any())

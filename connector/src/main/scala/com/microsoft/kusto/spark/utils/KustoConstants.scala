@@ -46,6 +46,7 @@ object KustoConstants {
     MaxIngestRetryAttempts * (DefaultExecutionQueueing + DefaultTimeoutQueueing) + 2000,
     "millis")
   val QueueRetryAttempts = 1
+  val SourceLocationColumnName = "ingestion_source_location_url_blob_internal"
 
   object Schema {
     val NAME: String = "Name"

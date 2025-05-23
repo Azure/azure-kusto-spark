@@ -476,8 +476,14 @@ object KustoDataSourceUtils {
 
     val disableFlushImmediately =
       parameters.getOrElse(KustoDebugOptions.KUSTO_DISABLE_FLUSH_IMMEDIATELY, "false").toBoolean
+
     val ensureNoDupBlobs =
       parameters.getOrElse(KustoDebugOptions.KUSTO_ENSURE_NO_DUPLICATED_BLOBS, "false").toBoolean
+
+    val addSourceLocationTransform =
+      parameters
+        .getOrElse(KustoDebugOptions.KUSTO_ADD_SOURCE_LOCATION_TRANSFORM, "false")
+        .toBoolean
 
     val ingestionPropertiesAsJson =
       parameters.get(KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON)
@@ -487,6 +493,12 @@ object KustoDataSourceUtils {
     val maybeSparkIngestionProperties =
       getIngestionProperties(writeMode == WriteMode.KustoStreaming, ingestionPropertiesAsJson)
 
+    val kustoCustomDebugOptions = KustoCustomDebugWriteOptions(
+      minimalExtentsCountForSplitMergePerNode = minimalExtentsCountForSplitMergePerNode,
+      maxRetriesOnMoveExtents = maxRetriesOnMoveExtents,
+      disableFlushImmediately = disableFlushImmediately,
+      ensureNoDuplicatedBlobs = ensureNoDupBlobs,
+      addSourceLocationTransform = addSourceLocationTransform)
 
     val writeOptions = WriteOptions(
       pollingOnDriver,
@@ -499,15 +511,12 @@ object KustoDataSourceUtils {
       batchLimit,
       sourceParameters.requestId,
       autoCleanupTime,
-      maxRetriesOnMoveExtents,
-      minimalExtentsCountForSplitMergePerNode,
       adjustSchema,
       writeMode,
       userTempTableName,
-      disableFlushImmediately,
-      ensureNoDupBlobs,
       streamIngestMaxSize,
-      maybeIngestionStorageParameters)
+      maybeIngestionStorageParameters,
+      kustoCustomDebugOptions)
 
     if (sourceParameters.kustoCoordinates.table.isEmpty) {
       throw new InvalidParameterException(
@@ -517,7 +526,7 @@ object KustoDataSourceUtils {
     logInfo(
       "parseSinkParameters",
       s"Parsed write options for sink: {'table': '${sourceParameters.kustoCoordinates.table}', " +
-        s"'timeout': '${writeOptions.timeout}, 'async': ${writeOptions.isAsync}, 'writeMode': ${writeOptions.writeMode}, "+
+        s"'timeout': '${writeOptions.timeout}, 'async': ${writeOptions.isAsync}, 'writeMode': ${writeOptions.writeMode}, " +
         s"'tableCreationMode': ${writeOptions.tableCreateOptions}, 'writeLimit': ${writeOptions.writeResultLimit}, " +
         s"'batchLimit': ${writeOptions.batchLimit}" +
         s", 'timeout': ${writeOptions.timeout}, 'timezone': ${writeOptions.timeZone}, " +
@@ -532,21 +541,22 @@ object KustoDataSourceUtils {
     SinkParameters(writeOptions, sourceParameters)
   }
 
-  def validateIngestionStorageParameters(parameters: Map[String, String]): Option[Array[IngestionStorageParameters]] = {
+  def validateIngestionStorageParameters(
+      parameters: Map[String, String]): Option[Array[IngestionStorageParameters]] = {
     val maybeIngestionStorageParameters: Option[Array[IngestionStorageParameters]] =
       parameters
         .get(KustoSinkOptions.KUSTO_INGESTION_STORAGE)
         .map(is => IngestionStorageParameters.fromString(is))
 
     maybeIngestionStorageParameters match {
-      case Some(arrayOfIngestionStorageParameters) => arrayOfIngestionStorageParameters.foreach(ingestionStorageParameter
-      => {
-        if (StringUtils.isEmpty(ingestionStorageParameter.containerName) || StringUtils.isEmpty(
-          ingestionStorageParameter.storageUrl)) {
-          throw new IllegalArgumentException(
-            "storageUrl and containerName must be set when supplying ingestion storage")
-        }
-      })
+      case Some(arrayOfIngestionStorageParameters) =>
+        arrayOfIngestionStorageParameters.foreach(ingestionStorageParameter => {
+          if (StringUtils.isEmpty(ingestionStorageParameter.containerName) || StringUtils.isEmpty(
+              ingestionStorageParameter.storageUrl)) {
+            throw new IllegalArgumentException(
+              "storageUrl and containerName must be set when supplying ingestion storage")
+          }
+        })
       case None => logDebug("parseSinkParameters", "Using DM provided storage for ingestion")
     }
     maybeIngestionStorageParameters

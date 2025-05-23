@@ -10,7 +10,7 @@ import com.microsoft.kusto.spark.datasink.SchemaAdjustmentMode.{
 }
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
 import com.microsoft.kusto.spark.datasink.WriteMode.{Transactional, WriteMode}
-import com.microsoft.kusto.spark.utils.KustoConstants
+import com.microsoft.kusto.spark.utils.{KustoConstants, KustoCustomDebugWriteOptions}
 
 import java.util.UUID
 import java.util.concurrent.TimeUnit
@@ -118,12 +118,9 @@ final case class WriteOptions(
     requestId: String = UUID.randomUUID().toString,
     autoCleanupTime: FiniteDuration =
       new FiniteDuration(KustoConstants.DefaultCleaningInterval.toInt, TimeUnit.SECONDS),
-    maxRetriesOnMoveExtents: Int = 10,
-    minimalExtentsCountForSplitMerge: Int = 400,
     adjustSchema: SchemaAdjustmentMode = NoAdjustment,
     writeMode: WriteMode = Transactional,
     userTempTableName: Option[String] = None,
-    disableFlushImmediately: Boolean = false,
-    ensureNoDupBlobs: Boolean = false,
     streamIngestUncompressedMaxSize: Int = KustoConstants.DefaultMaxStreamingBytesUncompressed,
-    maybeIngestionBlobStorage: Option[Array[IngestionStorageParameters]] = None)
+    maybeIngestionBlobStorage: Option[Array[IngestionStorageParameters]] = None,
+    kustoCustomDebugWriteOptions: KustoCustomDebugWriteOptions)
