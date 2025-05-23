@@ -110,9 +110,10 @@ object KustoIngestionUtils {
           this.getClass.getSimpleName,
           s"Source schema has columns that are not present in the target: ${notFoundSourceColumns.mkString(",")}. " +
             s"However, since the option 'addSourceLocationTransform' is set to true, the ingestion will continue.")
-      } else {}
-      throw SchemaMatchException(
-        s"Source schema has columns that are not present in the target: ${notFoundSourceColumns.mkString(", ")}.")
+      } else {
+        throw SchemaMatchException(
+          s"Source schema has columns that are not present in the target: ${notFoundSourceColumns.mkString(", ")}.")
+      }
     }
 
     val columnMappingsBase = sourceSchemaColumns
