@@ -102,7 +102,7 @@ object KustoIngestionUtils {
         Map.empty[String, String]
       }
     val notFoundSourceColumns =
-      sourceSchemaColumns.filter(c => !targetSchemaColumns.contains(c._1)).keys
+      sourceSchemaColumns.filter(c => !targetSchemaColumns.contains(c._1)).keys.toSet
     if (notFoundSourceColumns.nonEmpty && targetSchema != null && targetSchema.nonEmpty) {
       // TODO Add
       if (includeSourceTransforms) {
@@ -116,7 +116,7 @@ object KustoIngestionUtils {
       }
     }
 
-    val columnMappingsBase = sourceSchemaColumns
+    val columnMappingsBase = sourceSchemaColumns.filter(sourceColumn => !notFoundSourceColumns.contains(sourceColumn._1))
       .map(sourceColumn => {
         val targetDataType = targetSchemaColumns.get(sourceColumn._1)
         val columnMapping = targetDataType match {
