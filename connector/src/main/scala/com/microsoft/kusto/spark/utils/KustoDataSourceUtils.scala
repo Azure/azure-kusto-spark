@@ -548,7 +548,7 @@ object KustoDataSourceUtils {
       disableFlushImmediately: Boolean,
       ensureNoDupBlobs: Boolean,
       addSourceLocationTransform: Boolean,
-      maybeSparkIngestionProperties: Option[SparkIngestionProperties]) = {
+      maybeSparkIngestionProperties: Option[SparkIngestionProperties]): KustoCustomDebugWriteOptions = {
 
     val isMappingAlreadyPresent = maybeSparkIngestionProperties match {
       case Some(sparkIngestionProperties) =>
