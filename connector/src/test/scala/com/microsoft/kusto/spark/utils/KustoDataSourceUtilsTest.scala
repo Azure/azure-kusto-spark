@@ -189,11 +189,11 @@ class KustoDataSourceUtilsTest extends AnyFlatSpec with MockFactory {
       addSourceLocationTransform = false,
       maybeSparkIngestionProperties = None)
 
-    result.minimalExtentsCountForSplitMergePerNode == 1
-    result.maxRetriesOnMoveExtents == 3
-    result.disableFlushImmediately == false
-    result.ensureNoDuplicatedBlobs == false
-    result.addSourceLocationTransform == false
+    assert(result.minimalExtentsCountForSplitMergePerNode == 1)
+    assert(result.maxRetriesOnMoveExtents == 3)
+    assert(!result.disableFlushImmediately)
+    assert(!result.ensureNoDuplicatedBlobs)
+    assert(!result.addSourceLocationTransform)
   }
 
   it should "throw IllegalArgumentException when addSourceLocationTransform is true and ingestion properties contain mapping" in {
@@ -224,11 +224,11 @@ class KustoDataSourceUtilsTest extends AnyFlatSpec with MockFactory {
       addSourceLocationTransform = true,
       maybeSparkIngestionProperties = Some(sparkIngestionProperties))
 
-    result.addSourceLocationTransform == true
-    result.minimalExtentsCountForSplitMergePerNode == 5
-    result.maxRetriesOnMoveExtents == 10
-    result.disableFlushImmediately == true
-    result.ensureNoDuplicatedBlobs == true
+    assert(result.addSourceLocationTransform)
+    assert(result.minimalExtentsCountForSplitMergePerNode == 5)
+    assert(result.maxRetriesOnMoveExtents == 10)
+    assert(result.disableFlushImmediately)
+    assert(result.ensureNoDuplicatedBlobs)
   }
 
   it should "detect mapping from mapping name reference" in {
