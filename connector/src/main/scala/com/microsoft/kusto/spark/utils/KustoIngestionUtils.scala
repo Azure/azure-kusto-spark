@@ -44,7 +44,8 @@ object KustoIngestionUtils {
           sourceSchema,
           targetSchema,
           ingestionProperties,
-          includeSourceTransforms = kustoCustomDebugWriteOptions.addSourceLocationTransform,
+          includeSourceLocationTransform =
+            kustoCustomDebugWriteOptions.addSourceLocationTransform,
           tableCreationMode)
         val mapping = csvMappingToString(columnMappings.toArray)
         KustoDataSourceUtils.logDebug(
@@ -73,7 +74,7 @@ object KustoIngestionUtils {
       sourceSchema: StructType,
       targetSchema: Array[JsonNode],
       ingestionProperties: SparkIngestionProperties,
-      includeSourceTransforms: Boolean = false,
+      includeSourceLocationTransform: Boolean = false,
       tableCreationMode: SinkTableCreationMode): Iterable[ColumnMapping] = {
     require(
       ingestionProperties.csvMappingNameReference == null
@@ -104,19 +105,20 @@ object KustoIngestionUtils {
     val notFoundSourceColumns =
       sourceSchemaColumns.filter(c => !targetSchemaColumns.contains(c._1)).keys.toSet
     if (notFoundSourceColumns.nonEmpty && targetSchema != null && targetSchema.nonEmpty) {
-      // TODO Add
-      if (includeSourceTransforms) {
+      if (includeSourceLocationTransform) {
         KustoDataSourceUtils.logWarn(
           this.getClass.getSimpleName,
           s"Source schema has columns that are not present in the target: ${notFoundSourceColumns.mkString(",")}. " +
             s"However, since the option 'addSourceLocationTransform' is set to true, the ingestion will continue.")
       } else {
         throw SchemaMatchException(
-          s"Source schema has columns that are not present in the target: ${notFoundSourceColumns.mkString(", ")}.")
+          s"Source schema has columns that are not present in the target: ${notFoundSourceColumns
+              .mkString(", ")}.")
       }
     }
 
-    val columnMappingsBase = sourceSchemaColumns.filter(sourceColumn => !notFoundSourceColumns.contains(sourceColumn._1))
+    val columnMappingsBase = sourceSchemaColumns
+      .filter(sourceColumn => !notFoundSourceColumns.contains(sourceColumn._1))
       .map(sourceColumn => {
         val targetDataType = targetSchemaColumns.get(sourceColumn._1)
         val columnMapping = targetDataType match {
@@ -130,7 +132,7 @@ object KustoIngestionUtils {
         columnMapping.setOrdinal(sourceColumn._2)
         columnMapping
       })
-    if (includeSourceTransforms) {
+    if (includeSourceLocationTransform) {
       val sourceLocationTransform =
         new ColumnMapping(KustoConstants.SourceLocationColumnName, "string")
       sourceLocationTransform.setTransform(TransformationMethod.SourceLocation)

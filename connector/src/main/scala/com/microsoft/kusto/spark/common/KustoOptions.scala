@@ -134,6 +134,18 @@ private[kusto] object KustoDebugOptions {
 
   // Needed only if your task produce big blobs in high volume
   val KUSTO_ENSURE_NO_DUPLICATED_BLOBS: String = newOption("ensureNoDuplicatedBlobs")
+  // If set to true, the connector will add a source location transform to the ingestion mapping.
+  // This is useful for debugging and tracing purposes, as it allows you to track the source of the data.
+  // Default: false
 
+  // In case this option is set to true :
+  // a) If the target table already exists and the target column exists (ingestion_source_location_url_blob_internal) then
+  //    the ingestion will succeed and the source location will be added to the target column.
+  // b) If the target table already exists and the target column does not exist, then the column will be not be
+  //    present in the target table.
+  // c) If the target table does not exist, then apart from columns in the dataframe an additional
+  //    column will be created in the target table (ingestion_source_location_url_blob_internal)
+
+  // This option cannot be used in conjunction with the csvMappingNameReference or csvMapping in SparkIngestionProperties.
   val KUSTO_ADD_SOURCE_LOCATION_TRANSFORM: String = newOption("addSourceLocationTransform")
 }

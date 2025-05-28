@@ -3,10 +3,25 @@
 
 package com.microsoft.kusto.spark.utils
 
-import com.microsoft.kusto.spark.datasink.KustoSinkOptions.{KUSTO_CLUSTER, KUSTO_DATABASE, KUSTO_INGESTION_STORAGE, KUSTO_TABLE, KUSTO_TABLE_CREATE_OPTIONS}
-import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SchemaAdjustmentMode}
+import com.microsoft.kusto.spark.datasink.KustoSinkOptions.{
+  KUSTO_CLUSTER,
+  KUSTO_DATABASE,
+  KUSTO_INGESTION_STORAGE,
+  KUSTO_TABLE,
+  KUSTO_TABLE_CREATE_OPTIONS
+}
+import com.microsoft.kusto.spark.datasink.{
+  KustoSinkOptions,
+  SchemaAdjustmentMode,
+  SparkIngestionProperties
+}
 import com.microsoft.kusto.spark.datasource.ReadMode.ForceDistributedMode
-import com.microsoft.kusto.spark.datasource.{KustoReadOptions, KustoSourceOptions, PartitionOptions, ReadMode}
+import com.microsoft.kusto.spark.datasource.{
+  KustoReadOptions,
+  KustoSourceOptions,
+  PartitionOptions,
+  ReadMode
+}
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.prop.TableDrivenPropertyChecks.forAll
@@ -89,19 +104,38 @@ class KustoDataSourceUtilsTest extends AnyFlatSpec with MockFactory {
     val testCombinations =
       Table(
         ("map", "isInvalid", "error"),
-        (mutable.Map(KustoSinkOptions.KUSTO_WRITE_MODE -> "KustoStreaming",
-          KustoSinkOptions.KUSTO_ADJUST_SCHEMA -> SchemaAdjustmentMode.GenerateDynamicCsvMapping.toString), true,
+        (
+          mutable.Map(
+            KustoSinkOptions.KUSTO_WRITE_MODE -> "KustoStreaming",
+            KustoSinkOptions.KUSTO_ADJUST_SCHEMA -> SchemaAdjustmentMode.GenerateDynamicCsvMapping.toString),
+          true,
           "GenerateDynamicCsvMapping cannot be used with Spark streaming ingestion"),
-        (mutable.Map(KustoSinkOptions.KUSTO_WRITE_MODE -> "Queued",
-          KustoSinkOptions.KUSTO_ADJUST_SCHEMA -> SchemaAdjustmentMode.GenerateDynamicCsvMapping.toString), false, ""),
-        (mutable.Map(KustoSinkOptions.KUSTO_WRITE_MODE -> "Transactional",
-          KustoSinkOptions.KUSTO_ADJUST_SCHEMA -> SchemaAdjustmentMode.GenerateDynamicCsvMapping.toString), false, ""),
-        (mutable.Map(KustoSinkOptions.KUSTO_WRITE_MODE -> "KustoStreaming",
-          KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON ->
-            "{\"csvMappingNameReference\":\"a-mapping-ref\"}"), false, ""),
-        (mutable.Map(KustoSinkOptions.KUSTO_WRITE_MODE -> "KustoStreaming",
-          KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON ->
-            "{\"csvMapping\":\"(..a real mapping.)\"}"), true, "CSVMapping cannot be used with Spark streaming ingestion"),
+        (
+          mutable.Map(
+            KustoSinkOptions.KUSTO_WRITE_MODE -> "Queued",
+            KustoSinkOptions.KUSTO_ADJUST_SCHEMA -> SchemaAdjustmentMode.GenerateDynamicCsvMapping.toString),
+          false,
+          ""),
+        (
+          mutable.Map(
+            KustoSinkOptions.KUSTO_WRITE_MODE -> "Transactional",
+            KustoSinkOptions.KUSTO_ADJUST_SCHEMA -> SchemaAdjustmentMode.GenerateDynamicCsvMapping.toString),
+          false,
+          ""),
+        (
+          mutable.Map(
+            KustoSinkOptions.KUSTO_WRITE_MODE -> "KustoStreaming",
+            KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON ->
+              "{\"csvMappingNameReference\":\"a-mapping-ref\"}"),
+          false,
+          ""),
+        (
+          mutable.Map(
+            KustoSinkOptions.KUSTO_WRITE_MODE -> "KustoStreaming",
+            KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON ->
+              "{\"csvMapping\":\"(..a real mapping.)\"}"),
+          true,
+          "CSVMapping cannot be used with Spark streaming ingestion"),
         (mutable.Map("" -> ""), false, "") // falls back to transactional mode
       )
     forAll(testCombinations) { (map, isInvalid, errorMessage) =>
@@ -113,16 +147,15 @@ class KustoDataSourceUtilsTest extends AnyFlatSpec with MockFactory {
         KustoSourceOptions.KUSTO_AAD_APP_SECRET -> "AppKey",
         KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID -> "Tenant",
         KUSTO_TABLE_CREATE_OPTIONS -> "CreateIfNotExist")
-      map.foreach {
-        case (k, v) => conf.put(k, v)
+      map.foreach { case (k, v) =>
+        conf.put(k, v)
       }
       if (isInvalid) {
         val illegalArgumentException = {
           intercept[IllegalArgumentException](
             KustoDataSourceUtils.parseSinkParameters(conf.toMap))
         }
-        assert(
-          illegalArgumentException.getMessage == errorMessage)
+        assert(illegalArgumentException.getMessage == errorMessage)
       }
     }
   }
@@ -139,13 +172,79 @@ class KustoDataSourceUtilsTest extends AnyFlatSpec with MockFactory {
       KustoSourceOptions.KUSTO_AAD_APP_SECRET -> "AppKey",
       KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID -> "Tenant",
       KUSTO_TABLE_CREATE_OPTIONS -> "CreateIfNotExist",
-      KUSTO_INGESTION_STORAGE -> ingestionStorage
-    )
+      KUSTO_INGESTION_STORAGE -> ingestionStorage)
     val illegalArgumentException = {
-      intercept[IllegalArgumentException](
-        KustoDataSourceUtils.parseSinkParameters(conf))
+      intercept[IllegalArgumentException](KustoDataSourceUtils.parseSinkParameters(conf))
     }
     assert(
       illegalArgumentException.getMessage == "storageUrl and containerName must be set when supplying ingestion storage")
+  }
+
+  "validateAndCreateWriteDebugOptions" should "create debug options with default values when no special options specified" in {
+    val result = KustoDataSourceUtils.validateAndCreateWriteDebugOptions(
+      minimalExtentsCountForSplitMergePerNode = 1,
+      maxRetriesOnMoveExtents = 3,
+      disableFlushImmediately = false,
+      ensureNoDupBlobs = false,
+      addSourceLocationTransform = false,
+      maybeSparkIngestionProperties = None)
+
+    result.minimalExtentsCountForSplitMergePerNode == 1
+    result.maxRetriesOnMoveExtents == 3
+    result.disableFlushImmediately == false
+    result.ensureNoDuplicatedBlobs == false
+    result.addSourceLocationTransform == false
+  }
+
+  it should "throw IllegalArgumentException when addSourceLocationTransform is true and ingestion properties contain mapping" in {
+    val sparkIngestionProperties = new SparkIngestionProperties()
+    sparkIngestionProperties.csvMapping = "csv_mapping"
+
+    val exception = intercept[IllegalArgumentException] {
+      KustoDataSourceUtils.validateAndCreateWriteDebugOptions(
+        minimalExtentsCountForSplitMergePerNode = 1,
+        maxRetriesOnMoveExtents = 3,
+        disableFlushImmediately = false,
+        ensureNoDupBlobs = false,
+        addSourceLocationTransform = true,
+        maybeSparkIngestionProperties = Some(sparkIngestionProperties))
+    }
+
+    exception.getMessage == "addSourceLocationTransform cannot be used with Spark ingestion properties"
+  }
+
+  it should "allow addSourceLocationTransform when no mapping is defined" in {
+    val sparkIngestionProperties = new SparkIngestionProperties()
+
+    val result = KustoDataSourceUtils.validateAndCreateWriteDebugOptions(
+      minimalExtentsCountForSplitMergePerNode = 5,
+      maxRetriesOnMoveExtents = 10,
+      disableFlushImmediately = true,
+      ensureNoDupBlobs = true,
+      addSourceLocationTransform = true,
+      maybeSparkIngestionProperties = Some(sparkIngestionProperties))
+
+    result.addSourceLocationTransform == true
+    result.minimalExtentsCountForSplitMergePerNode == 5
+    result.maxRetriesOnMoveExtents == 10
+    result.disableFlushImmediately == true
+    result.ensureNoDuplicatedBlobs == true
+  }
+
+  it should "detect mapping from mapping name reference" in {
+    val sparkIngestionProperties = new SparkIngestionProperties()
+    sparkIngestionProperties.csvMappingNameReference = "some-mapping-reference"
+
+    val exception = intercept[IllegalArgumentException] {
+      KustoDataSourceUtils.validateAndCreateWriteDebugOptions(
+        minimalExtentsCountForSplitMergePerNode = 1,
+        maxRetriesOnMoveExtents = 3,
+        disableFlushImmediately = false,
+        ensureNoDupBlobs = false,
+        addSourceLocationTransform = true,
+        maybeSparkIngestionProperties = Some(sparkIngestionProperties))
+    }
+
+    exception.getMessage == "addSourceLocationTransform cannot be used with Spark ingestion properties"
   }
 }

@@ -493,12 +493,13 @@ object KustoDataSourceUtils {
     val maybeSparkIngestionProperties =
       getIngestionProperties(writeMode == WriteMode.KustoStreaming, ingestionPropertiesAsJson)
 
-    val kustoCustomDebugOptions = KustoCustomDebugWriteOptions(
-      minimalExtentsCountForSplitMergePerNode = minimalExtentsCountForSplitMergePerNode,
-      maxRetriesOnMoveExtents = maxRetriesOnMoveExtents,
-      disableFlushImmediately = disableFlushImmediately,
-      ensureNoDuplicatedBlobs = ensureNoDupBlobs,
-      addSourceLocationTransform = addSourceLocationTransform)
+    val kustoCustomDebugOptions = validateAndCreateWriteDebugOptions(
+      minimalExtentsCountForSplitMergePerNode,
+      maxRetriesOnMoveExtents,
+      disableFlushImmediately,
+      ensureNoDupBlobs,
+      addSourceLocationTransform,
+      maybeSparkIngestionProperties)
 
     val writeOptions = WriteOptions(
       pollingOnDriver,
@@ -539,6 +540,34 @@ object KustoDataSourceUtils {
           else ""}, disableFlushImmediately: $disableFlushImmediately${if (ensureNoDupBlobs) "ensureNoDupBlobs: true"
           else ""}")
     SinkParameters(writeOptions, sourceParameters)
+  }
+
+  def validateAndCreateWriteDebugOptions(
+      minimalExtentsCountForSplitMergePerNode: Int,
+      maxRetriesOnMoveExtents: Int,
+      disableFlushImmediately: Boolean,
+      ensureNoDupBlobs: Boolean,
+      addSourceLocationTransform: Boolean,
+      maybeSparkIngestionProperties: Option[SparkIngestionProperties]) = {
+
+    val isMappingAlreadyPresent = maybeSparkIngestionProperties match {
+      case Some(sparkIngestionProperties) =>
+        StringUtils.isNotEmpty(sparkIngestionProperties.csvMapping) || StringUtils.isNotEmpty(
+          sparkIngestionProperties.csvMappingNameReference)
+      case None => false
+    }
+
+    if (isMappingAlreadyPresent && addSourceLocationTransform) {
+      throw new IllegalArgumentException(
+        "addSourceLocationTransform cannot be used with Spark ingestion properties that already contain a CSV mapping.")
+    }
+
+    KustoCustomDebugWriteOptions(
+      minimalExtentsCountForSplitMergePerNode = minimalExtentsCountForSplitMergePerNode,
+      maxRetriesOnMoveExtents = maxRetriesOnMoveExtents,
+      disableFlushImmediately = disableFlushImmediately,
+      ensureNoDuplicatedBlobs = ensureNoDupBlobs,
+      addSourceLocationTransform = addSourceLocationTransform)
   }
 
   def validateIngestionStorageParameters(
