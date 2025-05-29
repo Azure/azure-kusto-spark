@@ -180,71 +180,88 @@ class KustoDataSourceUtilsTest extends AnyFlatSpec with MockFactory {
       illegalArgumentException.getMessage == "storageUrl and containerName must be set when supplying ingestion storage")
   }
 
-  "validateAndCreateWriteDebugOptions" should "create debug options with default values when no special options specified" in {
-    val result = KustoDataSourceUtils.validateAndCreateWriteDebugOptions(
-      minimalExtentsCountForSplitMergePerNode = 1,
-      maxRetriesOnMoveExtents = 3,
-      disableFlushImmediately = false,
-      ensureNoDupBlobs = false,
-      addSourceLocationTransform = false,
-      maybeSparkIngestionProperties = None)
+  private val testName = "Create debug options"
+  private val minimalExtentsCountForSplitMergePerNode = 5
+  private val maxRetriesOnMoveExtents = 3
+  private val allSchemaTestCombinations = Table(
+    "schemaAdjustmentMode",
+    SchemaAdjustmentMode.GenerateDynamicCsvMapping,
+    SchemaAdjustmentMode.FailIfNotMatch,
+    SchemaAdjustmentMode.NoAdjustment)
+  forAll(allSchemaTestCombinations) { schemaAdjustmentMode =>
+    testName should s"get created with default values when no special options specified with $schemaAdjustmentMode" in {
+      val result = KustoDataSourceUtils.validateAndCreateWriteDebugOptions(
+        schemaAdjustmentMode,
+        minimalExtentsCountForSplitMergePerNode,
+        maxRetriesOnMoveExtents,
+        disableFlushImmediately = false,
+        ensureNoDupBlobs = false,
+        addSourceLocationTransform = false,
+        maybeSparkIngestionProperties = None)
 
-    assert(result.minimalExtentsCountForSplitMergePerNode == 1)
-    assert(result.maxRetriesOnMoveExtents == 3)
-    assert(!result.disableFlushImmediately)
-    assert(!result.ensureNoDuplicatedBlobs)
-    assert(!result.addSourceLocationTransform)
+      assert(
+        result.minimalExtentsCountForSplitMergePerNode == minimalExtentsCountForSplitMergePerNode)
+      assert(result.maxRetriesOnMoveExtents == 3)
+      assert(!result.disableFlushImmediately)
+      assert(!result.ensureNoDuplicatedBlobs)
+      assert(!result.addSourceLocationTransform)
+    }
   }
 
-  it should "throw IllegalArgumentException when addSourceLocationTransform is true and ingestion properties contain mapping" in {
+  s"$testName" should "throw IllegalArgumentException when addSourceLocationTransform is true and ingestion properties contain mapping" in {
     val sparkIngestionProperties = new SparkIngestionProperties()
     sparkIngestionProperties.csvMapping = "csv_mapping"
 
     val exception = intercept[IllegalArgumentException] {
       KustoDataSourceUtils.validateAndCreateWriteDebugOptions(
-        minimalExtentsCountForSplitMergePerNode = 1,
-        maxRetriesOnMoveExtents = 3,
+        SchemaAdjustmentMode.GenerateDynamicCsvMapping,
+        minimalExtentsCountForSplitMergePerNode,
+        maxRetriesOnMoveExtents,
         disableFlushImmediately = false,
         ensureNoDupBlobs = false,
         addSourceLocationTransform = true,
         maybeSparkIngestionProperties = Some(sparkIngestionProperties))
     }
-
-    exception.getMessage == "addSourceLocationTransform cannot be used with Spark ingestion properties"
+    assert(
+      exception.getMessage == "addSourceLocationTransform cannot be used with Spark ingestion properties that already contain a CSV mapping.")
   }
 
-  it should "allow addSourceLocationTransform when no mapping is defined" in {
+  s"$testName" should "get created only when GenerateDynamicCsvMapping is specified" in {
     val sparkIngestionProperties = new SparkIngestionProperties()
-
     val result = KustoDataSourceUtils.validateAndCreateWriteDebugOptions(
-      minimalExtentsCountForSplitMergePerNode = 5,
-      maxRetriesOnMoveExtents = 10,
+      SchemaAdjustmentMode.GenerateDynamicCsvMapping,
+      minimalExtentsCountForSplitMergePerNode,
+      maxRetriesOnMoveExtents,
       disableFlushImmediately = true,
       ensureNoDupBlobs = true,
       addSourceLocationTransform = true,
       maybeSparkIngestionProperties = Some(sparkIngestionProperties))
-
     assert(result.addSourceLocationTransform)
-    assert(result.minimalExtentsCountForSplitMergePerNode == 5)
-    assert(result.maxRetriesOnMoveExtents == 10)
+    assert(
+      result.minimalExtentsCountForSplitMergePerNode == minimalExtentsCountForSplitMergePerNode)
+    assert(result.maxRetriesOnMoveExtents == maxRetriesOnMoveExtents)
     assert(result.disableFlushImmediately)
     assert(result.ensureNoDuplicatedBlobs)
   }
 
-  it should "detect mapping from mapping name reference" in {
-    val sparkIngestionProperties = new SparkIngestionProperties()
-    sparkIngestionProperties.csvMappingNameReference = "some-mapping-reference"
-
-    val exception = intercept[IllegalArgumentException] {
-      KustoDataSourceUtils.validateAndCreateWriteDebugOptions(
-        minimalExtentsCountForSplitMergePerNode = 1,
-        maxRetriesOnMoveExtents = 3,
-        disableFlushImmediately = false,
-        ensureNoDupBlobs = false,
-        addSourceLocationTransform = true,
-        maybeSparkIngestionProperties = Some(sparkIngestionProperties))
+  private val invalidSchemaTestCombinations = Table(
+    "schemaAdjustmentMode",
+    SchemaAdjustmentMode.FailIfNotMatch,
+    SchemaAdjustmentMode.NoAdjustment)
+  forAll(invalidSchemaTestCombinations) { schemaAdjustmentMode =>
+    testName should s"fail when $schemaAdjustmentMode is used with addSourceLocationTransform" in {
+      val exception = intercept[IllegalArgumentException] {
+        KustoDataSourceUtils.validateAndCreateWriteDebugOptions(
+          schemaAdjustmentMode,
+          minimalExtentsCountForSplitMergePerNode,
+          maxRetriesOnMoveExtents,
+          disableFlushImmediately = false,
+          ensureNoDupBlobs = false,
+          addSourceLocationTransform = true,
+          maybeSparkIngestionProperties = None)
+      }
+      assert(
+        exception.getMessage == "addSourceLocationTransform can only be used with GenerateDynamicCsvMapping schema adjustment mode.")
     }
-
-    exception.getMessage == "addSourceLocationTransform cannot be used with Spark ingestion properties"
   }
 }

@@ -447,10 +447,9 @@ object KustoDataSourceUtils {
       .trim
       .toInt
 
-    val maybeSchemaAdjustmentParam = parameters.get(KustoSinkOptions.KUSTO_ADJUST_SCHEMA)
-    val adjustSchema = maybeSchemaAdjustmentParam match {
-      case Some(param) =>
-        SchemaAdjustmentMode.withName(param)
+    val adjustSchema = parameters.get(KustoSinkOptions.KUSTO_ADJUST_SCHEMA) match {
+      case Some(adjustSchemaString) =>
+        SchemaAdjustmentMode.withName(adjustSchemaString)
       case None => SchemaAdjustmentMode.NoAdjustment
     }
 
@@ -494,6 +493,7 @@ object KustoDataSourceUtils {
       getIngestionProperties(writeMode == WriteMode.KustoStreaming, ingestionPropertiesAsJson)
 
     val kustoCustomDebugOptions = validateAndCreateWriteDebugOptions(
+      adjustSchema,
       minimalExtentsCountForSplitMergePerNode,
       maxRetriesOnMoveExtents,
       disableFlushImmediately,
@@ -543,12 +543,14 @@ object KustoDataSourceUtils {
   }
 
   def validateAndCreateWriteDebugOptions(
+      adjustSchema: SchemaAdjustmentMode.SchemaAdjustmentMode,
       minimalExtentsCountForSplitMergePerNode: Int,
       maxRetriesOnMoveExtents: Int,
       disableFlushImmediately: Boolean,
       ensureNoDupBlobs: Boolean,
       addSourceLocationTransform: Boolean,
-      maybeSparkIngestionProperties: Option[SparkIngestionProperties]): KustoCustomDebugWriteOptions = {
+      maybeSparkIngestionProperties: Option[SparkIngestionProperties])
+      : KustoCustomDebugWriteOptions = {
 
     val isMappingAlreadyPresent = maybeSparkIngestionProperties match {
       case Some(sparkIngestionProperties) =>
@@ -560,6 +562,11 @@ object KustoDataSourceUtils {
     if (isMappingAlreadyPresent && addSourceLocationTransform) {
       throw new IllegalArgumentException(
         "addSourceLocationTransform cannot be used with Spark ingestion properties that already contain a CSV mapping.")
+    }
+
+    if (adjustSchema != SchemaAdjustmentMode.GenerateDynamicCsvMapping && addSourceLocationTransform) {
+      throw new IllegalArgumentException(
+        "addSourceLocationTransform can only be used with GenerateDynamicCsvMapping schema adjustment mode.")
     }
 
     KustoCustomDebugWriteOptions(

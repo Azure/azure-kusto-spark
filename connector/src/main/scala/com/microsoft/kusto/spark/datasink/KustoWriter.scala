@@ -109,6 +109,7 @@ object KustoWriter {
       schemaShowCommandResult.getData.asScala.map(c => c.get(0).asInstanceOf[JsonNode]).toArray
 
     KustoIngestionUtils.adjustSchema(
+      writeOptions.writeMode,
       writeOptions.adjustSchema,
       data.schema,
       targetSchema,

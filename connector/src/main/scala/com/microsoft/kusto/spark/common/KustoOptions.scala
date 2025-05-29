@@ -141,8 +141,8 @@ private[kusto] object KustoDebugOptions {
   // In case this option is set to true :
   // a) If the target table already exists and the target column exists (ingestion_source_location_url_blob_internal) then
   //    the ingestion will succeed and the source location will be added to the target column.
-  // b) If the target table already exists and the target column does not exist, then the column will be not be
-  //    present in the target table.
+  // b) If the target table already exists and the column ingestion_source_location_url_blob_internal does not exist,
+  //    the validation will fail with an error
   // c) If the target table does not exist, then apart from columns in the dataframe an additional
   //    column will be created in the target table (ingestion_source_location_url_blob_internal)
 

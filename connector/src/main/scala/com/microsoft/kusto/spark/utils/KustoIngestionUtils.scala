@@ -10,17 +10,20 @@ import com.microsoft.azure.kusto.ingest.{ColumnMapping, TransformationMethod}
 import com.microsoft.kusto.spark.datasink.{
   SchemaAdjustmentMode,
   SinkTableCreationMode,
-  SparkIngestionProperties
+  SparkIngestionProperties,
+  WriteMode
 }
 import com.microsoft.kusto.spark.datasink.SchemaAdjustmentMode.SchemaAdjustmentMode
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
+import com.microsoft.kusto.spark.datasink.WriteMode.WriteMode
 import com.microsoft.kusto.spark.exceptions.SchemaMatchException
 import com.microsoft.kusto.spark.utils.DataTypeMapping.getSparkTypeToKustoTypeMap
 import org.apache.spark.sql.types.StructType
 
 object KustoIngestionUtils {
   private[kusto] def adjustSchema(
-      mode: SchemaAdjustmentMode,
+      writeMode: WriteMode,
+      schemaAdjustmentMode: SchemaAdjustmentMode,
       sourceSchema: StructType,
       targetSchema: Array[JsonNode],
       ingestionProperties: SparkIngestionProperties,
@@ -30,7 +33,7 @@ object KustoIngestionUtils {
     val effectiveMode = if (kustoCustomDebugWriteOptions.addSourceLocationTransform) {
       SchemaAdjustmentMode.GenerateDynamicCsvMapping
     } else {
-      mode
+      schemaAdjustmentMode
     }
 
     effectiveMode match {
@@ -38,6 +41,7 @@ object KustoIngestionUtils {
       case SchemaAdjustmentMode.FailIfNotMatch => forceAdjustSchema(sourceSchema, targetSchema)
       case SchemaAdjustmentMode.GenerateDynamicCsvMapping =>
         val columnMappings = setCsvMapping(
+          writeMode,
           sourceSchema,
           targetSchema,
           ingestionProperties,
@@ -68,11 +72,12 @@ object KustoIngestionUtils {
   }
 
   private[kusto] def setCsvMapping(
-                                    sourceSchema: StructType,
-                                    targetSchema: Array[JsonNode],
-                                    ingestionProperties: SparkIngestionProperties,
-                                    includeSourceLocationTransform: Boolean = false,
-                                    tableCreationMode: SinkTableCreationMode): Iterable[ColumnMapping] = {
+      writeMode: WriteMode,
+      sourceSchema: StructType,
+      targetSchema: Array[JsonNode],
+      ingestionProperties: SparkIngestionProperties,
+      includeSourceLocationTransform: Boolean = false,
+      tableCreationMode: SinkTableCreationMode): Iterable[ColumnMapping] = {
 
     validateMappingParameters(ingestionProperties)
     val targetSchemaColumns = extractTargetSchemaColumns(targetSchema)
@@ -80,8 +85,16 @@ object KustoIngestionUtils {
     val sourceSchemaColumnTypes = extractSourceSchemaTypes(sourceSchema, tableCreationMode)
 
     val notFoundSourceColumns = findMissingSourceColumns(sourceSchemaColumns, targetSchemaColumns)
-    validateSchemaCompatibility(notFoundSourceColumns, targetSchema, includeSourceLocationTransform)
-    val columnMappingsBase = createBaseMappings(sourceSchemaColumns, notFoundSourceColumns, targetSchemaColumns, sourceSchemaColumnTypes)
+    validateSchemaCompatibility(
+      writeMode,
+      notFoundSourceColumns,
+      targetSchemaColumns,
+      includeSourceLocationTransform)
+    val columnMappingsBase = createBaseMappings(
+      sourceSchemaColumns,
+      notFoundSourceColumns,
+      targetSchemaColumns,
+      sourceSchemaColumnTypes)
 
     if (includeSourceLocationTransform) {
       addSourceLocationMapping(columnMappingsBase)
@@ -111,7 +124,9 @@ object KustoIngestionUtils {
     sourceSchema.fields.zipWithIndex.map(c => (c._1.name, c._2)).toMap
   }
 
-  private def extractSourceSchemaTypes(sourceSchema: StructType, tableCreationMode: SinkTableCreationMode): Map[String, String] = {
+  private def extractSourceSchemaTypes(
+      sourceSchema: StructType,
+      tableCreationMode: SinkTableCreationMode): Map[String, String] = {
     if (tableCreationMode == SinkTableCreationMode.CreateIfNotExist) {
       sourceSchema.fields
         .map(field => (field.name, getSparkTypeToKustoTypeMap(field.dataType)))
@@ -122,17 +137,28 @@ object KustoIngestionUtils {
   }
 
   private def findMissingSourceColumns(
-                                        sourceSchemaColumns: Map[String, Int],
-                                        targetSchemaColumns: Map[String, String]): Set[String] = {
+      sourceSchemaColumns: Map[String, Int],
+      targetSchemaColumns: Map[String, String]): Set[String] = {
     sourceSchemaColumns.filter(c => !targetSchemaColumns.contains(c._1)).keys.toSet
   }
 
   private def validateSchemaCompatibility(
-                                           notFoundSourceColumns: Set[String],
-                                           targetSchema: Array[JsonNode],
-                                           includeSourceLocationTransform: Boolean): Unit = {
-    if (notFoundSourceColumns.nonEmpty && targetSchema != null && targetSchema.nonEmpty) {
-      if (includeSourceLocationTransform) {
+      writeMode: WriteMode,
+      notFoundSourceColumns: Set[String],
+      targetSchemaColumns: Map[String, String],
+      includeSourceLocationTransform: Boolean): Unit = {
+
+    if (includeSourceLocationTransform && !targetSchemaColumns.contains(
+        KustoConstants.SourceLocationColumnName)) {
+      throw SchemaMatchException(
+        "addSourceLocationTransform is set to true, but the target schema does not contain the " +
+          s"column '${KustoConstants.SourceLocationColumnName}'. " +
+          s"Please ensure that the target table has this column defined.")
+    }
+
+    if (notFoundSourceColumns.nonEmpty && targetSchemaColumns != null && targetSchemaColumns.nonEmpty) {
+      // The drift between source and target schema is allowed for queued ingestion only if includeSourceLocationTransform is true
+      if (writeMode == WriteMode.Queued && includeSourceLocationTransform) {
         KustoDataSourceUtils.logWarn(
           this.getClass.getSimpleName,
           s"Source schema has columns that are not present in the target: ${notFoundSourceColumns.mkString(",")}. " +
@@ -140,16 +166,16 @@ object KustoIngestionUtils {
       } else {
         throw SchemaMatchException(
           s"Source schema has columns that are not present in the target: ${notFoundSourceColumns
-            .mkString(", ")}.")
+              .mkString(", ")}.")
       }
     }
   }
 
   private def createBaseMappings(
-                                  sourceSchemaColumns: Map[String, Int],
-                                  notFoundSourceColumns: Set[String],
-                                  targetSchemaColumns: Map[String, String],
-                                  sourceSchemaColumnTypes: Map[String, String]): Iterable[ColumnMapping] = {
+      sourceSchemaColumns: Map[String, Int],
+      notFoundSourceColumns: Set[String],
+      targetSchemaColumns: Map[String, String],
+      sourceSchemaColumnTypes: Map[String, String]): Iterable[ColumnMapping] = {
     sourceSchemaColumns
       .filter(sourceColumn => !notFoundSourceColumns.contains(sourceColumn._1))
       .map(sourceColumn => {
@@ -167,8 +193,10 @@ object KustoIngestionUtils {
       })
   }
 
-  private def addSourceLocationMapping(columnMappingsBase: Iterable[ColumnMapping]): Iterable[ColumnMapping] = {
-    val sourceLocationTransform = new ColumnMapping(KustoConstants.SourceLocationColumnName, "string")
+  private def addSourceLocationMapping(
+      columnMappingsBase: Iterable[ColumnMapping]): Iterable[ColumnMapping] = {
+    val sourceLocationTransform =
+      new ColumnMapping(KustoConstants.SourceLocationColumnName, "string")
     sourceLocationTransform.setTransform(TransformationMethod.SourceLocation)
     columnMappingsBase ++ Seq(sourceLocationTransform)
   }
