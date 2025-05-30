@@ -590,7 +590,7 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
             assert(totalRows.keys.count(blobUrl => blobUrl.startsWith("https://")) > 0,
               s"Expected all rows to have a blob URL, but got: ${totalRows.keys}")
           }
-          kustoAdminClient.executeMgmt(kustoTestConnectionOptions.database, s".drop table ${table}")
+          kustoAdminClient.executeMgmt(kustoTestConnectionOptions.database, s".drop table $table")
         }
     }
   }
