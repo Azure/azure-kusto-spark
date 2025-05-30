@@ -798,7 +798,7 @@ object KustoDataSourceUtils {
     val statusCol = "Status"
     val statusCheck: () => Option[KustoResultSetTable] = () => {
       try {
-        Some(client.execute(database, operationsShowCommand).getPrimaryResults)
+        Some(client.executeQuery(database, operationsShowCommand).getPrimaryResults)
       } catch {
         case e: DataServiceException =>
           if (e.isPermanent) {
@@ -930,7 +930,7 @@ object KustoDataSourceUtils {
       query: String,
       database: String,
       crp: ClientRequestProperties): Int = {
-    val res = client.execute(database, generateCountQuery(query), crp).getPrimaryResults
+    val res = client.executeQuery(database, generateCountQuery(query), crp).getPrimaryResults
     res.next()
     res.getInt(0)
   }
@@ -944,7 +944,9 @@ object KustoDataSourceUtils {
     val estimationResult: util.List[AnyRef] = Await.result(
       Future {
         val res =
-          client.execute(database, generateEstimateRowsCountQuery(query), crp).getPrimaryResults
+          client
+            .executeQuery(database, generateEstimateRowsCountQuery(query), crp)
+            .getPrimaryResults
         res.next()
         res.getCurrentRow
       },
@@ -965,7 +967,8 @@ object KustoDataSourceUtils {
     if (estimatedCount == 0) {
       Await.result(
         Future {
-          val res = client.execute(database, generateCountQuery(query), crp).getPrimaryResults
+          val res =
+            client.executeQuery(database, generateCountQuery(query), crp).getPrimaryResults
           res.next()
           res.getInt(0)
         },
