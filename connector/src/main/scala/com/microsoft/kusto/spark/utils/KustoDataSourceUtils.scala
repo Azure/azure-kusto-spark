@@ -487,7 +487,6 @@ object KustoDataSourceUtils {
     val maybeSparkIngestionProperties =
       getIngestionProperties(writeMode == WriteMode.KustoStreaming, ingestionPropertiesAsJson)
 
-
     val writeOptions = WriteOptions(
       pollingOnDriver,
       tableCreation,
@@ -517,7 +516,7 @@ object KustoDataSourceUtils {
     logInfo(
       "parseSinkParameters",
       s"Parsed write options for sink: {'table': '${sourceParameters.kustoCoordinates.table}', " +
-        s"'timeout': '${writeOptions.timeout}, 'async': ${writeOptions.isAsync}, 'writeMode': ${writeOptions.writeMode}, "+
+        s"'timeout': '${writeOptions.timeout}, 'async': ${writeOptions.isAsync}, 'writeMode': ${writeOptions.writeMode}, " +
         s"'tableCreationMode': ${writeOptions.tableCreateOptions}, 'writeLimit': ${writeOptions.writeResultLimit}, " +
         s"'batchLimit': ${writeOptions.batchLimit}" +
         s", 'timeout': ${writeOptions.timeout}, 'timezone': ${writeOptions.timeZone}, " +
@@ -532,21 +531,22 @@ object KustoDataSourceUtils {
     SinkParameters(writeOptions, sourceParameters)
   }
 
-  def validateIngestionStorageParameters(parameters: Map[String, String]): Option[Array[IngestionStorageParameters]] = {
+  def validateIngestionStorageParameters(
+      parameters: Map[String, String]): Option[Array[IngestionStorageParameters]] = {
     val maybeIngestionStorageParameters: Option[Array[IngestionStorageParameters]] =
       parameters
         .get(KustoSinkOptions.KUSTO_INGESTION_STORAGE)
         .map(is => IngestionStorageParameters.fromString(is))
 
     maybeIngestionStorageParameters match {
-      case Some(arrayOfIngestionStorageParameters) => arrayOfIngestionStorageParameters.foreach(ingestionStorageParameter
-      => {
-        if (StringUtils.isEmpty(ingestionStorageParameter.containerName) || StringUtils.isEmpty(
-          ingestionStorageParameter.storageUrl)) {
-          throw new IllegalArgumentException(
-            "storageUrl and containerName must be set when supplying ingestion storage")
-        }
-      })
+      case Some(arrayOfIngestionStorageParameters) =>
+        arrayOfIngestionStorageParameters.foreach(ingestionStorageParameter => {
+          if (StringUtils.isEmpty(ingestionStorageParameter.containerName) || StringUtils.isEmpty(
+              ingestionStorageParameter.storageUrl)) {
+            throw new IllegalArgumentException(
+              "storageUrl and containerName must be set when supplying ingestion storage")
+          }
+        })
       case None => logDebug("parseSinkParameters", "Using DM provided storage for ingestion")
     }
     maybeIngestionStorageParameters
@@ -752,7 +752,7 @@ object KustoDataSourceUtils {
     val statusCol = "Status"
     val statusCheck: () => Option[KustoResultSetTable] = () => {
       try {
-        Some(client.execute(database, operationsShowCommand).getPrimaryResults)
+        Some(client.executeQuery(database, operationsShowCommand).getPrimaryResults)
       } catch {
         case e: DataServiceException =>
           if (e.isPermanent) {
@@ -882,7 +882,7 @@ object KustoDataSourceUtils {
       query: String,
       database: String,
       crp: ClientRequestProperties): Int = {
-    val res = client.execute(database, generateCountQuery(query), crp).getPrimaryResults
+    val res = client.executeQuery(database, generateCountQuery(query), crp).getPrimaryResults
     res.next()
     res.getInt(0)
   }
@@ -896,7 +896,9 @@ object KustoDataSourceUtils {
     val estimationResult: util.List[AnyRef] = Await.result(
       Future {
         val res =
-          client.execute(database, generateEstimateRowsCountQuery(query), crp).getPrimaryResults
+          client
+            .executeQuery(database, generateEstimateRowsCountQuery(query), crp)
+            .getPrimaryResults
         res.next()
         res.getCurrentRow
       },
@@ -917,7 +919,8 @@ object KustoDataSourceUtils {
     if (estimatedCount == 0) {
       Await.result(
         Future {
-          val res = client.execute(database, generateCountQuery(query), crp).getPrimaryResults
+          val res =
+            client.executeQuery(database, generateCountQuery(query), crp).getPrimaryResults
           res.next()
           res.getInt(0)
         },

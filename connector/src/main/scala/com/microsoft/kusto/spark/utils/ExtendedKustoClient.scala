@@ -188,7 +188,7 @@ class ExtendedKustoClient(
       retryConfig: Option[RetryConfig] = None): KustoOperationResult = {
     KDSU.retryApplyFunction(
       i => {
-        dmClient.execute(
+        dmClient.executeMgmt(
           ExtendedKustoClient.DefaultDb,
           command,
           newIncrementedCrp(maybeCrp, activityName, i))
@@ -205,7 +205,7 @@ class ExtendedKustoClient(
       retryConfig: Option[RetryConfig] = None): KustoOperationResult = {
     KDSU.retryApplyFunction(
       i => {
-        engineClient.execute(database, command, newIncrementedCrp(Some(crp), activityName, i))
+        engineClient.executeMgmt(database, command, newIncrementedCrp(Some(crp), activityName, i))
       },
       retryConfig.getOrElse(this.retryConfig),
       "Execute engine command with retries")
