@@ -18,7 +18,7 @@ import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreatio
 import com.microsoft.kusto.spark.datasink.WriteMode.WriteMode
 import com.microsoft.kusto.spark.exceptions.SchemaMatchException
 import com.microsoft.kusto.spark.utils.DataTypeMapping.getSparkTypeToKustoTypeMap
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
 object KustoIngestionUtils {
   private[kusto] def adjustSchema(
@@ -85,12 +85,18 @@ object KustoIngestionUtils {
     val sourceSchemaColumnTypes = extractSourceSchemaTypes(sourceSchema, tableCreationMode)
 
     val notFoundSourceColumns = findMissingSourceColumns(sourceSchemaColumns, targetSchemaColumns)
-    validateSchemaCompatibility(
-      writeMode,
-      notFoundSourceColumns,
-      targetSchemaColumns,
-      includeSourceLocationTransform)
+    // Why should validation be done only if the target schema is not empty?
+    // If the target schema is empty, it means that the table is not created yet, so we don't need to validate
+    // the schema compatibility. The table will be created with the source schema, and the validation will be done
+    if (targetSchemaColumns.nonEmpty && tableCreationMode != SinkTableCreationMode.CreateIfNotExist) {
+      validateSchemaCompatibility(
+        writeMode,
+        notFoundSourceColumns,
+        targetSchemaColumns,
+        includeSourceLocationTransform)
+    }
     val columnMappingsBase = createBaseMappings(
+      tableCreationMode,
       sourceSchemaColumns,
       notFoundSourceColumns,
       targetSchemaColumns,
@@ -172,12 +178,21 @@ object KustoIngestionUtils {
   }
 
   private def createBaseMappings(
+      tableCreationMode: SinkTableCreationMode,
       sourceSchemaColumns: Map[String, Int],
       notFoundSourceColumns: Set[String],
       targetSchemaColumns: Map[String, String],
       sourceSchemaColumnTypes: Map[String, String]): Iterable[ColumnMapping] = {
+
+    // If the target schema is empty, we assume that the table is not created yet. This combined with CreateIfNotExist
+    // implies the table will be created this run. So there is no filter to be applied on source columns.
+
+    val predicate: String => Boolean = srcCol =>
+      (targetSchemaColumns.isEmpty && tableCreationMode == SinkTableCreationMode.CreateIfNotExist) || !notFoundSourceColumns
+        .contains(srcCol)
+
     sourceSchemaColumns
-      .filter(sourceColumn => !notFoundSourceColumns.contains(sourceColumn._1))
+      .filter(sourceColumn => predicate(sourceColumn._1))
       .map(sourceColumn => {
         val targetDataType = targetSchemaColumns.get(sourceColumn._1)
         val columnMapping = targetDataType match {

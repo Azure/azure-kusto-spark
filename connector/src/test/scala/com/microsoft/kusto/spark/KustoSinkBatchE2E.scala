@@ -7,11 +7,26 @@ import com.microsoft.azure.kusto.data.ClientFactory
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.kusto.spark.KustoTestUtils.getSystemTestOptions
 import com.microsoft.kusto.spark.common.KustoDebugOptions
-import com.microsoft.kusto.spark.datasink.{IngestionStorageParameters, KustoSinkOptions, SchemaAdjustmentMode, SinkTableCreationMode, WriteMode}
+import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.{CreateIfNotExist, FailIfNotExist}
+import com.microsoft.kusto.spark.datasink.{
+  IngestionStorageParameters,
+  KustoSinkOptions,
+  SchemaAdjustmentMode,
+  SinkTableCreationMode,
+  WriteMode
+}
 import com.microsoft.kusto.spark.datasource.{KustoSourceOptions, ReadMode}
 import com.microsoft.kusto.spark.sql.extension.SparkExtension.DataFrameReaderExtension
-import com.microsoft.kusto.spark.utils.CslCommandsGenerator.{generateTableAlterStreamIngestionCommand, generateTableCreateCommand, generateTempTableCreateCommand}
-import com.microsoft.kusto.spark.utils.{KustoConstants, KustoQueryUtils, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.CslCommandsGenerator.{
+  generateTableAlterStreamIngestionCommand,
+  generateTableCreateCommand,
+  generateTempTableCreateCommand
+}
+import com.microsoft.kusto.spark.utils.{
+  KustoConstants,
+  KustoQueryUtils,
+  KustoDataSourceUtils => KDSU
+}
 import org.apache.commons.lang3.StringUtils
 import org.apache.spark.SparkContext
 import org.apache.spark.sql._
@@ -484,20 +499,41 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
 
   private val schemaAdjustmentModes =
     Table(
-      ("targetColumnExists", "schemaAdjustmentMode", "writeMode"),
-      (true, SchemaAdjustmentMode.GenerateDynamicCsvMapping, WriteMode.Transactional),
-      (true, SchemaAdjustmentMode.GenerateDynamicCsvMapping, WriteMode.Queued),
-      (false, SchemaAdjustmentMode.GenerateDynamicCsvMapping, WriteMode.Transactional),
-      (false, SchemaAdjustmentMode.GenerateDynamicCsvMapping, WriteMode.Queued))
+      ("targetColumnExists", "schemaAdjustmentMode", "writeMode", "createTable"),
+      (
+        true,
+        SchemaAdjustmentMode.GenerateDynamicCsvMapping,
+        WriteMode.Transactional,
+        FailIfNotExist),
+      (true, SchemaAdjustmentMode.GenerateDynamicCsvMapping, WriteMode.Queued, FailIfNotExist),
+      (
+        false,
+        SchemaAdjustmentMode.GenerateDynamicCsvMapping,
+        WriteMode.Transactional,
+        FailIfNotExist),
+      (false, SchemaAdjustmentMode.GenerateDynamicCsvMapping, WriteMode.Queued, FailIfNotExist),
+      (
+        true,
+        SchemaAdjustmentMode.GenerateDynamicCsvMapping,
+        WriteMode.Transactional,
+        CreateIfNotExist
+      ), // the first param is not relevant here
+      (
+        true,
+        SchemaAdjustmentMode.GenerateDynamicCsvMapping,
+        WriteMode.Queued,
+        CreateIfNotExist
+      ) // the first param is not relevant here
+    )
 
   TableDrivenPropertyChecks.forEvery(schemaAdjustmentModes) {
     val engineKcsb = ConnectionStringBuilder.createWithAadAccessTokenAuthentication(
       kustoTestConnectionOptions.cluster,
       kustoTestConnectionOptions.accessToken)
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
-    (targetColumnExists, schemaAdjustmentMode, writeMode) => {
+    (targetColumnExists, schemaAdjustmentMode, writeMode, tableCreationMode) => {
       "KustoWrite" should s"check for matrix of tests when using SchemaAdjustment: ${schemaAdjustmentMode.toString}, " +
-        s"TargetColumnExists: $targetColumnExists , WriteMode: $writeMode" in {
+        s"TargetColumnExists: $targetColumnExists , WriteMode: $writeMode and TableCreateMode: $tableCreationMode" in {
           val testName =
             s"${schemaAdjustmentMode.toString.substring(0, 3)}_${writeMode.toString.substring(0, 3)}"
           val df = rows.toDF("name", "value").withColumn("WriteMode", lit(writeMode.toString))
@@ -509,9 +545,11 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
           } else {
             "name:string, value:int, WriteMode:string"
           }
-          kustoAdminClient.execute(
-            kustoTestConnectionOptions.database,
-            generateTableCreateCommand(table, columnsTypesAndNames = columnDefinition))
+          if (tableCreationMode != SinkTableCreationMode.CreateIfNotExist) {
+            kustoAdminClient.execute(
+              kustoTestConnectionOptions.database,
+              generateTableCreateCommand(table, columnsTypesAndNames = columnDefinition))
+          }
 
           KDSU.logInfo(
             className,
@@ -529,6 +567,7 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
                   kustoTestConnectionOptions.accessToken)
                 .option(KustoSinkOptions.KUSTO_ADJUST_SCHEMA, schemaAdjustmentMode.toString)
                 .option(KustoDebugOptions.KUSTO_ADD_SOURCE_LOCATION_TRANSFORM, "true")
+                .option(KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS, tableCreationMode.toString)
                 .option(KustoSinkOptions.KUSTO_WRITE_MODE, writeMode.toString)
                 .option(KustoSinkOptions.KUSTO_TIMEOUT_LIMIT, (8 * 60).toString)
                 .mode(SaveMode.Append)
@@ -562,32 +601,40 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
               .mode(SaveMode.Append)
               .save()
             val query = if (targetColumnExists) {
-              s"$table | where isnotempty(${KustoConstants.SourceLocationColumnName}) | summarize Count=count() by ${KustoConstants.SourceLocationColumnName}"
+              s"$table | where isnotempty(${KustoConstants.SourceLocationColumnName}) " +
+                "and isnotempty(name) and value > 0  and isnotempty(WriteMode)" +
+                s"| summarize Count=count() by ${KustoConstants.SourceLocationColumnName}"
             } else {
               s"$table | summarize Count=count() by WriteMode"
             }
-            val nonEmptyResult = (res: Map[String, Long]) => res.values.sum == expectedNumberOfRows
+            val nonEmptyResult =
+              (res: Map[String, Long]) => res.values.sum == expectedNumberOfRows
 
-            val totalRows = Awaitility.await().atMost(sleepTimeTillTableCreate, TimeUnit.MILLISECONDS).until(
-              () => {
-                kustoAdminClient
-                  .executeQuery(kustoTestConnectionOptions.database, query)
-                  .getPrimaryResults
-                  .getData.toArray()
-                  .map {
-                    // check if row is a util.List
-                    case list: java.util.ArrayList[_] =>
-                      val key = list.get(0).toString
-                      val value = list.get(1).toString.toLong
-                      (key, value)
-                  }
-                  .toMap
-              },res => nonEmptyResult(res)
-            )
+            val totalRows = Awaitility
+              .await()
+              .atMost(sleepTimeTillTableCreate, TimeUnit.MILLISECONDS)
+              .until(
+                () => {
+                  kustoAdminClient
+                    .executeQuery(kustoTestConnectionOptions.database, query)
+                    .getPrimaryResults
+                    .getData
+                    .toArray()
+                    .map {
+                      // check if row is a util.List
+                      case list: java.util.ArrayList[_] =>
+                        val key = list.get(0).toString
+                        val value = list.get(1).toString.toLong
+                        (key, value)
+                    }
+                    .toMap
+                },
+                res => nonEmptyResult(res))
             assert(
               totalRows.values.sum == expectedNumberOfRows,
               s"Expected $expectedNumberOfRows rows, but got $totalRows")
-            assert(totalRows.keys.count(blobUrl => blobUrl.startsWith("https://")) > 0,
+            assert(
+              totalRows.keys.count(blobUrl => blobUrl.startsWith("https://")) > 0,
               s"Expected all rows to have a blob URL, but got: ${totalRows.keys}")
           }
           kustoAdminClient.executeMgmt(kustoTestConnectionOptions.database, s".drop table $table")
