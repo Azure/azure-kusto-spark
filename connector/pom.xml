@@ -37,13 +37,28 @@
             <groupId>com.microsoft.azure.kusto</groupId>
             <artifactId>kusto-data</artifactId>
             <version>${kusto.sdk.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>net.minidev</groupId>
+                    <artifactId>json-smart</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>com.azure</groupId>
+            <artifactId>azure-security-keyvault-secrets</artifactId>
+            <version>${azure-kv-version}</version>
         </dependency>
         <dependency>
             <groupId>com.microsoft.azure.kusto</groupId>
             <artifactId>kusto-ingest</artifactId>
             <version>${kusto.sdk.version}</version>
         </dependency>
-
+        <dependency>
+            <groupId>net.minidev</groupId>
+            <artifactId>json-smart</artifactId>
+            <version>${jsonsmart.version}</version>
+        </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>

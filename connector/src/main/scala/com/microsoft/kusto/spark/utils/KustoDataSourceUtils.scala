@@ -3,6 +3,13 @@
 
 package com.microsoft.kusto.spark.utils
 
+import com.azure.core.credential.TokenRequestContext
+import com.azure.identity.{
+  AzureCliCredentialBuilder,
+  ChainedTokenCredential,
+  ChainedTokenCredentialBuilder,
+  DeviceCodeCredentialBuilder
+}
 import com.fasterxml.jackson.core.`type`.TypeReference
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.node.ArrayNode
@@ -44,7 +51,16 @@ import java.net.URI
 import java.security.InvalidParameterException
 import java.util
 import java.util.concurrent.{Callable, CountDownLatch, TimeUnit}
-import java.util.{NoSuchElementException, Properties, StringJoiner, Timer, TimerTask, UUID}
+import java.util.{
+  Collections,
+  NoSuchElementException,
+  Objects,
+  Properties,
+  StringJoiner,
+  Timer,
+  TimerTask,
+  UUID
+}
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
@@ -225,102 +241,177 @@ object KustoDataSourceUtils {
   }
 
   private def parseAuthentication(parameters: Map[String, String], clusterUrl: String) = {
-    // Parse KustoAuthentication
-    val applicationId = parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_APP_ID, "")
-    val applicationKey = parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_APP_SECRET, "")
-    val applicationCertPath =
-      parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_APP_CERTIFICATE_PATH, "")
-    val applicationCertPassword =
-      parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_APP_CERTIFICATE_PASSWORD, "")
-    val tokenProviderCoordinates =
-      parameters.getOrElse(KustoSourceOptions.KUSTO_TOKEN_PROVIDER_CALLBACK_CLASSPATH, "")
-    val keyVaultAppId: String = parameters.getOrElse(KustoSourceOptions.KEY_VAULT_APP_ID, "")
-    val keyVaultAppKey = parameters.getOrElse(KustoSourceOptions.KEY_VAULT_APP_KEY, "")
-    val keyVaultUri: String = parameters.getOrElse(KustoSourceOptions.KEY_VAULT_URI, "")
-    val keyVaultPemFile = parameters.getOrElse(KustoDebugOptions.KEY_VAULT_PEM_FILE_PATH, "")
-    val keyVaultCertKey = parameters.getOrElse(KustoDebugOptions.KEY_VAULT_CERTIFICATE_KEY, "")
-    val accessToken: String = parameters.getOrElse(KustoSourceOptions.KUSTO_ACCESS_TOKEN, "")
-    val userPrompt: Option[String] = parameters.get(KustoSourceOptions.KUSTO_USER_PROMPT)
-    var authentication: KustoAuthentication = null
-    var keyVaultAuthentication: Option[KeyVaultAuthentication] = None
+    val authenticationParams = extractAuthenticationParams(parameters)
+    val keyVaultAuthentication = createKeyVaultAuthentication(authenticationParams)
 
-    val managedIdentityAuth: Boolean =
-      parameters.getOrElse(KustoSourceOptions.KUSTO_MANAGED_IDENTITY_AUTH, "false").toBoolean
-    val maybeManagedClientId: Option[String] =
-      parameters.get(KustoSourceOptions.KUSTO_MANAGED_IDENTITY_CLIENT_ID)
+    validateNoAuthenticationConflicts(authenticationParams)
 
-    val authorityId: String =
-      parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID, DefaultMicrosoftTenant)
+    val authentication = createAuthentication(authenticationParams, clusterUrl)
 
-    // Check KeyVault Authentication
-    if (keyVaultUri != "") {
-      if (keyVaultAppId.nonEmpty) {
-        keyVaultAuthentication = Some(
-          KeyVaultAppAuthentication(keyVaultUri, keyVaultAppId, keyVaultAppKey, authorityId))
-      } else {
-        keyVaultAuthentication = Some(
-          KeyVaultCertificateAuthentication(
-            keyVaultUri,
-            keyVaultPemFile,
-            keyVaultCertKey,
-            authorityId))
-      }
+    (authentication, keyVaultAuthentication)
+  }
+
+  private def extractAuthenticationParams(
+      parameters: Map[String, String]): AuthenticationParams = {
+    AuthenticationParams(
+      applicationId = parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_APP_ID, ""),
+      applicationKey = parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_APP_SECRET, ""),
+      applicationCertPath =
+        parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_APP_CERTIFICATE_PATH, ""),
+      applicationCertPassword =
+        parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_APP_CERTIFICATE_PASSWORD, ""),
+      tokenProviderCoordinates =
+        parameters.getOrElse(KustoSourceOptions.KUSTO_TOKEN_PROVIDER_CALLBACK_CLASSPATH, ""),
+      keyVaultAppId = parameters.getOrElse(KustoSourceOptions.KEY_VAULT_APP_ID, ""),
+      keyVaultAppKey = parameters.getOrElse(KustoSourceOptions.KEY_VAULT_APP_KEY, ""),
+      keyVaultUri = parameters.getOrElse(KustoSourceOptions.KEY_VAULT_URI, ""),
+      keyVaultPemFile = parameters.getOrElse(KustoDebugOptions.KEY_VAULT_PEM_FILE_PATH, ""),
+      keyVaultCertKey = parameters.getOrElse(KustoDebugOptions.KEY_VAULT_CERTIFICATE_KEY, ""),
+      accessToken = parameters.getOrElse(KustoSourceOptions.KUSTO_ACCESS_TOKEN, ""),
+      userPrompt = parameters.get(KustoSourceOptions.KUSTO_USER_PROMPT),
+      managedIdentityAuth =
+        parameters.getOrElse(KustoSourceOptions.KUSTO_MANAGED_IDENTITY_AUTH, "false").toBoolean,
+      maybeManagedClientId = parameters.get(KustoSourceOptions.KUSTO_MANAGED_IDENTITY_CLIENT_ID),
+      authorityId =
+        parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID, DefaultMicrosoftTenant),
+      parameters = parameters // Pass full parameters for token provider
+    )
+  }
+
+  private def createKeyVaultAuthentication(
+      params: AuthenticationParams): Option[KeyVaultAuthentication] = {
+    if (params.keyVaultUri.isEmpty) {
+      None
+    } else if (params.keyVaultAppId.nonEmpty) {
+      Some(
+        KeyVaultAppAuthentication(
+          params.keyVaultUri,
+          params.keyVaultAppId,
+          params.keyVaultAppKey,
+          params.authorityId))
+    } else {
+      Some(
+        KeyVaultCertificateAuthentication(
+          params.keyVaultUri,
+          params.keyVaultPemFile,
+          params.keyVaultCertKey,
+          params.authorityId))
     }
+  }
 
-    // Look for conflicts
+  private def validateNoAuthenticationConflicts(params: AuthenticationParams): Unit = {
     var numberOfAuthenticationMethods = 0
-    if (applicationId.nonEmpty) numberOfAuthenticationMethods += 1
-    if (accessToken.nonEmpty) numberOfAuthenticationMethods += 1
-    if (tokenProviderCoordinates.nonEmpty) numberOfAuthenticationMethods += 1
-    if (keyVaultUri.nonEmpty) numberOfAuthenticationMethods += 1
+    if (params.applicationId.nonEmpty) numberOfAuthenticationMethods += 1
+    if (params.accessToken.nonEmpty) numberOfAuthenticationMethods += 1
+    if (params.tokenProviderCoordinates.nonEmpty) numberOfAuthenticationMethods += 1
+    if (params.keyVaultUri.nonEmpty) numberOfAuthenticationMethods += 1
+
     if (numberOfAuthenticationMethods > 1) {
       throw new IllegalArgumentException(
         "More than one authentication methods were provided. Failing.")
     }
-
-    // Resolve authentication
-    if (applicationId.nonEmpty) {
-      // Application authentication
-      if (applicationKey.nonEmpty) {
-        authentication = AadApplicationAuthentication(applicationId, applicationKey, authorityId)
-      } else if (applicationCertPath.nonEmpty) {
-        authentication = AadApplicationCertificateAuthentication(
-          applicationId,
-          applicationCertPath,
-          applicationCertPassword,
-          authorityId)
-      }
-    } else if (managedIdentityAuth) {
-      // Authentication for managed Identity
-      authentication = ManagedIdentityAuthentication(maybeManagedClientId)
-    } else if (accessToken.nonEmpty) {
-      // Authentication by token
-      authentication = KustoAccessTokenAuthentication(accessToken)
-    } else if (tokenProviderCoordinates.nonEmpty) {
-      // Authentication by token provider
-      val classLoader = Thread.currentThread().getContextClassLoader
-      val c1 = classLoader
-        .loadClass(tokenProviderCoordinates)
-        .getConstructor(parameters.getClass)
-        .newInstance(parameters)
-      val tokenProviderCallback = c1.asInstanceOf[Callable[String]]
-
-      authentication = KustoTokenProviderAuthentication(tokenProviderCallback)
-    } else if (keyVaultUri.isEmpty) {
-      if (userPrompt.isDefined) {
-        // Use only for local run where you can open the browser and logged in as your user
-        authentication = KustoUserPromptAuthentication(authorityId)
-      } else {
-        logWarn(
-          "parseSourceParameters",
-          "No authentication method was supplied - using device code authentication. The token should last for one hour")
-        val deviceCodeProvider = new DeviceAuthentication(clusterUrl, authorityId)
-        val accessToken = deviceCodeProvider.acquireToken()
-        authentication = KustoAccessTokenAuthentication(accessToken)
-      }
-    }
-    (authentication, keyVaultAuthentication)
   }
+
+  private def createAuthentication(
+      params: AuthenticationParams,
+      clusterUrl: String): KustoAuthentication = {
+    if (params.applicationId.nonEmpty) {
+      createApplicationAuthentication(params)
+    } else if (params.managedIdentityAuth) {
+      ManagedIdentityAuthentication(params.maybeManagedClientId)
+    } else if (params.accessToken.nonEmpty) {
+      KustoAccessTokenAuthentication(params.accessToken)
+    } else if (params.tokenProviderCoordinates.nonEmpty) {
+      createTokenProviderAuthentication(params)
+    } else if (params.keyVaultUri.isEmpty) {
+      createDefaultAuthentication(params, clusterUrl)
+    } else {
+      null // This will never be reached due to validation, but needed for compilation
+    }
+  }
+
+  private def createApplicationAuthentication(
+      params: AuthenticationParams): KustoAuthentication = {
+    if (params.applicationKey.nonEmpty) {
+      AadApplicationAuthentication(
+        params.applicationId,
+        params.applicationKey,
+        params.authorityId)
+    } else if (params.applicationCertPath.nonEmpty) {
+      AadApplicationCertificateAuthentication(
+        params.applicationId,
+        params.applicationCertPath,
+        params.applicationCertPassword,
+        params.authorityId)
+    } else {
+      null // This should not occur in normal operation
+    }
+  }
+
+  private def createTokenProviderAuthentication(
+      params: AuthenticationParams): KustoAuthentication = {
+    val classLoader = Thread.currentThread().getContextClassLoader
+    val c1 = classLoader
+      .loadClass(params.tokenProviderCoordinates)
+      .getConstructor(params.parameters.getClass)
+      .newInstance(params.parameters)
+    val tokenProviderCallback = c1.asInstanceOf[Callable[String]]
+
+    KustoTokenProviderAuthentication(tokenProviderCallback)
+  }
+
+  private def createDefaultAuthentication(
+      params: AuthenticationParams,
+      clusterUrl: String): KustoAuthentication = {
+    if (params.userPrompt.isDefined) {
+      KustoUserPromptAuthentication(params.authorityId)
+    } else {
+      logWarn(
+        "parseSourceParameters",
+        "No authentication method was supplied - using device code authentication. The token should last for one hour")
+      val accessToken = getAccessTokenFallback(clusterUrl, params.authorityId)
+      KustoAccessTokenAuthentication(accessToken)
+    }
+  }
+
+  def getAccessTokenFallback(clusterUrl: String, tenantId: String): String = {
+    val tokenRequestContext = new TokenRequestContext().addScopes(s"$clusterUrl/.default")
+    val azCliAuthProvider = new AzureCliCredentialBuilder().tenantId(tenantId).build()
+    val deviceCodeAuthentication =
+      new DeviceCodeCredentialBuilder().tenantId(tenantId).build()
+    val chainedTokenCredential = new ChainedTokenCredentialBuilder()
+      .addFirst(azCliAuthProvider)
+      .addLast(deviceCodeAuthentication)
+      .build()
+
+    val accessToken = chainedTokenCredential.getTokenSync(tokenRequestContext)
+
+    if (Objects.isNull(accessToken) || StringUtils.isEmpty(accessToken.getToken)) {
+      throw new InvalidParameterException(
+        "No fallback authentication method was supplied and no access token could be retrieved using Azure CLI or Device Code authentication.Please provide a valid authentication method.")
+    } else {
+      accessToken.getToken
+    }
+  }
+
+  // Case class to group authentication parameters
+  private final case class AuthenticationParams(
+      applicationId: String,
+      applicationKey: String,
+      applicationCertPath: String,
+      applicationCertPassword: String,
+      tokenProviderCoordinates: String,
+      keyVaultAppId: String,
+      keyVaultAppKey: String,
+      keyVaultUri: String,
+      keyVaultPemFile: String,
+      keyVaultCertKey: String,
+      accessToken: String,
+      userPrompt: Option[String],
+      managedIdentityAuth: Boolean,
+      maybeManagedClientId: Option[String],
+      authorityId: String,
+      parameters: Map[String, String])
 
   def parseSourceParameters(
       parameters: Map[String, String],
