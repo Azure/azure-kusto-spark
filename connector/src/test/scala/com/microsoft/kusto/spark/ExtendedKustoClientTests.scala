@@ -82,7 +82,7 @@ class ExtendedKustoClientTests extends AnyFlatSpec with Matchers {
       "CslType":"string", "Name":"name"}""")),
       WriteOptions(writeMode = WriteMode.Queued),
       null,
-      true)
+      configureRetentionPolicy = true)
     verify(stubbedClient.engineClient, times(0)).executeMgmt(any(), any(), any())
   }
 }
