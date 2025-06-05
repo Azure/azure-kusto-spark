@@ -88,8 +88,7 @@ object KustoIngestionUtils {
     // Why should validation be done only if the target schema is not empty?
     // If the target schema is empty, it means that the table is not created yet, so we don't need to validate
     // the schema compatibility. The table will be created with the source schema, and the validation will be done
-    if (targetSchemaColumns.nonEmpty) {
-      // && tableCreationMode != SinkTableCreationMode.CreateIfNotExist
+    if (targetSchemaColumns.nonEmpty && tableCreationMode != SinkTableCreationMode.CreateIfNotExist) {
       validateSchemaCompatibility(
         writeMode,
         notFoundSourceColumns,
