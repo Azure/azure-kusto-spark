@@ -155,10 +155,12 @@ object KustoIngestionUtils {
       notFoundSourceColumns: Set[String],
       targetSchemaColumns: Map[String, String],
       includeSourceLocationTransform: Boolean): Unit = {
-
+    // If the transform is included, we need to ensure that the target schema contains the source location column and
+    // that it is of type string.
     if (includeSourceLocationTransform && (!targetSchemaColumns.contains(
         KustoConstants.SourceLocationColumnName) ||
-      cslStringType.equalsIgnoreCase(targetSchemaColumns.getOrElse(KustoConstants.SourceLocationColumnName,"")))) {
+        !cslStringType.equalsIgnoreCase(
+          targetSchemaColumns.getOrElse(KustoConstants.SourceLocationColumnName, "")))) {
       throw SchemaMatchException(
         "addSourceLocationTransform is set to true, but the target schema does not contain the " +
           s"column '${KustoConstants.SourceLocationColumnName}'. " +
