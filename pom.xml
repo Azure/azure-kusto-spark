@@ -8,7 +8,7 @@
     <packaging>pom</packaging>
     <version>${revision}</version>
     <properties>
-        <revision>5.3.0</revision>
+        <revision>5.3.1</revision>
         <!-- Spark dependencies -->
         <scala.version.major>2.12</scala.version.major>
         <scalafmt.plugin.version>1.1.1640084764.9f463a9</scalafmt.plugin.version>
@@ -47,6 +47,7 @@
         <specs2.version>3.6.5</specs2.version>
         <msal4j.version>1.16.0</msal4j.version>
         <az.identity.version>1.12.0</az.identity.version>
+        <awaitility.version>4.3.0</awaitility.version>
         <kusto.shade.prefix>kusto_connector_shaded</kusto.shade.prefix>
     </properties>
 

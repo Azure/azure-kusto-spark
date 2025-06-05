@@ -3,10 +3,25 @@
 
 package com.microsoft.kusto.spark.utils
 
-import com.microsoft.kusto.spark.datasink.KustoSinkOptions.{KUSTO_CLUSTER, KUSTO_DATABASE, KUSTO_INGESTION_STORAGE, KUSTO_TABLE, KUSTO_TABLE_CREATE_OPTIONS}
-import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SchemaAdjustmentMode}
+import com.microsoft.kusto.spark.datasink.KustoSinkOptions.{
+  KUSTO_CLUSTER,
+  KUSTO_DATABASE,
+  KUSTO_INGESTION_STORAGE,
+  KUSTO_TABLE,
+  KUSTO_TABLE_CREATE_OPTIONS
+}
+import com.microsoft.kusto.spark.datasink.{
+  KustoSinkOptions,
+  SchemaAdjustmentMode,
+  SparkIngestionProperties
+}
 import com.microsoft.kusto.spark.datasource.ReadMode.ForceDistributedMode
-import com.microsoft.kusto.spark.datasource.{KustoReadOptions, KustoSourceOptions, PartitionOptions, ReadMode}
+import com.microsoft.kusto.spark.datasource.{
+  KustoReadOptions,
+  KustoSourceOptions,
+  PartitionOptions,
+  ReadMode
+}
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.prop.TableDrivenPropertyChecks.forAll
@@ -89,19 +104,38 @@ class KustoDataSourceUtilsTest extends AnyFlatSpec with MockFactory {
     val testCombinations =
       Table(
         ("map", "isInvalid", "error"),
-        (mutable.Map(KustoSinkOptions.KUSTO_WRITE_MODE -> "KustoStreaming",
-          KustoSinkOptions.KUSTO_ADJUST_SCHEMA -> SchemaAdjustmentMode.GenerateDynamicCsvMapping.toString), true,
+        (
+          mutable.Map(
+            KustoSinkOptions.KUSTO_WRITE_MODE -> "KustoStreaming",
+            KustoSinkOptions.KUSTO_ADJUST_SCHEMA -> SchemaAdjustmentMode.GenerateDynamicCsvMapping.toString),
+          true,
           "GenerateDynamicCsvMapping cannot be used with Spark streaming ingestion"),
-        (mutable.Map(KustoSinkOptions.KUSTO_WRITE_MODE -> "Queued",
-          KustoSinkOptions.KUSTO_ADJUST_SCHEMA -> SchemaAdjustmentMode.GenerateDynamicCsvMapping.toString), false, ""),
-        (mutable.Map(KustoSinkOptions.KUSTO_WRITE_MODE -> "Transactional",
-          KustoSinkOptions.KUSTO_ADJUST_SCHEMA -> SchemaAdjustmentMode.GenerateDynamicCsvMapping.toString), false, ""),
-        (mutable.Map(KustoSinkOptions.KUSTO_WRITE_MODE -> "KustoStreaming",
-          KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON ->
-            "{\"csvMappingNameReference\":\"a-mapping-ref\"}"), false, ""),
-        (mutable.Map(KustoSinkOptions.KUSTO_WRITE_MODE -> "KustoStreaming",
-          KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON ->
-            "{\"csvMapping\":\"(..a real mapping.)\"}"), true, "CSVMapping cannot be used with Spark streaming ingestion"),
+        (
+          mutable.Map(
+            KustoSinkOptions.KUSTO_WRITE_MODE -> "Queued",
+            KustoSinkOptions.KUSTO_ADJUST_SCHEMA -> SchemaAdjustmentMode.GenerateDynamicCsvMapping.toString),
+          false,
+          ""),
+        (
+          mutable.Map(
+            KustoSinkOptions.KUSTO_WRITE_MODE -> "Transactional",
+            KustoSinkOptions.KUSTO_ADJUST_SCHEMA -> SchemaAdjustmentMode.GenerateDynamicCsvMapping.toString),
+          false,
+          ""),
+        (
+          mutable.Map(
+            KustoSinkOptions.KUSTO_WRITE_MODE -> "KustoStreaming",
+            KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON ->
+              "{\"csvMappingNameReference\":\"a-mapping-ref\"}"),
+          false,
+          ""),
+        (
+          mutable.Map(
+            KustoSinkOptions.KUSTO_WRITE_MODE -> "KustoStreaming",
+            KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON ->
+              "{\"csvMapping\":\"(..a real mapping.)\"}"),
+          true,
+          "CSVMapping cannot be used with Spark streaming ingestion"),
         (mutable.Map("" -> ""), false, "") // falls back to transactional mode
       )
     forAll(testCombinations) { (map, isInvalid, errorMessage) =>
@@ -113,16 +147,15 @@ class KustoDataSourceUtilsTest extends AnyFlatSpec with MockFactory {
         KustoSourceOptions.KUSTO_AAD_APP_SECRET -> "AppKey",
         KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID -> "Tenant",
         KUSTO_TABLE_CREATE_OPTIONS -> "CreateIfNotExist")
-      map.foreach {
-        case (k, v) => conf.put(k, v)
+      map.foreach { case (k, v) =>
+        conf.put(k, v)
       }
       if (isInvalid) {
         val illegalArgumentException = {
           intercept[IllegalArgumentException](
             KustoDataSourceUtils.parseSinkParameters(conf.toMap))
         }
-        assert(
-          illegalArgumentException.getMessage == errorMessage)
+        assert(illegalArgumentException.getMessage == errorMessage)
       }
     }
   }
@@ -139,13 +172,96 @@ class KustoDataSourceUtilsTest extends AnyFlatSpec with MockFactory {
       KustoSourceOptions.KUSTO_AAD_APP_SECRET -> "AppKey",
       KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID -> "Tenant",
       KUSTO_TABLE_CREATE_OPTIONS -> "CreateIfNotExist",
-      KUSTO_INGESTION_STORAGE -> ingestionStorage
-    )
+      KUSTO_INGESTION_STORAGE -> ingestionStorage)
     val illegalArgumentException = {
-      intercept[IllegalArgumentException](
-        KustoDataSourceUtils.parseSinkParameters(conf))
+      intercept[IllegalArgumentException](KustoDataSourceUtils.parseSinkParameters(conf))
     }
     assert(
       illegalArgumentException.getMessage == "storageUrl and containerName must be set when supplying ingestion storage")
+  }
+
+  private val testName = "Create debug options"
+  private val minimalExtentsCountForSplitMergePerNode = 5
+  private val maxRetriesOnMoveExtents = 3
+  private val allSchemaTestCombinations = Table(
+    "schemaAdjustmentMode",
+    SchemaAdjustmentMode.GenerateDynamicCsvMapping,
+    SchemaAdjustmentMode.FailIfNotMatch,
+    SchemaAdjustmentMode.NoAdjustment)
+  forAll(allSchemaTestCombinations) { schemaAdjustmentMode =>
+    testName should s"get created with default values when no special options specified with $schemaAdjustmentMode" in {
+      val result = KustoDataSourceUtils.validateAndCreateWriteDebugOptions(
+        schemaAdjustmentMode,
+        minimalExtentsCountForSplitMergePerNode,
+        maxRetriesOnMoveExtents,
+        disableFlushImmediately = false,
+        ensureNoDupBlobs = false,
+        addSourceLocationTransform = false,
+        maybeSparkIngestionProperties = None)
+
+      assert(
+        result.minimalExtentsCountForSplitMergePerNode == minimalExtentsCountForSplitMergePerNode)
+      assert(result.maxRetriesOnMoveExtents == 3)
+      assert(!result.disableFlushImmediately)
+      assert(!result.ensureNoDuplicatedBlobs)
+      assert(!result.addSourceLocationTransform)
+    }
+  }
+
+  s"$testName" should "throw IllegalArgumentException when addSourceLocationTransform is true and ingestion properties contain mapping" in {
+    val sparkIngestionProperties = new SparkIngestionProperties()
+    sparkIngestionProperties.csvMapping = "csv_mapping"
+
+    val exception = intercept[IllegalArgumentException] {
+      KustoDataSourceUtils.validateAndCreateWriteDebugOptions(
+        SchemaAdjustmentMode.GenerateDynamicCsvMapping,
+        minimalExtentsCountForSplitMergePerNode,
+        maxRetriesOnMoveExtents,
+        disableFlushImmediately = false,
+        ensureNoDupBlobs = false,
+        addSourceLocationTransform = true,
+        maybeSparkIngestionProperties = Some(sparkIngestionProperties))
+    }
+    assert(
+      exception.getMessage == "addSourceLocationTransform cannot be used with Spark ingestion properties that already contain a CSV mapping.")
+  }
+
+  s"$testName" should "get created only when GenerateDynamicCsvMapping is specified" in {
+    val sparkIngestionProperties = new SparkIngestionProperties()
+    val result = KustoDataSourceUtils.validateAndCreateWriteDebugOptions(
+      SchemaAdjustmentMode.GenerateDynamicCsvMapping,
+      minimalExtentsCountForSplitMergePerNode,
+      maxRetriesOnMoveExtents,
+      disableFlushImmediately = true,
+      ensureNoDupBlobs = true,
+      addSourceLocationTransform = true,
+      maybeSparkIngestionProperties = Some(sparkIngestionProperties))
+    assert(result.addSourceLocationTransform)
+    assert(
+      result.minimalExtentsCountForSplitMergePerNode == minimalExtentsCountForSplitMergePerNode)
+    assert(result.maxRetriesOnMoveExtents == maxRetriesOnMoveExtents)
+    assert(result.disableFlushImmediately)
+    assert(result.ensureNoDuplicatedBlobs)
+  }
+
+  private val invalidSchemaTestCombinations = Table(
+    "schemaAdjustmentMode",
+    SchemaAdjustmentMode.FailIfNotMatch,
+    SchemaAdjustmentMode.NoAdjustment)
+  forAll(invalidSchemaTestCombinations) { schemaAdjustmentMode =>
+    testName should s"fail when $schemaAdjustmentMode is used with addSourceLocationTransform" in {
+      val exception = intercept[IllegalArgumentException] {
+        KustoDataSourceUtils.validateAndCreateWriteDebugOptions(
+          schemaAdjustmentMode,
+          minimalExtentsCountForSplitMergePerNode,
+          maxRetriesOnMoveExtents,
+          disableFlushImmediately = false,
+          ensureNoDupBlobs = false,
+          addSourceLocationTransform = true,
+          maybeSparkIngestionProperties = None)
+      }
+      assert(
+        exception.getMessage == "addSourceLocationTransform can only be used with GenerateDynamicCsvMapping schema adjustment mode.")
+    }
   }
 }

@@ -11,6 +11,7 @@ import com.microsoft.kusto.spark.utils.{
   ExtendedKustoClient,
   KustoClientCache,
   KustoConstants,
+  KustoCustomDebugWriteOptions,
   KustoQueryUtils,
   KustoDataSourceUtils => KDSU
 }
@@ -256,7 +257,8 @@ private[kusto] case class KustoRelation(
       kustoCoordinates,
       authentication,
       // TODO revisit this block and refactor
-      writeOptions = WriteOptions.apply(),
+      writeOptions =
+        WriteOptions.apply(kustoCustomDebugWriteOptions = KustoCustomDebugWriteOptions()),
       clientRequestProperties.get)
   }
 }

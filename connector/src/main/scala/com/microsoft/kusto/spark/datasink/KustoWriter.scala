@@ -107,12 +107,15 @@ object KustoWriter {
 
     val targetSchema =
       schemaShowCommandResult.getData.asScala.map(c => c.get(0).asInstanceOf[JsonNode]).toArray
+
     KustoIngestionUtils.adjustSchema(
+      writeOptions.writeMode,
       writeOptions.adjustSchema,
       data.schema,
       targetSchema,
       stagingTableIngestionProperties,
-      writeOptions.tableCreateOptions)
+      writeOptions.tableCreateOptions,
+      writeOptions.kustoCustomDebugWriteOptions)
 
     val rebuiltOptions =
       writeOptions.copy(maybeSparkIngestionProperties = Some(stagingTableIngestionProperties))
@@ -569,12 +572,12 @@ object KustoWriter {
         kustoClient: ExtendedKustoClient): Unit = {
       var props = ingestionProperties
       val blobUri = blobResource.blob.getStorageUri.getPrimaryUri.toString
-      if (parameters.writeOptions.ensureNoDupBlobs || (!props.getFlushImmediately && flushImmediately)) {
+      if (parameters.writeOptions.kustoCustomDebugWriteOptions.ensureNoDuplicatedBlobs || (!props.getFlushImmediately && flushImmediately)) {
         // Need to copy the maybeSparkIngestionProperties so that only this blob ingestion will be effected
         props = SparkIngestionProperties.cloneIngestionProperties(ingestionProperties)
       }
 
-      if (parameters.writeOptions.ensureNoDupBlobs) {
+      if (parameters.writeOptions.kustoCustomDebugWriteOptions.ensureNoDuplicatedBlobs) {
         val pref = KDSU.getDedupTagsPrefix(parameters.writeOptions.requestId, batchIdForTracing)
         val tag = pref + blobUUID
         val ingestIfNotExist = new util.ArrayList[String]
@@ -649,7 +652,7 @@ object KustoWriter {
         if (shouldNotCommitBlockBlob) {
           blobWriter
         } else {
-          if (parameters.writeOptions.ensureNoDupBlobs) {
+          if (parameters.writeOptions.kustoCustomDebugWriteOptions.ensureNoDuplicatedBlobs) {
             taskMap.put(curBlobUUID, blobWriter)
           } else {
             KDSU.logInfo(
@@ -661,7 +664,8 @@ object KustoWriter {
               blobWriter,
               blobWriter.csvWriter.getCounter,
               blobWriter.sas,
-              flushImmediately = !parameters.writeOptions.disableFlushImmediately,
+              flushImmediately =
+                !parameters.writeOptions.kustoCustomDebugWriteOptions.disableFlushImmediately,
               curBlobUUID,
               kustoClient)
             curBlobUUID = UUID.randomUUID().toString
@@ -676,7 +680,7 @@ object KustoWriter {
         s"requestId: '${parameters.writeOptions.requestId}' ")
     finalizeBlobWrite(lastBlobWriter)
     if (lastBlobWriter.csvWriter.getCounter > 0) {
-      if (parameters.writeOptions.ensureNoDupBlobs) {
+      if (parameters.writeOptions.kustoCustomDebugWriteOptions.ensureNoDuplicatedBlobs) {
         taskMap.put(curBlobUUID, lastBlobWriter)
       } else {
         ingest(
@@ -688,7 +692,8 @@ object KustoWriter {
           kustoClient)
       }
     }
-    if (parameters.writeOptions.ensureNoDupBlobs && taskMap.size() > 0) {
+    if (parameters.writeOptions.kustoCustomDebugWriteOptions.ensureNoDuplicatedBlobs && taskMap
+        .size() > 0) {
       taskMap.forEach((uuid, bw) => {
         ingest(bw, bw.csvWriter.getCounter, bw.sas, flushImmediately = false, uuid, kustoClient)
       })

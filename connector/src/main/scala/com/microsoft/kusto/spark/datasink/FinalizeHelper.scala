@@ -70,7 +70,7 @@ object FinalizeHelper {
                 requestId,
                 writeOptions.timeout.toMillis,
                 ingestionInfoString,
-                !writeOptions.ensureNoDupBlobs))
+                !writeOptions.kustoCustomDebugWriteOptions.ensureNoDuplicatedBlobs))
           } else {
             KDSU.logWarn(
               myName,
@@ -86,7 +86,7 @@ object FinalizeHelper {
                   requestId,
                   writeOptions.timeout.toMillis,
                   ingestionInfoString,
-                  !writeOptions.ensureNoDupBlobs)))
+                  !writeOptions.kustoCustomDebugWriteOptions.ensureNoDuplicatedBlobs)))
           }
 
           if (partitionsResults.value.size > 0) {
@@ -106,7 +106,7 @@ object FinalizeHelper {
                 "alterMergePolicyCommand",
                 crp)
               // Drop dedup tags
-              if (writeOptions.ensureNoDupBlobs) {
+              if (writeOptions.kustoCustomDebugWriteOptions.ensureNoDuplicatedBlobs) {
                 client.retryAsyncOp(
                   coordinates.database,
                   generateExtentTagsDropByPrefixCommand(tmpTableName, pref),
