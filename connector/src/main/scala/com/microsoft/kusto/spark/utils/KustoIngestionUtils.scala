@@ -163,7 +163,8 @@ object KustoIngestionUtils {
           targetSchemaColumns.getOrElse(KustoConstants.SourceLocationColumnName, "")))) {
       throw SchemaMatchException(
         "addSourceLocationTransform is set to true, but the target schema does not contain the " +
-          s"column '${KustoConstants.SourceLocationColumnName}'. " +
+          s"column '${KustoConstants.SourceLocationColumnName}' of type '${targetSchemaColumns
+              .get(KustoConstants.SourceLocationColumnName)} " +
           s"Please ensure that the target table has this column defined.")
     }
 
