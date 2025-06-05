@@ -88,7 +88,8 @@ object KustoIngestionUtils {
     // Why should validation be done only if the target schema is not empty?
     // If the target schema is empty, it means that the table is not created yet, so we don't need to validate
     // the schema compatibility. The table will be created with the source schema, and the validation will be done
-    if (targetSchemaColumns.nonEmpty && tableCreationMode != SinkTableCreationMode.CreateIfNotExist) {
+    if (targetSchemaColumns.nonEmpty) {
+      // && tableCreationMode != SinkTableCreationMode.CreateIfNotExist
       validateSchemaCompatibility(
         writeMode,
         notFoundSourceColumns,
@@ -148,14 +149,17 @@ object KustoIngestionUtils {
     sourceSchemaColumns.filter(c => !targetSchemaColumns.contains(c._1)).keys.toSet
   }
 
+  private val cslStringType = "string"
+
   private def validateSchemaCompatibility(
       writeMode: WriteMode,
       notFoundSourceColumns: Set[String],
       targetSchemaColumns: Map[String, String],
       includeSourceLocationTransform: Boolean): Unit = {
 
-    if (includeSourceLocationTransform && !targetSchemaColumns.contains(
-        KustoConstants.SourceLocationColumnName)) {
+    if (includeSourceLocationTransform && (!targetSchemaColumns.contains(
+        KustoConstants.SourceLocationColumnName) ||
+      cslStringType.equalsIgnoreCase(targetSchemaColumns.getOrElse(KustoConstants.SourceLocationColumnName,"")))) {
       throw SchemaMatchException(
         "addSourceLocationTransform is set to true, but the target schema does not contain the " +
           s"column '${KustoConstants.SourceLocationColumnName}'. " +
@@ -168,7 +172,9 @@ object KustoIngestionUtils {
         KustoDataSourceUtils.logWarn(
           this.getClass.getSimpleName,
           s"Source schema has columns that are not present in the target: ${notFoundSourceColumns.mkString(",")}. " +
-            s"Since the option 'addSourceLocationTransform' is set to true, the ingestion will continue.")
+            s"Since the option 'addSourceLocationTransform' is set to true, the ingestion will continue." +
+            "In order to preserve behavior of 'no-mapping like behavior for the client where we do not fail " +
+            "on schema drift as no validation is made")
       } else {
         throw SchemaMatchException(
           s"Source schema has columns that are not present in the target: ${notFoundSourceColumns
@@ -201,7 +207,7 @@ object KustoIngestionUtils {
           case None =>
             new ColumnMapping(
               sourceColumn._1,
-              sourceSchemaColumnTypes.getOrElse(sourceColumn._1, "string"))
+              sourceSchemaColumnTypes.getOrElse(sourceColumn._1, cslStringType))
         }
         columnMapping.setOrdinal(sourceColumn._2)
         columnMapping
@@ -211,7 +217,7 @@ object KustoIngestionUtils {
   private def addSourceLocationMapping(
       columnMappingsBase: Iterable[ColumnMapping]): Iterable[ColumnMapping] = {
     val sourceLocationTransform =
-      new ColumnMapping(KustoConstants.SourceLocationColumnName, "string")
+      new ColumnMapping(KustoConstants.SourceLocationColumnName, cslStringType)
     sourceLocationTransform.setTransform(TransformationMethod.SourceLocation)
     columnMappingsBase ++ Seq(sourceLocationTransform)
   }
