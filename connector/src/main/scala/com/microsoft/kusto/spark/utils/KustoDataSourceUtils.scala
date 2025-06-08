@@ -808,9 +808,11 @@ object KustoDataSourceUtils {
             logError("verifyAsyncCommandCompletion", message)
             throw new Exception(message, e)
           }
+          val transientErrorMessage =
+            s"Failed to retrieve export status for $doingWhat on requestId: $requestId, retrying in a few seconds." +
+              s"Exception: $e}"
           logWarn(
-            "verifyAsyncCommandCompletion",
-            "Failed transiently to retrieve export status, trying again in a few seconds")
+            "verifyAsyncCommandCompletion",transientErrorMessage)
           None
         case _: DataClientException => None
       }
