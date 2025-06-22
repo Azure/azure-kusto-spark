@@ -546,7 +546,7 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
             "name:string, value:int, WriteMode:string"
           }
           if (tableCreationMode != SinkTableCreationMode.CreateIfNotExist) {
-            kustoAdminClient.execute(
+            kustoAdminClient.executeMgmt(
               kustoTestConnectionOptions.database,
               generateTableCreateCommand(table, columnsTypesAndNames = columnDefinition))
           }
