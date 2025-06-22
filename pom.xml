@@ -8,27 +8,20 @@
     <packaging>pom</packaging>
     <version>${revision}</version>
     <properties>
-        <revision>5.3.1</revision>
-        <!-- Spark dependencies -->
-        <scala.version.major>2.12</scala.version.major>
-        <scalafmt.plugin.version>1.1.1640084764.9f463a9</scalafmt.plugin.version>
-        <scala.version.minor>17</scala.version.minor>
-        <spark.version.major>3.0</spark.version.major>
-        <spark.version.minor>1</spark.version.minor>
-        <!-- other dependencies -->
-        <!-- versions from https://learn.microsoft.com/en-us/azure/databricks/release-notes/runtime/13.2-->
+        <az.bom.version>1.6.0</az.bom.version>
+        <revision>6.0.1</revision>
+        <az.identity.version>1.12.0</az.identity.version>
+        <azure-kv-version>4.8.7</azure-kv-version>
+        <azure-storage.version>8.6.6</azure-storage.version>
+        <commons.lang3.version>3.17.0</commons.lang3.version>
         <fasterxml.jackson.jar.version>2.19.0</fasterxml.jackson.jar.version>
         <fasterxml.jackson.version>2.19.0</fasterxml.jackson.version>
-        <!-- Deprecate only after full migration to azure storage 12-->
-        <azure-storage.version>8.6.6</azure-storage.version>
-        <jsonsmart.version>2.4.10</jsonsmart.version>
-        <junit4.version>4.13.2</junit4.version>
-        <commons.lang3.version>3.17.0</commons.lang3.version>
         <hadoop.version>3.4.1</hadoop.version>
-        <kusto.sdk.version>6.0.2</kusto.sdk.version>
         <java.source.version>1.8</java.source.version>
         <java.target.version>1.8</java.target.version>
-        <!-- test dependencies -->
+        <jsonsmart.version>2.5.2</jsonsmart.version>
+        <junit4.version>4.13.2</junit4.version>
+        <kusto.sdk.version>6.0.2</kusto.sdk.version>
         <maven.compile.plugin.version>3.10.1</maven.compile.plugin.version>
         <maven.flatten.version>1.4.1</maven.flatten.version>
         <maven.jar.plugin.version>3.3.0</maven.jar.plugin.version>
@@ -36,13 +29,19 @@
         <maven.source.plugin.version>3.0.1</maven.source.plugin.version>
         <maven.surefire.plugin.version>3.0.0</maven.surefire.plugin.version>
         <mockito.version>4.11.0</mockito.version>
+        <msal4j.version>1.16.0</msal4j.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <scala.maven.plugin.version>4.8.1</scala.maven.plugin.version>
+        <scala.version.major>2.12</scala.version.major>
+        <scala.version.minor>17</scala.version.minor>
+        <scalafmt.plugin.version>1.1.1640084764.9f463a9</scalafmt.plugin.version>
         <scalamock.version>5.2.0</scalamock.version>
         <scalastyle.maven.plugin.version>1.0.0</scalastyle.maven.plugin.version>
         <scalatest.maven.version>2.2.0</scalatest.maven.version>
         <scalatest.version>3.2.17</scalatest.version>
         <slf4j.version>1.8.0-beta4</slf4j.version>
+        <spark.version.major>3.0</spark.version.major>
+        <spark.version.minor>1</spark.version.minor>
         <specs2.version>3.6.5</specs2.version>
         <msal4j.version>1.16.0</msal4j.version>
         <az.identity.version>1.12.0</az.identity.version>

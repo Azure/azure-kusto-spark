@@ -38,8 +38,11 @@ class ExtendedKustoClientTests extends AnyFlatSpec with Matchers {
         crp: ClientRequestProperties): KustoResultSetTable = {
       val response =
         s"""{"Tables":[{"TableName":"Table_0","Columns":[{"ColumnName":"Tags","DataType":"Object","ColumnType":"dynamic"}],
-           "Rows":[[${if (tagsToReturn.isEmpty) ""
-          else tagsToReturn.asScala.map(t => "\"" + t + "\"").asJava}]]}]}"""
+           "Rows":[[${if (tagsToReturn.isEmpty) {
+            ""
+          } else {
+            tagsToReturn.asScala.map(t => "\"" + t + "\"").asJava
+          }}]]}]}"""
       new KustoOperationResult(response, "v1").getPrimaryResults
     }
   }
@@ -82,6 +85,6 @@ class ExtendedKustoClientTests extends AnyFlatSpec with Matchers {
         kustoCustomDebugWriteOptions = KustoCustomDebugWriteOptions()),
       null,
       true)
-    verify(stubbedClient.engineClient, times(0)).execute(any(), any(), any())
+    verify(stubbedClient.engineClient, times(0)).executeMgmt(any(), any(), any())
   }
 }
