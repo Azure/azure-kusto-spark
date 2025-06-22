@@ -99,7 +99,7 @@ private[kusto] object KustoTestUtils {
       database: String,
       tablePrefix: String): Unit = {
     try {
-      val res = kustoAdminClient.executeQuery(
+      val res = kustoAdminClient.executeMgmt(
         database,
         generateFindCurrentTempTablesCommand(Array(tablePrefix)))
       val tablesToCleanup = res.getPrimaryResults.getData.asScala.map(row => row.get(0))
