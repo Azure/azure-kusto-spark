@@ -919,7 +919,7 @@ object KustoDataSourceUtils {
     val statusCol = "Status"
     val statusCheck: () => Option[KustoResultSetTable] = () => {
       try {
-        Some(client.executeQuery(database, operationsShowCommand).getPrimaryResults)
+        Some(client.executeMgmt(database, operationsShowCommand).getPrimaryResults)
       } catch {
         case e: DataServiceException =>
           if (e.isPermanent) {
@@ -933,7 +933,9 @@ object KustoDataSourceUtils {
             s"Failed to retrieve export status for $doingWhat on requestId: $requestId, retrying in a few seconds." +
               s"Exception: $e}"
           logWarn(
-            "verifyAsyncCommandCompletion",transientErrorMessage)
+            "verifyAsyncCommandCompletion",
+            s"Failed transiently to retrieve export status, trying again in a few seconds, " +
+              s"requestId: $requestId, operationId: $operationId, error: ${ExceptionUtils.getStackTrace(e)}")
           None
         case _: DataClientException => None
       }
