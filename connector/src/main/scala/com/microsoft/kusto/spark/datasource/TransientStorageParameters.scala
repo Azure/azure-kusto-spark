@@ -14,7 +14,7 @@ import java.security.InvalidParameterException
 import scala.util.matching.Regex
 class TransientStorageParameters(
     val storageCredentials: scala.Array[TransientStorageCredentials],
-    var endpointSuffix: String = KustoDataSourceUtils.DefaultDomainPostfix) {
+    var endpointSuffix: String = KustoDataSourceUtils.defaultDomainPostfix) {
 
   // C'tor for serialization
   def this() {

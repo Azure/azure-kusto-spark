@@ -84,7 +84,7 @@ class ExtendedKustoClientTests extends AnyFlatSpec with Matchers {
         writeMode = WriteMode.Queued,
         kustoCustomDebugWriteOptions = KustoCustomDebugWriteOptions()),
       null,
-      true)
+      configureRetentionPolicy = true)
     verify(stubbedClient.engineClient, times(0)).executeMgmt(any(), any(), any())
   }
 }

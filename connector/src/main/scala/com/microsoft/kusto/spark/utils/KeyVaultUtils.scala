@@ -86,7 +86,7 @@ object KeyVaultUtils {
         key.getValue
       },
       authority = if (Objects.isNull(authority)) {
-        KustoDataSourceUtils.DefaultMicrosoftTenant
+        KustoDataSourceUtils.defaultMicrosoftTenant
       } else {
         authority.getValue
       })

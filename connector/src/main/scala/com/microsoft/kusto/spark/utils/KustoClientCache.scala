@@ -125,7 +125,7 @@ object KustoClientCache {
 
     engineKcsb.setConnectorDetails(
       KCONST.ClientName,
-      KustoDataSourceUtils.Version,
+      KustoDataSourceUtils.version,
       null,
       null,
       false,
@@ -133,7 +133,7 @@ object KustoClientCache {
       Pair.of("spark.version", SPARK_VERSION))
     ingestKcsb.setConnectorDetails(
       KCONST.ClientName,
-      KustoDataSourceUtils.Version,
+      KustoDataSourceUtils.version,
       null,
       null,
       false,
@@ -152,7 +152,7 @@ object KustoClientCache {
     val ingestUri: String = ingestionUri.getOrElse(
       new URIBuilder()
         .setScheme("https")
-        .setHost(KustoDataSourceUtils.IngestPrefix + new URI(engineUrl).getHost)
+        .setHost(KustoDataSourceUtils.ingestPrefix + new URI(engineUrl).getHost)
         .toString)
 
     override def equals(that: Any): Boolean = that match {

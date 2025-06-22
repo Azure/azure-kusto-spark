@@ -225,8 +225,8 @@ object FinalizeHelper {
           pending
         },
         res => finalRes = res,
-        maxWaitTimeBetweenCallsMillis = KDSU.WriteInitialMaxWaitTime.toMillis.toInt,
-        maxWaitTimeAfterMinute = KDSU.WriteMaxWaitTime.toMillis.toInt)
+        maxWaitTimeBetweenCallsMillis = KDSU.writeInitialMaxWaitTime.toMillis.toInt,
+        maxWaitTimeAfterMinute = KDSU.writeMaxWaitTime.toMillis.toInt)
       .await(timeout, TimeUnit.MILLISECONDS)
     finalRes match {
       case Some(ingestResults) =>

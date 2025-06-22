@@ -6,7 +6,6 @@ package com.microsoft.kusto.spark.utils
 import com.azure.core.credential.TokenRequestContext
 import com.azure.identity.{
   AzureCliCredentialBuilder,
-  ChainedTokenCredential,
   ChainedTokenCredentialBuilder,
   DeviceCodeCredentialBuilder
 }
@@ -16,26 +15,50 @@ import com.fasterxml.jackson.databind.node.ArrayNode
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import com.microsoft.azure.kusto.data.exceptions.{DataClientException, DataServiceException}
 import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties, KustoResultSetTable}
-import com.microsoft.kusto.spark.authentication._
+import com.microsoft.kusto.spark.authentication.{
+  AadApplicationAuthentication,
+  AadApplicationCertificateAuthentication,
+  KeyVaultAppAuthentication,
+  KeyVaultAuthentication,
+  KeyVaultCertificateAuthentication,
+  KustoAccessTokenAuthentication,
+  KustoAuthentication,
+  KustoTokenProviderAuthentication,
+  KustoUserPromptAuthentication,
+  ManagedIdentityAuthentication
+}
 import com.microsoft.kusto.spark.common.{KustoCoordinates, KustoDebugOptions}
+import com.microsoft.kusto.spark.datasink.{
+  IngestionStorageParameters,
+  KustoSinkOptions,
+  SchemaAdjustmentMode,
+  SinkTableCreationMode,
+  SparkIngestionProperties,
+  WriteMode,
+  WriteOptions
+}
 import com.microsoft.kusto.spark.datasink.KustoWriter.TempIngestionTablePrefix
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
 import com.microsoft.kusto.spark.datasink.WriteMode.WriteMode
-import com.microsoft.kusto.spark.datasink.{SchemaAdjustmentMode, _}
+import com.microsoft.kusto.spark.datasource.{
+  KustoReadOptions,
+  KustoResponseDeserializer,
+  KustoSchema,
+  KustoSourceOptions,
+  PartitionOptions,
+  ReadMode,
+  TransientStorageParameters
+}
 import com.microsoft.kusto.spark.datasource.ReadMode.ReadMode
-import com.microsoft.kusto.spark.datasource._
 import com.microsoft.kusto.spark.exceptions.{
   FailedOperationException,
   TimeoutAwaitingPendingOperationException
 }
-import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
-import com.microsoft.kusto.spark.utils.KustoConstants.{
-  DefaultBatchingLimit,
-  DefaultExtentsCountForSplitMergePerNode,
-  DefaultMaxRetriesOnMoveExtents,
-  DefaultMaxStreamingBytesUncompressed,
-  OneMegaByte
+import com.microsoft.kusto.spark.utils.CslCommandsGenerator.{
+  generateCountQuery,
+  generateEstimateRowsCountQuery
 }
+import com.microsoft.kusto.spark.utils.KustoConstants._
 import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
 import io.github.resilience4j.retry.{Retry, RetryConfig}
 import io.vavr.CheckedFunction0
@@ -52,7 +75,6 @@ import java.security.InvalidParameterException
 import java.util
 import java.util.concurrent.{Callable, CountDownLatch, TimeUnit}
 import java.util.{
-  Collections,
   NoSuchElementException,
   Objects,
   Properties,
@@ -101,7 +123,7 @@ object KustoDataSourceUtils {
       None
     }
     val distributedReadModeTransientCacheEnabled = parameters
-      .getOrElse(KustoSourceOptions.KUSTO_DISTRIBUTED_READ_MODE_TRANSIENT_CACHE, "false")
+      .getOrElse(KustoSourceOptions.KUSTO_DISTRIBUTED_READ_MODE_TRANSIENT_CACHE, false.toString)
       .trim
       .toBoolean
     val queryFilterPushDown =
@@ -159,29 +181,29 @@ object KustoDataSourceUtils {
 
   private val klog = Logger.getLogger("KustoConnector")
 
-  val DefaultMicrosoftTenant = "microsoft.com"
+  val defaultMicrosoftTenant = "microsoft.com"
   val NewLine: String = sys.props("line.separator")
-  var ReadInitialMaxWaitTime: FiniteDuration = 4 seconds
-  var ReadMaxWaitTime: FiniteDuration = 30 seconds
-  var WriteInitialMaxWaitTime: FiniteDuration = 2 seconds
-  var WriteMaxWaitTime: FiniteDuration = 10 seconds
+  private val readInitialMaxWaitTime: FiniteDuration = FiniteDuration(4, TimeUnit.SECONDS)
+  private val readMaxWaitTime: FiniteDuration = FiniteDuration(30, TimeUnit.SECONDS)
+  val writeInitialMaxWaitTime: FiniteDuration = FiniteDuration(2, TimeUnit.SECONDS)
+  val writeMaxWaitTime: FiniteDuration = FiniteDuration(10, TimeUnit.SECONDS)
 
-  val input: InputStream = getClass.getClassLoader.getResourceAsStream("spark.kusto.properties")
-  val props = new Properties()
+  private val input: InputStream =
+    getClass.getClassLoader.getResourceAsStream("spark.kusto.properties")
+  private val props = new Properties()
   props.load(input)
-  var Version: String = props.getProperty("application.version")
-  var clientName = s"Kusto.Spark.Connector:$Version"
-  val IngestPrefix: String = props.getProperty("ingestPrefix", "ingest-")
-  val EnginePrefix: String = props.getProperty("enginePrefix", "https://")
-  val DefaultDomainPostfix: String = props.getProperty("defaultDomainPostfix", "core.windows.net")
-  val DefaultClusterSuffix: String =
-    props.getProperty("defaultClusterSuffix", "kusto.windows.net")
-  val AriaClustersProxy: String =
+  var version: String = props.getProperty("application.version")
+  val clientName = s"Kusto.Spark.Connector:$version"
+  val ingestPrefix: String = props.getProperty("ingestPrefix", "ingest-")
+  private val enginePrefix: String = props.getProperty("enginePrefix", "https://")
+  val defaultDomainPostfix: String =
+    props.getProperty("defaultDomainPostfix", "core.windows.net")
+  private val ariaClustersProxy: String =
     props.getProperty("ariaClustersProxy", "https://kusto.aria.microsoft.com")
-  val PlayFabClustersProxy: String =
+  private val playFabClustersProxy: String =
     props.getProperty("playFabProxy", "https://insights.playfab.com")
-  val AriaClustersAlias: String = "Aria proxy"
-  val PlayFabClustersAlias: String = "PlayFab proxy"
+  private val ariaClustersAlias: String = "Aria proxy"
+  private val playFabClustersAlias: String = "PlayFab proxy"
   var loggingLevel: Level = Level.INFO
 
   def setLoggingLevel(level: String): Unit = {
@@ -269,11 +291,12 @@ object KustoDataSourceUtils {
       keyVaultCertKey = parameters.getOrElse(KustoDebugOptions.KEY_VAULT_CERTIFICATE_KEY, ""),
       accessToken = parameters.getOrElse(KustoSourceOptions.KUSTO_ACCESS_TOKEN, ""),
       userPrompt = parameters.get(KustoSourceOptions.KUSTO_USER_PROMPT),
-      managedIdentityAuth =
-        parameters.getOrElse(KustoSourceOptions.KUSTO_MANAGED_IDENTITY_AUTH, "false").toBoolean,
+      managedIdentityAuth = parameters
+        .getOrElse(KustoSourceOptions.KUSTO_MANAGED_IDENTITY_AUTH, false.toString)
+        .toBoolean,
       maybeManagedClientId = parameters.get(KustoSourceOptions.KUSTO_MANAGED_IDENTITY_CLIENT_ID),
       authorityId =
-        parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID, DefaultMicrosoftTenant),
+        parameters.getOrElse(KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID, defaultMicrosoftTenant),
       parameters = parameters // Pass full parameters for token provider
     )
   }
@@ -516,10 +539,15 @@ object KustoDataSourceUtils {
       throw new InvalidParameterException(
         "tempTableName can only be used with FailIfNotExists table create mode and Transactional write mode.")
     }
-    isAsync =
-      parameters.getOrElse(KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC, "false").trim.toBoolean
+    isAsync = parameters
+      .getOrElse(KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC, false.toString)
+      .trim
+      .toBoolean
     val pollingOnDriver =
-      parameters.getOrElse(KustoSinkOptions.KUSTO_POLLING_ON_DRIVER, "false").trim.toBoolean
+      parameters
+        .getOrElse(KustoSinkOptions.KUSTO_POLLING_ON_DRIVER, false.toString)
+        .trim
+        .toBoolean
 
     batchLimit = parameters
       .getOrElse(KustoSinkOptions.KUSTO_CLIENT_BATCHING_LIMIT, DefaultBatchingLimit.toString)
@@ -565,10 +593,13 @@ object KustoDataSourceUtils {
       TimeUnit.SECONDS)
 
     val disableFlushImmediately =
-      parameters.getOrElse(KustoDebugOptions.KUSTO_DISABLE_FLUSH_IMMEDIATELY, "false").toBoolean
-
+      parameters
+        .getOrElse(KustoDebugOptions.KUSTO_DISABLE_FLUSH_IMMEDIATELY, false.toString)
+        .toBoolean
     val ensureNoDupBlobs =
-      parameters.getOrElse(KustoDebugOptions.KUSTO_ENSURE_NO_DUPLICATED_BLOBS, "false").toBoolean
+      parameters
+        .getOrElse(KustoDebugOptions.KUSTO_ENSURE_NO_DUPLICATED_BLOBS, false.toString)
+        .toBoolean
 
     val addSourceLocationTransform =
       parameters
@@ -626,10 +657,10 @@ object KustoDataSourceUtils {
         s"'pollingOnDriver': ${writeOptions.pollingOnDriver}," +
         s"'maxRetriesOnMoveExtents':$maxRetriesOnMoveExtents, 'minimalExtentsCountForSplitMergePerNode':" +
         s"$minimalExtentsCountForSplitMergePerNode, " +
-        s"'adjustSchema': $adjustSchema, 'autoCleanupTime': $autoCleanupTime${if (writeOptions.userTempTableName.isDefined)
-            s", userTempTableName: ${userTempTableName.get}"
-          else ""}, disableFlushImmediately: $disableFlushImmediately${if (ensureNoDupBlobs) "ensureNoDupBlobs: true"
-          else ""}")
+        s"'adjustSchema': $adjustSchema, 'autoCleanupTime': $autoCleanupTime${writeOptions.userTempTableName
+            .getOrElse("")}, " +
+        s"disableFlushImmediately: $disableFlushImmediately," +
+        s"ensureNoDupBlobs: $ensureNoDupBlobs")
     SinkParameters(writeOptions, sourceParameters)
   }
 
@@ -716,7 +747,7 @@ object KustoDataSourceUtils {
     retry.executeCheckedSupplier(f)
   }
 
-  def getClientRequestProperties(
+  private def getClientRequestProperties(
       parameters: Map[String, String],
       requestId: String): ClientRequestProperties = {
     val crpOption = parameters.get(KustoSourceOptions.KUSTO_CLIENT_REQUEST_PROPERTIES_JSON)
@@ -726,7 +757,6 @@ object KustoDataSourceUtils {
     } else {
       new ClientRequestProperties
     }
-
     crp.setClientRequestId(requestId)
     crp
   }
@@ -761,18 +791,18 @@ object KustoDataSourceUtils {
   }
 
   private[kusto] def getClusterNameFromUrlIfNeeded(cluster: String): String = {
-    if (cluster.equals(AriaClustersProxy)) {
-      AriaClustersAlias
-    } else if (cluster.equals(PlayFabClustersProxy)) {
-      PlayFabClustersAlias
-    } else if (cluster.startsWith(EnginePrefix)) {
+    if (cluster.equals(ariaClustersProxy)) {
+      ariaClustersAlias
+    } else if (cluster.equals(playFabClustersProxy)) {
+      playFabClustersAlias
+    } else if (cluster.startsWith(enginePrefix)) {
       if (!cluster.contains(".kusto.") && !cluster.contains(".kustodev.")) {
         throw new InvalidParameterException(
           "KUSTO_CLUSTER parameter accepts either a full url with https scheme or the cluster's" +
             "alias and tries to construct the full URL from it. Parameter given: " + cluster)
       }
       val host = new URI(cluster).getHost
-      val startIdx = if (host.startsWith(IngestPrefix)) IngestPrefix.length else 0
+      val startIdx = if (host.startsWith(ingestPrefix)) ingestPrefix.length else 0
       val endIdx =
         if (cluster.contains(".kustodev.")) host.indexOf(".kustodev.")
         else host.indexOf(".kusto.")
@@ -784,11 +814,11 @@ object KustoDataSourceUtils {
   }
 
   private[kusto] def getEngineUrlFromAliasIfNeeded(cluster: String): String = {
-    if (cluster.startsWith(EnginePrefix)) {
+    if (cluster.startsWith(enginePrefix)) {
 
       val host = new URI(cluster).getHost
-      if (host.startsWith(IngestPrefix)) {
-        val startIdx = IngestPrefix.length
+      if (host.startsWith(ingestPrefix)) {
+        val startIdx = ingestPrefix.length
         val uriBuilder = new URIBuilder()
         uriBuilder.setHost(
           s"${host.substring(startIdx, host.indexOf(".kusto."))}.kusto.windows.net")
@@ -927,8 +957,8 @@ object KustoDataSourceUtils {
       finalWork = (result: Option[KustoResultSetTable]) => {
         lastResponse = result
       },
-      maxWaitTimeBetweenCallsMillis = ReadInitialMaxWaitTime.toMillis.toInt,
-      ReadMaxWaitTime.toMillis.toInt)
+      maxWaitTimeBetweenCallsMillis = readInitialMaxWaitTime.toMillis.toInt,
+      readMaxWaitTime.toMillis.toInt)
 
     var success = true
     if (timeOut < FiniteDuration.apply(0, SECONDS)) {
@@ -982,7 +1012,8 @@ object KustoDataSourceUtils {
             app.password
           },
           authority =
-            if (app.authority == "microsoft.com") paramsFromKeyVault.authority else app.authority)
+            if (app.authority == defaultMicrosoftTenant) paramsFromKeyVault.authority
+            else app.authority)
       } catch {
         case _: ClassCastException =>
           throw new UnsupportedOperationException(
@@ -1001,9 +1032,11 @@ object KustoDataSourceUtils {
     val keyVaultCredential = KeyVaultUtils.getStorageParamsFromKeyVault(keyVaultAuthentication)
     try {
       val domainSuffix =
-        if (StringUtils.isNotBlank(keyVaultCredential.domainSuffix))
+        if (StringUtils.isNotBlank(keyVaultCredential.domainSuffix)) {
           keyVaultCredential.domainSuffix
-        else KustoDataSourceUtils.DefaultDomainPostfix
+        } else {
+          KustoDataSourceUtils.defaultDomainPostfix
+        }
       Some(new TransientStorageParameters(Array(keyVaultCredential), domainSuffix))
     } catch {
       case ex: Exception =>
@@ -1048,8 +1081,11 @@ object KustoDataSourceUtils {
      */
     val estimatedCount = maybeEstimatedCount match {
       case Some(ecStr: String) =>
-        if (StringUtils.isBlank(ecStr) || !StringUtils.isNumeric(ecStr)) /* Empty estimate */ 0
-        else ecStr.toInt
+        if (StringUtils.isBlank(ecStr) || !StringUtils.isNumeric(ecStr)) /* Empty estimate */ {
+          0
+        } else {
+          ecStr.toInt
+        }
       case Some(ecInt: java.lang.Number) =>
         ecInt.intValue() // Is a numeric , get the int value back
       case None => 0 // No value
