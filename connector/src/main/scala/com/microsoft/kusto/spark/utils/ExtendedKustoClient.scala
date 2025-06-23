@@ -206,7 +206,15 @@ class ExtendedKustoClient(
       crp: ClientRequestProperties,
       isMgmtCommand: Boolean = true,
       retryConfig: Option[RetryConfig] = None): KustoOperationResult = {
-    val isMgmtCommandStr = if(isMgmtCommand) {
+
+    if (StringUtils.trim(command).startsWith(".") && !isMgmtCommand) {
+      KDSU.logWarn(
+        myName,
+        s"Command '$command' starts with a dot but is not marked as management command. " +
+          "This may lead to unexpected behavior. Please ensure the command is intended to be a management command.")
+    }
+
+    val isMgmtCommandStr = if (isMgmtCommand || StringUtils.trim(command).startsWith(".")) {
       "management"
     } else {
       "query"
@@ -222,7 +230,9 @@ class ExtendedKustoClient(
             command,
             newIncrementedCrp(Some(crp), activityName, retryNumber))
         } else {
-          KDSU.logDebug(myName, s"Executing $isMgmtCommandStr command: $command, retry number: $retryNumber")
+          KDSU.logDebug(
+            myName,
+            s"Executing $isMgmtCommandStr command: $command, retry number: $retryNumber")
           engineClient.executeQuery(
             database,
             command,

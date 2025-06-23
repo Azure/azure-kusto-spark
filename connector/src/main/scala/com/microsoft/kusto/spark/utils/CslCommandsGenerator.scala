@@ -11,8 +11,11 @@ import com.microsoft.kusto.spark.datasource.{
 }
 
 private[kusto] object CslCommandsGenerator {
-  private final val defaultKeySet =
-    Set("compressionType", "namePrefix", "sizeLimit", "compressed", "async")
+
+  private val COMPRESSED_KEY = "compressed"
+  private final val DEFAULT_EXPORT_KEYS =
+    Set("compressionType", "namePrefix", "sizeLimit", COMPRESSED_KEY, "async")
+
   def generateFetchTableIngestByTagsCommand(table: String): String = {
     s""".show table $table  extents;
        $$command_results
@@ -124,9 +127,11 @@ private[kusto] object CslCommandsGenerator {
       batchSize: Option[Int],
       isDestinationTableMaterializedViewSource: Boolean = false): String = {
     val withClause =
-      if (batchSize.isDefined)
+      if (batchSize.isDefined) {
         s"""with(extentsShowFilteringRuntimePolicy='{"MaximumResultsCount":${batchSize.get}}')"""
-      else ""
+      } else {
+        ""
+      }
     val setNewIngestionTime: String =
       if (isDestinationTableMaterializedViewSource) "with(SetNewIngestionTime=true)" else ""
     s""".move async extents to table $destinationTableName $setNewIngestionTime with(extentCreatedOnFrom='${timerange(
@@ -176,8 +181,11 @@ private[kusto] object CslCommandsGenerator {
         storage.authMethod match {
           case AuthMethod.Key => s""";" h@"${storage.storageAccountKey}""""
           case AuthMethod.Sas =>
-            if (storage.sasKey(0) == '?') s"""" h@"${storage.sasKey}""""
-            else s"""?" h@"${storage.sasKey}""""
+            if (storage.sasKey(0) == '?') {
+              s"""" h@"${storage.sasKey}""""
+            } else {
+              s"""?" h@"${storage.sasKey}""""
+            }
           case AuthMethod.Impersonation =>
             s"""${TransientStorageParameters.ImpersonationString}""""
         }
@@ -188,11 +196,11 @@ private[kusto] object CslCommandsGenerator {
     // if we pass in compress as 'none' explicitly then do not compress, else compress
     val compress =
       if (additionalExportOptions
-          .get("compressed")
+          .get(COMPRESSED_KEY)
           .exists(compressed => "none".equalsIgnoreCase(compressed))) ""
-      else "compressed"
+      else COMPRESSED_KEY
     val additionalOptionsString = additionalExportOptions
-      .filterKeys(key => !defaultKeySet.contains(key))
+      .filterKeys(key => !DEFAULT_EXPORT_KEYS.contains(key))
       .map { case (k, v) =>
         s"""$k="$v""""
       }
@@ -225,18 +233,16 @@ private[kusto] object CslCommandsGenerator {
     query + "| evaluate estimate_rows_count()"
   }
 
-  def generateTableCount(table: String): String = {
-    s".show tables | where TableName == '$table' | count"
-  }
-
   def generateTableAlterRetentionPolicy(
       tmpTableName: String,
       period: String,
       recoverable: Boolean): String = {
     s""".alter table ${KustoQueryUtils.normalizeTableName(
-        tmpTableName)} policy retention '{ "SoftDeletePeriod": "$period", "Recoverability":"${if (recoverable)
+        tmpTableName)} policy retention '{ "SoftDeletePeriod": "$period", "Recoverability":"${if (recoverable) {
         "Enabled"
-      else "Disabled"}" }' """
+      } else {
+        "Disabled"
+      }}" }' """
   }
 
   def generateTableAlterAutoDeletePolicy(tmpTableName: String, expiryDate: Instant): String = {
