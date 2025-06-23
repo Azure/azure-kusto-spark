@@ -104,7 +104,7 @@ class DefaultSource
     val readOptions = KDSU.getReadParameters(parameters, sqlContext)
     if (authenticationParameters.isEmpty) {
       // Parse parameters if haven't got parsed before
-      val sourceParameters = KDSU.parseSourceParameters(parameters, true)
+      val sourceParameters = KDSU.parseSourceParameters(parameters, allowProxy = true)
       initCommonParams(sourceParameters)
     }
 
