@@ -40,8 +40,8 @@
         <scalatest.maven.version>2.2.0</scalatest.maven.version>
         <scalatest.version>3.2.17</scalatest.version>
         <slf4j.version>2.0.17</slf4j.version>
-        <spark.version.major>3.5</spark.version.major>
-        <spark.version.minor>6</spark.version.minor>
+        <spark.version.major>3.0</spark.version.major>
+        <spark.version.minor>3</spark.version.minor>
         <specs2.version>3.6.5</specs2.version>
         <kusto.shade.prefix>kusto_connector_shaded</kusto.shade.prefix>
     </properties>
