@@ -189,10 +189,9 @@ object KustoWriter {
         }
         KDSU.logInfo(className, s"asynchronous write to Kusto table '$table' in progress")
         // This part runs back on the driver
-
         if (writeOptions.writeMode == WriteMode.Transactional) {
-          asyncWork.onSuccess { case _ =>
-            finalizeIngestionWhenWorkersSucceeded(
+          asyncWork.onComplete(
+            handleAsyncWorkCompletion(
               tableCoordinates,
               batchIdIfExists,
               tmpTableName,
@@ -203,24 +202,7 @@ object KustoWriter {
               rdd.sparkContext,
               authentication,
               kustoClient,
-              sinkStartTime)
-          }
-          asyncWork.onFailure { case exception: Exception =>
-            if (writeOptions.userTempTableName.isEmpty) {
-              kustoClient.cleanupIngestionByProducts(tableCoordinates.database, tmpTableName, crp)
-            }
-            KDSU.reportExceptionAndThrow(
-              className,
-              exception,
-              "writing data",
-              tableCoordinates.clusterUrl,
-              tableCoordinates.database,
-              table,
-              shouldNotThrow = true)
-            KDSU.logError(
-              className,
-              "The exception is not visible in the driver since we're in async mode")
-          }
+              sinkStartTime))
         }
       } else {
         try
@@ -255,6 +237,51 @@ object KustoWriter {
             sinkStartTime)
         }
       }
+    }
+  }
+
+  // Add this private method to the object:
+  private def handleAsyncWorkCompletion(
+      tableCoordinates: KustoCoordinates,
+      batchIdIfExists: String,
+      tmpTableName: String,
+      partitionsResults: CollectionAccumulator[PartitionResult],
+      writeOptions: WriteOptions,
+      crp: ClientRequestProperties,
+      tableExists: Boolean,
+      sparkContext: org.apache.spark.SparkContext,
+      authentication: KustoAuthentication,
+      kustoClient: ExtendedKustoClient,
+      sinkStartTime: Instant): scala.util.Try[Unit] => Unit = {
+    {
+      case Success(_) =>
+        finalizeIngestionWhenWorkersSucceeded(
+          tableCoordinates,
+          batchIdIfExists,
+          tmpTableName,
+          partitionsResults,
+          writeOptions,
+          crp,
+          tableExists,
+          sparkContext,
+          authentication,
+          kustoClient,
+          sinkStartTime)
+      case Failure(exception) =>
+        if (writeOptions.userTempTableName.isEmpty) {
+          kustoClient.cleanupIngestionByProducts(tableCoordinates.database, tmpTableName, crp)
+        }
+        KDSU.reportExceptionAndThrow(
+          className,
+          exception,
+          "writing data",
+          tableCoordinates.clusterUrl,
+          tableCoordinates.database,
+          tableCoordinates.table.get,
+          shouldNotThrow = true)
+        KDSU.logError(
+          className,
+          "The exception is not visible in the driver since we're in async mode")
     }
   }
 
