@@ -214,6 +214,13 @@ class ExtendedKustoClient(
           "This may lead to unexpected behavior. Please ensure the command is intended to be a management command.")
     }
 
+    if(isMgmtCommand && !StringUtils.trim(command).startsWith(".")) {
+      KDSU.logWarn(
+        myName,
+        s"Command '$command' does not start with '.' an but is marked as management command. " +
+          "This may lead to unexpected behavior. Please ensure the command is intended to be a query command.")
+    }
+
     val isMgmtCommandStr = if (isMgmtCommand || StringUtils.trim(command).startsWith(".")) {
       "management"
     } else {
