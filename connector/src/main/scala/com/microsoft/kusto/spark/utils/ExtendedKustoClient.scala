@@ -208,7 +208,8 @@ class ExtendedKustoClient(
       isMgmtCommand: Boolean = true,
       retryConfig: Option[RetryConfig] = None): KustoOperationResult = {
 
-    val startsWithDot = StringUtils.trim(command).startsWith(DOT)
+    val startsWithDot =
+      StringUtils.isNotEmpty(command) && StringUtils.trim(command).startsWith(DOT)
 
     if (startsWithDot && !isMgmtCommand) {
       KDSU.logWarn(
@@ -217,7 +218,7 @@ class ExtendedKustoClient(
           "This may lead to unexpected behavior. Please ensure the command is intended to be a management command.")
     }
 
-    if(isMgmtCommand && !startsWithDot) {
+    if (isMgmtCommand && !startsWithDot) {
       KDSU.logWarn(
         myName,
         s"Command '$command' does not start with '.' an but is marked as management command. " +
