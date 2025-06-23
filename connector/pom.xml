@@ -41,6 +41,10 @@
                     <groupId>com.fasterxml.jackson.datatype</groupId>
                     <artifactId>jackson-datatype-jsr310</artifactId>
                 </exclusion>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-api</artifactId>
+                </exclusion>
             </exclusions>
         </dependency>
         <dependency>

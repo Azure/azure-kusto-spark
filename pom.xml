@@ -39,7 +39,7 @@
         <scalastyle.maven.plugin.version>1.0.0</scalastyle.maven.plugin.version>
         <scalatest.maven.version>2.2.0</scalatest.maven.version>
         <scalatest.version>3.2.17</scalatest.version>
-        <slf4j.version>1.8.0-beta4</slf4j.version>
+        <slf4j.version>2.0.17</slf4j.version>
         <spark.version.major>3.5</spark.version.major>
         <spark.version.minor>6</spark.version.minor>
         <specs2.version>3.6.5</specs2.version>
