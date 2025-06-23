@@ -14,8 +14,7 @@
         <azure-kv-version>4.8.7</azure-kv-version>
         <azure-storage.version>8.6.6</azure-storage.version>
         <commons.lang3.version>3.17.0</commons.lang3.version>
-        <fasterxml.jackson.jar.version>2.19.0</fasterxml.jackson.jar.version>
-        <fasterxml.jackson.version>2.19.0</fasterxml.jackson.version>
+        <fasterxml.jackson.version>2.19.1</fasterxml.jackson.version>
         <hadoop.version>3.4.1</hadoop.version>
         <java.source.version>1.8</java.source.version>
         <java.target.version>1.8</java.target.version>
