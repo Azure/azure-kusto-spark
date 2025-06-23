@@ -12,7 +12,7 @@ import com.microsoft.azure.kusto.ingest.resources.ResourceWithSas
 import com.microsoft.azure.kusto.ingest.{
   IngestClientFactory,
   ManagedStreamingIngestClient,
-  QueuedIngestClient,
+  QueuedIngestClient
 }
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.KustoWriter.DelayPeriodBetweenCalls
@@ -204,13 +204,33 @@ class ExtendedKustoClient(
       command: String,
       activityName: String,
       crp: ClientRequestProperties,
+      isMgmtCommand: Boolean = true,
       retryConfig: Option[RetryConfig] = None): KustoOperationResult = {
+    val isMgmtCommandStr = if(isMgmtCommand) {
+      "management"
+    } else {
+      "query"
+    }
     KDSU.retryApplyFunction(
-      i => {
-        engineClient.executeMgmt(database, command, newIncrementedCrp(Some(crp), activityName, i))
+      retryNumber => {
+        if (isMgmtCommand) {
+          KDSU.logDebug(
+            myName,
+            s"Executing $isMgmtCommandStr command: $command, retry number: $retryNumber")
+          engineClient.executeMgmt(
+            database,
+            command,
+            newIncrementedCrp(Some(crp), activityName, retryNumber))
+        } else {
+          KDSU.logDebug(myName, s"Executing $isMgmtCommandStr command: $command, retry number: $retryNumber")
+          engineClient.executeQuery(
+            database,
+            command,
+            newIncrementedCrp(Some(crp), activityName, retryNumber))
+        }
       },
       retryConfig.getOrElse(this.retryConfig),
-      "Execute engine command with retries")
+      s"Execute $isMgmtCommandStr command with retries")
   }
 
   private def newIncrementedCrp(

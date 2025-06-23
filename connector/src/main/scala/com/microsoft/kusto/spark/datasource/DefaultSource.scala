@@ -71,8 +71,9 @@ class DefaultSource
 
     val limit =
       if (sinkParameters.writeOptions.writeResultLimit.equalsIgnoreCase(
-          KustoSinkOptions.NONE_RESULT_LIMIT)) None
-      else {
+          KustoSinkOptions.NONE_RESULT_LIMIT)) {
+        None
+      } else {
         try {
           Some(sinkParameters.writeOptions.writeResultLimit.toInt)
         } catch {
@@ -85,7 +86,7 @@ class DefaultSource
     createRelation(sqlContext, adjustParametersForBaseRelation(parameters, limit))
   }
 
-  def adjustParametersForBaseRelation(
+  private def adjustParametersForBaseRelation(
       parameters: Map[String, String],
       limit: Option[Int]): Map[String, String] = {
     if (limit.isDefined) {
