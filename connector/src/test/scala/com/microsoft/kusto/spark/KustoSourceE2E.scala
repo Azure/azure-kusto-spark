@@ -285,7 +285,7 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
 
     // Should take up to another 10 seconds for .show commands to come up
     Thread.sleep(5000 * 60)
-    val res3 = maybeKustoAdminClient.get.executeQuery(
+    val res3 = maybeKustoAdminClient.get.executeMgmt(
       s""".show commands | where StartedOn > datetime(${time.toString})  | where
                                         CommandType ==
       "DataExportToFile" | where Text has "$table"""")

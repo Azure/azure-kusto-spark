@@ -66,6 +66,7 @@ class ExtendedKustoClient(
   RetryConfig.ofDefaults()
   private val retryConfig = buildRetryConfig
   private val retryConfigAsyncOp = buildRetryConfigForAsyncOp
+  private val DOT = "."
 
   private val myName = this.getClass.getSimpleName
   private val durationFormat = "dd:HH:mm:ss"
@@ -207,21 +208,23 @@ class ExtendedKustoClient(
       isMgmtCommand: Boolean = true,
       retryConfig: Option[RetryConfig] = None): KustoOperationResult = {
 
-    if (StringUtils.trim(command).startsWith(".") && !isMgmtCommand) {
+    val startsWithDot = StringUtils.trim(command).startsWith(DOT)
+
+    if (startsWithDot && !isMgmtCommand) {
       KDSU.logWarn(
         myName,
         s"Command '$command' starts with a dot but is not marked as management command. " +
           "This may lead to unexpected behavior. Please ensure the command is intended to be a management command.")
     }
 
-    if(isMgmtCommand && !StringUtils.trim(command).startsWith(".")) {
+    if(isMgmtCommand && !startsWithDot) {
       KDSU.logWarn(
         myName,
         s"Command '$command' does not start with '.' an but is marked as management command. " +
           "This may lead to unexpected behavior. Please ensure the command is intended to be a query command.")
     }
 
-    val isMgmtCommandStr = if (isMgmtCommand || StringUtils.trim(command).startsWith(".")) {
+    val isMgmtCommandStr = if (isMgmtCommand || startsWithDot) {
       "management"
     } else {
       "query"
