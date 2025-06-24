@@ -1019,8 +1019,12 @@ object KustoDataSourceUtils {
             app.password
           },
           authority =
-            if (app.authority == defaultMicrosoftTenant) paramsFromKeyVault.authority
-            else app.authority)
+            if (app.authority == defaultMicrosoftTenant) {
+              paramsFromKeyVault.authority
+            }
+            else {
+              app.authority
+            })
       } catch {
         case _: ClassCastException =>
           throw new UnsupportedOperationException(
@@ -1095,7 +1099,13 @@ object KustoDataSourceUtils {
         }
       case Some(ecInt: java.lang.Number) =>
         ecInt.intValue() // Is a numeric , get the int value back
-      case None => 0 // No value
+      case Some(someObj:Object)         =>
+        if(!Objects.isNull(someObj) && StringUtils.isNumeric(someObj.toString)) {
+          someObj.toString.toInt
+        } else {
+          0
+        }  // fallback for other types
+      case None            => 0
     }
     // We cannot be finitely determine the count , or have a 0 count. Recheck using a 'query | count()'
     if (estimatedCount == 0) {

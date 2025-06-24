@@ -9,6 +9,7 @@
     <version>${revision}</version>
     <properties>
         <revision>6.0.0</revision>
+        <kusto.shade.prefix>kusto_connector_shaded</kusto.shade.prefix>
         <awaitility.version>4.3.0</awaitility.version>
         <az.identity.version>1.12.0</az.identity.version>
         <azure.kv.version>4.8.7</azure.kv.version>
@@ -30,18 +31,22 @@
         <msal4j.version>1.16.0</msal4j.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <scala.maven.plugin.version>4.8.1</scala.maven.plugin.version>
+        <scala.rewrites.version>0.1.5</scala.rewrites.version>
         <scala.version.major>2.12</scala.version.major>
         <scala.version.minor>17</scala.version.minor>
+        <scalafix.core.version>0.11.1</scalafix.core.version>
+        <scalafix.version>0.1.8_0.11.0</scalafix.version>
         <scalafmt.plugin.version>1.1.1640084764.9f463a9</scalafmt.plugin.version>
         <scalamock.version>5.2.0</scalamock.version>
-        <scalastyle.maven.plugin.version>1.0.0</scalastyle.maven.plugin.version>
         <scalatest.maven.version>2.2.0</scalatest.maven.version>
         <scalatest.version>3.2.17</scalatest.version>
+        <scalastyle.maven.plugin.version>1.0.0</scalastyle.maven.plugin.version>
         <slf4j.version>2.0.17</slf4j.version>
         <spark.version.major>3.0</spark.version.major>
         <spark.version.minor>3</spark.version.minor>
         <specs2.version>3.6.5</specs2.version>
-        <kusto.shade.prefix>kusto_connector_shaded</kusto.shade.prefix>
+        <typelevel.scalafix.version>0.5.0</typelevel.scalafix.version>
+        <xml.maven.plugin.version>1.1.0</xml.maven.plugin.version>
     </properties>
     <inceptionYear>2018</inceptionYear>
     <scm>
@@ -124,22 +129,22 @@
             <plugin>
                 <groupId>io.github.evis</groupId>
                 <artifactId>scalafix-maven-plugin_${scala.version.major}</artifactId>
-                <version>0.1.8_0.11.0</version>
+                <version>${scalafix.version}</version>
                 <dependencies>
                     <dependency>
                         <groupId>ch.epfl.scala</groupId>
                         <artifactId>scalafix-core_${scala.version.major}</artifactId>
-                        <version>0.11.1</version>
+                        <version>${scalafix.core.version}</version>
                     </dependency>
                     <dependency>
                         <groupId>org.scala-lang</groupId>
                         <artifactId>scala-rewrites_${scala.version.major}</artifactId>
-                        <version>0.1.3</version>
+                        <version>${scala.rewrites.version}</version>
                     </dependency>
                     <dependency>
                         <groupId>org.typelevel</groupId>
                         <artifactId>typelevel-scalafix_${scala.version.major}</artifactId>
-                        <version>0.1.4</version>
+                        <version>${typelevel.scalafix.version}</version>
                     </dependency>
                 </dependencies>
             </plugin>
