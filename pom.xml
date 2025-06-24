@@ -28,7 +28,7 @@
         <maven.source.plugin.version>3.3.1</maven.source.plugin.version>
         <maven.surefire.plugin.version>3.5.3</maven.surefire.plugin.version>
         <mockito.version>4.11.0</mockito.version>
-        <msal4j.version>1.16.0</msal4j.version>
+        <msal4j.version>1.21.0</msal4j.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <scala.maven.plugin.version>4.8.1</scala.maven.plugin.version>
         <scala.rewrites.version>0.1.5</scala.rewrites.version>
