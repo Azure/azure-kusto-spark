@@ -103,7 +103,7 @@ class KustoBlobAccessE2E extends AnyFlatSpec with BeforeAndAfterAll {
     val myTable = updateKustoTable()
     val schema = KustoResponseDeserializer(
       kustoAdminClient
-        .execute(kustoTestConnectionOptions.database, getQuerySchemaQuery(myTable))
+        .executeMgmt(kustoTestConnectionOptions.database, getQuerySchemaQuery(myTable))
         .getPrimaryResults).getSchema
 
     val firstColumn =
@@ -140,7 +140,7 @@ class KustoBlobAccessE2E extends AnyFlatSpec with BeforeAndAfterAll {
       Some(partitionPredicate))
 
     val blobs = kustoAdminClient
-      .execute(kustoTestConnectionOptions.database, exportCommand)
+      .executeQuery(kustoTestConnectionOptions.database, exportCommand)
       .getPrimaryResults
       .getData
       .asScala

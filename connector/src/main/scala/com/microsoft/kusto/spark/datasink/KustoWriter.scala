@@ -11,7 +11,7 @@ import com.microsoft.azure.kusto.ingest.IngestionProperties.DataFormat
 import com.microsoft.azure.kusto.ingest.exceptions.IngestionServiceException
 import com.microsoft.azure.kusto.ingest.resources.ContainerWithSas
 import com.microsoft.azure.kusto.ingest.result.IngestionResult
-import com.microsoft.azure.kusto.ingest.source.{BlobSourceInfo, StreamSourceInfo}
+import com.microsoft.azure.kusto.ingest.source.{BlobSourceInfo, CompressionType, StreamSourceInfo}
 import com.microsoft.azure.kusto.ingest.{
   IngestClient,
   IngestionProperties,
@@ -43,6 +43,7 @@ import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.CollectionAccumulator
+import reactor.core.publisher.Mono
 
 import java.io._
 import java.net.URI
@@ -188,10 +189,9 @@ object KustoWriter {
         }
         KDSU.logInfo(className, s"asynchronous write to Kusto table '$table' in progress")
         // This part runs back on the driver
-
         if (writeOptions.writeMode == WriteMode.Transactional) {
-          asyncWork.onSuccess { case _ =>
-            finalizeIngestionWhenWorkersSucceeded(
+          asyncWork.onComplete(
+            handleAsyncWorkCompletion(
               tableCoordinates,
               batchIdIfExists,
               tmpTableName,
@@ -202,24 +202,7 @@ object KustoWriter {
               rdd.sparkContext,
               authentication,
               kustoClient,
-              sinkStartTime)
-          }
-          asyncWork.onFailure { case exception: Exception =>
-            if (writeOptions.userTempTableName.isEmpty) {
-              kustoClient.cleanupIngestionByProducts(tableCoordinates.database, tmpTableName, crp)
-            }
-            KDSU.reportExceptionAndThrow(
-              className,
-              exception,
-              "writing data",
-              tableCoordinates.clusterUrl,
-              tableCoordinates.database,
-              table,
-              shouldNotThrow = true)
-            KDSU.logError(
-              className,
-              "The exception is not visible in the driver since we're in async mode")
-          }
+              sinkStartTime))
         }
       } else {
         try
@@ -254,6 +237,51 @@ object KustoWriter {
             sinkStartTime)
         }
       }
+    }
+  }
+
+  // Add this private method to the object:
+  private def handleAsyncWorkCompletion(
+      tableCoordinates: KustoCoordinates,
+      batchIdIfExists: String,
+      tmpTableName: String,
+      partitionsResults: CollectionAccumulator[PartitionResult],
+      writeOptions: WriteOptions,
+      crp: ClientRequestProperties,
+      tableExists: Boolean,
+      sparkContext: org.apache.spark.SparkContext,
+      authentication: KustoAuthentication,
+      kustoClient: ExtendedKustoClient,
+      sinkStartTime: Instant): scala.util.Try[Unit] => Unit = {
+    {
+      case Success(_) =>
+        finalizeIngestionWhenWorkersSucceeded(
+          tableCoordinates,
+          batchIdIfExists,
+          tmpTableName,
+          partitionsResults,
+          writeOptions,
+          crp,
+          tableExists,
+          sparkContext,
+          authentication,
+          kustoClient,
+          sinkStartTime)
+      case Failure(exception) =>
+        if (writeOptions.userTempTableName.isEmpty) {
+          kustoClient.cleanupIngestionByProducts(tableCoordinates.database, tmpTableName, crp)
+        }
+        KDSU.reportExceptionAndThrow(
+          className,
+          exception,
+          "writing data",
+          tableCoordinates.clusterUrl,
+          tableCoordinates.database,
+          tableCoordinates.table.get,
+          shouldNotThrow = true)
+        KDSU.logError(
+          className,
+          "The exception is not visible in the driver since we're in async mode")
     }
   }
 
@@ -499,7 +527,9 @@ object KustoWriter {
       parameters.coordinates.ingestionUrl,
       parameters.coordinates.clusterAlias)
     val ingestClient = clientCache.ingestClient
-    CloudInfo.manuallyAddToCache(clientCache.ingestKcsb.getClusterUrl, parameters.cloudInfo)
+    CloudInfo.manuallyAddToCache(
+      clientCache.ingestKcsb.getClusterUrl,
+      Mono.just(parameters.cloudInfo))
 
     val reqRetryOpts = new RequestRetryOptions(
       RetryPolicyType.FIXED,
@@ -599,7 +629,7 @@ object KustoWriter {
         i => {
           Try(
             ingestClient.ingestFromBlob(
-              new BlobSourceInfo(blobUri + sas, size, UUID.randomUUID()),
+              new BlobSourceInfo(blobUri + sas, CompressionType.gz, UUID.randomUUID()),
               props)) match {
             case Success(x) =>
               <!-- The statuses of the ingestion operations are now set in the ingestion result -->

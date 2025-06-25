@@ -8,10 +8,11 @@ import scala.concurrent.duration._
 
 object KustoConstants {
   // Setting high value to have no timeout on Await commands
-  val DefaultWaitingIntervalLongRunning: String = (2 days).toSeconds.toString
-  val DefaultCleaningInterval: String = (7 days).toSeconds.toString
-  val DefaultPeriodicSamplePeriod: FiniteDuration = 1 seconds
-  val NoTimeout: String = (-1 seconds).toSeconds.toString
+  val DefaultWaitingIntervalLongRunning: String =
+    Duration.create(2, TimeUnit.DAYS).toSeconds.toString
+  val DefaultCleaningInterval: String = Duration.create(7, TimeUnit.DAYS).toSeconds.toString
+  val DefaultPeriodicSamplePeriod: FiniteDuration = Duration.create(1, TimeUnit.SECONDS)
+  val NoTimeout: String = Duration.create(-1, TimeUnit.SECONDS).toSeconds.toString
   val ClientName: String = KustoDataSourceUtils.clientName
   val DefaultBufferSize: Int = 16 * 1024
   val StorageExpirySeconds: Int =
@@ -22,7 +23,7 @@ object KustoConstants {
   val OneGigaByte: Int = OneMegaByte * OneKiloByte
   // The restriction from kusto is 50000 rows but 5000 can still be really big
   val DirectQueryUpperBoundRows = 5000
-  val TimeoutForCountCheck: FiniteDuration = 3 seconds
+  val TimeoutForCountCheck: FiniteDuration = Duration.create(3, TimeUnit.SECONDS)
   val IngestByPrefix = "ingest-by:"
   val IngestSkippedTrace =
     s"Ingestion skipped: Provided ingest-by tags are present in the destination table: "

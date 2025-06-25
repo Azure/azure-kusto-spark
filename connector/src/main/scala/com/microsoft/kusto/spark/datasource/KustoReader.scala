@@ -10,7 +10,13 @@ import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties, KustoRes
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasource.ReadMode.ReadMode
-import com.microsoft.kusto.spark.utils.{CslCommandsGenerator, ExtendedKustoClient, KustoAzureFsSetupCache, KustoBlobStorageUtils, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.{
+  CslCommandsGenerator,
+  ExtendedKustoClient,
+  KustoAzureFsSetupCache,
+  KustoBlobStorageUtils,
+  KustoDataSourceUtils => KDSU
+}
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.util.ComparableVersion
 import org.apache.spark.Partition
@@ -85,7 +91,8 @@ private[kusto] object KustoReader {
         request.kustoCoordinates.database,
         filteredQuery,
         "executeQuery",
-        request.clientRequestProperties.orNull)
+        request.clientRequestProperties.orNull,
+        isMgmtCommand = false)
       .getPrimaryResults
 
     val serializer = KustoResponseDeserializer(kustoResult)
@@ -93,9 +100,9 @@ private[kusto] object KustoReader {
   }
 
   private def determineFilterPushDown(
-                               queryFilterPushDown: Option[Boolean],
-                               queryFilterPushDownDefault: Boolean,
-                               inputFilter: KustoFiltering): KustoFiltering = {
+      queryFilterPushDown: Option[Boolean],
+      queryFilterPushDownDefault: Boolean,
+      inputFilter: KustoFiltering): KustoFiltering = {
     if (queryFilterPushDown.getOrElse(queryFilterPushDownDefault)) {
       KDSU.logInfo(className, s"using ${KustoSourceOptions.KUSTO_QUERY_FILTER_PUSH_DOWN}")
       inputFilter
@@ -120,10 +127,14 @@ private[kusto] object KustoReader {
         request.kustoCoordinates,
         request.authentication)
       if (distributedReadModeTransientCache.contains(key)) {
-        KDSU.logInfo(className, "Fetching from distributedReadModeTransientCache: hit, reusing cached export paths")
+        KDSU.logInfo(
+          className,
+          "Fetching from distributedReadModeTransientCache: hit, reusing cached export paths")
         paths = distributedReadModeTransientCache(key)
       } else {
-        KDSU.logInfo(className, "distributedReadModeTransientCache: miss, exporting to cache paths")
+        KDSU.logInfo(
+          className,
+          "distributedReadModeTransientCache: miss, exporting to cache paths")
         val filter = determineFilterPushDown(
           options.queryFilterPushDown,
           queryFilterPushDownDefault = false,
@@ -164,9 +175,14 @@ private[kusto] object KustoReader {
     rdd
   }
 
-  private def dirExist(spark:SparkSession, params: TransientStorageCredentials, directory: String, endpointSuffix: String): Boolean = {
+  private def dirExist(
+      spark: SparkSession,
+      params: TransientStorageCredentials,
+      directory: String,
+      endpointSuffix: String): Boolean = {
     if (params.authMethod == AuthMethod.Impersonation) {
-      val url = s"wasbs://${params.blobContainer}@${params.storageAccountName}.blob.$endpointSuffix"
+      val url =
+        s"wasbs://${params.blobContainer}@${params.storageAccountName}.blob.$endpointSuffix"
       val hadoopConf = spark.sparkContext.hadoopConfiguration
       val fs = FileSystem.get(new URI(url), hadoopConf)
 
@@ -183,14 +199,14 @@ private[kusto] object KustoReader {
             .credential(new AzureSasCredential(sas))
             .buildClient()
         case AuthMethod.Key =>
-          new BlobContainerClientBuilder ()
-          .endpoint (endpoint)
-          .containerName (params.blobContainer)
-          .credential (
-          new StorageSharedKeyCredential (params.storageAccountName, params.storageAccountKey) )
-          .buildClient ()
+          new BlobContainerClientBuilder()
+            .endpoint(endpoint)
+            .containerName(params.blobContainer)
+            .credential(
+              new StorageSharedKeyCredential(params.storageAccountName, params.storageAccountKey))
+            .buildClient()
         case _ => throw new InvalidParameterException("")
-    }
+      }
       val exists = container.listBlobsByHierarchy(directory).stream().count() > 0
       // Existing logic container.exists() && container.getDirectoryReference(directory).listBlobsSegmented().getLength > 0
       exists
@@ -245,19 +261,19 @@ private[kusto] object KustoReader {
       storage.authMethod match {
         case AuthMethod.Key =>
           if (!KustoAzureFsSetupCache.updateAndGetPrevStorageAccountAccess(
-            storage.storageAccountName,
-            storage.storageAccountKey,
-            now)) {
+              storage.storageAccountName,
+              storage.storageAccountKey,
+              now)) {
             config.set(
               s"fs.azure.account.key.${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}",
               s"${storage.storageAccountKey}")
           }
         case AuthMethod.Sas =>
           if (!KustoAzureFsSetupCache.updateAndGetPrevSas(
-            storage.blobContainer,
-            storage.storageAccountName,
-            storage.sasKey,
-            now)) {
+              storage.blobContainer,
+              storage.storageAccountName,
+              storage.sasKey,
+              now)) {
             config.set(
               s"fs.azure.sas.${storage.blobContainer}.${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}",
               s"${storage.sasKey}")

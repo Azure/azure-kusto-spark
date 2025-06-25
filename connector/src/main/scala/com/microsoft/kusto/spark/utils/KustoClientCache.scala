@@ -3,6 +3,8 @@
 
 package com.microsoft.kusto.spark.utils
 
+import com.azure.identity.{ChainedTokenCredentialBuilder, ManagedIdentityCredentialBuilder}
+
 import java.net.URI
 import java.util.concurrent.ConcurrentHashMap
 import java.util.function
@@ -59,21 +61,9 @@ object KustoClientCache {
             keyCert.cert,
             keyCert.key,
             app.authority))
+      // externalize to have some logic for UserAssigned Managed Identity and SystemAssigned Managed Identity
       case app: ManagedIdentityAuthentication =>
-        app.clientId match {
-          case Some(clientId) =>
-            (
-              ConnectionStringBuilder.createWithAadManagedIdentity(
-                clusterAndAuth.engineUri,
-                clientId),
-              ConnectionStringBuilder.createWithAadManagedIdentity(
-                clusterAndAuth.ingestUri,
-                clientId))
-          case None =>
-            (
-              ConnectionStringBuilder.createWithAadManagedIdentity(clusterAndAuth.engineUri),
-              ConnectionStringBuilder.createWithAadManagedIdentity(clusterAndAuth.ingestUri))
-        }
+        createManagedIdentityKustoAuth(clusterAndAuth, app)
       case keyVaultParams: KeyVaultAuthentication =>
         val app = KeyVaultUtils.getAadAppParametersFromKeyVault(keyVaultParams)
         (
@@ -125,7 +115,7 @@ object KustoClientCache {
 
     engineKcsb.setConnectorDetails(
       KCONST.ClientName,
-      KustoDataSourceUtils.Version,
+      KustoDataSourceUtils.version,
       null,
       null,
       false,
@@ -133,7 +123,7 @@ object KustoClientCache {
       Pair.of("spark.version", SPARK_VERSION))
     ingestKcsb.setConnectorDetails(
       KCONST.ClientName,
-      KustoDataSourceUtils.Version,
+      KustoDataSourceUtils.version,
       null,
       null,
       false,
@@ -141,6 +131,32 @@ object KustoClientCache {
       Pair.of("spark.version", SPARK_VERSION))
 
     new ExtendedKustoClient(engineKcsb, ingestKcsb, clusterAndAuth.clusterAlias)
+  }
+
+  private def createManagedIdentityKustoAuth(
+      clusterAndAuth: ClusterAndAuth,
+      app: ManagedIdentityAuthentication) = {
+    app.clientId match {
+      case Some(clientId) =>
+        val userManagedCredential =
+          new ManagedIdentityCredentialBuilder().clientId(clientId).build()
+        (
+          ConnectionStringBuilder.createWithTokenCredential(
+            clusterAndAuth.engineUri,
+            userManagedCredential),
+          ConnectionStringBuilder.createWithTokenCredential(
+            clusterAndAuth.ingestUri,
+            userManagedCredential))
+      case None =>
+        val systemManagedCredential = new ManagedIdentityCredentialBuilder().build()
+        (
+          ConnectionStringBuilder.createWithTokenCredential(
+            clusterAndAuth.engineUri,
+            systemManagedCredential),
+          ConnectionStringBuilder.createWithTokenCredential(
+            clusterAndAuth.ingestUri,
+            systemManagedCredential))
+    }
   }
 
   private[kusto] case class ClusterAndAuth(
@@ -152,7 +168,7 @@ object KustoClientCache {
     val ingestUri: String = ingestionUri.getOrElse(
       new URIBuilder()
         .setScheme("https")
-        .setHost(KustoDataSourceUtils.IngestPrefix + new URI(engineUrl).getHost)
+        .setHost(KustoDataSourceUtils.ingestPrefix + new URI(engineUrl).getHost)
         .toString)
 
     override def equals(that: Any): Boolean = that match {

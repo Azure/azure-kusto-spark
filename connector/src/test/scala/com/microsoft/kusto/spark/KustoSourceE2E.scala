@@ -75,7 +75,7 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
     sc = spark.sparkContext
     sqlContext = spark.sqlContext
     Try(
-      maybeKustoAdminClient.get.execute(
+      maybeKustoAdminClient.get.executeMgmt(
         kustoConnectionOptions.database,
         generateAlterIngestionBatchingPolicyCommand(
           "database",
@@ -96,9 +96,8 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
     // Remove table if stopping gracefully
     maybeKustoAdminClient match {
       case Some(kustoAdminClient) =>
-        Try(
-          kustoAdminClient
-            .execute(kustoConnectionOptions.database, generateTableDropCommand(table))) match {
+        Try(kustoAdminClient
+          .executeMgmt(kustoConnectionOptions.database, generateTableDropCommand(table))) match {
           case Success(_) => KDSU.logDebug(className, "Ingestion policy applied")
           case Failure(e: Throwable) =>
             KDSU.reportExceptionAndThrow(
@@ -171,7 +170,7 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
       .save()
 
     val instant = Instant.now.plus(1, ChronoUnit.HOURS)
-    maybeKustoAdminClient.get.execute(
+    maybeKustoAdminClient.get.executeMgmt(
       kustoConnectionOptions.database,
       generateTableAlterAutoDeletePolicy(table, instant))
 
@@ -286,7 +285,7 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
 
     // Should take up to another 10 seconds for .show commands to come up
     Thread.sleep(5000 * 60)
-    val res3 = maybeKustoAdminClient.get.execute(
+    val res3 = maybeKustoAdminClient.get.executeMgmt(
       s""".show commands | where StartedOn > datetime(${time.toString})  | where
                                         CommandType ==
       "DataExportToFile" | where Text has "$table"""")

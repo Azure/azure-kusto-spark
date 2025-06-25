@@ -12,7 +12,7 @@ import com.microsoft.azure.kusto.ingest.resources.ResourceWithSas
 import com.microsoft.azure.kusto.ingest.{
   IngestClientFactory,
   ManagedStreamingIngestClient,
-  QueuedIngestClient,
+  QueuedIngestClient
 }
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.KustoWriter.DelayPeriodBetweenCalls
@@ -66,6 +66,7 @@ class ExtendedKustoClient(
   RetryConfig.ofDefaults()
   private val retryConfig = buildRetryConfig
   private val retryConfigAsyncOp = buildRetryConfigForAsyncOp
+  private val DOT = "."
 
   private val myName = this.getClass.getSimpleName
   private val durationFormat = "dd:HH:mm:ss"
@@ -121,11 +122,7 @@ class ExtendedKustoClient(
     } else {
       // Table exists. Parse kusto table schema and check if it matches the dataframes schema
       val transformedTargetSchema = new ObjectMapper().createArrayNode()
-      targetSchema.foreach {
-        case (value) => {
-          transformedTargetSchema.add(value)
-        }
-      }
+      targetSchema.foreach(value => transformedTargetSchema.add(value))
       tmpTableSchema = extractSchemaFromResultTable(transformedTargetSchema)
     }
 
@@ -190,7 +187,7 @@ class ExtendedKustoClient(
       retryConfig: Option[RetryConfig] = None): KustoOperationResult = {
     KDSU.retryApplyFunction(
       i => {
-        dmClient.execute(
+        dmClient.executeMgmt(
           ExtendedKustoClient.DefaultDb,
           command,
           newIncrementedCrp(maybeCrp, activityName, i))
@@ -204,13 +201,53 @@ class ExtendedKustoClient(
       command: String,
       activityName: String,
       crp: ClientRequestProperties,
+      isMgmtCommand: Boolean = true,
       retryConfig: Option[RetryConfig] = None): KustoOperationResult = {
+
+    val startsWithDot =
+      StringUtils.isNotEmpty(command) && StringUtils.trim(command).startsWith(DOT)
+
+    if (startsWithDot && !isMgmtCommand) {
+      KDSU.logWarn(
+        myName,
+        s"Command '$command' starts with a dot but is not marked as management command. " +
+          "This may lead to unexpected behavior. Please ensure the command is intended to be a management command.")
+    }
+
+    if (isMgmtCommand && !startsWithDot) {
+      KDSU.logWarn(
+        myName,
+        s"Command '$command' does not start with '.' an but is marked as management command. " +
+          "This may lead to unexpected behavior. Please ensure the command is intended to be a query command.")
+    }
+
+    val isMgmtCommandStr = if (isMgmtCommand || startsWithDot) {
+      "management"
+    } else {
+      "query"
+    }
     KDSU.retryApplyFunction(
-      i => {
-        engineClient.execute(database, command, newIncrementedCrp(Some(crp), activityName, i))
+      retryNumber => {
+        if (isMgmtCommand) {
+          KDSU.logDebug(
+            myName,
+            s"Executing $isMgmtCommandStr command: $command, retry number: $retryNumber")
+          engineClient.executeMgmt(
+            database,
+            command,
+            newIncrementedCrp(Some(crp), activityName, retryNumber))
+        } else {
+          KDSU.logDebug(
+            myName,
+            s"Executing $isMgmtCommandStr command: $command, retry number: $retryNumber")
+          engineClient.executeQuery(
+            database,
+            command,
+            newIncrementedCrp(Some(crp), activityName, retryNumber))
+        }
       },
       retryConfig.getOrElse(this.retryConfig),
-      "Execute engine command with retries")
+      s"Execute $isMgmtCommandStr command with retries")
   }
 
   private def newIncrementedCrp(
@@ -385,7 +422,11 @@ class ExtendedKustoClient(
         consecutiveSuccesses = 0
         retry += 1
         val extentsProcessedErrorString =
-          if (extentsProcessed > 0) s"and ${extentsProcessed} were moved" else ""
+          if (extentsProcessed > 0) {
+            s"and $extentsProcessed were moved"
+          } else {
+            ""
+          }
         if (extentsProcessed > 0) {
           // This is not the first move command
           if (retry > secondMovesRetries)
@@ -591,7 +632,7 @@ class ExtendedKustoClient(
       cmdToTrace)
   }
 
-  def buildRetryConfig = {
+  def buildRetryConfig: RetryConfig = {
     val sleepConfig = IntervalFunction.ofExponentialRandomBackoff(
       ExtendedKustoClient.BaseIntervalMs,
       IntervalFunction.DEFAULT_MULTIPLIER,
@@ -625,7 +666,6 @@ class ExtendedKustoClient(
       tmpTableName: String,
       crp: ClientRequestProperties): Unit = {
     try {
-
       executeEngine(database, generateTableDropCommand(tmpTableName), "tableDrop", crp)
       KDSU.logInfo(myName, s"Temporary table '$tmpTableName' deleted successfully")
     } catch {
@@ -634,8 +674,7 @@ class ExtendedKustoClient(
           myName,
           exception,
           s"deleting temporary table $tmpTableName",
-          database,
-          shouldNotThrow = false)
+          database)
     }
   }
 
