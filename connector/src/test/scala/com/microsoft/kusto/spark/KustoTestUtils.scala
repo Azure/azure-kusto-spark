@@ -3,64 +3,127 @@
 
 package com.microsoft.kusto.spark
 
-import com.azure.core.credential.{AccessToken, TokenRequestContext}
-import com.azure.identity.AzureCliCredentialBuilder
-import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
-import com.microsoft.azure.kusto.data.{Client, ClientFactory}
-import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
-import com.microsoft.kusto.spark.datasink.{
-  IngestionStorageParameters,
-  KustoSinkOptions,
-  SinkTableCreationMode,
-  SparkIngestionProperties
-}
-import com.microsoft.kusto.spark.datasource.{KustoSourceOptions, TransientStorageCredentials}
-import com.microsoft.kusto.spark.sql.extension.SparkExtension.DataFrameReaderExtension
-import com.microsoft.kusto.spark.utils.CslCommandsGenerator.{
-  generateDropTablesCommand,
-  generateFindCurrentTempTablesCommand,
-  generateTempTableCreateCommand
-}
-import com.microsoft.kusto.spark.utils.{
-  ContainerAndSas,
-  ContainerProvider,
-  KustoQueryUtils,
-  KustoDataSourceUtils => KDSU
-}
-import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.microsoft.kusto.spark.datasink._
+import com.microsoft.kusto.spark.utils.{KustoConstants, KustoDataSourceUtils => KDSU}
+import org.apache.spark.SparkConf
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.types._
+import org.apache.spark.sql.{DataFrame, Row, SparkSession}
+import org.mockito.Mockito._
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 
-import java.security.InvalidParameterException
-import java.util.{Collections, UUID}
-import scala.collection.JavaConverters.asScalaBufferConverter
-import scala.collection.mutable
-import scala.concurrent.TimeoutException
-import scala.util.Try
+import java.io.{BufferedWriter, ByteArrayOutputStream, OutputStreamWriter}
+import java.nio.charset.StandardCharsets
+import java.sql.{Date, Timestamp}
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
+import java.util.TimeZone
+import java.util.zip.GZIPOutputStream
 
-private[kusto] object KustoTestUtils {
-  private val className = this.getClass.getSimpleName
-  private val loggingLevel: Option[String] = Option(System.getProperty("logLevel"))
-  private val cachedToken: mutable.Map[String, KustoConnectionOptions] =
-    new mutable.HashMap[String, KustoConnectionOptions]()
-  loggingLevel match {
-    case Some(level) => KDSU.setLoggingLevel(level)
-    // default to warn for tests
-    case None => KDSU.setLoggingLevel("WARN")
+class WriterTests extends AnyFlatSpec with Matchers {
+
+  val objectMapper = new ObjectMapper
+
+  val lineSep: String = System.lineSeparator()
+  val sparkConf: SparkConf = new SparkConf()
+    .set("spark.testing", "true")
+    .set("spark.ui.enabled", "false")
+    .setAppName("SimpleKustoDataSink")
+    .setMaster("local[*]")
+  val sparkSession: SparkSession = SparkSession.builder().config(sparkConf).getOrCreate()
+
+  def getDF(isNestedSchema: Boolean): DataFrame = {
+    val customSchema =
+      if (isNestedSchema)
+        StructType(
+          Array(
+            StructField(KustoConstants.Schema.NAME, StringType, nullable = true),
+            StructField("Number", IntegerType, nullable = true)))
+      else null
+    if (isNestedSchema)
+      sparkSession.read
+        .format("csv")
+        .option("header", "false")
+        .schema(customSchema)
+        .load("src/test/resources/ShortTestData/ShortTestData.csv")
+    else
+      sparkSession.read
+        .format("json")
+        .option("header", "true")
+        .load("src/test/resources/TestData/json/TestDynamicFields.json")
   }
 
-  def validateResultsAndCleanup(
-      kustoAdminClient: Client,
-      table: String,
-      database: String,
-      expectedNumberOfRows: Int, // Set a negative value to skip validation
-      timeoutMs: Int,
-      cleanupAllTables: Boolean = true,
-      tableCleanupPrefix: String = ""): Unit = {
+  "convertRowToCsv" should "convert the row as expected" in {
+    val df: DataFrame = getDF(isNestedSchema = true)
+    val dfRow: InternalRow = df.queryExecution.toRdd.collect().head
 
-    var rowCount = 0
-    var timeElapsedMs = 0
-    val sleepPeriodMs = timeoutMs / 10
+    val byteArrayOutputStream = new ByteArrayOutputStream()
+    val streamWriter = new OutputStreamWriter(byteArrayOutputStream)
+    val writer = new BufferedWriter(streamWriter)
+    val csvWriter = CountingWriter(writer)
+    RowCSVWriterUtils.writeRowAsCSV(
+      dfRow,
+      df.schema,
+      TimeZone.getTimeZone("UTC").toZoneId,
+      csvWriter)
+    writer.flush()
+    writer.close()
+    byteArrayOutputStream.toString() shouldEqual "\"John,\"\" Doe\",1" + lineSep
+  }
 
-    val query = s"$table | count"
+  "convertRowToCsv" should "convert the row as expected, including nested types." in {
+    val df: DataFrame = getDF(isNestedSchema = false)
+    val dfRow: InternalRow = df.queryExecution.toRdd.collect().head
+    val expected =
+      """"[true,false,null]","[1,2,3,null]",,"value","[""a"",""b"",""c"",null]","[[""a"",""b"",""c""],null]","{""bool"":true,""dict_ar"":[{""int"":1,""string"":""a""},{""int"":2,""string"":""b""}],""int"":1,""int_ar"":[1,2,3],""string"":""abc"",""string_ar"":[""a"",""b"",""c""]}""""
+        .concat(lineSep)
+
+    val byteArrayOutputStream = new ByteArrayOutputStream()
+    val streamWriter = new OutputStreamWriter(byteArrayOutputStream)
+    val writer = new BufferedWriter(streamWriter)
+    var csvWriter = CountingWriter(writer)
+    RowCSVWriterUtils.writeRowAsCSV(
+      dfRow,
+      df.schema,
+      TimeZone.getTimeZone("UTC").toZoneId,
+      csvWriter)
+    writer.flush()
+    val got = byteArrayOutputStream.toString()
+
+    got shouldEqual expected
+  }
+
+  "convertRowToCsv" should "calculate row size as expected" in {
+    val df: DataFrame = getDF(isNestedSchema = true)
+    val dfRow: InternalRow = df.queryExecution.toRdd.collect().head
+    val expectedSize = ("\"John,\"\" Doe\",1" + lineSep).getBytes(StandardCharsets.UTF_8).length
+    val byteArrayOutputStream = new ByteArrayOutputStream()
+    val streamWriter = new OutputStreamWriter(byteArrayOutputStream)
+    val writer = new BufferedWriter(streamWriter)
+    val csvWriter = CountingWriter(writer)
+
+    RowCSVWriterUtils.writeRowAsCSV(
+      dfRow,
+      df.schema,
+      TimeZone.getTimeZone("UTC").toZoneId,
+      csvWriter)
+    writer.flush()
+    writer.close()
+    csvWriter.getCounter shouldEqual expectedSize
+  }
+
+  "finalizeFileWrite" should "should flush and close buffers" in {
+    val gzip = mock(classOf[GZIPOutputStream])
+    val buffer = mock(classOf[BufferedWriter])
+    val csvWriter = CountingWriter(buffer)
+
+    val fileWriteResource = BlobWriteResource(buffer, gzip, csvWriter, null, null)
+    KustoWriter.finalizeBlobWrite(fileWriteResource)
+
+    verify(gzip, times(1)).flush()
+    verify(gzip, times(1)).close()
 
     while (rowCount < expectedNumberOfRows && timeElapsedMs < timeoutMs) {
       val result = kustoAdminClient.executeQuery(database, query).getPrimaryResults
@@ -80,19 +143,34 @@ private[kusto] object KustoTestUtils {
       kustoAdminClient.executeMgmt(database, generateDropTablesCommand(table))
     }
 
-    if (expectedNumberOfRows >= 0) {
-      if (rowCount == expectedNumberOfRows) {
-        KDSU.logInfo(
-          className,
-          s"KustoSinkStreamingE2E: Ingestion results validated for table '$table'")
-      } else {
-        throw new TimeoutException(
-          s"KustoSinkStreamingE2E: Timed out waiting for ingest. $rowCount rows " +
-            s"found in database '$database' table '$table', expected: " +
-            s"$expectedNumberOfRows. Elapsed time:$timeElapsedMs")
-      }
-    }
-  }
+    val someSchema = List(
+      StructField(
+        "mapToArray",
+        MapType(
+          StringType,
+          new StructType()
+            .add("arrayStrings", ArrayType(StringType, containsNull = true), nullable = true),
+          valueContainsNull = true),
+        nullable = true))
+    val someDateSchema = List(
+      StructField(
+        "mapToStruct",
+        MapType(
+          StringType,
+          new StructType()
+            .add("date", DateType, nullable = true)
+            .add("time", TimestampType)
+            .add("booly", BooleanType)
+            .add("deci", DataTypes.createDecimalType(20, 14)),
+          valueContainsNull = true),
+        nullable = true))
+    val someEmptyArraysSchema = List(
+      StructField(
+        "emptyStruct",
+        new StructType()
+          .add("emptyArray", ArrayType(StringType, containsNull = true), nullable = true)
+          .add("emptyString", StringType)))
+    val someDecimalSchema = List(StructField("BigDecimals", DataTypes.createDecimalType(38, 10)))
 
   def tryDropAllTablesByPrefix(
       kustoAdminClient: Client,
@@ -117,15 +195,12 @@ private[kusto] object KustoTestUtils {
     }
   }
 
-  def createTestTable(
-      kustoConnectionOptions: KustoConnectionOptions,
-      prefix: String,
-      targetSchema: String): String = {
+    val byteArrayOutputStream = new ByteArrayOutputStream()
+    val streamWriter = new OutputStreamWriter(byteArrayOutputStream)
+    val writer = new BufferedWriter(streamWriter)
+    val csvWriter = CountingWriter(writer)
 
-    val table = KustoQueryUtils.simplifyName(s"${prefix}_${UUID.randomUUID()}")
-    val engineKcsb = ConnectionStringBuilder.createWithAadAccessTokenAuthentication(
-      s"https://${kustoConnectionOptions.cluster}.kusto.windows.net",
-      kustoConnectionOptions.accessToken)
+    RowCSVWriterUtils.writeRowAsCSV(dfRow, df.schema, tz.getZone, csvWriter)
 
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
     kustoAdminClient.executeMgmt(
@@ -134,140 +209,94 @@ private[kusto] object KustoTestUtils {
     table
   }
 
-  def ingest(
-      kustoConnectionOptions: KustoConnectionOptions,
-      df: DataFrame,
-      table: String,
-      schemaAdjustmentMode: String,
-      sparkIngestionProperties: SparkIngestionProperties = new SparkIngestionProperties())
-      : Unit = {
+    byteArrayOutputStream.reset()
+    RowCSVWriterUtils.writeRowAsCSV(dfRow2, dateDf.schema, tz.getZone, csvWriter)
+    writer.flush()
+    val res2 = byteArrayOutputStream.toString
+    res2 shouldEqual "\"{\"\"asd\"\":{\"\"date\"\":\"\"1991-09-07\"\"," +
+      s"""""time"":""${sdf.format(ts.toInstant.atZone(tz.getZone))}"",""" +
+      "\"\"booly\"\":false,\"\"deci\"\":\"\"0.00001000000000\"\"}}\"" + lineSep
 
-    df.write
-      .format("com.microsoft.kusto.spark.datasource")
-      .partitionBy("value")
-      .option(KustoSinkOptions.KUSTO_CLUSTER, kustoConnectionOptions.cluster)
-      .option(KustoSinkOptions.KUSTO_DATABASE, kustoConnectionOptions.database)
-      .option(KustoSinkOptions.KUSTO_TABLE, table)
-      .option(KustoSinkOptions.KUSTO_ACCESS_TOKEN, kustoConnectionOptions.accessToken)
-      .option(KustoSinkOptions.KUSTO_ADJUST_SCHEMA, schemaAdjustmentMode)
-      .option(KustoSinkOptions.KUSTO_TIMEOUT_LIMIT, (8 * 60).toString)
-      .option(
-        KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON,
-        sparkIngestionProperties.toString)
-      .option(
-        KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS,
-        kustoConnectionOptions.createTableIfNotExists.toString)
-      .mode(SaveMode.Append)
-      .save()
+    byteArrayOutputStream.reset()
+    RowCSVWriterUtils.writeRowAsCSV(dfRows3(0), emptyArraysDf.schema, tz.getZone, csvWriter)
+    RowCSVWriterUtils.writeRowAsCSV(dfRows3(1), emptyArraysDf.schema, tz.getZone, csvWriter)
+    writer.flush()
+    val res3 = byteArrayOutputStream.toString
+    res3 shouldEqual "\"{\"\"emptyArray\"\":[null,\"\"\"\"],\"\"emptyString\"\":\"\"\"\"}\"" + lineSep + "\"{\"\"emptyString\"\":\"\"\"\"}\"" + lineSep
 
-  }
-
-  def cleanup(kustoConnectionOptions: KustoConnectionOptions, tablePrefix: String): Unit = {
-    if (tablePrefix.isEmpty) {
-      throw new InvalidParameterException("Tables cleanup prefix must be set")
+    byteArrayOutputStream.reset()
+    for (row <- dfRows4) {
+      RowCSVWriterUtils.writeRowAsCSV(row, someDecimalDf.schema, tz.getZone, csvWriter)
     }
-    val engineKcsb = ConnectionStringBuilder.createWithAadAccessTokenAuthentication(
-      clusterToKustoFQDN(kustoConnectionOptions.cluster),
-      kustoConnectionOptions.accessToken)
-    val kustoAdminClient = ClientFactory.createClient(engineKcsb)
-    tryDropAllTablesByPrefix(kustoAdminClient, kustoConnectionOptions.database, tablePrefix)
+
+    writer.flush()
+    val res4 = byteArrayOutputStream.toString
+    res4 shouldEqual "\"123456789.1234567890\"" + lineSep + "\"123456789123456789.1234567891\"" + lineSep + "\"-123456789123456789.1234567891\"" + lineSep +
+      "\"0.1234567891\"" + lineSep
+
+    byteArrayOutputStream.reset()
+    for (row <- dfRows5) {
+      RowCSVWriterUtils.writeRowAsCSV(row, someDecimalDf.schema, tz.getZone, csvWriter)
+    }
+
+    writer.flush()
+    writer.close()
+    val res5 = byteArrayOutputStream.toString
+    res5 shouldEqual "\"-123456789123456789.0000000000\"" + lineSep + "\"0.0000000000\"" + lineSep + "\"0.1000000000\"" +
+      lineSep + "\"-0.1000000000\"" + lineSep
   }
 
-  def validateTargetTable(
-      kustoConnectionOptions: KustoConnectionOptions,
-      tableName: String,
-      expectedRows: DataFrame,
-      spark: SparkSession): Boolean = {
+  "convertRowToCsv" should "convert the row as expected with binary data" in {
+    val sparkConf: SparkConf = new SparkConf()
+      .set("spark.testing", "true")
+      .set("spark.ui.enabled", "false")
+      .setAppName("SimpleKustoDataSink")
+      .setMaster("local[*]")
+    val sparkSession: SparkSession = SparkSession.builder().config(sparkConf).getOrCreate()
+    val byteArrayOutputStream = new ByteArrayOutputStream()
+    val streamWriter = new OutputStreamWriter(byteArrayOutputStream)
+    val writer = new BufferedWriter(streamWriter)
+    val csvWriter = CountingWriter(writer)
 
-    val conf = Map[String, String](
-      KustoSourceOptions.KUSTO_ACCESS_TOKEN -> kustoConnectionOptions.accessToken)
+    val someData =
+      List(
+        "Test string for spark binary".getBytes(),
+        "A second test string for spark binary".getBytes(),
+        null
+      )
 
-    val tableRows = spark.read
-      .kusto(
-        clusterToKustoFQDN(kustoConnectionOptions.cluster),
-        kustoConnectionOptions.database,
-        tableName,
-        conf)
+    val someSchema = List(StructField("binaryString", BinaryType, nullable = true))
 
-    tableRows.count() == tableRows.intersectAll(expectedRows).count()
+    val df = sparkSession.createDataFrame(
+      sparkSession.sparkContext.parallelize(WriterTests.asRows(someData)),
+      StructType(WriterTests.asSchema(someSchema)))
 
+    val dfRows: Array[InternalRow] = df.queryExecution.toRdd.collect()
+
+    RowCSVWriterUtils.writeRowAsCSV(dfRows(0), df.schema, TimeZone.getTimeZone("UTC").toZoneId, csvWriter)
+    RowCSVWriterUtils.writeRowAsCSV(dfRows(1), df.schema, TimeZone.getTimeZone("UTC").toZoneId, csvWriter)
+    RowCSVWriterUtils.writeRowAsCSV(dfRows(2), df.schema, TimeZone.getTimeZone("UTC").toZoneId, csvWriter)
+
+    writer.flush()
+    val res1 = byteArrayOutputStream.toString
+    res1 shouldEqual "\"VGVzdCBzdHJpbmcgZm9yIHNwYXJrIGJpbmFyeQ==\"" + lineSep + "\"QSBzZWNvbmQgdGVzdCBzdHJpbmcgZm9yIHNwYXJrIGJpbmFyeQ==\"" + lineSep + lineSep
   }
+}
 
-  def getSystemTestOptions: KustoConnectionOptions = {
-    val cluster: String = clusterToKustoFQDN(getSystemVariable(KustoSinkOptions.KUSTO_CLUSTER))
-    val database: String = getSystemVariable(KustoSinkOptions.KUSTO_DATABASE)
-    val table: String =
-      Option(getSystemVariable(KustoSinkOptions.KUSTO_TABLE)).getOrElse("SparkTestTable")
-    KDSU.logInfo(
-      className,
-      s"Getting AZCli token for cluster $cluster , database $database & table $table")
-    val key = s"$cluster"
-    if (cachedToken.contains(key)) {
-      cachedToken(key)
-    } else {
-      val maybeAccessTokenEnv = Option(getSystemVariable(KustoSinkOptions.KUSTO_ACCESS_TOKEN))
-      val authority: String = getSystemVariable(KustoSinkOptions.KUSTO_AAD_AUTHORITY_ID)
-      val clusterScope = s"$cluster/.default"
-      KDSU.logWarn(className, s"Using scope $clusterScope and authority $authority")
-      val accessToken: String = maybeAccessTokenEnv match {
-        case Some(at) =>
-          KDSU.logDebug(
-            className,
-            s"Using access token from environment variable ${KustoSinkOptions.KUSTO_ACCESS_TOKEN}")
-          at
-        case None =>
-          val tokenRequestContext = new TokenRequestContext()
-            .setScopes(Collections.singletonList(clusterScope))
-            .setTenantId(authority)
-          val value =
-            new AzureCliCredentialBuilder().build().getToken(tokenRequestContext).block()
-          Try(value) match {
-            case scala.util.Success(token: AccessToken) =>
-              val azCliToken: AccessToken = token
-              azCliToken.getToken
-            case scala.util.Failure(exception) =>
-              KDSU.reportExceptionAndThrow(
-                s"Failed to get access token for cluster $cluster, database $database & table $table at scope $clusterScope",
-                exception)
-              throw exception
-          }
-      }
-      val storageAccountUrl: String = getSystemVariable("storageAccountUrl")
-      val connectionOptions = KustoConnectionOptions(
-        cluster,
-        database,
-        accessToken,
-        authority,
-        storageContainerUrl = Some(storageAccountUrl))
-      cachedToken.put(key, connectionOptions)
-      KDSU.logDebug(
-        className,
-        s"Generated token for cluster $cluster, database $database & table $table")
-      cachedToken(key)
+object WriterTests {
+  def asRows[U](values: List[U]): List[Row] = {
+    values.map {
+      case row: Row => row.asInstanceOf[Row]
+      case prod: Product => Row(prod.productIterator.toList: _*)
+      case any => Row(any)
     }
   }
 
-  def getSystemVariable(key: String): String = {
-    var value = System.getenv(key)
-    if (value == null) {
-      value = System.getProperty(key)
-    }
-    value
-  }
-
-  private def clusterToKustoFQDN(cluster: String): String = {
-    if (cluster.startsWith("https://")) {
-      cluster
-    } else {
-      s"https://$cluster.kusto.windows.net"
-    }
-  }
-
-  def generateSasDelegationWithAzCli(storageContainerUrl: String): String = {
-    val containerName = storageContainerUrl match {
-      case TransientStorageCredentials.SasPattern(_, _, _, container, _) =>
-        container
-      case _ => throw new InvalidParameterException("Storage url is invalid")
+  def asSchema[U <: Product](fields: List[U]): List[StructField] = {
+    fields.map {
+      case x: StructField => x.asInstanceOf[StructField]
+      case (name: String, dataType: DataType, nullable: Boolean) =>
+        StructField(name, dataType, nullable)
     }
     val ingestionStorageParam =
       new IngestionStorageParameters(storageContainerUrl, containerName, "", "")
@@ -277,12 +306,4 @@ private[kusto] object KustoTestUtils {
       ingestionStorageParameter = ingestionStorageParam)
     sas
   }
-
-  final case class KustoConnectionOptions(
-      cluster: String,
-      database: String,
-      accessToken: String,
-      tenantId: String,
-      createTableIfNotExists: SinkTableCreationMode = SinkTableCreationMode.CreateIfNotExist,
-      storageContainerUrl: Option[String] = None)
 }

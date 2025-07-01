@@ -23,18 +23,9 @@ import com.microsoft.kusto.spark.datasink.WriteMode.WriteMode
 import com.microsoft.kusto.spark.datasink.{SchemaAdjustmentMode, _}
 import com.microsoft.kusto.spark.datasource.ReadMode.ReadMode
 import com.microsoft.kusto.spark.datasource._
-import com.microsoft.kusto.spark.exceptions.{
-  FailedOperationException,
-  TimeoutAwaitingPendingOperationException
-}
+import com.microsoft.kusto.spark.exceptions.{FailedOperationException, TimeoutAwaitingPendingOperationException}
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
-import com.microsoft.kusto.spark.utils.KustoConstants.{
-  DefaultBatchingLimit,
-  DefaultExtentsCountForSplitMergePerNode,
-  DefaultMaxRetriesOnMoveExtents,
-  DefaultMaxStreamingBytesUncompressed,
-  OneMegaByte
-}
+import com.microsoft.kusto.spark.utils.KustoConstants.{DefaultBatchingLimit, DefaultExtentsCountForSplitMergePerNode, DefaultMaxRetriesOnMoveExtents, DefaultMaxStreamingBytesUncompressed, OneMegaByte}
 import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
 import io.github.resilience4j.retry.{Retry, RetryConfig}
 import io.vavr.CheckedFunction0
@@ -50,9 +41,7 @@ import java.net.URI
 import java.security.InvalidParameterException
 import java.util
 import java.util.concurrent.{Callable, CountDownLatch, TimeUnit}
-import java.util.{
-  NoSuchElementException,
-  Objects,
+import java.util.{NoSuchElementException, Objects,
   Properties,
   StringJoiner,
   Timer,

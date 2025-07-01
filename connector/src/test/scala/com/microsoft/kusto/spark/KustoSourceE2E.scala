@@ -214,11 +214,11 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
       kustoConnectionOptions.storageContainerUrl.get)
     kustoConnectionOptions.storageContainerUrl.get match {
       case TransientStorageCredentials.SasPattern(
-            storageAccountName,
-            _,
-            domainSuffix,
-            container,
-            _) =>
+      storageAccountName,
+      _,
+      domainSuffix,
+      container,
+      _) =>
         spark.sparkContext.hadoopConfiguration
           .set(s"fs.azure.sas.$container.$storageAccountName.blob.$domainSuffix", sas)
       case _ => throw new InvalidParameterException("Storage url is invalid")

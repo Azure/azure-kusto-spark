@@ -57,7 +57,7 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
   private val sleepTimeTillTableCreate: Int = 3 * 60 * 1000 // 2 minutes
   private def newRow(): String = s"row-${rowId.getAndIncrement()}"
   private def newAllDataTypesRow(v: Int): (
-      String,
+    String,
       Int,
       java.sql.Date,
       Boolean,
@@ -128,7 +128,7 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
     val table = KustoQueryUtils.simplifyName(s"${prefix}_${UUID.randomUUID()}")
 
     val dataTypesRows: immutable.IndexedSeq[(
-        String,
+      String,
         Int,
         java.sql.Date,
         Boolean,
@@ -187,7 +187,7 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
       conf2)
 
     def getRowOriginal(x: Row): (
-        String,
+      String,
         Int,
         Date,
         Boolean,
@@ -213,7 +213,7 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
     }
 
     def getRowFromKusto(x: Row): (
-        String,
+      String,
         Int,
         Timestamp,
         Boolean,
@@ -240,30 +240,30 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
 
     val dateFormat = new SimpleDateFormat("yyyy-MM-dd")
     def compareRowsWithTimestamp(
-        row1: (
-            String,
-            Int,
-            Date,
-            Boolean,
-            Short,
-            Byte,
-            Float,
-            Timestamp,
-            Double,
-            BigDecimal,
-            Long),
-        row2: (
-            String,
-            Int,
-            Timestamp,
-            Boolean,
-            Short,
-            Byte,
-            Float,
-            Timestamp,
-            Double,
-            BigDecimal,
-            Long)): Boolean = {
+                                  row1: (
+                                    String,
+                                      Int,
+                                      Date,
+                                      Boolean,
+                                      Short,
+                                      Byte,
+                                      Float,
+                                      Timestamp,
+                                      Double,
+                                      BigDecimal,
+                                      Long),
+                                  row2: (
+                                    String,
+                                      Int,
+                                      Timestamp,
+                                      Boolean,
+                                      Short,
+                                      Byte,
+                                      Float,
+                                      Timestamp,
+                                      Double,
+                                      BigDecimal,
+                                      Long)): Boolean = {
       val myValA = row2._10.setScale(2, RoundingMode.HALF_UP)
       val myValB = row1._10.setScale(2, RoundingMode.HALF_UP)
 
@@ -337,8 +337,8 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
     var isEqual = true
     for (idx <- orig.indices) {
       if (!compareRowsWithTimestamp(orig(idx), result(idx)) || !compareRowsWithTimestamp(
-          orig(idx),
-          resultSingle(idx))) {
+        orig(idx),
+        resultSingle(idx))) {
         isEqual = false
       }
     }
@@ -534,111 +534,111 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
     (targetColumnExists, schemaAdjustmentMode, writeMode, tableCreationMode) => {
       "KustoWrite" should s"check for matrix of tests when using SchemaAdjustment: ${schemaAdjustmentMode.toString}, " +
         s"TargetColumnExists: $targetColumnExists , WriteMode: $writeMode and TableCreateMode: $tableCreationMode" in {
-          val testName =
-            s"${schemaAdjustmentMode.toString.substring(0, 3)}_${writeMode.toString.substring(0, 3)}"
-          val df = rows.toDF("name", "value").withColumn("WriteMode", lit(writeMode.toString))
-          val prefix = s"KustoBatchSinkE2E_Ingest_$testName"
-          val table = KustoQueryUtils.simplifyName(s"${prefix}_${UUID.randomUUID()}")
+        val testName =
+          s"${schemaAdjustmentMode.toString.substring(0, 3)}_${writeMode.toString.substring(0, 3)}"
+        val df = rows.toDF("name", "value").withColumn("WriteMode", lit(writeMode.toString))
+        val prefix = s"KustoBatchSinkE2E_Ingest_$testName"
+        val table = KustoQueryUtils.simplifyName(s"${prefix}_${UUID.randomUUID()}")
 
-          val columnDefinition = if (targetColumnExists) {
-            s"name:string, value:int, ${KustoConstants.SourceLocationColumnName}:string, WriteMode:string"
-          } else {
-            "name:string, value:int, WriteMode:string"
-          }
-          if (tableCreationMode != SinkTableCreationMode.CreateIfNotExist) {
-            kustoAdminClient.executeMgmt(
-              kustoTestConnectionOptions.database,
-              generateTableCreateCommand(table, columnsTypesAndNames = columnDefinition))
-          }
+        val columnDefinition = if (targetColumnExists) {
+          s"name:string, value:int, ${KustoConstants.SourceLocationColumnName}:string, WriteMode:string"
+        } else {
+          "name:string, value:int, WriteMode:string"
+        }
+        if (tableCreationMode != SinkTableCreationMode.CreateIfNotExist) {
+          kustoAdminClient.executeMgmt(
+            kustoTestConnectionOptions.database,
+            generateTableCreateCommand(table, columnsTypesAndNames = columnDefinition))
+        }
 
-          KDSU.logInfo(
-            className,
-            s"TableName:: $table. Running test: $testName with schema adjustment mode: $schemaAdjustmentMode")
-          if (!targetColumnExists) {
-            intercept[Exception] {
-              df.write
-                .format("com.microsoft.kusto.spark.datasource")
-                .partitionBy("value")
-                .option(KustoSinkOptions.KUSTO_CLUSTER, kustoTestConnectionOptions.cluster)
-                .option(KustoSinkOptions.KUSTO_DATABASE, kustoTestConnectionOptions.database)
-                .option(KustoSinkOptions.KUSTO_TABLE, table)
-                .option(
-                  KustoSinkOptions.KUSTO_ACCESS_TOKEN,
-                  kustoTestConnectionOptions.accessToken)
-                .option(KustoSinkOptions.KUSTO_ADJUST_SCHEMA, schemaAdjustmentMode.toString)
-                .option(KustoDebugOptions.KUSTO_ADD_SOURCE_LOCATION_TRANSFORM, "true")
-                .option(KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS, tableCreationMode.toString)
-                .option(KustoSinkOptions.KUSTO_WRITE_MODE, writeMode.toString)
-                .option(KustoSinkOptions.KUSTO_TIMEOUT_LIMIT, (8 * 60).toString)
-                .mode(SaveMode.Append)
-                .save()
-            }
-            val query = if (targetColumnExists) {
-              s"$table | where isnotempty(${KustoConstants.SourceLocationColumnName}) | summarize Count=count() by ${KustoConstants.SourceLocationColumnName}"
-            } else {
-              s"$table | summarize Count=count() by WriteMode"
-            }
-            val queryResults = kustoAdminClient
-              .executeQuery(kustoTestConnectionOptions.database, query)
-              .getPrimaryResults
-              .getData
-            assert(queryResults.isEmpty, s"Expected no results for query: $query")
-          } else {
+        KDSU.logInfo(
+          className,
+          s"TableName:: $table. Running test: $testName with schema adjustment mode: $schemaAdjustmentMode")
+        if (!targetColumnExists) {
+          intercept[Exception] {
             df.write
               .format("com.microsoft.kusto.spark.datasource")
               .partitionBy("value")
               .option(KustoSinkOptions.KUSTO_CLUSTER, kustoTestConnectionOptions.cluster)
               .option(KustoSinkOptions.KUSTO_DATABASE, kustoTestConnectionOptions.database)
               .option(KustoSinkOptions.KUSTO_TABLE, table)
-              .option(KustoSinkOptions.KUSTO_ACCESS_TOKEN, kustoTestConnectionOptions.accessToken)
               .option(
-                KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS,
-                SinkTableCreationMode.CreateIfNotExist.toString)
+                KustoSinkOptions.KUSTO_ACCESS_TOKEN,
+                kustoTestConnectionOptions.accessToken)
               .option(KustoSinkOptions.KUSTO_ADJUST_SCHEMA, schemaAdjustmentMode.toString)
               .option(KustoDebugOptions.KUSTO_ADD_SOURCE_LOCATION_TRANSFORM, "true")
+              .option(KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS, tableCreationMode.toString)
               .option(KustoSinkOptions.KUSTO_WRITE_MODE, writeMode.toString)
               .option(KustoSinkOptions.KUSTO_TIMEOUT_LIMIT, (8 * 60).toString)
               .mode(SaveMode.Append)
               .save()
-            val query = if (targetColumnExists) {
-              s"$table | where isnotempty(${KustoConstants.SourceLocationColumnName}) " +
-                "and isnotempty(name) and value > 0  and isnotempty(WriteMode)" +
-                s"| summarize Count=count() by ${KustoConstants.SourceLocationColumnName}"
-            } else {
-              s"$table | summarize Count=count() by WriteMode"
-            }
-            val nonEmptyResult =
-              (res: Map[String, Long]) => res.values.sum == expectedNumberOfRows
-
-            val totalRows = Awaitility
-              .await()
-              .atMost(sleepTimeTillTableCreate, TimeUnit.MILLISECONDS)
-              .until(
-                () => {
-                  kustoAdminClient
-                    .executeQuery(kustoTestConnectionOptions.database, query)
-                    .getPrimaryResults
-                    .getData
-                    .toArray()
-                    .map {
-                      // check if row is a util.List
-                      case list: java.util.ArrayList[_] =>
-                        val key = list.get(0).toString
-                        val value = list.get(1).toString.toLong
-                        (key, value)
-                    }
-                    .toMap
-                },
-                res => nonEmptyResult(res))
-            assert(
-              totalRows.values.sum == expectedNumberOfRows,
-              s"Expected $expectedNumberOfRows rows, but got $totalRows")
-            assert(
-              totalRows.keys.count(blobUrl => blobUrl.startsWith("https://")) > 0,
-              s"Expected all rows to have a blob URL, but got: ${totalRows.keys}")
           }
-          kustoAdminClient.executeMgmt(kustoTestConnectionOptions.database, s".drop table $table")
+          val query = if (targetColumnExists) {
+            s"$table | where isnotempty(${KustoConstants.SourceLocationColumnName}) | summarize Count=count() by ${KustoConstants.SourceLocationColumnName}"
+          } else {
+            s"$table | summarize Count=count() by WriteMode"
+          }
+          val queryResults = kustoAdminClient
+            .executeQuery(kustoTestConnectionOptions.database, query)
+            .getPrimaryResults
+            .getData
+          assert(queryResults.isEmpty, s"Expected no results for query: $query")
+        } else {
+          df.write
+            .format("com.microsoft.kusto.spark.datasource")
+            .partitionBy("value")
+            .option(KustoSinkOptions.KUSTO_CLUSTER, kustoTestConnectionOptions.cluster)
+            .option(KustoSinkOptions.KUSTO_DATABASE, kustoTestConnectionOptions.database)
+            .option(KustoSinkOptions.KUSTO_TABLE, table)
+            .option(KustoSinkOptions.KUSTO_ACCESS_TOKEN, kustoTestConnectionOptions.accessToken)
+            .option(
+              KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS,
+              SinkTableCreationMode.CreateIfNotExist.toString)
+            .option(KustoSinkOptions.KUSTO_ADJUST_SCHEMA, schemaAdjustmentMode.toString)
+            .option(KustoDebugOptions.KUSTO_ADD_SOURCE_LOCATION_TRANSFORM, "true")
+            .option(KustoSinkOptions.KUSTO_WRITE_MODE, writeMode.toString)
+            .option(KustoSinkOptions.KUSTO_TIMEOUT_LIMIT, (8 * 60).toString)
+            .mode(SaveMode.Append)
+            .save()
+          val query = if (targetColumnExists) {
+            s"$table | where isnotempty(${KustoConstants.SourceLocationColumnName}) " +
+              "and isnotempty(name) and value > 0  and isnotempty(WriteMode)" +
+              s"| summarize Count=count() by ${KustoConstants.SourceLocationColumnName}"
+          } else {
+            s"$table | summarize Count=count() by WriteMode"
+          }
+          val nonEmptyResult =
+            (res: Map[String, Long]) => res.values.sum == expectedNumberOfRows
+
+          val totalRows = Awaitility
+            .await()
+            .atMost(sleepTimeTillTableCreate, TimeUnit.MILLISECONDS)
+            .until(
+              () => {
+                kustoAdminClient
+                  .executeQuery(kustoTestConnectionOptions.database, query)
+                  .getPrimaryResults
+                  .getData
+                  .toArray()
+                  .map {
+                    // check if row is a util.List
+                    case list: java.util.ArrayList[_] =>
+                      val key = list.get(0).toString
+                      val value = list.get(1).toString.toLong
+                      (key, value)
+                  }
+                  .toMap
+              },
+              res => nonEmptyResult(res))
+          assert(
+            totalRows.values.sum == expectedNumberOfRows,
+            s"Expected $expectedNumberOfRows rows, but got $totalRows")
+          assert(
+            totalRows.keys.count(blobUrl => blobUrl.startsWith("https://")) > 0,
+            s"Expected all rows to have a blob URL, but got: ${totalRows.keys}")
         }
+        kustoAdminClient.executeMgmt(kustoTestConnectionOptions.database, s".drop table $table")
+      }
     }
   }
 }

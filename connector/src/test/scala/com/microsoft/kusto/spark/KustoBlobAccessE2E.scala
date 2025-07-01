@@ -182,10 +182,10 @@ class KustoBlobAccessE2E extends AnyFlatSpec with BeforeAndAfterAll {
   }
 
   private def getBlobCoordinates(
-      storageAccountName: String,
-      container: String,
-      secret: String,
-      useKeyNotSas: Boolean): (String, String, String) = {
+                                  storageAccountName: String,
+                                  container: String,
+                                  secret: String,
+                                  useKeyNotSas: Boolean): (String, String, String) = {
     val secretString =
       if (useKeyNotSas) {
         s""";" h@"$secret""""
