@@ -4,7 +4,11 @@
 package com.microsoft.kusto.spark.utils
 
 import com.azure.core.credential.TokenRequestContext
-import com.azure.identity.{AzureCliCredentialBuilder, ChainedTokenCredentialBuilder, DeviceCodeCredentialBuilder}
+import com.azure.identity.{
+  AzureCliCredentialBuilder,
+  ChainedTokenCredentialBuilder,
+  DeviceCodeCredentialBuilder
+}
 import com.fasterxml.jackson.core.`type`.TypeReference
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.node.ArrayNode
@@ -19,9 +23,18 @@ import com.microsoft.kusto.spark.datasink.WriteMode.WriteMode
 import com.microsoft.kusto.spark.datasink.{SchemaAdjustmentMode, _}
 import com.microsoft.kusto.spark.datasource.ReadMode.ReadMode
 import com.microsoft.kusto.spark.datasource._
-import com.microsoft.kusto.spark.exceptions.{FailedOperationException, TimeoutAwaitingPendingOperationException}
+import com.microsoft.kusto.spark.exceptions.{
+  FailedOperationException,
+  TimeoutAwaitingPendingOperationException
+}
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
-import com.microsoft.kusto.spark.utils.KustoConstants.{DefaultBatchingLimit, DefaultExtentsCountForSplitMergePerNode, DefaultMaxRetriesOnMoveExtents, DefaultMaxStreamingBytesUncompressed, OneMegaByte}
+import com.microsoft.kusto.spark.utils.KustoConstants.{
+  DefaultBatchingLimit,
+  DefaultExtentsCountForSplitMergePerNode,
+  DefaultMaxRetriesOnMoveExtents,
+  DefaultMaxStreamingBytesUncompressed,
+  OneMegaByte
+}
 import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
 import io.github.resilience4j.retry.{Retry, RetryConfig}
 import io.vavr.CheckedFunction0
@@ -37,7 +50,15 @@ import java.net.URI
 import java.security.InvalidParameterException
 import java.util
 import java.util.concurrent.{Callable, CountDownLatch, TimeUnit}
-import java.util.{NoSuchElementException, Objects, Properties, StringJoiner, Timer, TimerTask, UUID}
+import java.util.{
+  NoSuchElementException,
+  Objects,
+  Properties,
+  StringJoiner,
+  Timer,
+  TimerTask,
+  UUID
+}
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
@@ -810,7 +831,7 @@ object KustoDataSourceUtils {
     val statusCol = "Status"
     val statusCheck: () => Option[KustoResultSetTable] = () => {
       try {
-        Some(client.execute(database, operationsShowCommand).getPrimaryResults)
+        Some(client.executeMgmt(database, operationsShowCommand).getPrimaryResults)
       } catch {
         case e: DataServiceException =>
           if (e.isPermanent) {
@@ -823,8 +844,7 @@ object KustoDataSourceUtils {
           val transientErrorMessage =
             s"Failed to retrieve export status for $doingWhat on requestId: $requestId, retrying in a few seconds." +
               s"Exception: $e}"
-          logWarn(
-            "verifyAsyncCommandCompletion",transientErrorMessage)
+          logWarn("verifyAsyncCommandCompletion", transientErrorMessage)
           None
         case _: DataClientException => None
       }
@@ -956,7 +976,9 @@ object KustoDataSourceUtils {
     val estimationResult: util.List[AnyRef] = Await.result(
       Future {
         val res =
-          client.executeQuery(database, generateEstimateRowsCountQuery(query), crp).getPrimaryResults
+          client
+            .executeQuery(database, generateEstimateRowsCountQuery(query), crp)
+            .getPrimaryResults
         res.next()
         res.getCurrentRow
       },
@@ -977,7 +999,8 @@ object KustoDataSourceUtils {
     if (estimatedCount == 0) {
       Await.result(
         Future {
-          val res = client.execute(database, generateCountQuery(query), crp).getPrimaryResults
+          val res =
+            client.executeQuery(database, generateCountQuery(query), crp).getPrimaryResults
           res.next()
           res.getInt(0)
         },
