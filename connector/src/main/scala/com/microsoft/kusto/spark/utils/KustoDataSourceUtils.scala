@@ -234,7 +234,7 @@ object KustoDataSourceUtils {
       clientRequestProperties: Option[ClientRequestProperties]): KustoSchema = {
     KustoResponseDeserializer(
       client
-        .executeEngine(database, query, "schemaGet", clientRequestProperties.orNull)
+        .executeEngine(database, query, "schemaGet", clientRequestProperties.orNull, isMgmtCommand = false)
         .getPrimaryResults).getSchema
   }
 
