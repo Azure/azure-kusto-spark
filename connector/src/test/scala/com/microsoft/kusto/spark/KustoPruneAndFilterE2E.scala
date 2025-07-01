@@ -128,7 +128,7 @@ class KustoPruneAndFilterE2E extends AnyFlatSpec with BeforeAndAfterAll {
       kustoTestConnectionOptions.cluster,
       kustoTestConnectionOptions.accessToken)
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
-    kustoAdminClient.execute(
+    kustoAdminClient.executeMgmt(
       kustoTestConnectionOptions.database,
       generateTempTableCreateCommand(query, columnsTypesAndNames = "ColA:string, ColB:int"))
 
@@ -225,7 +225,7 @@ class KustoPruneAndFilterE2E extends AnyFlatSpec with BeforeAndAfterAll {
       kustoTestConnectionOptions.cluster,
       kustoTestConnectionOptions.accessToken)
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
-    kustoAdminClient.execute(
+    kustoAdminClient.executeMgmt(
       kustoTestConnectionOptions.database,
       generateTempTableCreateCommand(query, columnsTypesAndNames = "ColA:string, ColB:int"))
 

@@ -11,31 +11,15 @@ import com.microsoft.azure.kusto.ingest.IngestionProperties.DataFormat
 import com.microsoft.azure.kusto.ingest.exceptions.IngestionServiceException
 import com.microsoft.azure.kusto.ingest.resources.ContainerWithSas
 import com.microsoft.azure.kusto.ingest.result.IngestionResult
-import com.microsoft.azure.kusto.ingest.source.{BlobSourceInfo, StreamSourceInfo}
-import com.microsoft.azure.kusto.ingest.{
-  IngestClient,
-  IngestionProperties,
-  ManagedStreamingIngestClient
-}
+import com.microsoft.azure.kusto.ingest.source.{BlobSourceInfo, CompressionType, StreamSourceInfo}
+import com.microsoft.azure.kusto.ingest.{IngestClient, IngestionProperties, ManagedStreamingIngestClient}
 import com.microsoft.azure.storage.blob.{BlobRequestOptions, CloudBlockBlob}
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.FinalizeHelper.finalizeIngestionWhenWorkersSucceeded
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator.generateTableGetSchemaAsRowsCommand
-import com.microsoft.kusto.spark.utils.KustoConstants.{
-  IngestSkippedTrace,
-  MaxIngestRetryAttempts,
-  WarnStreamingBytes
-}
-import com.microsoft.kusto.spark.utils.{
-  ByteArrayOutputStreamWithOffset,
-  ExtendedKustoClient,
-  KustoClientCache,
-  KustoIngestionUtils,
-  KustoQueryUtils,
-  KustoConstants => KCONST,
-  KustoDataSourceUtils => KDSU
-}
+import com.microsoft.kusto.spark.utils.KustoConstants.{IngestSkippedTrace, MaxIngestRetryAttempts, WarnStreamingBytes}
+import com.microsoft.kusto.spark.utils.{ByteArrayOutputStreamWithOffset, ExtendedKustoClient, KustoClientCache, KustoIngestionUtils, KustoQueryUtils, KustoConstants => KCONST, KustoDataSourceUtils => KDSU}
 import io.github.resilience4j.retry.RetryConfig
 import org.apache.commons.io.IOUtils
 import org.apache.spark.TaskContext
@@ -600,7 +584,7 @@ object KustoWriter {
         i => {
           Try(
             ingestClient.ingestFromBlob(
-              new BlobSourceInfo(blobUri + sas, size, UUID.randomUUID()),
+              new BlobSourceInfo(blobUri + sas, CompressionType.gz, UUID.randomUUID()),
               props)) match {
             case Success(x) =>
               <!-- The statuses of the ingestion operations are now set in the ingestion result -->

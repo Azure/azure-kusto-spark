@@ -11,43 +11,65 @@
         <version>${revision}</version>
     </parent>
     <dependencies>
-        <!-- Compile Scope -->
-        <dependency>
-            <groupId>com.fasterxml.jackson.module</groupId>
-            <artifactId>jackson-module-scala_${scala.version.major}</artifactId>
-            <version>${fasterxml.jackson.version}</version>
-            <exclusions>
-                <exclusion>
-                    <artifactId>scala-library</artifactId>
-                    <groupId>org.scala-lang</groupId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-        <dependency>
-            <groupId>com.fasterxml.jackson.datatype</groupId>
-            <artifactId>jackson-datatype-jsr310</artifactId>
-            <version>${fasterxml.jackson.jar.version}</version>
-        </dependency>        
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-lang3</artifactId>
             <version>${commons.lang3.version}</version>
-        </dependency>        
+        </dependency>
         <dependency>
             <groupId>com.microsoft.azure.kusto</groupId>
             <artifactId>kusto-data</artifactId>
             <version>${kusto.sdk.version}</version>
             <exclusions>
                 <exclusion>
-                    <groupId>com.microsoft.azure</groupId>
-                    <artifactId>msal4j</artifactId>
+                    <groupId>net.minidev</groupId>
+                    <artifactId>json-smart</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.fasterxml.jackson.core</groupId>
+                    <artifactId>jackson-databind</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.fasterxml.jackson.core</groupId>
+                    <artifactId>jackson-annotations</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.fasterxml.jackson.core</groupId>
+                    <artifactId>jackson-core</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.fasterxml.jackson.datatype</groupId>
+                    <artifactId>jackson-datatype-jsr310</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-api</artifactId>
                 </exclusion>
             </exclusions>
         </dependency>
         <dependency>
-            <groupId>com.microsoft.azure</groupId>
-            <artifactId>msal4j</artifactId>
-            <version>${msal4j.version}</version>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>${fasterxml.jackson.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
+            <version>${fasterxml.jackson.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-core</artifactId>
+            <version>${fasterxml.jackson.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jsr310</artifactId>
+            <version>${fasterxml.jackson.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.azure</groupId>
+            <artifactId>azure-security-keyvault-secrets</artifactId>
         </dependency>
         <dependency>
             <groupId>com.microsoft.azure.kusto</groupId>
@@ -55,10 +77,10 @@
             <version>${kusto.sdk.version}</version>
             <exclusions>
                 <exclusion>
-                    <groupId>com.microsoft.azure</groupId>
-                    <artifactId>msal4j</artifactId>
+                    <groupId>com.microsoft.azure.kusto</groupId>
+                    <artifactId>kusto-data</artifactId>
                 </exclusion>
-            </exclusions>            
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>com.azure</groupId>
@@ -67,11 +89,12 @@
         <dependency>
             <groupId>com.microsoft.azure</groupId>
             <artifactId>azure-storage</artifactId>
-            <version>${azure-storage.version}</version>
+            <version>${azure.storage.version}</version>
         </dependency>
         <dependency>
-            <groupId>com.azure</groupId>
-            <artifactId>azure-security-keyvault-secrets</artifactId>
+            <groupId>net.minidev</groupId>
+            <artifactId>json-smart</artifactId>
+            <version>${jsonsmart.version}</version>
         </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>
@@ -132,12 +155,6 @@
             <scope>provided</scope>
         </dependency>
         <!-- Test Scope -->
-        <dependency>
-            <groupId>junit</groupId>
-            <artifactId>junit</artifactId>
-            <version>${junit4.version}</version>
-            <scope>test</scope>
-        </dependency>
         <dependency>
             <groupId>org.scalatest</groupId>
             <artifactId>scalatest_${scala.version.major}</artifactId>
@@ -377,7 +394,7 @@
                                 <relocation>
                                     <pattern>com.nimbusds</pattern>
                                     <shadedPattern>${kusto.shade.prefix}.com.nimbusds</shadedPattern>
-                                </relocation>                                                                                                       
+                                </relocation>
                                 <relocation>
                                     <pattern>com.microsoft.spark</pattern>
                                     <shadedPattern>${kusto.shade.prefix}.com.microsoft.spark</shadedPattern>
@@ -452,7 +469,8 @@
                                 </relocation>
                                 <relocation>
                                     <pattern>com.fasterxml.jackson.dataformat</pattern>
-                                    <shadedPattern>${kusto.shade.prefix}.com.fasterxml.jackson.dataformat</shadedPattern>
+                                    <shadedPattern>${kusto.shade.prefix}.com.fasterxml.jackson.dataformat
+                                    </shadedPattern>
                                 </relocation>
                                 <relocation>
                                     <pattern>com.fasterxml.jackson.databind</pattern>
@@ -464,7 +482,8 @@
                                 </relocation>
                                 <relocation>
                                     <pattern>com.fasterxml.jackson.annotation</pattern>
-                                    <shadedPattern>${kusto.shade.prefix}.com.fasterxml.jackson.annotation</shadedPattern>
+                                    <shadedPattern>${kusto.shade.prefix}.com.fasterxml.jackson.annotation
+                                    </shadedPattern>
                                 </relocation>
                                 <relocation>
                                     <pattern>com.ctc.wstx</pattern>
@@ -575,11 +594,13 @@
                             </artifactSet>
                             <transformers>
                                 <!-- prevents apache license duplication -->
-                                <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheLicenseResourceTransformer"/>
+                                <transformer
+                                        implementation="org.apache.maven.plugins.shade.resource.ApacheLicenseResourceTransformer"/>
                                 <!-- Some licenses (including the Apache License, Version 2)
                                 require that notices are preserved by downstream distributors.
                                 ApacheNoticeResourceTransformer automates the assembly of an appropriate NOTICE. -->
-                                <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheNoticeResourceTransformer">
+                                <transformer
+                                        implementation="org.apache.maven.plugins.shade.resource.ApacheNoticeResourceTransformer">
                                     <addHeader>false</addHeader>
                                 </transformer>
                                 <!-- The PropertiesTransformer allows a set of properties files to be merged
@@ -587,7 +608,8 @@
                                 An optional alreadyMergedKey enables to have a boolean flag in the file which,
                                 if set to true, request to use the file as it as the result of the merge.
                                 If two files are considered complete in the merge process then the shade will fail.-->
-                                <transformer implementation="org.apache.maven.plugins.shade.resource.properties.PropertiesTransformer">
+                                <transformer
+                                        implementation="org.apache.maven.plugins.shade.resource.properties.PropertiesTransformer">
                                     <!-- required configuration -->
                                     <!-- merges all netty lib version files into one file -->
                                     <resource>META-INF/io.netty.versions.properties</resource>
@@ -598,13 +620,16 @@
                                     <reverseOrder>false</reverseOrder>
                                 </transformer>
                                 <!-- this handles and properly merges the content of META-INF/services in the dependencies -->
-                                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
-                                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                                <transformer
+                                        implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                                <transformer
+                                        implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
                                     <!-- once 3.3.0 shade plugin is release upgrade the maven plugin and remove AppendingTransformer
                                         https://issues.apache.org/jira/browse/MSHADE-371 -->
                                     <resource>META-INF/NOTICE.md</resource>
                                 </transformer>
-                                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                                <transformer
+                                        implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
                                     <!-- once 3.3.0 shade plugin is release upgrade the maven plugin and remove AppendingTransformer
                                     https://issues.apache.org/jira/browse/MSHADE-371 -->
                                     <resource>META-INF/LICENSE.md</resource>
@@ -615,12 +640,12 @@
                             <minimizeJar>true</minimizeJar>
                         </configuration>
                     </execution>
-               </executions>
+                </executions>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-antrun-plugin</artifactId>
-                <version>3.1.0</version> <!-- {x-version-update;org.apache.maven.plugins:maven-antrun-plugin;external_dependency} -->
+                <version>3.1.0</version>
                 <executions>
                     <execution>
                         <id>03-repack</id>
@@ -630,17 +655,27 @@
                         </goals>
                         <configuration>
                             <target>
-                                <unzip src="${project.build.directory}/${project.build.finalName}.jar" dest="${project.build.directory}/tmp" />
-                                <move file="${project.build.directory}/tmp/META-INF/native/libnetty_resolver_dns_native_macos_x86_64.jnilib" tofile="${project.build.directory}/tmp/META-INF/native/libazurecosmosspark_netty_resolver_dns_native_macos_x86_64.jnilib" />
-                                <move file="${project.build.directory}/tmp/META-INF/native/libnetty_tcnative_linux_aarch_64.so" tofile="${project.build.directory}/tmp/META-INF/native/libazurecosmosspark_netty_tcnative_linux_aarch_64.so" />
-                                <move file="${project.build.directory}/tmp/META-INF/native/libnetty_tcnative_linux_x86_64.so" tofile="${project.build.directory}/tmp/META-INF/native/libazurecosmosspark_netty_tcnative_linux_x86_64.so" />
-                                <move file="${project.build.directory}/tmp/META-INF/native/libnetty_tcnative_osx_aarch_64.jnilib" tofile="${project.build.directory}/tmp/META-INF/native/libazurecosmosspark_netty_tcnative_osx_aarch_64.jnilib" />
-                                <move file="${project.build.directory}/tmp/META-INF/native/libnetty_tcnative_osx_x86_64.jnilib" tofile="${project.build.directory}/tmp/META-INF/native/libazurecosmosspark_netty_tcnative_osx_x86_64.jnilib" />
-                                <move file="${project.build.directory}/tmp/META-INF/native/libnetty_transport_native_epoll_x86_64.so" tofile="${project.build.directory}/tmp/META-INF/native/libazurecosmosspark_netty_transport_native_epoll_x86_64.so" />
-                                <move file="${project.build.directory}/tmp/META-INF/native/libnetty_transport_native_kqueue_x86_64.jnilib" tofile="${project.build.directory}/tmp/META-INF/native/libazurecosmosspark_netty_transport_native_kqueue_x86_64.jnilib" />
-                                <move file="${project.build.directory}/tmp/META-INF/native/netty_tcnative_windows_x86_64.dll" tofile="${project.build.directory}/tmp/META-INF/native/azurecosmosspark_netty_tcnative_windows_x86_64.dll" />
-                                <zip basedir="${project.build.directory}/tmp" destfile="${project.build.directory}/${project.build.finalName}.jar" />
-                                <delete dir="${project.build.directory}/tmp" />
+                                <unzip src="${project.build.directory}/${project.build.finalName}.jar"
+                                       dest="${project.build.directory}/tmp"/>
+                                <move file="${project.build.directory}/tmp/META-INF/native/libnetty_resolver_dns_native_macos_x86_64.jnilib"
+                                      tofile="${project.build.directory}/tmp/META-INF/native/libazurekustospark_netty_resolver_dns_native_macos_x86_64.jnilib"/>
+                                <move file="${project.build.directory}/tmp/META-INF/native/libnetty_tcnative_linux_aarch_64.so"
+                                      tofile="${project.build.directory}/tmp/META-INF/native/libazurekustospark_netty_tcnative_linux_aarch_64.so"/>
+                                <move file="${project.build.directory}/tmp/META-INF/native/libnetty_tcnative_linux_x86_64.so"
+                                      tofile="${project.build.directory}/tmp/META-INF/native/libazurekustospark_netty_tcnative_linux_x86_64.so"/>
+                                <move file="${project.build.directory}/tmp/META-INF/native/libnetty_tcnative_osx_aarch_64.jnilib"
+                                      tofile="${project.build.directory}/tmp/META-INF/native/libazurekustospark_netty_tcnative_osx_aarch_64.jnilib"/>
+                                <move file="${project.build.directory}/tmp/META-INF/native/libnetty_tcnative_osx_x86_64.jnilib"
+                                      tofile="${project.build.directory}/tmp/META-INF/native/libazurekustospark_netty_tcnative_osx_x86_64.jnilib"/>
+                                <move file="${project.build.directory}/tmp/META-INF/native/libnetty_transport_native_epoll_x86_64.so"
+                                      tofile="${project.build.directory}/tmp/META-INF/native/libazurekustospark_netty_transport_native_epoll_x86_64.so"/>
+                                <move file="${project.build.directory}/tmp/META-INF/native/libnetty_transport_native_kqueue_x86_64.jnilib"
+                                      tofile="${project.build.directory}/tmp/META-INF/native/libazurekustospark_netty_transport_native_kqueue_x86_64.jnilib"/>
+                                <move file="${project.build.directory}/tmp/META-INF/native/netty_tcnative_windows_x86_64.dll"
+                                      tofile="${project.build.directory}/tmp/META-INF/native/azurekustospark_netty_tcnative_windows_x86_64.dll"/>
+                                <zip basedir="${project.build.directory}/tmp"
+                                     destfile="${project.build.directory}/${project.build.finalName}.jar"/>
+                                <delete dir="${project.build.directory}/tmp"/>
                             </target>
                         </configuration>
                     </execution>
@@ -658,7 +693,7 @@
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>xml-maven-plugin</artifactId>
-                <version>1.1.0</version> <!-- {x-version-update;org.codehaus.mojo:xml-maven-plugin;external_dependency} -->
+                <version>${xml.maven.plugin.version}</version>
                 <executions>
                     <execution>
                         <id>stripDependencyReducedPom</id>

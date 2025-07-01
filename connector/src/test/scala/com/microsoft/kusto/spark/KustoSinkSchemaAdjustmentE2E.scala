@@ -22,7 +22,7 @@ import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 import java.util.UUID
 
 class KustoSinkSchemaAdjustmentE2E
-    extends AnyFlatSpec
+  extends AnyFlatSpec
     with BeforeAndAfterEach
     with BeforeAndAfterAll {
 

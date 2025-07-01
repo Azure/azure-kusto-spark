@@ -8,7 +8,7 @@ import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.kusto.spark.KustoTestUtils.KustoConnectionOptions
 import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode}
 import com.microsoft.kusto.spark.sql.extension.SparkExtension._
-import com.microsoft.kusto.spark.utils.KustoQueryUtils
+import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils, KustoQueryUtils}
 import org.apache.spark.sql.SparkSession
 import org.scalatest.flatspec.AnyFlatSpec
 
@@ -47,7 +47,7 @@ class KustoAuthenticationTestE2E extends AnyFlatSpec {
       KustoSinkOptions.KEY_VAULT_URI -> keyVaultUri,
       KustoSinkOptions.KEY_VAULT_APP_ID -> (if (keyVaultAppId == null) "" else keyVaultAppId),
       KustoSinkOptions.KEY_VAULT_APP_KEY -> (if (keyVaultAppKey == null) { "" }
-                                             else keyVaultAppKey),
+      else keyVaultAppKey),
       KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS -> SinkTableCreationMode.CreateIfNotExist.toString)
 
     df.write.kusto(kustoConnectionOptions.cluster, kustoConnectionOptions.database, table, conf)
@@ -102,13 +102,12 @@ class KustoAuthenticationTestE2E extends AnyFlatSpec {
     val prefix = "deviceAuthentication"
     val table = KustoQueryUtils.simplifyName(s"${prefix}_${UUID.randomUUID()}")
 
-    val deviceAuth = new com.microsoft.kusto.spark.authentication.DeviceAuthentication(
+    val fallbackToken = KustoDataSourceUtils.getAccessTokenFallback(
       kustoConnectionOptions.cluster,
       kustoConnectionOptions.tenantId)
-    val token = deviceAuth.acquireToken()
     val engineKcsb = ConnectionStringBuilder.createWithAadAccessTokenAuthentication(
       kustoConnectionOptions.cluster,
-      token)
+      fallbackToken)
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
     val df = rows.toDF("name", "value")
     val conf: Map[String, String] = Map(
