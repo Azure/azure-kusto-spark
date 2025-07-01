@@ -29,10 +29,10 @@ object KeyVaultUtils {
   private var cachedClient: SecretClient = _
 
   private def getClient(
-                         uri: String,
-                         clientID: String,
-                         clientPassword: String,
-                         authority: String): SecretClient = {
+      uri: String,
+      clientID: String,
+      clientPassword: String,
+      authority: String): SecretClient = {
     if (cachedClient == null) {
       cachedClient = new KeyVaultADALAuthenticator(
         uri,
@@ -45,7 +45,7 @@ object KeyVaultUtils {
 
   @throws[IOException]
   def getStorageParamsFromKeyVault(
-                                    keyVaultAuthentication: KeyVaultAuthentication): TransientStorageCredentials = {
+      keyVaultAuthentication: KeyVaultAuthentication): TransientStorageCredentials = {
     keyVaultAuthentication match {
       case app: KeyVaultAppAuthentication =>
         val client = getClient(app.uri, app.keyVaultAppID, app.keyVaultAppKey, app.authority)
@@ -57,7 +57,7 @@ object KeyVaultUtils {
 
   @throws[IOException]
   def getAadAppParametersFromKeyVault(
-                                       keyVaultAuthentication: KeyVaultAuthentication): AadApplicationAuthentication = {
+      keyVaultAuthentication: KeyVaultAuthentication): AadApplicationAuthentication = {
     keyVaultAuthentication match {
       case app: KeyVaultAppAuthentication =>
         val client = getClient(app.uri, app.keyVaultAppID, app.keyVaultAppKey, app.authority)
@@ -68,8 +68,8 @@ object KeyVaultUtils {
   }
 
   private def getAadAppParamsFromKeyVaultImpl(
-                                               secretClient: SecretClient,
-                                               uri: String): AadApplicationAuthentication = {
+      secretClient: SecretClient,
+      uri: String): AadApplicationAuthentication = {
     val id = secretClient.getSecret(appId)
     val key = secretClient.getSecret(appKey)
     val authority = secretClient.getSecret(appAuthority)
@@ -93,7 +93,7 @@ object KeyVaultUtils {
   }
 
   private def getStorageParamsFromKeyVaultImpl(
-                                                client: SecretClient): TransientStorageCredentials = {
+      client: SecretClient): TransientStorageCredentials = {
     val sasUrlValue = Try(client.getSecret(sasUrl))
     val accountName = Try(client.getSecret(storageAccountName))
     val accountKey = Try(client.getSecret(storageAccountKey))
