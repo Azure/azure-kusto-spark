@@ -85,7 +85,7 @@ private[kusto] object KustoReader {
         request.kustoCoordinates.database,
         filteredQuery,
         "executeQuery",
-        request.clientRequestProperties.orNull)
+        request.clientRequestProperties.orNull, isMgmtCommand = false)
       .getPrimaryResults
 
     val serializer = KustoResponseDeserializer(kustoResult)
