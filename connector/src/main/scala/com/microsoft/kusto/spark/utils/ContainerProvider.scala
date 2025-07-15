@@ -13,7 +13,6 @@ import com.microsoft.azure.kusto.ingest.exceptions.{
 }
 import com.microsoft.kusto.spark.datasink.IngestionStorageParameters
 import com.microsoft.kusto.spark.exceptions.NoStorageContainersException
-import com.microsoft.kusto.spark.utils.ContainerProvider.className
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import io.github.resilience4j.core.IntervalFunction
 import io.github.resilience4j.retry.{Retry, RetryConfig}
@@ -138,7 +137,7 @@ class ContainerProvider(
           Try(client.ingestClient.getResourceManager.getShuffledContainers) match {
             case Success(res) =>
               val storage = res.asScala.map(row => {
-                ContainerAndSas(row.getContainer.getBlobContainerUrl, s"${row.getSas}")
+                ContainerAndSas(row.getAsyncContainer.getBlobContainerUrl, s"${row.getSas}")
               })
               processContainerResults(storage)
             case Failure(exception) =>

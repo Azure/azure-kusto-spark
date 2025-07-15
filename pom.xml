@@ -20,7 +20,7 @@
         <java.source.version>1.8</java.source.version>
         <java.target.version>1.8</java.target.version>
         <jsonsmart.version>2.5.2</jsonsmart.version>
-        <kusto.sdk.version>6.0.2</kusto.sdk.version>
+        <kusto.sdk.version>7.0.0</kusto.sdk.version>
         <maven.compile.plugin.version>3.10.1</maven.compile.plugin.version>
         <maven.flatten.version>1.4.1</maven.flatten.version>
         <maven.jar.plugin.version>3.3.0</maven.jar.plugin.version>
@@ -30,7 +30,7 @@
         <mockito.version>4.11.0</mockito.version>
         <msal4j.version>1.21.0</msal4j.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <scala.maven.plugin.version>4.8.1</scala.maven.plugin.version>
+        <scala.maven.plugin.version>4.9.5</scala.maven.plugin.version>
         <scala.rewrites.version>0.1.5</scala.rewrites.version>
         <scala.version.major>2.12</scala.version.major>
         <scala.version.minor>17</scala.version.minor>
