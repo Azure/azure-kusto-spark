@@ -107,12 +107,12 @@
             <plugin>
                     <groupId>com.diffplug.spotless</groupId>
                     <artifactId>spotless-maven-plugin</artifactId>
-                    <version>2.37.0</version>
+                    <version>2.28.0</version>
                     <configuration>
                         <scala>
                             <scalafmt>
-                                <version>3.7.14</version>
-                                <configFile>${project.basedir}/.scalafmt.conf</configFile>
+                                <version>3.5.9</version>
+                                <file>.scalafmt.conf</file>
                             </scalafmt>
                         </scala>
                     </configuration>
