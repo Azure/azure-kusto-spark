@@ -105,30 +105,26 @@
                 </executions>
             </plugin>
             <plugin>
-                <groupId>org.antipathy</groupId>
-                <artifactId>mvn-scalafmt_${scala.version.major}</artifactId>
-                <version>${scalafmt.plugin.version}</version>
-                <configuration>
-                    <configLocation>./.scalafmt.conf</configLocation> <!-- path to config -->
-                    <validateOnly>false</validateOnly> <!-- check formatting without changing files -->
-                    <onlyChangedFiles>true</onlyChangedFiles> <!-- only format (staged) files that have been changed from the specified git branch -->
-                    <showReformattedOnly>false</showReformattedOnly> <!-- log only modified files -->
-                    <!-- The git branch to check against
-                         If branch.startsWith(": ") the value in <branch> tag is used as a command to run
-                         and the output will be used as the actual branch-->
-                    <branch>: git rev-parse --abbrev-ref HEAD</branch> <!-- the current branch-->
-                    <!-- <branch>master</branch>-->
-                    <useSpecifiedRepositories>false</useSpecifiedRepositories> <!-- use project repositories configuration for scalafmt dynamic loading -->
-                </configuration>
-                <executions>
-                    <execution>
-                        <phase>validate</phase> <!-- default -->
-                        <goals>
-                            <goal>format</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
+                    <groupId>com.diffplug.spotless</groupId>
+                    <artifactId>spotless-maven-plugin</artifactId>
+                    <version>2.37.0</version>
+                    <configuration>
+                        <scala>
+                            <scalafmt>
+                                <version>3.7.14</version>
+                                <configFile>${project.basedir}/.scalafmt.conf</configFile>
+                            </scalafmt>
+                        </scala>
+                    </configuration>
+                    <executions>
+                        <execution>
+                            <goals>
+                                <goal>check</goal>
+                                <goal>apply</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
             <plugin>
                 <groupId>io.github.evis</groupId>
                 <artifactId>scalafix-maven-plugin_${scala.version.major}</artifactId>
@@ -151,7 +147,6 @@
                     </dependency>
                 </dependencies>
             </plugin>
-
         </plugins>
     </build>
     <dependencyManagement>
