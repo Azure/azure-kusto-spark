@@ -14,7 +14,12 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.node.ArrayNode
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import com.microsoft.azure.kusto.data.exceptions.{DataClientException, DataServiceException}
-import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties, KustoResultSetTable}
+import com.microsoft.azure.kusto.data.{
+  Client,
+  ClientRequestProperties,
+  KustoResultSetTable,
+  StringUtils
+}
 import com.microsoft.kusto.spark.authentication._
 import com.microsoft.kusto.spark.common.{KustoCoordinates, KustoDebugOptions}
 import com.microsoft.kusto.spark.datasink.KustoWriter.TempIngestionTablePrefix
@@ -38,14 +43,12 @@ import com.microsoft.kusto.spark.utils.KustoConstants.{
 import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
 import io.github.resilience4j.retry.{Retry, RetryConfig}
 import io.vavr.CheckedFunction0
-import org.apache.commons.lang3.StringUtils
-import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.http.client.utils.URIBuilder
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.{SQLContext, SaveMode}
 
-import java.io.InputStream
+import java.io.{PrintWriter, StringWriter, InputStream}
 import java.net.URI
 import java.security.InvalidParameterException
 import java.util
@@ -592,7 +595,7 @@ object KustoDataSourceUtils {
 
     val isMappingAlreadyPresent = maybeSparkIngestionProperties match {
       case Some(sparkIngestionProperties) =>
-        StringUtils.isNotEmpty(sparkIngestionProperties.csvMapping) || StringUtils.isNotEmpty(
+        StringUtils.isNotBlank(sparkIngestionProperties.csvMapping) || StringUtils.isNotBlank(
           sparkIngestionProperties.csvMappingNameReference)
       case None => false
     }
@@ -697,15 +700,13 @@ object KustoDataSourceUtils {
     if (!shouldNotThrow) {
       logError(
         reporter,
-        s"caught exception $whatFailed$clusterDesc$databaseDesc$tableDesc$requestIdDesc.${NewLine}EXCEPTION: ${ExceptionUtils
-            .getStackTrace(exception)}")
+        s"caught exception $whatFailed$clusterDesc$databaseDesc$tableDesc$requestIdDesc.${NewLine}EXCEPTION: ${getStackTrace(exception)}")
       throw exception
     }
 
     logWarn(
       reporter,
-      s"caught exception $whatFailed$clusterDesc$databaseDesc$tableDesc$requestIdDesc, exception ignored.${NewLine}EXCEPTION: ${ExceptionUtils
-          .getStackTrace(exception)}")
+      s"caught exception $whatFailed$clusterDesc$databaseDesc$tableDesc$requestIdDesc, exception ignored.${NewLine}EXCEPTION: ${getStackTrace(exception)}")
   }
 
   private[kusto] def getClusterNameFromUrlIfNeeded(cluster: String): String = {
@@ -995,13 +996,13 @@ object KustoDataSourceUtils {
      */
     val estimatedCount = maybeEstimatedCount match {
       case Some(ecStr: String) =>
-        if (StringUtils.isBlank(ecStr) || !StringUtils.isNumeric(ecStr)) /* Empty estimate */ 0
+        if (StringUtils.isBlank(ecStr) || !isNumeric(ecStr)) /* Empty estimate */ 0
         else ecStr.toInt
       case Some(ecInt: java.lang.Number) =>
         ecInt.intValue() // Is a numeric , get the int value back
       case Some(ecObj: Object) =>
         val ecStr = Option(ecObj).map(_.toString).getOrElse("0")
-        if (StringUtils.isBlank(ecStr) || !StringUtils.isNumeric(ecStr)) {
+        if (StringUtils.isBlank(ecStr) || !isNumeric(ecStr)) {
           0 // Empty estimate
         } else {
           ecStr.toInt
@@ -1021,5 +1022,29 @@ object KustoDataSourceUtils {
     } else {
       estimatedCount
     }
+  }
+
+  private[kusto] def isNumeric(string: String): Boolean = {
+    if (string == null || string.isEmpty) {
+      false
+    } else {
+      string.forall(c => c.isDigit || c == '-' || c == '.')
+    }
+  }
+
+  private[kusto] def formatDuration(millis: Long): String = {
+    val days = java.util.concurrent.TimeUnit.MILLISECONDS.toDays(millis)
+    val hours = java.util.concurrent.TimeUnit.MILLISECONDS.toHours(millis) % 24
+    val minutes = java.util.concurrent.TimeUnit.MILLISECONDS.toMinutes(millis) % 60
+    val seconds = java.util.concurrent.TimeUnit.MILLISECONDS.toSeconds(millis) % 60
+    f"$days%02d:$hours%02d:$minutes%02d:$seconds%02d"
+  }
+
+  // Utility method to replace ExceptionUtils.getStackTrace
+  private[kusto] def getStackTrace(throwable: Throwable): String = {
+    val sw = new StringWriter()
+    val pw = new PrintWriter(sw)
+    throwable.printStackTrace(pw)
+    sw.toString
   }
 }

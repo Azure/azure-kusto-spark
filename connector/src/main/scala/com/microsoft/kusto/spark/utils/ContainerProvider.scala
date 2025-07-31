@@ -6,7 +6,12 @@ package com.microsoft.kusto.spark.utils
 import com.azure.identity.{DefaultAzureCredentialBuilder, ManagedIdentityCredentialBuilder}
 import com.azure.storage.blob.BlobServiceClientBuilder
 import com.azure.storage.blob.sas.{BlobContainerSasPermission, BlobServiceSasSignatureValues}
-import com.microsoft.azure.kusto.data.exceptions.{DataServiceException, KustoDataExceptionBase}
+import com.microsoft.azure.kusto.data.StringUtils
+import com.microsoft.azure.kusto.data.exceptions.{
+  DataServiceException,
+  ExceptionUtils,
+  KustoDataExceptionBase
+}
 import com.microsoft.azure.kusto.ingest.exceptions.{
   IngestionClientException,
   IngestionServiceException
@@ -17,8 +22,6 @@ import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import io.github.resilience4j.core.IntervalFunction
 import io.github.resilience4j.retry.{Retry, RetryConfig}
 import io.vavr.CheckedFunction0
-import org.apache.commons.lang3.StringUtils
-import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.http.conn.HttpHostConnectException
 
 import java.time.{Clock, Instant, OffsetDateTime}
@@ -42,9 +45,8 @@ class ContainerProvider(
     (e.isInstanceOf[IngestionServiceException] && !e
       .asInstanceOf[KustoDataExceptionBase]
       .isPermanent) ||
-      (e.isInstanceOf[DataServiceException] && ExceptionUtils
-        .getRootCause(e)
-        .isInstanceOf[HttpHostConnectException]))
+      (e.isInstanceOf[DataServiceException] && (e != null && e.getCause
+        .isInstanceOf[HttpHostConnectException])))
   private val retryConfigIngestionRefresh = buildRetryConfig((e: Throwable) =>
     (e.isInstanceOf[NoStorageContainersException]
       || e.isInstanceOf[IngestionClientException] || e.isInstanceOf[IngestionServiceException]))
@@ -197,7 +199,7 @@ class ContainerProvider(
           s"${ingestionStorageParameter.storageUrl}/${ingestionStorageParameter.containerName}",
           s"$normalizedSas"))
     } else {
-      if (StringUtils.isNotEmpty(ingestionStorageParameter.sas)) {
+      if (StringUtils.isNotBlank(ingestionStorageParameter.sas)) {
         KDSU.logInfo(className, "Using SAS token from ingestion storage parameter")
         val normalizedSas = ingestionStorageParameter.sas
         (
@@ -248,7 +250,7 @@ object ContainerProvider {
       cacheExpirySeconds: Long,
       listPermissions: Boolean,
       ingestionStorageParameter: IngestionStorageParameters): String = {
-    val credential = if (StringUtils.isNotEmpty(ingestionStorageParameter.userMsi)) {
+    val credential = if (StringUtils.isNotBlank(ingestionStorageParameter.userMsi)) {
       new ManagedIdentityCredentialBuilder()
         .clientId(ingestionStorageParameter.userMsi)
         .build()

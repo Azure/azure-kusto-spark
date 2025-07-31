@@ -264,4 +264,42 @@ class KustoDataSourceUtilsTest extends AnyFlatSpec with MockFactory {
         exception.getMessage == "addSourceLocationTransform can only be used with GenerateDynamicCsvMapping schema adjustment mode.")
     }
   }
+
+  "isNumeric" should "correctly identify numeric strings" in {
+    val testCases = Table(
+      ("input", "expected"),
+      ("123", true),
+      ("-123", true),
+      ("123.456", true),
+      ("-123.456", true),
+      ("", false),
+      (null, false),
+      ("abc", false),
+      ("123abc", false),
+      ("123.456.789", false),
+      ("12-34", false))
+
+    forAll(testCases) { (input, expected) =>
+      assert(KustoDataSourceUtils.isNumeric(input) == expected)
+    }
+  }
+
+  "formatDuration" should "format duration in days:hours:minutes:seconds" in {
+    val testCases = Table(
+      ("millis", "expected"),
+      (0L, "00:00:00:00"),
+      (1000L, "00:00:00:01"), // 1 second
+      (60000L, "00:00:01:00"), // 1 minute
+      (3600000L, "00:01:00:00"), // 1 hour
+      (86400000L, "01:00:00:00"), // 1 day
+      (90061000L, "01:01:01:01"), // 1 day, 1 hour, 1 minute, 1 second
+      (172800000L, "02:00:00:00"), // 2 days
+      (7776000000L, "90:00:00:00"), // 90 days
+      (123456789L, "01:10:17:36") // 1 day, 10 hours, 17 minutes, 36 seconds
+    )
+
+    forAll(testCases) { (millis, expected) =>
+      assert(KustoDataSourceUtils.formatDuration(millis) == expected)
+    }
+  }
 }

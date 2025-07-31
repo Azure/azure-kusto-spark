@@ -5,7 +5,7 @@ package com.microsoft.kusto.spark.datasource
 
 import java.security.InvalidParameterException
 import java.util.concurrent.TimeUnit
-import com.microsoft.azure.kusto.data.ClientRequestProperties
+import com.microsoft.azure.kusto.data.{ClientRequestProperties, StringUtils}
 import com.microsoft.kusto.spark.authentication.{KeyVaultAuthentication, KustoAuthentication}
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, KustoWriter}
@@ -16,7 +16,6 @@ import com.microsoft.kusto.spark.utils.{
   KustoDataSourceUtils => KDSU
 }
 import com.microsoft.kusto.spark.utils.KustoDataSourceUtils.SourceParameters
-import org.apache.commons.lang3.StringUtils
 import org.apache.spark.sql.sources.{
   BaseRelation,
   CreatableRelationProvider,
@@ -132,7 +131,7 @@ class DefaultSource
         // If any of the storage parameters defined a SAS we will take endpoint suffix from there
         transientStorageParams.get.storageCredentials.foreach(st => {
           st.validate()
-          if (StringUtils.isNoneBlank(st.domainSuffix)) {
+          if (StringUtils.isNotBlank(st.domainSuffix)) {
             transientStorageParams.get.endpointSuffix = st.domainSuffix
           }
         })

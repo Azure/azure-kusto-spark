@@ -37,9 +37,6 @@ import com.microsoft.kusto.spark.utils.KustoDataSourceUtils.extractSchemaFromRes
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import io.github.resilience4j.core.IntervalFunction
 import io.github.resilience4j.retry.RetryConfig
-import org.apache.commons.lang3.StringUtils
-import org.apache.commons.lang3.exception.ExceptionUtils
-import org.apache.commons.lang3.time.DurationFormatUtils
 import org.apache.log4j.Level
 import org.apache.spark.sql.types.StructType
 
@@ -160,10 +157,7 @@ class ExtendedKustoClient(
           database,
           generateTableAlterRetentionPolicy(
             tmpTableName,
-            DurationFormatUtils.formatDuration(
-              writeOptions.autoCleanupTime.toMillis,
-              durationFormat,
-              true),
+            KDSU.formatDuration(writeOptions.autoCleanupTime.toMillis),
             recoverable = false),
           "alterRetentionPolicy",
           crp)
@@ -205,7 +199,7 @@ class ExtendedKustoClient(
       retryConfig: Option[RetryConfig] = None): KustoOperationResult = {
 
     val startsWithDot =
-      StringUtils.isNotEmpty(command) && StringUtils.trim(command).startsWith(DOT)
+      StringUtils.isNotBlank(command) && command.trim().startsWith(DOT)
 
     val commandType = if (isMgmtCommand || startsWithDot) {
       "management"
@@ -241,7 +235,7 @@ class ExtendedKustoClient(
     var prefix: Option[String] = None
     if (maybeCrp.isDefined) {
       val currentId = maybeCrp.get.getClientRequestId
-      if (StringUtils.isNoneBlank(currentId)) {
+      if (StringUtils.isNotBlank(currentId)) {
         prefix = Some(currentId + ";")
       }
     }
@@ -273,7 +267,7 @@ class ExtendedKustoClient(
     val transientStorage =
       storage.map(c => new TransientStorageCredentials(c.containerUrl + c.sas))
     val endpointSuffix = transientStorage.head.domainSuffix
-    if (StringUtils.isNoneBlank(endpointSuffix)) {
+    if (StringUtils.isNotBlank(endpointSuffix)) {
       new TransientStorageParameters(transientStorage.toArray, endpointSuffix)
     } else {
       new TransientStorageParameters(transientStorage.toArray)
@@ -391,7 +385,7 @@ class ExtendedKustoClient(
           }
           failed = true
         case ex: KustoDataExceptionBase =>
-          error = ExceptionUtils.getStackTrace(ex)
+          error = KDSU.getStackTrace(ex)
           failed = true
       }
 

@@ -8,43 +8,50 @@
     <packaging>pom</packaging>
     <version>${revision}</version>
     <properties>
+        <!-- Project Configuration -->
         <revision>6.0.0</revision>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <java.source.version>1.8</java.source.version>
+        <java.target.version>1.8</java.target.version>
         <kusto.shade.prefix>kusto_connector_shaded</kusto.shade.prefix>
-        <awaitility.version>4.3.0</awaitility.version>
-        <az.identity.version>1.12.0</az.identity.version>
+
+        <!-- Compile Dependencies -->
         <azure.bom.version>1.2.28</azure.bom.version>
         <azure.storage.version>8.6.6</azure.storage.version>
+        <az.identity.version>1.12.0</az.identity.version>
         <commons.lang3.version>3.18.0</commons.lang3.version>
         <fasterxml.jackson.version>2.19.1</fasterxml.jackson.version>
         <hadoop.version>3.4.1</hadoop.version>
-        <java.source.version>1.8</java.source.version>
-        <java.target.version>1.8</java.target.version>
         <jsonsmart.version>2.5.2</jsonsmart.version>
         <kusto.sdk.version>7.0.2</kusto.sdk.version>
+        <msal4j.version>1.21.0</msal4j.version>
+        <scala.version.major>2.12</scala.version.major>
+        <scala.version.minor>17</scala.version.minor>
+        <slf4j.version>2.0.17</slf4j.version>
+        <spark.version.major>3.0</spark.version.major>
+        <spark.version.minor>3</spark.version.minor>
+        <specs2.version>3.6.5</specs2.version>
+
+        <!-- Test Dependencies -->
+        <awaitility.version>4.3.0</awaitility.version>
+        <mockito.version>4.11.0</mockito.version>
+        <scalamock.version>5.2.0</scalamock.version>
+        <scalatest.version>3.2.17</scalatest.version>
+
+        <!-- Maven Plugins -->
         <maven.compile.plugin.version>3.10.1</maven.compile.plugin.version>
         <maven.flatten.version>1.4.1</maven.flatten.version>
         <maven.jar.plugin.version>3.3.0</maven.jar.plugin.version>
         <maven.shade.plugin.version>3.6.0</maven.shade.plugin.version>
         <maven.source.plugin.version>3.3.1</maven.source.plugin.version>
         <maven.surefire.plugin.version>3.5.3</maven.surefire.plugin.version>
-        <mockito.version>4.11.0</mockito.version>
-        <msal4j.version>1.21.0</msal4j.version>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <scala.maven.plugin.version>4.9.5</scala.maven.plugin.version>
         <scala.rewrites.version>0.1.5</scala.rewrites.version>
-        <scala.version.major>2.12</scala.version.major>
-        <scala.version.minor>17</scala.version.minor>
         <scalafix.core.version>0.11.1</scalafix.core.version>
         <scalafix.version>0.1.8_0.11.0</scalafix.version>
         <scalafmt.plugin.version>1.1.1640084764.9f463a9</scalafmt.plugin.version>
-        <scalamock.version>5.2.0</scalamock.version>
         <scalatest.maven.version>2.2.0</scalatest.maven.version>
-        <scalatest.version>3.2.17</scalatest.version>
         <scalastyle.maven.plugin.version>1.0.0</scalastyle.maven.plugin.version>
-        <slf4j.version>2.0.17</slf4j.version>
-        <spark.version.major>3.0</spark.version.major>
-        <spark.version.minor>3</spark.version.minor>
-        <specs2.version>3.6.5</specs2.version>
         <typelevel.scalafix.version>0.5.0</typelevel.scalafix.version>
         <xml.maven.plugin.version>1.1.0</xml.maven.plugin.version>
     </properties>
@@ -190,3 +197,4 @@
         </dependency>
     </dependencies>
 </project>
+

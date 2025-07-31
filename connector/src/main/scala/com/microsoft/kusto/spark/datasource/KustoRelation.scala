@@ -4,6 +4,7 @@
 package com.microsoft.kusto.spark.datasource
 
 import com.microsoft.azure.kusto.data.ClientRequestProperties
+import com.microsoft.azure.kusto.data.StringUtils
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.{KustoCoordinates, KustoDebugOptions}
 import com.microsoft.kusto.spark.datasink.{KustoWriter, WriteOptions}
@@ -15,7 +16,6 @@ import com.microsoft.kusto.spark.utils.{
   KustoQueryUtils,
   KustoDataSourceUtils => KDSU
 }
-import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
@@ -134,8 +134,8 @@ private[kusto] case class KustoRelation(
           case Failure(exception) =>
             // If the user specified forceSingleMode explicitly and that cannot be honored , throw an exception back
             // Only check is if exception is because of QueryLimits , it will fallback
-            val isRowLimitHit = ExceptionUtils
-              .getRootCauseStackTrace(exception)
+            val isRowLimitHit = KDSU
+              .getStackTrace(exception)
               .contains("Query execution has exceeded the allowed limits")
             if (isUserOptionForceSingleMode && !isRowLimitHit) {
               // Expected behavior for Issue#261

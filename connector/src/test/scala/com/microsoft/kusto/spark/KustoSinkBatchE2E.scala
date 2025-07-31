@@ -3,7 +3,7 @@
 
 package com.microsoft.kusto.spark
 
-import com.microsoft.azure.kusto.data.ClientFactory
+import com.microsoft.azure.kusto.data.{ClientFactory, StringUtils}
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.kusto.spark.KustoTestUtils.getSystemTestOptions
 import com.microsoft.kusto.spark.common.KustoDebugOptions
@@ -27,7 +27,7 @@ import com.microsoft.kusto.spark.utils.{
   KustoQueryUtils,
   KustoDataSourceUtils => KDSU
 }
-import org.apache.commons.lang3.StringUtils
+//import org.apache.commons.lang3.StringUtils
 import org.apache.spark.SparkContext
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils

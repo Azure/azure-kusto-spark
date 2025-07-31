@@ -4,7 +4,6 @@
 package com.microsoft.kusto.spark.utils
 
 import com.microsoft.kusto.spark.datasink.SparkIngestionProperties
-import org.apache.commons.lang3.builder.EqualsBuilder
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.prop.TableDrivenPropertyChecks.forAll
 import org.scalatest.prop.Tables.Table
@@ -30,17 +29,17 @@ class SparkIngestionPropertiesTest extends AnyFlatSpec {
     val stringProps = sp.toString
     val spFromString = SparkIngestionProperties.fromString(stringProps)
 
-    assert(EqualsBuilder.reflectionEquals(spFromString, sp))
+    assert(spFromString.toString.equals(sp.toString))
     val ingestByTags2 = new java.util.ArrayList[String]
     val tag2 = "dummyTag2"
     ingestByTags.add(tag2)
     sp.ingestByTags = ingestByTags2
-    assert(!EqualsBuilder.reflectionEquals(spFromString, sp))
+    assert(!spFromString.toString.equals(sp.toString))
 
     val ingestionProperties = spFromString
       .toIngestionProperties("database", "tableName")
     val cloned = SparkIngestionProperties.cloneIngestionProperties(ingestionProperties)
-    assert(EqualsBuilder.reflectionEquals(ingestionProperties, cloned))
+    assert(ingestionProperties.toString.equals(cloned.toString))
   }
 
   // This will be called only for WriteOption "Stream"
