@@ -49,9 +49,9 @@ import scala.collection.JavaConverters._
 import scala.concurrent.duration.FiniteDuration
 
 class ExtendedKustoClient(
-                           val engineKcsb: ConnectionStringBuilder,
-                           val ingestKcsb: ConnectionStringBuilder,
-                           val clusterAlias: String) {
+    val engineKcsb: ConnectionStringBuilder,
+    val ingestKcsb: ConnectionStringBuilder,
+    val clusterAlias: String) {
   lazy val engineClient: Client = ClientFactory.createClient(engineKcsb)
 
   // Reading process does not require ingest client to start working
@@ -72,13 +72,13 @@ class ExtendedKustoClient(
   private val durationFormat = "dd:HH:mm:ss"
 
   def initializeTablesBySchema(
-                                tableCoordinates: KustoCoordinates,
-                                tmpTableName: String,
-                                sourceSchema: StructType,
-                                targetSchema: Iterable[JsonNode],
-                                writeOptions: WriteOptions,
-                                crp: ClientRequestProperties,
-                                configureRetentionPolicy: Boolean): Unit = {
+      tableCoordinates: KustoCoordinates,
+      tmpTableName: String,
+      sourceSchema: StructType,
+      targetSchema: Iterable[JsonNode],
+      writeOptions: WriteOptions,
+      crp: ClientRequestProperties,
+      configureRetentionPolicy: Boolean): Unit = {
 
     var tmpTableSchema: String = ""
     val database = tableCoordinates.database
@@ -181,10 +181,10 @@ class ExtendedKustoClient(
   }
 
   def executeDM(
-                 command: String,
-                 maybeCrp: Option[ClientRequestProperties],
-                 activityName: String,
-                 retryConfig: Option[RetryConfig] = None): KustoOperationResult = {
+      command: String,
+      maybeCrp: Option[ClientRequestProperties],
+      activityName: String,
+      retryConfig: Option[RetryConfig] = None): KustoOperationResult = {
     KDSU.retryApplyFunction(
       i => {
         dmClient.executeMgmt(
@@ -197,31 +197,17 @@ class ExtendedKustoClient(
   }
 
   def executeEngine(
-                     database: String,
-                     command: String,
-                     activityName: String,
-                     crp: ClientRequestProperties,
-                     isMgmtCommand: Boolean = true,
-                     retryConfig: Option[RetryConfig] = None): KustoOperationResult = {
+      database: String,
+      command: String,
+      activityName: String,
+      crp: ClientRequestProperties,
+      isMgmtCommand: Boolean = true,
+      retryConfig: Option[RetryConfig] = None): KustoOperationResult = {
 
     val startsWithDot =
       StringUtils.isNotEmpty(command) && StringUtils.trim(command).startsWith(DOT)
 
-    if (startsWithDot && !isMgmtCommand) {
-      KDSU.logWarn(
-        myName,
-        s"Command '$command' starts with a dot but is not marked as management command. " +
-          "This may lead to unexpected behavior. Please ensure the command is intended to be a management command.")
-    }
-
-    if (isMgmtCommand && !startsWithDot) {
-      KDSU.logWarn(
-        myName,
-        s"Command '$command' does not start with '.' an but is marked as management command. " +
-          "This may lead to unexpected behavior. Please ensure the command is intended to be a query command.")
-    }
-
-    val isMgmtCommandStr = if (isMgmtCommand || startsWithDot) {
+    val commandType = if (isMgmtCommand || startsWithDot) {
       "management"
     } else {
       "query"
@@ -249,9 +235,9 @@ class ExtendedKustoClient(
   }
 
   private def newIncrementedCrp(
-                                 maybeCrp: Option[ClientRequestProperties],
-                                 activityName: String,
-                                 iteration: Int): ClientRequestProperties = {
+      maybeCrp: Option[ClientRequestProperties],
+      activityName: String,
+      iteration: Int): ClientRequestProperties = {
     var prefix: Option[String] = None
     if (maybeCrp.isDefined) {
       val currentId = maybeCrp.get.getClientRequestId
@@ -267,7 +253,7 @@ class ExtendedKustoClient(
   }
 
   def getTempBlobForIngestion(
-                               maybeIngestionStorageParams: Option[Array[IngestionStorageParameters]]): ContainerAndSas = {
+      maybeIngestionStorageParams: Option[Array[IngestionStorageParameters]]): ContainerAndSas = {
     ingestContainersContainerProvider.getContainer(maybeIngestionStorageParams)
   }
 
@@ -295,12 +281,12 @@ class ExtendedKustoClient(
   }
 
   def moveExtents(
-                   database: String,
-                   tmpTableName: String,
-                   targetTable: String,
-                   crp: ClientRequestProperties,
-                   writeOptions: WriteOptions,
-                   sinkStartTime: Instant): Unit = {
+      database: String,
+      tmpTableName: String,
+      targetTable: String,
+      crp: ClientRequestProperties,
+      writeOptions: WriteOptions,
+      sinkStartTime: Instant): Unit = {
     val extentsCountQuery =
       executeEngine(
         database,
@@ -338,14 +324,14 @@ class ExtendedKustoClient(
   }
 
   def moveExtentsWithRetries(
-                              batchSize: Option[Int],
-                              totalAmount: Int,
-                              database: String,
-                              tmpTableName: String,
-                              targetTable: String,
-                              ingestionStartTime: Instant,
-                              crp: ClientRequestProperties,
-                              writeOptions: WriteOptions): Unit = {
+      batchSize: Option[Int],
+      totalAmount: Int,
+      database: String,
+      tmpTableName: String,
+      targetTable: String,
+      ingestionStartTime: Instant,
+      crp: ClientRequestProperties,
+      writeOptions: WriteOptions): Unit = {
     var extentsProcessed = 0
     var retry = 0
     var curBatchSize = batchSize.getOrElse(0)
@@ -463,16 +449,16 @@ class ExtendedKustoClient(
   }
 
   def handleRetryFail(
-                       curBatchSize: Int,
-                       retry: Int,
-                       currentSleepTime: Int,
-                       targetTable: String,
-                       error: Object): (Int, Int) = {
+      curBatchSize: Int,
+      retry: Int,
+      currentSleepTime: Int,
+      targetTable: String,
+      error: Object): (Int, Int) = {
     KDSU.logWarn(
       myName,
       s"""moving extents to '$targetTable' failed,
         retry number: $retry ${if (error == null) ""
-      else s", error: ${error.asInstanceOf[String]}"}.
+        else s", error: ${error.asInstanceOf[String]}"}.
         Sleeping for: $currentSleepTime""")
     Thread.sleep(currentSleepTime)
     val increasedSleepTime = Math.min(MaxSleepOnMoveExtentsMillis, currentSleepTime * 2)
@@ -485,11 +471,11 @@ class ExtendedKustoClient(
   }
 
   def handleNoResults(
-                       totalAmount: Int,
-                       extentsProcessed: Int,
-                       database: String,
-                       tmpTableName: String,
-                       crp: ClientRequestProperties): Boolean = {
+      totalAmount: Int,
+      extentsProcessed: Int,
+      database: String,
+      tmpTableName: String,
+      crp: ClientRequestProperties): Boolean = {
     // Could we get here ?
     KDSU.logFatal(
       myName,
@@ -540,9 +526,9 @@ class ExtendedKustoClient(
   }
 
   def shouldUseMaterializedViewFlag(
-                                     database: String,
-                                     targetTable: String,
-                                     crp: ClientRequestProperties): Boolean = {
+      database: String,
+      targetTable: String,
+      crp: ClientRequestProperties): Boolean = {
     val isDestinationTableMaterializedViewSourceResult =
       executeEngine(
         database,
@@ -567,10 +553,10 @@ class ExtendedKustoClient(
   }
 
   def shouldIngestData(
-                        tableCoordinates: KustoCoordinates,
-                        maybeSparkIngestionProperties: Option[SparkIngestionProperties],
-                        tableExists: Boolean,
-                        crp: ClientRequestProperties): Boolean = {
+      tableCoordinates: KustoCoordinates,
+      maybeSparkIngestionProperties: Option[SparkIngestionProperties],
+      tableExists: Boolean,
+      crp: ClientRequestProperties): Boolean = {
     if (tableExists && maybeSparkIngestionProperties.isDefined) {
       val ingestIfNotExistsTags = maybeSparkIngestionProperties.orNull.ingestIfNotExists
       if (ingestIfNotExistsTags != null && !ingestIfNotExistsTags.isEmpty) {
@@ -591,9 +577,9 @@ class ExtendedKustoClient(
   }
 
   def fetchTableExtentsTags(
-                             database: String,
-                             table: String,
-                             crp: ClientRequestProperties): KustoResultSetTable = {
+      database: String,
+      table: String,
+      crp: ClientRequestProperties): KustoResultSetTable = {
     executeEngine(
       database,
       CslCommandsGenerator.generateFetchTableIngestByTagsCommand(table),
@@ -602,13 +588,13 @@ class ExtendedKustoClient(
   }
 
   def retryAsyncOp(
-                    database: String,
-                    cmd: String,
-                    crp: ClientRequestProperties,
-                    timeout: FiniteDuration,
-                    cmdToTrace: String,
-                    cmdName: String,
-                    requestId: String): Option[KustoResultSetTable] = {
+      database: String,
+      cmd: String,
+      crp: ClientRequestProperties,
+      timeout: FiniteDuration,
+      cmdToTrace: String,
+      cmdName: String,
+      requestId: String): Option[KustoResultSetTable] = {
     KDSU.retryApplyFunction(
       i => {
         val operation = executeEngine(
@@ -660,9 +646,9 @@ class ExtendedKustoClient(
   }
 
   private[kusto] def cleanupIngestionByProducts(
-                                                 database: String,
-                                                 tmpTableName: String,
-                                                 crp: ClientRequestProperties): Unit = {
+      database: String,
+      tmpTableName: String,
+      crp: ClientRequestProperties): Unit = {
     try {
       executeEngine(database, generateTableDropCommand(tmpTableName), "tableDrop", crp)
       KDSU.logInfo(myName, s"Temporary table '$tmpTableName' deleted successfully")
@@ -677,11 +663,11 @@ class ExtendedKustoClient(
   }
 
   private[kusto] def setMappingOnStagingTableIfNeeded(
-                                                       stagingTableSparkIngestionProperties: SparkIngestionProperties,
-                                                       database: String,
-                                                       tempTable: String,
-                                                       originalTable: String,
-                                                       crp: ClientRequestProperties): Unit = {
+      stagingTableSparkIngestionProperties: SparkIngestionProperties,
+      database: String,
+      tempTable: String,
+      originalTable: String,
+      crp: ClientRequestProperties): Unit = {
     val stagingTableIngestionProperties =
       stagingTableSparkIngestionProperties.toIngestionProperties(database, tempTable)
     val mapping = stagingTableIngestionProperties.getIngestionMapping

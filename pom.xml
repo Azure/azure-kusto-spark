@@ -20,7 +20,7 @@
         <java.source.version>1.8</java.source.version>
         <java.target.version>1.8</java.target.version>
         <jsonsmart.version>2.5.2</jsonsmart.version>
-        <kusto.sdk.version>7.0.0</kusto.sdk.version>
+        <kusto.sdk.version>7.0.2</kusto.sdk.version>
         <maven.compile.plugin.version>3.10.1</maven.compile.plugin.version>
         <maven.flatten.version>1.4.1</maven.flatten.version>
         <maven.jar.plugin.version>3.3.0</maven.jar.plugin.version>
