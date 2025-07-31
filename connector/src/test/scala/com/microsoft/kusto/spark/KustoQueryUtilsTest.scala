@@ -10,7 +10,7 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
 class KustoQueryUtilsTest
-  extends AnyFlatSpec
+    extends AnyFlatSpec
     with MockFactory
     with Matchers
     with BeforeAndAfterAll {

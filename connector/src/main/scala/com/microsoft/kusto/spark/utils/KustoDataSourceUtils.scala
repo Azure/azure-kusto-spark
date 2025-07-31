@@ -238,7 +238,8 @@ object KustoDataSourceUtils {
           database,
           query,
           "schemaGet",
-          clientRequestProperties.orNull, isMgmtCommand = false)
+          clientRequestProperties.orNull,
+          isMgmtCommand = false)
         .getPrimaryResults).getSchema
   }
 

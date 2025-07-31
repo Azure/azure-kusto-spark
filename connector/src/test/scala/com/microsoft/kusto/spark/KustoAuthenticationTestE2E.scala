@@ -47,7 +47,7 @@ class KustoAuthenticationTestE2E extends AnyFlatSpec {
       KustoSinkOptions.KEY_VAULT_URI -> keyVaultUri,
       KustoSinkOptions.KEY_VAULT_APP_ID -> (if (keyVaultAppId == null) "" else keyVaultAppId),
       KustoSinkOptions.KEY_VAULT_APP_KEY -> (if (keyVaultAppKey == null) { "" }
-      else keyVaultAppKey),
+                                             else keyVaultAppKey),
       KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS -> SinkTableCreationMode.CreateIfNotExist.toString)
 
     df.write.kusto(kustoConnectionOptions.cluster, kustoConnectionOptions.database, table, conf)

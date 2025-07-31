@@ -48,13 +48,13 @@ private[kusto] object KustoTestUtils {
   }
 
   def validateResultsAndCleanup(
-                                 kustoAdminClient: Client,
-                                 table: String,
-                                 database: String,
-                                 expectedNumberOfRows: Int, // Set a negative value to skip validation
-                                 timeoutMs: Int,
-                                 cleanupAllTables: Boolean = true,
-                                 tableCleanupPrefix: String = ""): Unit = {
+      kustoAdminClient: Client,
+      table: String,
+      database: String,
+      expectedNumberOfRows: Int, // Set a negative value to skip validation
+      timeoutMs: Int,
+      cleanupAllTables: Boolean = true,
+      tableCleanupPrefix: String = ""): Unit = {
 
     var rowCount = 0
     var timeElapsedMs = 0
@@ -237,10 +237,10 @@ private[kusto] object KustoTestUtils {
   }
 
   final case class KustoConnectionOptions(
-                                           cluster: String,
-                                           database: String,
-                                           accessToken: String,
-                                           tenantId: String,
-                                           createTableIfNotExists: SinkTableCreationMode = SinkTableCreationMode.CreateIfNotExist,
-                                           storageContainerUrl: Option[String] = None)
+      cluster: String,
+      database: String,
+      accessToken: String,
+      tenantId: String,
+      createTableIfNotExists: SinkTableCreationMode = SinkTableCreationMode.CreateIfNotExist,
+      storageContainerUrl: Option[String] = None)
 }
