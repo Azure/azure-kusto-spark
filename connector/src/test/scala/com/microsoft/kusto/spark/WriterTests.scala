@@ -313,8 +313,7 @@ class WriterTests extends AnyFlatSpec with Matchers {
       List(
         "Test string for spark binary".getBytes(),
         "A second test string for spark binary".getBytes(),
-        null
-      )
+        null)
 
     val someSchema = List(StructField("binaryString", BinaryType, nullable = true))
 
@@ -324,9 +323,21 @@ class WriterTests extends AnyFlatSpec with Matchers {
 
     val dfRows: Array[InternalRow] = df.queryExecution.toRdd.collect()
 
-    RowCSVWriterUtils.writeRowAsCSV(dfRows(0), df.schema, TimeZone.getTimeZone("UTC").toZoneId, csvWriter)
-    RowCSVWriterUtils.writeRowAsCSV(dfRows(1), df.schema, TimeZone.getTimeZone("UTC").toZoneId, csvWriter)
-    RowCSVWriterUtils.writeRowAsCSV(dfRows(2), df.schema, TimeZone.getTimeZone("UTC").toZoneId, csvWriter)
+    RowCSVWriterUtils.writeRowAsCSV(
+      dfRows(0),
+      df.schema,
+      TimeZone.getTimeZone("UTC").toZoneId,
+      csvWriter)
+    RowCSVWriterUtils.writeRowAsCSV(
+      dfRows(1),
+      df.schema,
+      TimeZone.getTimeZone("UTC").toZoneId,
+      csvWriter)
+    RowCSVWriterUtils.writeRowAsCSV(
+      dfRows(2),
+      df.schema,
+      TimeZone.getTimeZone("UTC").toZoneId,
+      csvWriter)
 
     writer.flush()
     val res1 = byteArrayOutputStream.toString

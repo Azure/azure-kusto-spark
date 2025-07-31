@@ -20,9 +20,8 @@ object IngestionStorageParameters extends Serializable {
     objectMapper.readValue(json, classOf[Array[IngestionStorageParameters]])
   }
 
-  def toJsonString(
-      storageParams: Array[IngestionStorageParameters]): String = {
-    if (Objects.isNull(storageParams)|| storageParams.isEmpty) {
+  def toJsonString(storageParams: Array[IngestionStorageParameters]): String = {
+    if (Objects.isNull(storageParams) || storageParams.isEmpty) {
       throw new IllegalArgumentException("storageParams cannot be null or empty")
     }
     objectMapper.writeValueAsString(storageParams)
@@ -41,14 +40,15 @@ class IngestionStorageParameters(
     val storageUrl: String,
     val containerName: String,
     val userMsi: String,
-    val sas:String)
+    val sas: String)
     extends Serializable {
   // C'tor for serialization
   def this() {
-    this("", "", "","")
+    this("", "", "", "")
   }
 
   override def toString: String = {
-    s"storageUrl: $storageUrl, containerName: $containerName, userMsi: $userMsi, is-sas: ${StringUtils.isNotEmpty(sas)}"
+    s"storageUrl: $storageUrl, containerName: $containerName, userMsi: $userMsi, is-sas: ${StringUtils
+        .isNotEmpty(sas)}"
   }
 }

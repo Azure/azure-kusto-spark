@@ -272,7 +272,9 @@ private[kusto] object KustoTestUtils {
     val ingestionStorageParam =
       new IngestionStorageParameters(storageContainerUrl, containerName, "", "")
     val sas = ContainerProvider.getUserDelegatedSas(
-      listPermissions = true, cacheExpirySeconds = 1*60*60, ingestionStorageParameter = ingestionStorageParam)
+      listPermissions = true,
+      cacheExpirySeconds = 1 * 60 * 60,
+      ingestionStorageParameter = ingestionStorageParam)
     sas
   }
 

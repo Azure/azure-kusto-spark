@@ -58,11 +58,9 @@ import scala.util.{Failure, Success, Try}
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicLong
 
 object KustoWriter {
   private val className = this.getClass.getSimpleName
-  val LegacyTempIngestionTablePrefix = "_tmpTable"
   val TempIngestionTablePrefix = "sparkTempTable_"
   val DelayPeriodBetweenCalls: Int = KCONST.DefaultPeriodicSamplePeriod.toMillis.toInt
   private val GzipBufferSize: Int = 1000 * KCONST.DefaultBufferSize
@@ -190,35 +188,38 @@ object KustoWriter {
         // This part runs back on the driver
 
         if (writeOptions.writeMode == WriteMode.Transactional) {
-          asyncWork.onSuccess { case _ =>
-            finalizeIngestionWhenWorkersSucceeded(
-              tableCoordinates,
-              batchIdIfExists,
-              tmpTableName,
-              partitionsResults,
-              writeOptions,
-              crp,
-              tableExists,
-              rdd.sparkContext,
-              authentication,
-              kustoClient,
-              sinkStartTime)
-          }
-          asyncWork.onFailure { case exception: Exception =>
-            if (writeOptions.userTempTableName.isEmpty) {
-              kustoClient.cleanupIngestionByProducts(tableCoordinates.database, tmpTableName, crp)
-            }
-            KDSU.reportExceptionAndThrow(
-              className,
-              exception,
-              "writing data",
-              tableCoordinates.clusterUrl,
-              tableCoordinates.database,
-              table,
-              shouldNotThrow = true)
-            KDSU.logError(
-              className,
-              "The exception is not visible in the driver since we're in async mode")
+          asyncWork.onComplete {
+            case Success(_) =>
+              finalizeIngestionWhenWorkersSucceeded(
+                tableCoordinates,
+                batchIdIfExists,
+                tmpTableName,
+                partitionsResults,
+                writeOptions,
+                crp,
+                tableExists,
+                rdd.sparkContext,
+                authentication,
+                kustoClient,
+                sinkStartTime)
+            case Failure(exception) =>
+              if (writeOptions.userTempTableName.isEmpty) {
+                kustoClient.cleanupIngestionByProducts(
+                  tableCoordinates.database,
+                  tmpTableName,
+                  crp)
+              }
+              KDSU.reportExceptionAndThrow(
+                className,
+                exception,
+                "writing data",
+                tableCoordinates.clusterUrl,
+                tableCoordinates.database,
+                table,
+                shouldNotThrow = true)
+              KDSU.logError(
+                className,
+                "The exception is not visible in the driver since we're in async mode")
           }
         }
       } else {
@@ -378,7 +379,7 @@ object KustoWriter {
         writer.flush()
         streamWriter.flush()
         if (lastIndex != 0) {
-          // Split the byteArrayOutputStream into two - i need actually that the one we write to will be reset
+          // Split the byteArrayOutputStream into two - we need actually that the one we write to will be reset
           val firstBB = byteArrayOutputStream.toByteArray
           val bb2 = byteArrayOutputStream.createNewFromOffset(lastIndex)
           byteArrayOutputStream = bb2

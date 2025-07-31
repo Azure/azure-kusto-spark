@@ -54,6 +54,7 @@ object KustoDataSourceUtils {
 
   private final val className = this.getClass.getSimpleName
   private final val objectMapper = new ObjectMapper().registerModule(DefaultScalaModule)
+
   def getDedupTagsPrefix(requestId: String, batchId: String): String = s"${requestId}_$batchId"
 
   def generateTempTableName(
@@ -145,27 +146,26 @@ object KustoDataSourceUtils {
 
   val DefaultMicrosoftTenant = "microsoft.com"
   val NewLine: String = sys.props("line.separator")
-  var ReadInitialMaxWaitTime: FiniteDuration = 4 seconds
-  var ReadMaxWaitTime: FiniteDuration = 30 seconds
-  var WriteInitialMaxWaitTime: FiniteDuration = 2 seconds
-  var WriteMaxWaitTime: FiniteDuration = 10 seconds
+  private val ReadInitialMaxWaitTime: FiniteDuration = Duration.create(4, TimeUnit.SECONDS)
+  private val ReadMaxWaitTime: FiniteDuration = Duration.create(30, TimeUnit.SECONDS)
+  var WriteInitialMaxWaitTime: FiniteDuration = Duration.create(2, TimeUnit.SECONDS)
+  var WriteMaxWaitTime: FiniteDuration = Duration.create(10, TimeUnit.SECONDS)
 
-  val input: InputStream = getClass.getClassLoader.getResourceAsStream("spark.kusto.properties")
+  private val input: InputStream =
+    getClass.getClassLoader.getResourceAsStream("spark.kusto.properties")
   val props = new Properties()
   props.load(input)
   var Version: String = props.getProperty("application.version")
   var clientName = s"Kusto.Spark.Connector:$Version"
   val IngestPrefix: String = props.getProperty("ingestPrefix", "ingest-")
-  val EnginePrefix: String = props.getProperty("enginePrefix", "https://")
+  private val EnginePrefix: String = props.getProperty("enginePrefix", "https://")
   val DefaultDomainPostfix: String = props.getProperty("defaultDomainPostfix", "core.windows.net")
-  val DefaultClusterSuffix: String =
-    props.getProperty("defaultClusterSuffix", "kusto.windows.net")
-  val AriaClustersProxy: String =
+  private val AriaClustersProxy: String =
     props.getProperty("ariaClustersProxy", "https://kusto.aria.microsoft.com")
-  val PlayFabClustersProxy: String =
+  private val PlayFabClustersProxy: String =
     props.getProperty("playFabProxy", "https://insights.playfab.com")
-  val AriaClustersAlias: String = "Aria proxy"
-  val PlayFabClustersAlias: String = "PlayFab proxy"
+  private val AriaClustersAlias: String = "Aria proxy"
+  private val PlayFabClustersAlias: String = "PlayFab proxy"
   var loggingLevel: Level = Level.INFO
 
   def setLoggingLevel(level: String): Unit = {
@@ -577,7 +577,7 @@ object KustoDataSourceUtils {
       addSourceLocationTransform = addSourceLocationTransform)
   }
 
-  def validateIngestionStorageParameters(
+  private def validateIngestionStorageParameters(
       parameters: Map[String, String]): Option[Array[IngestionStorageParameters]] = {
     val maybeIngestionStorageParameters: Option[Array[IngestionStorageParameters]] =
       parameters
@@ -616,6 +616,7 @@ object KustoDataSourceUtils {
     val retry = Retry.of(retryName, retryConfig)
     val f: CheckedFunction0[T] = new CheckedFunction0[T]() {
       var retry = 0
+
       override def apply(): T = {
         retry += 1
         func(retry)
@@ -625,7 +626,7 @@ object KustoDataSourceUtils {
     retry.executeCheckedSupplier(f)
   }
 
-  def getClientRequestProperties(
+  private def getClientRequestProperties(
       parameters: Map[String, String],
       requestId: String): ClientRequestProperties = {
     val crpOption = parameters.get(KustoSourceOptions.KUSTO_CLIENT_REQUEST_PROPERTIES_JSON)
@@ -811,8 +812,7 @@ object KustoDataSourceUtils {
           val transientErrorMessage =
             s"Failed to retrieve export status for $doingWhat on requestId: $requestId, retrying in a few seconds." +
               s"Exception: $e}"
-          logWarn(
-            "verifyAsyncCommandCompletion",transientErrorMessage)
+          logWarn("verifyAsyncCommandCompletion", transientErrorMessage)
           None
         case _: DataClientException => None
       }
@@ -959,6 +959,13 @@ object KustoDataSourceUtils {
         else ecStr.toInt
       case Some(ecInt: java.lang.Number) =>
         ecInt.intValue() // Is a numeric , get the int value back
+      case Some(ecObj: Object) =>
+        val ecStr = Option(ecObj).map(_.toString).getOrElse("0")
+        if (StringUtils.isBlank(ecStr) || !StringUtils.isNumeric(ecStr)) {
+          0 // Empty estimate
+        } else {
+          ecStr.toInt
+        }
       case None => 0 // No value
     }
     // We cannot be finitely determine the count , or have a 0 count. Recheck using a 'query | count()'

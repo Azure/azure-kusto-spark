@@ -24,32 +24,29 @@ class IngestionStorageParametersSpec extends AnyFlatSpec with Matchers {
     result(1).userMsi should be("msi2")
 
     val randomIngestionParameter = IngestionStorageParameters.getRandomIngestionStorage(result)
-    Set(
-      url2,
-      url1
-    ) should contain(randomIngestionParameter.storageUrl)
+    Set(url2, url1) should contain(randomIngestionParameter.storageUrl)
   }
 
   it should "handle empty JSON array" in {
     val json = "[]"
     val result = IngestionStorageParameters.fromString(json)
-    result.length should be (0)
+    result.length should be(0)
   }
 
   it should "throw an exception for invalid JSON" in {
     val json =
       """[{"storageUrl":"https://ateststorage.blob.core.windows.net","containerName":"container1","userMsi":"msi1"},
         |"storageUrl":"https://ateststorage.blob.core.windows.net","containerName":"container2"}]""".stripMargin
-    an [Exception] should be thrownBy IngestionStorageParameters.fromString(json)
+    an[Exception] should be thrownBy IngestionStorageParameters.fromString(json)
   }
 
   "toString" should "return a string representation of IngestionStorageParameters" in {
-    val params = new IngestionStorageParameters("url","c1", "msi","sas")
-    params.toString should be ("storageUrl: url, containerName: c1, userMsi: msi, is-sas: true")
+    val params = new IngestionStorageParameters("url", "c1", "msi", "sas")
+    params.toString should be("storageUrl: url, containerName: c1, userMsi: msi, is-sas: true")
   }
 
   it should "handle empty fields" in {
-    val params = new IngestionStorageParameters("", "", "","")
-    params.toString should be ("storageUrl: , containerName: , userMsi: , is-sas: false")
+    val params = new IngestionStorageParameters("", "", "", "")
+    params.toString should be("storageUrl: , containerName: , userMsi: , is-sas: false")
   }
 }

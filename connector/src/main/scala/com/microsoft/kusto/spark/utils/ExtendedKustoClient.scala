@@ -12,7 +12,7 @@ import com.microsoft.azure.kusto.ingest.resources.ResourceWithSas
 import com.microsoft.azure.kusto.ingest.{
   IngestClientFactory,
   ManagedStreamingIngestClient,
-  QueuedIngestClient,
+  QueuedIngestClient
 }
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.KustoWriter.DelayPeriodBetweenCalls

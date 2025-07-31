@@ -7,7 +7,10 @@ import com.azure.identity.{DefaultAzureCredentialBuilder, ManagedIdentityCredent
 import com.azure.storage.blob.BlobServiceClientBuilder
 import com.azure.storage.blob.sas.{BlobContainerSasPermission, BlobServiceSasSignatureValues}
 import com.microsoft.azure.kusto.data.exceptions.{DataServiceException, KustoDataExceptionBase}
-import com.microsoft.azure.kusto.ingest.exceptions.{IngestionClientException, IngestionServiceException}
+import com.microsoft.azure.kusto.ingest.exceptions.{
+  IngestionClientException,
+  IngestionServiceException
+}
 import com.microsoft.kusto.spark.datasink.IngestionStorageParameters
 import com.microsoft.kusto.spark.exceptions.NoStorageContainersException
 import com.microsoft.kusto.spark.utils.ContainerProvider.className
@@ -173,10 +176,10 @@ class ContainerProvider(
 
   private val sasKeyCacheMap = new ConcurrentHashMap[String, ContainerAndSas]()
   def refreshUserSas(
-                      ingestionStorageParams: Array[IngestionStorageParameters],
-                      isCacheExpired: Boolean,
-                      cacheExpirySeconds: Long,
-                      listPermissions: Boolean = false): (Boolean, ContainerAndSas) = {
+      ingestionStorageParams: Array[IngestionStorageParameters],
+      isCacheExpired: Boolean,
+      cacheExpirySeconds: Long,
+      listPermissions: Boolean = false): (Boolean, ContainerAndSas) = {
 
     val ingestionStorageParameter =
       IngestionStorageParameters.getRandomIngestionStorage(ingestionStorageParams)
@@ -208,7 +211,8 @@ class ContainerProvider(
           className,
           s"Using user supplied ingestion storage $ingestionStorageParameter.Expires at " +
             s"${OffsetDateTime.now.plusSeconds(cacheExpirySeconds)}")
-        val sasToken: String = normalizeSasKey(generateSasKey(cacheExpirySeconds, listPermissions, ingestionStorageParameter))
+        val sasToken: String = normalizeSasKey(
+          generateSasKey(cacheExpirySeconds, listPermissions, ingestionStorageParameter))
         // Cache the SAS token for future use
         val containerAndSas = ContainerAndSas(
           s"${ingestionStorageParameter.storageUrl}/${ingestionStorageParameter.containerName}",
@@ -220,9 +224,14 @@ class ContainerProvider(
     }
   }
 
-  def generateSasKey(cacheExpirySeconds: Long, listPermissions: Boolean,
-                                      ingestionStorageParameter: IngestionStorageParameters):String = {
-    ContainerProvider.getUserDelegatedSas(cacheExpirySeconds, listPermissions,ingestionStorageParameter)
+  def generateSasKey(
+      cacheExpirySeconds: Long,
+      listPermissions: Boolean,
+      ingestionStorageParameter: IngestionStorageParameters): String = {
+    ContainerProvider.getUserDelegatedSas(
+      cacheExpirySeconds,
+      listPermissions,
+      ingestionStorageParameter)
   }
 
   private def normalizeSasKey(sasValue: String) = {
@@ -236,8 +245,10 @@ class ContainerProvider(
 
 object ContainerProvider {
   private val className = this.getClass.getSimpleName
-  protected[kusto] def getUserDelegatedSas(cacheExpirySeconds: Long, listPermissions: Boolean,
-                                           ingestionStorageParameter: IngestionStorageParameters): String = {
+  protected[kusto] def getUserDelegatedSas(
+      cacheExpirySeconds: Long,
+      listPermissions: Boolean,
+      ingestionStorageParameter: IngestionStorageParameters): String = {
     val credential = if (StringUtils.isNotEmpty(ingestionStorageParameter.userMsi)) {
       new ManagedIdentityCredentialBuilder()
         .clientId(ingestionStorageParameter.userMsi)

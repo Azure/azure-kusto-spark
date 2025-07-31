@@ -18,7 +18,9 @@ class ByteArrayOutputStreamWithOffset extends ByteArrayOutputStream {
   }
 
   def createNewFromOffset(offset: Int): ByteArrayOutputStreamWithOffset = {
-    new ByteArrayOutputStreamWithOffset(util.Arrays.copyOfRange(buf, offset, count), count - offset)
+    new ByteArrayOutputStreamWithOffset(
+      util.Arrays.copyOfRange(buf, offset, count),
+      count - offset)
   }
 
   // Use this if the byte array will not change anymore before reading it, use toByteArray if a copy is needed
