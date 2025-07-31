@@ -11,10 +11,10 @@ import com.azure.security.keyvault.secrets.{SecretClient, SecretClientBuilder}
  * Authenticates to Azure Key Vault by providing a callback to authenticate using ADAL.
  */
 class KeyVaultADALAuthenticator(
-                                 uri: String,
-                                 clientId: String,
-                                 clientKey: String,
-                                 authority: String) {
+    uri: String,
+    clientId: String,
+    clientKey: String,
+    authority: String) {
 
   def getAuthenticatedClient: SecretClient = {
     new SecretClientBuilder()

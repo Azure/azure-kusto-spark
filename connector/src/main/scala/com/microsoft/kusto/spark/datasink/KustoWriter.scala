@@ -604,7 +604,7 @@ object KustoWriter {
           /*
           TODO: Param for Size in BlobSourceInfo is removed. We want to however keep the size in the blob name
           So at some point we have to see what is a workaround to add this. Perhaps V2 ?
-          */
+           */
           Try(
             ingestClient.ingestFromBlob(
               new BlobSourceInfo(blobUri + sas, CompressionType.gz, UUID.randomUUID()),

@@ -26,23 +26,23 @@ import scala.collection.JavaConverters._
 class ExtendedKustoClientTests extends AnyFlatSpec with Matchers {
   private val kustoCoordinates = KustoCoordinates("", "", "database", Some("table"))
   class ExtendedKustoClientStub(
-                                 override val engineKcsb: ConnectionStringBuilder,
-                                 override val ingestKcsb: ConnectionStringBuilder,
-                                 override val clusterAlias: String,
-                                 var tagsToReturn: util.ArrayList[String])
-    extends ExtendedKustoClient(engineKcsb, ingestKcsb, clusterAlias) {
+      override val engineKcsb: ConnectionStringBuilder,
+      override val ingestKcsb: ConnectionStringBuilder,
+      override val clusterAlias: String,
+      var tagsToReturn: util.ArrayList[String])
+      extends ExtendedKustoClient(engineKcsb, ingestKcsb, clusterAlias) {
     override lazy val engineClient: Client = mock(classOf[Client])
     override def fetchTableExtentsTags(
-                                        database: String,
-                                        table: String,
-                                        crp: ClientRequestProperties): KustoResultSetTable = {
+        database: String,
+        table: String,
+        crp: ClientRequestProperties): KustoResultSetTable = {
       val response =
         s"""{"Tables":[{"TableName":"Table_0","Columns":[{"ColumnName":"Tags","DataType":"Object","ColumnType":"dynamic"}],
            "Rows":[[${if (tagsToReturn.isEmpty) {
-          ""
-        } else {
-          tagsToReturn.asScala.map(t => "\"" + t + "\"").asJava
-        }}]]}]}"""
+            ""
+          } else {
+            tagsToReturn.asScala.map(t => "\"" + t + "\"").asJava
+          }}]]}]}"""
       new KustoOperationResult(response, "v1").getPrimaryResults
     }
   }

@@ -48,13 +48,13 @@ private[kusto] object KustoTestUtils {
   }
 
   def validateResultsAndCleanup(
-                                 kustoAdminClient: Client,
-                                 table: String,
-                                 database: String,
-                                 expectedNumberOfRows: Int, // Set a negative value to skip validation
-                                 timeoutMs: Int,
-                                 cleanupAllTables: Boolean = true,
-                                 tableCleanupPrefix: String = ""): Unit = {
+      kustoAdminClient: Client,
+      table: String,
+      database: String,
+      expectedNumberOfRows: Int, // Set a negative value to skip validation
+      timeoutMs: Int,
+      cleanupAllTables: Boolean = true,
+      tableCleanupPrefix: String = ""): Unit = {
 
     var rowCount = 0
     var timeElapsedMs = 0
@@ -95,9 +95,9 @@ private[kusto] object KustoTestUtils {
   }
 
   def tryDropAllTablesByPrefix(
-                                kustoAdminClient: Client,
-                                database: String,
-                                tablePrefix: String): Unit = {
+      kustoAdminClient: Client,
+      database: String,
+      tablePrefix: String): Unit = {
     try {
       val res = kustoAdminClient.executeMgmt(
         database,
@@ -118,9 +118,9 @@ private[kusto] object KustoTestUtils {
   }
 
   def createTestTable(
-                       kustoConnectionOptions: KustoConnectionOptions,
-                       prefix: String,
-                       targetSchema: String): String = {
+      kustoConnectionOptions: KustoConnectionOptions,
+      prefix: String,
+      targetSchema: String): String = {
 
     val table = KustoQueryUtils.simplifyName(s"${prefix}_${UUID.randomUUID()}")
     val engineKcsb = ConnectionStringBuilder.createWithAadAccessTokenAuthentication(
@@ -135,12 +135,12 @@ private[kusto] object KustoTestUtils {
   }
 
   def ingest(
-              kustoConnectionOptions: KustoConnectionOptions,
-              df: DataFrame,
-              table: String,
-              schemaAdjustmentMode: String,
-              sparkIngestionProperties: SparkIngestionProperties = new SparkIngestionProperties())
-  : Unit = {
+      kustoConnectionOptions: KustoConnectionOptions,
+      df: DataFrame,
+      table: String,
+      schemaAdjustmentMode: String,
+      sparkIngestionProperties: SparkIngestionProperties = new SparkIngestionProperties())
+      : Unit = {
 
     df.write
       .format("com.microsoft.kusto.spark.datasource")
@@ -174,10 +174,10 @@ private[kusto] object KustoTestUtils {
   }
 
   def validateTargetTable(
-                           kustoConnectionOptions: KustoConnectionOptions,
-                           tableName: String,
-                           expectedRows: DataFrame,
-                           spark: SparkSession): Boolean = {
+      kustoConnectionOptions: KustoConnectionOptions,
+      tableName: String,
+      expectedRows: DataFrame,
+      spark: SparkSession): Boolean = {
 
     val conf = Map[String, String](
       KustoSourceOptions.KUSTO_ACCESS_TOKEN -> kustoConnectionOptions.accessToken)
@@ -279,10 +279,10 @@ private[kusto] object KustoTestUtils {
   }
 
   final case class KustoConnectionOptions(
-                                           cluster: String,
-                                           database: String,
-                                           accessToken: String,
-                                           tenantId: String,
-                                           createTableIfNotExists: SinkTableCreationMode = SinkTableCreationMode.CreateIfNotExist,
-                                           storageContainerUrl: Option[String] = None)
+      cluster: String,
+      database: String,
+      accessToken: String,
+      tenantId: String,
+      createTableIfNotExists: SinkTableCreationMode = SinkTableCreationMode.CreateIfNotExist,
+      storageContainerUrl: Option[String] = None)
 }
