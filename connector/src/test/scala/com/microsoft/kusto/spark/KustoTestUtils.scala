@@ -115,13 +115,6 @@ private[kusto] object KustoTestUtils {
           className,
           s"Failed to delete temporary tables with exception: ${exception.getMessage}")
     }
-    val ingestionStorageParam =
-      new IngestionStorageParameters(storageContainerUrl, containerName, "", "")
-    val sas = ContainerProvider.getUserDelegatedSas(
-      listPermissions = true,
-      cacheExpirySeconds = 1 * 60 * 60,
-      ingestionStorageParameter = ingestionStorageParam)
-    sas
   }
 
   def createTestTable(
