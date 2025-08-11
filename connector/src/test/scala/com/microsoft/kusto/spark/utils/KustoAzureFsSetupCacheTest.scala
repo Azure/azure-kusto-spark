@@ -58,8 +58,7 @@ class KustoAzureFsSetupCacheTest extends AnyFunSuite {
       (
         now.minus(KustoConstants.SparkSettingsRefreshMinutes / 2, ChronoUnit.MINUTES),
         true,
-        "This will be within the cache interval and also the flag is set to true")
-    )
+        "This will be within the cache interval and also the flag is set to true"))
 
     forAll(dataToTest) { (now: Instant, checkIfRefreshNeeded: Boolean, scenario: String) =>
       val actualResult = KustoAzureFsSetupCache.updateAndGetPrevNativeAzureFs(now)

@@ -45,8 +45,7 @@ private[kusto] object KustoAzureFsSetupCache {
   def updateAndGetPrevNativeAzureFs(now: Instant): Boolean = {
     if (nativeAzureFsSet || checkIfRefreshNeeded(now)) {
       true
-    }
-    else {
+    } else {
       nativeAzureFsSet = true
       false
     }
