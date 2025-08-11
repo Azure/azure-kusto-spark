@@ -3,12 +3,16 @@
 
 package com.microsoft.kusto.spark.datasink
 
+import org.scalatest.ParallelTestExecution
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
 import scala.Seq
 
-class IngestionStorageParametersSpec extends AnyFlatSpec with Matchers {
+class IngestionStorageParametersSpec
+    extends AnyFlatSpec
+    with Matchers
+    with ParallelTestExecution {
 
   "fromString" should "deserialize JSON string to IngestionStorageParameters array" in {
     val url1 = "https://ateststorage.blob.core.windows.net/container1"

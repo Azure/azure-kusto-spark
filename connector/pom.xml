@@ -218,19 +218,6 @@
                 </configuration>
             </plugin>
             <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-surefire-plugin</artifactId>
-                <version>${maven.surefire.plugin.version}</version>
-                <configuration>
-                    <!-- When 'true': Tests will be run with scalatest-maven-plugin  -->
-                    <skipTests>true</skipTests>
-                    <excludes>
-                        <exclude>**/*E2E.scala</exclude>
-                    </excludes>
-                    <argLine>-Xms512m</argLine>
-                </configuration>
-            </plugin>
-            <plugin>
                 <groupId>org.scalatest</groupId>
                 <artifactId>scalatest-maven-plugin</artifactId>
                 <version>${scalatest.maven.version}</version>
@@ -240,8 +227,10 @@
                     <filereports>TestSuiteReport.txt</filereports>
                     <tagsToExclude>KustoE2E</tagsToExclude>
                     <argLine>-Xms512m</argLine>
-                    <!-- Comma separated list of JUnit test class names to execute -->
-                    <!--jUnitClasses>samples.AppTest</jUnitClasses-->
+                    <!-- Add these parallel execution parameters -->
+                    <parallel>true</parallel>
+                    <threadCount>4</threadCount>
+                    <!-- End of parallel execution parameters -->
                 </configuration>
                 <executions>
                     <execution>

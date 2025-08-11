@@ -1028,7 +1028,11 @@ object KustoDataSourceUtils {
     if (string == null || string.isEmpty) {
       false
     } else {
-      string.forall(c => c.isDigit || c == '-' || c == '.')
+      // Check if string is parsable as a number
+      Try(BigDecimal(string)) match {
+        case Success(_) => true
+        case Failure(_) => false
+      }
     }
   }
 

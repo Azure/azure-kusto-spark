@@ -4,13 +4,14 @@
 package com.microsoft.kusto.spark.datasource
 
 import com.microsoft.azure.kusto.data.KustoOperationResult
+import org.scalatest.ParallelTestExecution
 import org.scalatest.flatspec.AnyFlatSpec
 
 import java.sql.Timestamp
 import scala.collection.JavaConverters.collectionAsScalaIterableConverter
 import scala.io.Source
 
-class KustoResponseDeserializerTest extends AnyFlatSpec {
+class KustoResponseDeserializerTest extends AnyFlatSpec with ParallelTestExecution {
 
   "Data types should get resolved and rows" should "get extracted - v1 queries" in {
     val resultSetTable = new KustoOperationResult(readTestSource("query-results-v1.json"), "v1")

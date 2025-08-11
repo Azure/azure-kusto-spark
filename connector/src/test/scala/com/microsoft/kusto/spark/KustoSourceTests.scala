@@ -19,7 +19,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.sql.{SQLContext, SparkSession}
 import org.scalamock.scalatest.MockFactory
-import org.scalatest.BeforeAndAfterAll
+import org.scalatest.{BeforeAndAfterAll, ParallelTestExecution}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
@@ -49,7 +49,6 @@ class KustoSourceTests extends AnyFlatSpec with MockFactory with Matchers with B
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-
     sc = spark.sparkContext
     sqlContext = spark.sqlContext
   }
@@ -88,22 +87,38 @@ class KustoSourceTests extends AnyFlatSpec with MockFactory with Matchers with B
   }
 
   "KustoDataSource" should "fail with credentials in plain text" in {
-    val ksr = KustoRelation(
-      KustoCoordinates(
-        cluster,
-        "",
-        database,
-        table = Option("tablename"),
-        ingestionUrl = Option("")),
-      KustoAccessTokenAuthentication("token1"),
+    // Setup individual parameters
+    val kustoCoordinates = KustoCoordinates(
+      cluster,
       "",
-      KDSU.getReadParameters(Map[String, String](), null),
-      Duration(20, TimeUnit.SECONDS),
-      Option(""),
-      Option(new TransientStorageParameters(Array(new TransientStorageCredentials(
-        "https://storage.blob.core.windows.net/someplace-0?sp=r&st=2023-03-15T17:05:53Z&se=2023-03-16T01:05:53Z&spr=https&sv=2021-12-02&sr=c&sig=123456789")))),
-      Option(new ClientRequestProperties),
-      "reqid")(sqlContext.sparkSession)
+      database,
+      table = Option("tablename"),
+      ingestionUrl = Option(""))
+
+    val authentication = KustoAccessTokenAuthentication("token1")
+    val readOptions = ""
+    val readParameters = KDSU.getReadParameters(Map[String, String](), null)
+    val timeout = Duration(20, TimeUnit.SECONDS)
+    val schema = Option("")
+    val sasUrl =
+      "https://storage.blob.core.windows.net/someplace-0?sp=r&st=2023-03-15T17:05:53Z&se=2023-03-16T01:05:53Z&spr=https&sv=2021-12-02&sr=c&sig=123456789"
+    val storageCredentials = new TransientStorageCredentials(sasUrl)
+    val transientStorageParams = Option(new TransientStorageParameters(Array(storageCredentials)))
+    val clientRequestProperties = Option(new ClientRequestProperties)
+    val requestId = "reqid"
+    // Create KustoRelation with all parameters
+    val ksr = KustoRelation(
+      kustoCoordinates,
+      authentication,
+      readOptions,
+      readParameters,
+      timeout,
+      schema,
+      transientStorageParams,
+      clientRequestProperties,
+      requestId)(sqlContext.sparkSession)
+
+    // Assertions
     assert(!ksr.toString.contains("token1"))
     assert(ksr.toString.contains(
       "[BlobContainer: someplace-0 ,Storage: storage , IsSasKeyDefined: true, domain: core.windows.net]"))

@@ -3,6 +3,7 @@
 
 package com.microsoft.kusto.spark.utils
 
+import com.microsoft.azure.kusto.ingest.{IngestionMapping, IngestionProperties}
 import com.microsoft.kusto.spark.datasink.SparkIngestionProperties
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.prop.TableDrivenPropertyChecks.forAll
@@ -38,8 +39,24 @@ class SparkIngestionPropertiesTest extends AnyFlatSpec {
 
     val ingestionProperties = spFromString
       .toIngestionProperties("database", "tableName")
-    val cloned = SparkIngestionProperties.cloneIngestionProperties(ingestionProperties)
-    assert(ingestionProperties.toString.equals(cloned.toString))
+    val cloned: IngestionProperties =
+      SparkIngestionProperties.cloneIngestionProperties(ingestionProperties)
+    // Add assertions to check that the cloned properties match the original ones
+    assert(cloned.getFlushImmediately == sp.flushImmediately)
+    assert(cloned.getAdditionalProperties.get("ingestionMapping") == sp.csvMapping)
+    assert(cloned.getIngestionMapping.getIngestionMappingReference == sp.csvMappingNameReference)
+    assert(
+      cloned.getAdditionalProperties.get(
+        "ingestionMappingType") == IngestionMapping.IngestionMappingKind.CSV.getKustoValue)
+    assert(cloned.getAdditionalProperties.get("creationTime").equals(sp.creationTime.toString))
+    assert(cloned.getDropByTags == Collections.emptyList())
+    assert(
+      cloned.getIngestByTags != sp.ingestByTags
+    ) // Ensure that the list is cloned, not just referenced
+    assert(
+      cloned.getIngestIfNotExists != sp.ingestIfNotExists
+    ) // Ensure that the list is cloned, not just referenced
+    assert(cloned.getAdditionalTags != sp.additionalTags) // Ensure that the list is cloned,
   }
 
   // This will be called only for WriteOption "Stream"

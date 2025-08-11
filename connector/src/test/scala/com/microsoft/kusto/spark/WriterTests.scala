@@ -11,6 +11,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 import org.mockito.Mockito._
+import org.scalatest.ParallelTestExecution
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
@@ -22,7 +23,7 @@ import java.time.format.DateTimeFormatter
 import java.util.TimeZone
 import java.util.zip.GZIPOutputStream
 
-class WriterTests extends AnyFlatSpec with Matchers {
+class WriterTests extends AnyFlatSpec with Matchers with ParallelTestExecution {
 
   val objectMapper = new ObjectMapper
 

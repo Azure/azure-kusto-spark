@@ -7,12 +7,17 @@ import com.microsoft.kusto.spark.datasource.{KustoFilter, KustoFiltering, KustoS
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.scalamock.scalatest.MockFactory
+import org.scalatest.ParallelTestExecution
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
 import java.sql.{Date, Timestamp}
 
-class KustoFilterTests extends AnyFlatSpec with MockFactory with Matchers {
+class KustoFilterTests
+    extends AnyFlatSpec
+    with MockFactory
+    with Matchers
+    with ParallelTestExecution {
 
   private val schema: StructType = StructType(
     Seq(
