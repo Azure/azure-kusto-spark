@@ -7,11 +7,7 @@ import com.azure.identity.{DefaultAzureCredentialBuilder, ManagedIdentityCredent
 import com.azure.storage.blob.BlobServiceClientBuilder
 import com.azure.storage.blob.sas.{BlobContainerSasPermission, BlobServiceSasSignatureValues}
 import com.microsoft.azure.kusto.data.StringUtils
-import com.microsoft.azure.kusto.data.exceptions.{
-  DataServiceException,
-  ExceptionUtils,
-  KustoDataExceptionBase
-}
+import com.microsoft.azure.kusto.data.exceptions.{DataServiceException, KustoDataExceptionBase}
 import com.microsoft.azure.kusto.ingest.exceptions.{
   IngestionClientException,
   IngestionServiceException
@@ -161,7 +157,7 @@ class ContainerProvider(
     if (storage.isEmpty) {
       KDSU.reportExceptionAndThrow(
         className,
-        NoStorageContainersException(
+        new NoStorageContainersException(
           "No storage containers received. Failed to allocate temporary storage"),
         "writing to Kusto",
         clusterAlias)

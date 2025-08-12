@@ -5,9 +5,9 @@ package com.microsoft.kusto.spark
 
 import com.microsoft.kusto.spark.utils.KustoQueryUtils
 import org.scalamock.scalatest.MockFactory
-import org.scalatest.{BeforeAndAfterAll, ParallelTestExecution}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+import org.scalatest.{BeforeAndAfterAll, ParallelTestExecution}
 
 class KustoQueryUtilsTest
     extends AnyFlatSpec

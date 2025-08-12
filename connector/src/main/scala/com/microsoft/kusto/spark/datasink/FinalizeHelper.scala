@@ -31,7 +31,7 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.{Await, Future, TimeoutException}
 
 object FinalizeHelper {
-  private val myName = this.getClass.getSimpleName
+  private val className = this.getClass.getSimpleName
   private val mapper = new ObjectMapper().registerModule(new JavaTimeModule())
   private[kusto] def finalizeIngestionWhenWorkersSucceeded(
       coordinates: KustoCoordinates,
@@ -50,7 +50,7 @@ object FinalizeHelper {
         writeOptions.maybeSparkIngestionProperties,
         tableExists,
         crp)) {
-      KDSU.logInfo(myName, s"$IngestSkippedTrace '${coordinates.table}'")
+      KDSU.logInfo(className, s"$IngestSkippedTrace '${coordinates.table}'")
     } else {
       val mergeTask = Future {
         val requestId = writeOptions.requestId
@@ -58,7 +58,7 @@ object FinalizeHelper {
           s"RequestId: $requestId cluster: '${coordinates.clusterAlias}', " +
             s"database: '${coordinates.database}', table: '$tmpTableName' $batchIdIfExists"
         KDSU.logInfo(
-          myName,
+          className,
           s"Polling on ingestion results for requestId: $requestId, will move data to " +
             s"destination table when finished")
 
@@ -73,7 +73,7 @@ object FinalizeHelper {
                 !writeOptions.kustoCustomDebugWriteOptions.ensureNoDuplicatedBlobs))
           } else {
             KDSU.logWarn(
-              myName,
+              className,
               "IMPORTANT: It's highly recommended to set pollingOnDriver to true on production!\tRead here why https://github.com/Azure/azure-kusto-spark/blob/master/docs/KustoSink.md#supported-options")
             // Specifiying numSlices = 1 so that only one task is created
             val resultsRdd =
@@ -129,7 +129,7 @@ object FinalizeHelper {
             // We are using the ingestIfNotExists Tags here too (on top of the check at the start of the flow) so that if
             // several flows started together only one of them would ingest
             KDSU.logInfo(
-              myName,
+              className,
               s"Final ingestion step: Moving extents from '$tmpTableName, requestId: ${writeOptions.requestId}," +
                 s"$batchIdIfExists")
 
@@ -143,19 +143,19 @@ object FinalizeHelper {
             }
 
             KDSU.logInfo(
-              myName,
+              className,
               s"write to Kusto table '${coordinates.table.get}' finished successfully " +
                 s"requestId: ${writeOptions.requestId} $batchIdIfExists")
           } else {
             KDSU.logWarn(
-              myName,
+              className,
               s"write to Kusto table '${coordinates.table.get}' finished with no data written " +
                 s"requestId: ${writeOptions.requestId} $batchIdIfExists")
           }
         } catch {
           case ex: Exception =>
             KDSU.reportExceptionAndThrow(
-              myName,
+              className,
               ex,
               "Trying to poll on pending ingestions",
               coordinates.clusterUrl,
@@ -173,7 +173,7 @@ object FinalizeHelper {
         } catch {
           case _: TimeoutException =>
             KDSU.reportExceptionAndThrow(
-              myName,
+              className,
               new TimeoutException("Timed out polling on ingestion status"),
               "polling on ingestion status",
               coordinates.clusterUrl,
@@ -184,7 +184,7 @@ object FinalizeHelper {
     }
   }
 
-  def pollOnResult(
+  private def pollOnResult(
       partitionResult: PartitionResult,
       requestId: String,
       timeout: Long,
@@ -200,14 +200,14 @@ object FinalizeHelper {
           } catch {
             case e: TableServiceErrorException =>
               KDSU.reportExceptionAndThrow(
-                myName,
+                className,
                 e,
                 s"TableServiceErrorException : RequestId: $requestId",
                 shouldNotThrow = true)
               None
             case e: Exception =>
               KDSU.reportExceptionAndThrow(
-                myName,
+                className,
                 e,
                 s"Failed to fetch operation status. RequestId: $requestId")
               None
@@ -219,7 +219,7 @@ object FinalizeHelper {
           val pending = res.isDefined && res.get.status == OperationStatus.Pending
           if (pending) {
             KDSU.logDebug(
-              myName,
+              className,
               s"Polling on result for partition: '${partitionResult.partitionId}' in requestId: $requestId, status is-'Pending'")
           }
           pending
@@ -239,7 +239,7 @@ object FinalizeHelper {
     }
   }
 
-  def processIngestionStatusResults(
+  private def processIngestionStatusResults(
       partitionId: Int = 0,
       ingestionInfoString: String,
       shouldThrowOnTagsAlreadyExists: Boolean,
@@ -250,13 +250,13 @@ object FinalizeHelper {
           s"Ingestion to Kusto failed on timeout failure. $ingestionInfoString,  partition: '$partitionId'")
       case OperationStatus.Succeeded =>
         KDSU.logInfo(
-          myName,
+          className,
           s"Ingestion to Kusto succeeded. $ingestionInfoString,  partition: '$partitionId', " +
             s"from: '${ingestionStatusResult.ingestionSourcePath}' , Operation ${ingestionStatusResult.operationId}")
       case OperationStatus.Skipped =>
         // TODO: should we throw ?
         KDSU.logInfo(
-          myName,
+          className,
           s"Ingestion to Kusto skipped. $ingestionInfoString, " +
             s"partition: '$partitionId', from: '${ingestionStatusResult.ingestionSourcePath}', " +
             s"Operation ${ingestionStatusResult.operationId}")
@@ -276,7 +276,7 @@ object FinalizeHelper {
                 .writeValueAsString(ingestionStatusResult)}'")
         }
         KDSU.logInfo(
-          myName,
+          className,
           s"Ingestion to Kusto failed. $ingestionInfoString, " +
             s"partition: '$partitionId', from: '${ingestionStatusResult.ingestionSourcePath}', " +
             s"Operation ${ingestionStatusResult.operationId}")

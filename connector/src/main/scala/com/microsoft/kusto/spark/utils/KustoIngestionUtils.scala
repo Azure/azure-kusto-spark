@@ -18,7 +18,7 @@ import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreatio
 import com.microsoft.kusto.spark.datasink.WriteMode.WriteMode
 import com.microsoft.kusto.spark.exceptions.SchemaMatchException
 import com.microsoft.kusto.spark.utils.DataTypeMapping.getSparkTypeToKustoTypeMap
-import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import org.apache.spark.sql.types.StructType
 
 object KustoIngestionUtils {
   private[kusto] def adjustSchema(
@@ -64,7 +64,7 @@ object KustoIngestionUtils {
     val sourceSchemaColumns = sourceSchema.map(c => c.name)
 
     if (targetSchemaColumns != sourceSchemaColumns) {
-      throw SchemaMatchException(
+      throw new SchemaMatchException(
         "Target table schema does not match to DataFrame schema." +
           s"Target columns: ${targetSchemaColumns.mkString(
               ", ")}.Source columns: ${sourceSchemaColumns.mkString(", ")}")

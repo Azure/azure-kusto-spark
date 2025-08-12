@@ -84,7 +84,7 @@ class DefaultSource
     createRelation(sqlContext, adjustParametersForBaseRelation(parameters, limit))
   }
 
-  def adjustParametersForBaseRelation(
+  private def adjustParametersForBaseRelation(
       parameters: Map[String, String],
       limit: Option[Int]): Map[String, String] = {
     if (limit.isDefined) {
@@ -102,7 +102,7 @@ class DefaultSource
     val readOptions = KDSU.getReadParameters(parameters, sqlContext)
     if (authenticationParameters.isEmpty) {
       // Parse parameters if haven't got parsed before
-      val sourceParameters = KDSU.parseSourceParameters(parameters, true)
+      val sourceParameters = KDSU.parseSourceParameters(parameters, allowProxy = true)
       initCommonParams(sourceParameters)
     }
 

@@ -4,7 +4,6 @@
 package com.microsoft.kusto.spark.datasource
 
 import com.microsoft.azure.kusto.data.ClientRequestProperties
-import com.microsoft.azure.kusto.data.StringUtils
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.{KustoCoordinates, KustoDebugOptions}
 import com.microsoft.kusto.spark.datasink.{KustoWriter, WriteOptions}
@@ -42,7 +41,7 @@ private[kusto] case class KustoRelation(
     with InsertableRelation {
 
   private val normalizedQuery = KustoQueryUtils.normalizeQuery(query)
-  var cachedSchema: KustoSchema = _
+  private var cachedSchema: KustoSchema = _
 
   override def sqlContext: SQLContext = sparkSession.sqlContext
 

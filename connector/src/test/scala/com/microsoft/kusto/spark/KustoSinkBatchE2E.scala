@@ -3,18 +3,12 @@
 
 package com.microsoft.kusto.spark
 
-import com.microsoft.azure.kusto.data.{ClientFactory, StringUtils}
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
+import com.microsoft.azure.kusto.data.{ClientFactory, StringUtils}
 import com.microsoft.kusto.spark.KustoTestUtils.getSystemTestOptions
 import com.microsoft.kusto.spark.common.KustoDebugOptions
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.{CreateIfNotExist, FailIfNotExist}
-import com.microsoft.kusto.spark.datasink.{
-  IngestionStorageParameters,
-  KustoSinkOptions,
-  SchemaAdjustmentMode,
-  SinkTableCreationMode,
-  WriteMode
-}
+import com.microsoft.kusto.spark.datasink._
 import com.microsoft.kusto.spark.datasource.{KustoSourceOptions, ReadMode}
 import com.microsoft.kusto.spark.sql.extension.SparkExtension.DataFrameReaderExtension
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator.{
@@ -38,16 +32,13 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.prop.TableDrivenPropertyChecks
 import org.scalatest.prop.Tables.Table
 
-import java.{lang, util}
 import java.math.{BigDecimal, RoundingMode}
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.stream.Collectors
 import scala.collection.immutable
-import scala.concurrent.duration.SECONDS
 
 class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
   private val className = this.getClass.getSimpleName

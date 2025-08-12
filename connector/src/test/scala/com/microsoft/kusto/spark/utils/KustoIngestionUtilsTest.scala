@@ -3,18 +3,18 @@
 
 package com.microsoft.kusto.spark.utils
 
-import org.scalatest.flatspec.AnyFlatSpec
-import org.scalatest.matchers.should.Matchers
+import com.fasterxml.jackson.databind.JsonNode
+import com.fasterxml.jackson.databind.node.JsonNodeFactory
+import com.microsoft.azure.kusto.ingest.TransformationMethod
 import com.microsoft.kusto.spark.datasink.{
   SinkTableCreationMode,
   SparkIngestionProperties,
   WriteMode
 }
-import com.microsoft.azure.kusto.ingest.{ColumnMapping, TransformationMethod}
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
-import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
-import com.fasterxml.jackson.databind.node.{JsonNodeFactory, ObjectNode}
 import com.microsoft.kusto.spark.exceptions.SchemaMatchException
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 import org.scalatest.prop.Tables.Table
 
 class KustoIngestionUtilsTest extends AnyFlatSpec with Matchers {

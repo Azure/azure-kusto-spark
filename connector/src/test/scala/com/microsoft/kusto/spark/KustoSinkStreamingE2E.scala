@@ -22,7 +22,6 @@ import org.apache.spark.sql.{SQLContext, SparkSession}
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.flatspec.AnyFlatSpec
 
-import java.security.InvalidParameterException
 import java.util.UUID
 
 class KustoSinkStreamingE2E extends AnyFlatSpec with BeforeAndAfterAll {

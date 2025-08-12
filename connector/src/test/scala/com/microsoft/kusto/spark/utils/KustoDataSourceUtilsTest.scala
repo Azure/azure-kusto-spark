@@ -3,13 +3,7 @@
 
 package com.microsoft.kusto.spark.utils
 
-import com.microsoft.kusto.spark.datasink.KustoSinkOptions.{
-  KUSTO_CLUSTER,
-  KUSTO_DATABASE,
-  KUSTO_INGESTION_STORAGE,
-  KUSTO_TABLE,
-  KUSTO_TABLE_CREATE_OPTIONS
-}
+import com.microsoft.kusto.spark.datasink.KustoSinkOptions._
 import com.microsoft.kusto.spark.datasink.{
   KustoSinkOptions,
   SchemaAdjustmentMode,

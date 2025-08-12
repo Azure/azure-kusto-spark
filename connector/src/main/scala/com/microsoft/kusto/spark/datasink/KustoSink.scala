@@ -3,17 +3,16 @@
 
 package com.microsoft.kusto.spark.datasink
 
-import java.io._
-
 import com.microsoft.azure.kusto.data.ClientRequestProperties
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
-import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import com.microsoft.kusto.spark.common.KustoCoordinates
+import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.execution.streaming.Sink
-import org.apache.spark.sql.{DataFrame, SQLContext}
+
+import java.io._
 
 class KustoSink(
-    sqlContext: SQLContext,
     tableCoordinates: KustoCoordinates,
     authentication: KustoAuthentication,
     writeOptions: WriteOptions,
@@ -22,7 +21,6 @@ class KustoSink(
     with Serializable {
 
   private val myName = this.getClass.getSimpleName
-  val MessageSource = "KustoSink"
   @volatile private var latestBatchId = -1L
 
   override def toString = "KustoSink"

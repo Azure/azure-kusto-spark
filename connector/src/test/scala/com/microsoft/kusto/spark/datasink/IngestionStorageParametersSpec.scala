@@ -7,8 +7,6 @@ import org.scalatest.ParallelTestExecution
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
-import scala.Seq
-
 class IngestionStorageParametersSpec
     extends AnyFlatSpec
     with Matchers

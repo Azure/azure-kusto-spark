@@ -22,7 +22,6 @@ import com.microsoft.kusto.spark.utils.CslCommandsGenerator.{
   generateTempTableCreateCommand
 }
 import com.microsoft.kusto.spark.utils.{
-  ContainerAndSas,
   ContainerProvider,
   KustoQueryUtils,
   KustoDataSourceUtils => KDSU

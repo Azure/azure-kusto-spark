@@ -9,12 +9,11 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
 import com.microsoft.azure.kusto.data.StringUtils
 import com.microsoft.azure.kusto.ingest.IngestionMapping.IngestionMappingKind
-
-import java.util
 import com.microsoft.azure.kusto.ingest.{IngestionMapping, IngestionProperties}
 
 import java.security.InvalidParameterException
 import java.time.Instant
+import java.util
 import java.util.Objects
 
 class SparkIngestionProperties(

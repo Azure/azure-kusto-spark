@@ -9,13 +9,10 @@ import com.microsoft.kusto.spark.KustoTestUtils.getSystemTestOptions
 import com.microsoft.kusto.spark.datasink.KustoSinkOptions
 import com.microsoft.kusto.spark.datasource.{
   KustoResponseDeserializer,
-  KustoSourceOptions,
   TransientStorageCredentials,
   TransientStorageParameters
 }
 import com.microsoft.kusto.spark.sql.extension.SparkExtension._
-
-import java.util.concurrent.atomic.AtomicInteger
 import com.microsoft.kusto.spark.utils.KustoQueryUtils.getQuerySchemaQuery
 import com.microsoft.kusto.spark.utils.{
   CslCommandsGenerator,
@@ -30,6 +27,7 @@ import org.scalatest.flatspec.AnyFlatSpec
 
 import java.security.InvalidParameterException
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.JavaConverters._
 
 class KustoBlobAccessE2E extends AnyFlatSpec with BeforeAndAfterAll {

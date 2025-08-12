@@ -21,7 +21,6 @@ class KustoSinkProvider extends StreamSinkProvider with DataSourceRegister {
     val sinkParameters = KustoDataSourceUtils.parseSinkParameters(parameters)
 
     new KustoSink(
-      sqlContext,
       sinkParameters.sourceParametersResults.kustoCoordinates,
       if (sinkParameters.sourceParametersResults.keyVaultAuth.isDefined) {
         val paramsFromKeyVault = KeyVaultUtils.getAadAppParametersFromKeyVault(

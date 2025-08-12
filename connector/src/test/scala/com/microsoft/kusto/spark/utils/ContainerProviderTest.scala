@@ -4,8 +4,8 @@
 package com.microsoft.kusto.spark.utils
 
 import com.azure.storage.blob.BlobContainerAsyncClient
-import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.Client
+import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.ingest.exceptions.IngestionServiceException
 import com.microsoft.azure.kusto.ingest.resources.ContainerWithSas
 import com.microsoft.azure.kusto.ingest.{IngestionResourceManager, QueuedIngestClient}

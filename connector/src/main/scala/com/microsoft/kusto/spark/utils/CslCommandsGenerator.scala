@@ -99,22 +99,7 @@ private[kusto] object CslCommandsGenerator {
   }
 
   def generateIsTableEngineV3(tableName: String): String = {
-    s""".show table ${tableName} details | project todynamic(ShardingPolicy).UseShardEngine"""
-  }
-
-  def generateTableMoveExtentsCommand(
-      sourceTableName: String,
-      destinationTableName: String,
-      timerange: Array[Instant],
-      batchSize: Int,
-      isDestinationTableMaterializedViewSource: Boolean = false): String = {
-    val setNewIngestionTime: String =
-      if (isDestinationTableMaterializedViewSource) "with(SetNewIngestionTime=true)" else ""
-    s""".move extents to table $destinationTableName $setNewIngestionTime  with(extentCreatedOnFrom='${timerange(
-        0)}', extentCreatedOnTo='${timerange(1)}') <|
-       .show table $sourceTableName extents with(extentsShowFilteringRuntimePolicy='{"MaximumResultsCount":$batchSize}');
-        $$command_results
-       |  distinct ExtentId"""
+    s""".show table $tableName details | project todynamic(ShardingPolicy).UseShardEngine"""
   }
 
   def generateTableMoveExtentsAsyncCommand(
@@ -223,10 +208,6 @@ private[kusto] object CslCommandsGenerator {
 
   def generateEstimateRowsCountQuery(query: String): String = {
     query + "| evaluate estimate_rows_count()"
-  }
-
-  def generateTableCount(table: String): String = {
-    s".show tables | where TableName == '$table' | count"
   }
 
   def generateTableAlterRetentionPolicy(

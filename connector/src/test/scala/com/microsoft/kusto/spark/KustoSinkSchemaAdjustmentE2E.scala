@@ -3,14 +3,7 @@
 
 package com.microsoft.kusto.spark
 
-import com.microsoft.kusto.spark.KustoTestUtils.{
-  KustoConnectionOptions,
-  cleanup,
-  createTestTable,
-  getSystemTestOptions,
-  ingest,
-  validateTargetTable
-}
+import com.microsoft.kusto.spark.KustoTestUtils._
 import com.microsoft.kusto.spark.datasink.{SinkTableCreationMode, SparkIngestionProperties}
 import com.microsoft.kusto.spark.exceptions.SchemaMatchException
 import com.microsoft.kusto.spark.utils.KustoQueryUtils

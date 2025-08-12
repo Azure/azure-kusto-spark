@@ -6,20 +6,14 @@ package com.microsoft.kusto.spark
 import com.microsoft.azure.kusto.data.ClientRequestProperties
 import com.microsoft.kusto.spark.authentication.KustoAccessTokenAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
-import com.microsoft.kusto.spark.datasource.{
-  AuthMethod,
-  KustoRelation,
-  KustoSourceOptions,
-  TransientStorageCredentials,
-  TransientStorageParameters
-}
+import com.microsoft.kusto.spark.datasource._
 import com.microsoft.kusto.spark.utils.KustoClientCache.ClusterAndAuth
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.sql.{SQLContext, SparkSession}
 import org.scalamock.scalatest.MockFactory
-import org.scalatest.{BeforeAndAfterAll, ParallelTestExecution}
+import org.scalatest.BeforeAndAfterAll
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 

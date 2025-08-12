@@ -40,7 +40,7 @@ import io.github.resilience4j.retry.RetryConfig
 import org.apache.log4j.Level
 import org.apache.spark.sql.types.StructType
 
-import java.time.{Instant, OffsetDateTime}
+import java.time.Instant
 import java.util.{StringJoiner, UUID}
 import scala.collection.JavaConverters._
 import scala.concurrent.duration.FiniteDuration
@@ -63,10 +63,8 @@ class ExtendedKustoClient(
   RetryConfig.ofDefaults()
   private val retryConfig = buildRetryConfig
   private val retryConfigAsyncOp = buildRetryConfigForAsyncOp
-  private val DOT = "."
 
   private val myName = this.getClass.getSimpleName
-  private val durationFormat = "dd:HH:mm:ss"
 
   def initializeTablesBySchema(
       tableCoordinates: KustoCoordinates,
@@ -198,14 +196,6 @@ class ExtendedKustoClient(
       isMgmtCommand: Boolean = true,
       retryConfig: Option[RetryConfig] = None): KustoOperationResult = {
 
-    val startsWithDot =
-      StringUtils.isNotBlank(command) && command.trim().startsWith(DOT)
-
-    val commandType = if (isMgmtCommand || startsWithDot) {
-      "management"
-    } else {
-      "query"
-    }
     KDSU.retryApplyFunction(
       retryNumber => {
         if (isMgmtCommand) {
@@ -258,7 +248,7 @@ class ExtendedKustoClient(
       case exception: Exception =>
         KDSU.logDebug(
           myName,
-          s"Exception in repoting ingestion result : ${exception.getMessage} ")
+          s"Exception in reporting ingestion result : ${exception.getMessage} ")
     }
   }
 
@@ -317,7 +307,7 @@ class ExtendedKustoClient(
     }
   }
 
-  def moveExtentsWithRetries(
+  private def moveExtentsWithRetries(
       batchSize: Option[Int],
       totalAmount: Int,
       database: String,
@@ -408,10 +398,10 @@ class ExtendedKustoClient(
         if (extentsProcessed > 0) {
           // This is not the first move command
           if (retry > secondMovesRetries)
-            throw RetriesExhaustedException(
+            throw new RetriesExhaustedException(
               s"Failed to move extents after $retry tries$extentsProcessedErrorString.")
         } else if (retry > firstMoveRetries)
-          throw RetriesExhaustedException(
+          throw new RetriesExhaustedException(
             s"Failed to move extents after $retry tries$extentsProcessedErrorString.")
 
         // Lower batch size, increase delay
@@ -431,10 +421,15 @@ class ExtendedKustoClient(
         val batchSizeString = if (batchSize.isDefined) s"maxBatch: $curBatchSize," else ""
         KDSU.logDebug(
           myName,
-          s"Moving extents batch succeeded at retry: $retry," +
-            s" $batchSizeString consecutive successfull batches: $consecutiveSuccesses, successes this " +
-            s"batch: ${res.get.count()}," +
-            s" extentsProcessed: $extentsProcessed, backoff: $delayPeriodBetweenCalls, total:$totalAmount")
+          "Moving extents batch succeeded at retry: %d, %s consecutive successful batches: %d, successes this batch: %d, extentsProcessed: %d, backoff: %d, total:%d"
+            .format(
+              retry,
+              batchSizeString,
+              consecutiveSuccesses,
+              res.get.count(),
+              extentsProcessed,
+              delayPeriodBetweenCalls,
+              totalAmount))
 
         retry = 0
         delayPeriodBetweenCalls = DelayPeriodBetweenCalls
@@ -442,7 +437,7 @@ class ExtendedKustoClient(
     }
   }
 
-  def handleRetryFail(
+  private def handleRetryFail(
       curBatchSize: Int,
       retry: Int,
       currentSleepTime: Int,
@@ -464,7 +459,7 @@ class ExtendedKustoClient(
     }
   }
 
-  def handleNoResults(
+  private def handleNoResults(
       totalAmount: Int,
       extentsProcessed: Int,
       database: String,
@@ -487,7 +482,7 @@ class ExtendedKustoClient(
     extentsLeftRes.getInt(0) != 0
   }
 
-  def findErrorInResult(res: KustoResultSetTable): (Boolean, Object) = {
+  private def findErrorInResult(res: KustoResultSetTable): (Boolean, Object) = {
     var error: Object = null
     var failed = false
     if (KDSU.getLoggingLevel == Level.DEBUG) {
@@ -519,7 +514,7 @@ class ExtendedKustoClient(
     (failed, error)
   }
 
-  def shouldUseMaterializedViewFlag(
+  private def shouldUseMaterializedViewFlag(
       database: String,
       targetTable: String,
       crp: ClientRequestProperties): Boolean = {
@@ -698,7 +693,7 @@ class ExtendedKustoClient(
 }
 
 object ExtendedKustoClient {
-  val DefaultDb: String = "NetDefaultDB"
+  private val DefaultDb: String = "NetDefaultDB"
   val BaseIntervalMs: Long = 1000L
   val MaxRetryIntervalMs: Long = 1000L * 10
 }

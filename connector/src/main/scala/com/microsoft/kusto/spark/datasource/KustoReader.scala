@@ -14,7 +14,6 @@ import com.microsoft.kusto.spark.utils.{
   CslCommandsGenerator,
   ExtendedKustoClient,
   KustoAzureFsSetupCache,
-  KustoBlobStorageUtils,
   KustoDataSourceUtils => KDSU
 }
 import org.apache.hadoop.fs.{FileSystem, Path}
