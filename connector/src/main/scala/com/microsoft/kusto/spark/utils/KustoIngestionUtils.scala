@@ -161,7 +161,7 @@ object KustoIngestionUtils {
         KustoConstants.SourceLocationColumnName) ||
         !cslStringType.equalsIgnoreCase(
           targetSchemaColumns.getOrElse(KustoConstants.SourceLocationColumnName, "")))) {
-      throw SchemaMatchException(
+      throw new SchemaMatchException(
         "addSourceLocationTransform is set to true, but the target schema does not contain the " +
           s"column '${KustoConstants.SourceLocationColumnName}' of type '${targetSchemaColumns
               .get(KustoConstants.SourceLocationColumnName)} " +
@@ -178,7 +178,7 @@ object KustoIngestionUtils {
             "In order to preserve behavior of 'no-mapping like behavior for the client where we do not fail " +
             "on schema drift as no validation is made")
       } else {
-        throw SchemaMatchException(
+        throw new SchemaMatchException(
           s"Source schema has columns that are not present in the target: ${notFoundSourceColumns
               .mkString(", ")}.")
       }
