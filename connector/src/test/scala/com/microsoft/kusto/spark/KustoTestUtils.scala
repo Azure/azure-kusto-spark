@@ -80,34 +80,19 @@ private[kusto] object KustoTestUtils {
       kustoAdminClient.executeMgmt(database, generateDropTablesCommand(table))
     }
 
-    val someSchema = List(
-      StructField(
-        "mapToArray",
-        MapType(
-          StringType,
-          new StructType()
-            .add("arrayStrings", ArrayType(StringType, containsNull = true), nullable = true),
-          valueContainsNull = true),
-        nullable = true))
-    val someDateSchema = List(
-      StructField(
-        "mapToStruct",
-        MapType(
-          StringType,
-          new StructType()
-            .add("date", DateType, nullable = true)
-            .add("time", TimestampType)
-            .add("booly", BooleanType)
-            .add("deci", DataTypes.createDecimalType(20, 14)),
-          valueContainsNull = true),
-        nullable = true))
-    val someEmptyArraysSchema = List(
-      StructField(
-        "emptyStruct",
-        new StructType()
-          .add("emptyArray", ArrayType(StringType, containsNull = true), nullable = true)
-          .add("emptyString", StringType)))
-    val someDecimalSchema = List(StructField("BigDecimals", DataTypes.createDecimalType(38, 10)))
+    if (expectedNumberOfRows >= 0) {
+      if (rowCount == expectedNumberOfRows) {
+        KDSU.logInfo(
+          className,
+          s"KustoSinkStreamingE2E: Ingestion results validated for table '$table'")
+      } else {
+        throw new TimeoutException(
+          s"KustoSinkStreamingE2E: Timed out waiting for ingest. $rowCount rows " +
+            s"found in database '$database' table '$table', expected: " +
+            s"$expectedNumberOfRows. Elapsed time:$timeElapsedMs")
+      }
+    }
+  }
 
   def tryDropAllTablesByPrefix(
       kustoAdminClient: Client,
@@ -132,6 +117,68 @@ private[kusto] object KustoTestUtils {
     }
   }
 
+  def createTestTable(
+      kustoConnectionOptions: KustoConnectionOptions,
+      prefix: String,
+      targetSchema: String): String = {
+
+    val table = KustoQueryUtils.simplifyName(s"${prefix}_${UUID.randomUUID()}")
+    val engineKcsb = ConnectionStringBuilder.createWithAadAccessTokenAuthentication(
+      s"https://${kustoConnectionOptions.cluster}.kusto.windows.net",
+      kustoConnectionOptions.accessToken)
+
+    val kustoAdminClient = ClientFactory.createClient(engineKcsb)
+    kustoAdminClient.executeMgmt(
+      kustoConnectionOptions.database,
+      generateTempTableCreateCommand(table, targetSchema))
+    table
+  }
+
+  def ingest(
+      kustoConnectionOptions: KustoConnectionOptions,
+      df: DataFrame,
+      table: String,
+      schemaAdjustmentMode: String,
+      sparkIngestionProperties: SparkIngestionProperties = new SparkIngestionProperties())
+      : Unit = {
+
+    df.write
+      .format("com.microsoft.kusto.spark.datasource")
+      .partitionBy("value")
+      .option(KustoSinkOptions.KUSTO_CLUSTER, kustoConnectionOptions.cluster)
+      .option(KustoSinkOptions.KUSTO_DATABASE, kustoConnectionOptions.database)
+      .option(KustoSinkOptions.KUSTO_TABLE, table)
+      .option(KustoSinkOptions.KUSTO_ACCESS_TOKEN, kustoConnectionOptions.accessToken)
+      .option(KustoSinkOptions.KUSTO_ADJUST_SCHEMA, schemaAdjustmentMode)
+      .option(KustoSinkOptions.KUSTO_TIMEOUT_LIMIT, (8 * 60).toString)
+      .option(
+        KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON,
+        sparkIngestionProperties.toString)
+      .option(
+        KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS,
+        kustoConnectionOptions.createTableIfNotExists.toString)
+      .mode(SaveMode.Append)
+      .save()
+
+  }
+
+  def cleanup(kustoConnectionOptions: KustoConnectionOptions, tablePrefix: String): Unit = {
+    if (tablePrefix.isEmpty) {
+      throw new InvalidParameterException("Tables cleanup prefix must be set")
+    }
+    val engineKcsb = ConnectionStringBuilder.createWithAadAccessTokenAuthentication(
+      clusterToKustoFQDN(kustoConnectionOptions.cluster),
+      kustoConnectionOptions.accessToken)
+    val kustoAdminClient = ClientFactory.createClient(engineKcsb)
+    tryDropAllTablesByPrefix(kustoAdminClient, kustoConnectionOptions.database, tablePrefix)
+  }
+
+  def validateTargetTable(
+      kustoConnectionOptions: KustoConnectionOptions,
+      tableName: String,
+      expectedRows: DataFrame,
+      spark: SparkSession): Boolean = {
+
     val conf = Map[String, String](
       KustoSourceOptions.KUSTO_ACCESS_TOKEN -> kustoConnectionOptions.accessToken)
 
@@ -142,12 +189,7 @@ private[kusto] object KustoTestUtils {
         tableName,
         conf)
 
-    val kustoAdminClient = ClientFactory.createClient(engineKcsb)
-    kustoAdminClient.executeMgmt(
-      kustoConnectionOptions.database,
-      generateTempTableCreateCommand(table, targetSchema))
-    table
-  }
+    tableRows.count() == tableRows.intersectAll(expectedRows).count()
 
   }
 

@@ -127,11 +127,4 @@ object KeyVaultUtils {
       case Failure(_) => ""
     }
   }
-
-  private def getValueOrEmpty(secret: Try[KeyVaultSecret]): String = {
-    secret match {
-      case Success(s) => s.getValue
-      case Failure(_) => ""
-    }
-  }
 }
