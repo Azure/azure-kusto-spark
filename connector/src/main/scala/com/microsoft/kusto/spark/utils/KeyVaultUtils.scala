@@ -3,23 +3,30 @@
 
 package com.microsoft.kusto.spark.utils
 
-import java.io.IOException
-
 import com.azure.security.keyvault.secrets.SecretClient
-import com.microsoft.kusto.spark.authentication._
-import com.microsoft.kusto.spark.datasource._
+import com.azure.security.keyvault.secrets.models.KeyVaultSecret
+import com.microsoft.kusto.spark.authentication.{
+  AadApplicationAuthentication,
+  KeyVaultAppAuthentication,
+  KeyVaultAuthentication,
+  KeyVaultCertificateAuthentication
+}
+import com.microsoft.kusto.spark.datasource.TransientStorageCredentials
+import org.apache.commons.lang3.StringUtils
 
-import scala.util.{Try}
+import java.io.IOException
+import java.util.Objects
+import scala.util.{Failure, Success, Try}
 
 object KeyVaultUtils {
-  val AppId = "kustoAppId"
-  val AppKey = "kustoAppKey"
-  val AppAuthority = "kustoAppAuthority"
-  val SasUrl = "blobStorageSasUrl"
-  val StorageAccountName = "blobStorageAccountName"
-  val StorageAccountKey = "blobStorageAccountKey"
-  val Container = "blobContainer"
-  var cachedClient: SecretClient = _
+  private val appId = "kustoAppId"
+  private val appKey = "kustoAppKey"
+  private val appAuthority = "kustoAppAuthority"
+  private val sasUrl = "blobStorageSasUrl"
+  private val storageAccountName = "blobStorageAccountName"
+  private val storageAccountKey = "blobStorageAccountKey"
+  private val container = "blobContainer"
+  private var cachedClient: SecretClient = _
 
   private def getClient(
       uri: String,
@@ -42,7 +49,7 @@ object KeyVaultUtils {
     keyVaultAuthentication match {
       case app: KeyVaultAppAuthentication =>
         val client = getClient(app.uri, app.keyVaultAppID, app.keyVaultAppKey, app.authority)
-        getStorageParamsFromKeyVaultImpl(client, app.uri)
+        getStorageParamsFromKeyVaultImpl(client)
       case certificate: KeyVaultCertificateAuthentication =>
         throw new UnsupportedOperationException("certificates are not yet supported")
     }
@@ -61,45 +68,54 @@ object KeyVaultUtils {
   }
 
   private def getAadAppParamsFromKeyVaultImpl(
-      client: SecretClient,
+      secretClient: SecretClient,
       uri: String): AadApplicationAuthentication = {
-    val id = client.getSecret(AppId)
-    val key = client.getSecret(AppKey)
-
-    var authority: Option[String] = None
-    try {
-      authority = Some(client.getSecret(AppAuthority).getValue)
-    } catch {
-      case e: Exception => {
-        println(e)
-      }
-    }
-    if (authority.isEmpty) {
-      authority = Some("microsoft.com")
-    }
+    val id = secretClient.getSecret(appId)
+    val key = secretClient.getSecret(appKey)
+    val authority = secretClient.getSecret(appAuthority)
 
     AadApplicationAuthentication(
-      ID = if (id == null) null else id.getValue,
-      password = if (key == null) null else key.getValue,
-      authority = authority.get)
+      ID = if (Objects.isNull(id)) {
+        ""
+      } else {
+        id.getValue
+      },
+      password = if (Objects.isNull(key)) {
+        ""
+      } else {
+        key.getValue
+      },
+      authority = if (Objects.isNull(authority)) {
+        KustoDataSourceUtils.DefaultMicrosoftTenant
+      } else {
+        authority.getValue
+      })
   }
 
   private def getStorageParamsFromKeyVaultImpl(
-      client: SecretClient,
-      uri: String): TransientStorageCredentials = {
-    val sasUrl = Try(client.getSecret(SasUrl))
+      client: SecretClient): TransientStorageCredentials = {
+    val sasUrlValue = Try(client.getSecret(sasUrl))
+    val accountName = Try(client.getSecret(storageAccountName))
+    val accountKey = Try(client.getSecret(storageAccountKey))
+    val containerValue = Try(client.getSecret(container))
 
-    val accountName = Try(client.getSecret(StorageAccountName))
-    val accountKey = Try(client.getSecret(StorageAccountKey))
-    val container = Try(client.getSecret(Container))
+    val tsc = getValueOrEmpty(sasUrlValue)
 
-    if (sasUrl.isFailure) {
+    if (StringUtils.isEmpty(tsc)) {
       new TransientStorageCredentials(
-        if (accountName.isFailure) accountName.get.getValue else "",
-        if (accountKey.isFailure) accountKey.get.getValue else "",
-        if (container.isFailure) container.get.getValue else "")
+        getValueOrEmpty(accountName),
+        getValueOrEmpty(accountKey),
+        getValueOrEmpty(containerValue))
+
     } else {
-      new TransientStorageCredentials(sasUrl.get.getValue)
+      new TransientStorageCredentials(tsc)
+    }
+  }
+
+  private def getValueOrEmpty(secret: Try[KeyVaultSecret]): String = {
+    secret match {
+      case Success(s) => s.getValue
+      case Failure(_) => ""
     }
   }
 }

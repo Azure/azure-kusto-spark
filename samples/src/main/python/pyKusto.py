@@ -151,18 +151,22 @@ kustoQ.start().awaitTermination(60*8)
 # Acquire a token with device authentication and pass the token to the connector, this token will expire in one hour but
 # it should be enough for reading as the call to the service is done at the start of the flow. Write commands should be done
 # in an hour.
-# Prints done inside the JVM are not shown in the notebooks, therefore the user has to print himself the device code.
 
-deviceAuth = sc._jvm.com.microsoft.kusto.spark.authentication.DeviceAuthentication(
-               "https://{clusterAlias}.kusto.windows.net".format(clusterAlias=kustoOptions["kustoCluster"]),
-               kustoOptions["kustoAadAuthorityID"])
-deviceCodeMessage = deviceAuth.getDeviceCodeMessage()
-print(deviceCodeMessage)
-token = deviceAuth.acquireToken()
+# Install the azure-identity package if not already installed
+!pip install azure-identity
+
+from azure.identity import DeviceCodeCredential
+credential = DeviceCodeCredential()
+cluster = kustoOptions["kustoCluster"]
+# this should prompt the user to authenticate
+# To sign in, use a web browser to open the page https://microsoft.com/devicelogin and enter the code YYY3XA7XX to authenticate.
+access_token=credential.get_token(f"""{cluster}/.default""")
+
+token = access_token.token
 
 df  = pyKusto.read. \
             format("com.microsoft.kusto.spark.datasource"). \
-            option("kustoCluster", kustoOptions["kustoCluster"]). \
+            option("kustoCluster", cluster). \
             option("kustoDatabase", kustoOptions["kustoDatabase"]). \
             option("kustoQuery", kustoOptions["kustoTable"]). \
             option("accessToken", token). \

@@ -111,7 +111,7 @@ class KustoSinkStreamingE2E extends AnyFlatSpec with BeforeAndAfterAll {
       kustoTestConnectionOptions.accessToken)
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
 
-    kustoAdminClient.execute(
+    kustoAdminClient.executeMgmt(
       kustoTestConnectionOptions.database,
       generateTempTableCreateCommand(table, columnsTypesAndNames = "ColA:string, ColB:int"))
 
@@ -155,13 +155,13 @@ class KustoSinkStreamingE2E extends AnyFlatSpec with BeforeAndAfterAll {
       s"https://${kustoTestConnectionOptions.cluster}.kusto.windows.net",
       kustoTestConnectionOptions.accessToken)
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
-    kustoAdminClient.execute(
+    kustoAdminClient.executeMgmt(
       kustoTestConnectionOptions.database,
       generateTempTableCreateCommand(table, columnsTypesAndNames = "ColA:string, ColB:int"))
-    kustoAdminClient.execute(
+    kustoAdminClient.executeMgmt(
       kustoTestConnectionOptions.database,
       generateTableAlterStreamIngestionCommand(table))
-    kustoAdminClient.execute(
+    kustoAdminClient.executeMgmt(
       kustoTestConnectionOptions.database,
       generateClearStreamingIngestionCacheCommand(table))
 

@@ -374,7 +374,7 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
         kustoTestConnectionOptions.cluster,
         kustoTestConnectionOptions.accessToken)
       val kustoAdminClient = ClientFactory.createClient(engineKcsb)
-      kustoAdminClient.execute(
+      kustoAdminClient.executeMgmt(
         kustoTestConnectionOptions.database,
         generateTempTableCreateCommand(table, columnsTypesAndNames = "ColA:string, ColB:int"))
 
@@ -402,8 +402,8 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
           KDSU.logInfo(className, s"Using ingestion storage container: $containerName")
           val ingestionStorageString = IngestionStorageParameters.toJsonString(
             Array(new IngestionStorageParameters(storageUrl, containerName, "", "")))
-//            s"""[{"storageUrl":"$storageUrl" , "
-//              |containerName": "$containerName"}]""".stripMargin
+          //            s"""[{"storageUrl":"$storageUrl" , "
+          //              |containerName": "$containerName"}]""".stripMargin
           df.write
             .format("com.microsoft.kusto.spark.datasource")
             .partitionBy("value")
@@ -438,7 +438,7 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
       kustoTestConnectionOptions.cluster,
       kustoTestConnectionOptions.accessToken)
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
-    kustoAdminClient.execute(
+    kustoAdminClient.executeMgmt(
       kustoTestConnectionOptions.database,
       generateTempTableCreateCommand(table, columnsTypesAndNames = "ColA:string, ColB:int"))
 
@@ -469,10 +469,10 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
       kustoTestConnectionOptions.cluster,
       kustoTestConnectionOptions.accessToken)
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
-    kustoAdminClient.execute(
+    kustoAdminClient.executeMgmt(
       kustoTestConnectionOptions.database,
       generateTempTableCreateCommand(table, columnsTypesAndNames = "ColA:string, ColB:int"))
-    kustoAdminClient.execute(
+    kustoAdminClient.executeMgmt(
       kustoTestConnectionOptions.database,
       generateTableAlterStreamIngestionCommand(table))
 
@@ -546,7 +546,7 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
             "name:string, value:int, WriteMode:string"
           }
           if (tableCreationMode != SinkTableCreationMode.CreateIfNotExist) {
-            kustoAdminClient.execute(
+            kustoAdminClient.executeMgmt(
               kustoTestConnectionOptions.database,
               generateTableCreateCommand(table, columnsTypesAndNames = columnDefinition))
           }

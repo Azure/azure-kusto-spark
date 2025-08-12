@@ -33,9 +33,9 @@ object KustoQueryUtils {
     if (tableName.startsWith("[")) {
       tableName
     } else if (!tableName.contains("'")) {
-      "['" + tableName + "']"
+      s"['$tableName']"
     } else {
-      "[\"" + tableName + "\"]"
+      s"""["$tableName"]"""
     }
   }
 }

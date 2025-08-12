@@ -11,7 +11,7 @@ import com.microsoft.azure.kusto.ingest.IngestionProperties.DataFormat
 import com.microsoft.azure.kusto.ingest.exceptions.IngestionServiceException
 import com.microsoft.azure.kusto.ingest.resources.ContainerWithSas
 import com.microsoft.azure.kusto.ingest.result.IngestionResult
-import com.microsoft.azure.kusto.ingest.source.{BlobSourceInfo, StreamSourceInfo}
+import com.microsoft.azure.kusto.ingest.source.{BlobSourceInfo, CompressionType, StreamSourceInfo}
 import com.microsoft.azure.kusto.ingest.{
   IngestClient,
   IngestionProperties,
@@ -43,6 +43,7 @@ import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.CollectionAccumulator
+import reactor.core.publisher.Mono
 
 import java.io._
 import java.net.URI
@@ -500,7 +501,9 @@ object KustoWriter {
       parameters.coordinates.ingestionUrl,
       parameters.coordinates.clusterAlias)
     val ingestClient = clientCache.ingestClient
-    CloudInfo.manuallyAddToCache(clientCache.ingestKcsb.getClusterUrl, parameters.cloudInfo)
+    CloudInfo.manuallyAddToCache(
+      clientCache.ingestKcsb.getClusterUrl,
+      Mono.just(parameters.cloudInfo))
 
     val reqRetryOpts = new RequestRetryOptions(
       RetryPolicyType.FIXED,
@@ -598,9 +601,13 @@ object KustoWriter {
       // write the data here
       val partitionsResult = KDSU.retryApplyFunction(
         i => {
+          /*
+          TODO: Param for Size in BlobSourceInfo is removed. We want to however keep the size in the blob name
+          So at some point we have to see what is a workaround to add this. Perhaps V2 ?
+           */
           Try(
             ingestClient.ingestFromBlob(
-              new BlobSourceInfo(blobUri + sas, size, UUID.randomUUID()),
+              new BlobSourceInfo(blobUri + sas, CompressionType.gz, UUID.randomUUID()),
               props)) match {
             case Success(x) =>
               <!-- The statuses of the ingestion operations are now set in the ingestion result -->

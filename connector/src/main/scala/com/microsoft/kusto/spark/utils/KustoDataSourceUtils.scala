@@ -3,6 +3,12 @@
 
 package com.microsoft.kusto.spark.utils
 
+import com.azure.core.credential.TokenRequestContext
+import com.azure.identity.{
+  AzureCliCredentialBuilder,
+  ChainedTokenCredentialBuilder,
+  DeviceCodeCredentialBuilder
+}
 import com.fasterxml.jackson.core.`type`.TypeReference
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.node.ArrayNode
@@ -44,7 +50,15 @@ import java.net.URI
 import java.security.InvalidParameterException
 import java.util
 import java.util.concurrent.{Callable, CountDownLatch, TimeUnit}
-import java.util.{NoSuchElementException, Properties, StringJoiner, Timer, TimerTask, UUID}
+import java.util.{
+  NoSuchElementException,
+  Objects,
+  Properties,
+  StringJoiner,
+  Timer,
+  TimerTask,
+  UUID
+}
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
@@ -220,7 +234,12 @@ object KustoDataSourceUtils {
       clientRequestProperties: Option[ClientRequestProperties]): KustoSchema = {
     KustoResponseDeserializer(
       client
-        .executeEngine(database, query, "schemaGet", clientRequestProperties.orNull)
+        .executeEngine(
+          database,
+          query,
+          "schemaGet",
+          clientRequestProperties.orNull,
+          isMgmtCommand = false)
         .getPrimaryResults).getSchema
   }
 
@@ -314,14 +333,33 @@ object KustoDataSourceUtils {
         logWarn(
           "parseSourceParameters",
           "No authentication method was supplied - using device code authentication. The token should last for one hour")
-        val deviceCodeProvider = new DeviceAuthentication(clusterUrl, authorityId)
-        val accessToken = deviceCodeProvider.acquireToken()
+        val accessToken = getAccessTokenFallback(clusterUrl, authorityId)
         authentication = KustoAccessTokenAuthentication(accessToken)
       }
     }
     (authentication, keyVaultAuthentication)
   }
 
+  def getAccessTokenFallback(clusterUrl: String, tenantId: String): String = {
+    val tokenRequestContext = new TokenRequestContext().addScopes(s"$clusterUrl/.default")
+    val azCliAuthProvider = new AzureCliCredentialBuilder().tenantId(tenantId).build()
+    val deviceCodeAuthentication =
+      new DeviceCodeCredentialBuilder().tenantId(tenantId).build()
+    val chainedTokenCredential = new ChainedTokenCredentialBuilder()
+      .addFirst(azCliAuthProvider)
+      .addLast(deviceCodeAuthentication)
+      .build()
+
+    val accessToken = chainedTokenCredential.getTokenSync(tokenRequestContext)
+
+    if (Objects.isNull(accessToken) || StringUtils.isEmpty(accessToken.getToken)) {
+      throw new InvalidParameterException(
+        "No fallback authentication method was supplied and no access token could be retrieved using Azure CLI or " +
+          "Device Code authentication.Please provide a valid authentication method.")
+    } else {
+      accessToken.getToken
+    }
+  }
   def parseSourceParameters(
       parameters: Map[String, String],
       allowProxy: Boolean): SourceParameters = {
@@ -799,7 +837,7 @@ object KustoDataSourceUtils {
     val statusCol = "Status"
     val statusCheck: () => Option[KustoResultSetTable] = () => {
       try {
-        Some(client.execute(database, operationsShowCommand).getPrimaryResults)
+        Some(client.executeMgmt(database, operationsShowCommand).getPrimaryResults)
       } catch {
         case e: DataServiceException =>
           if (e.isPermanent) {
@@ -930,7 +968,7 @@ object KustoDataSourceUtils {
       query: String,
       database: String,
       crp: ClientRequestProperties): Int = {
-    val res = client.execute(database, generateCountQuery(query), crp).getPrimaryResults
+    val res = client.executeQuery(database, generateCountQuery(query), crp).getPrimaryResults
     res.next()
     res.getInt(0)
   }
@@ -944,7 +982,9 @@ object KustoDataSourceUtils {
     val estimationResult: util.List[AnyRef] = Await.result(
       Future {
         val res =
-          client.execute(database, generateEstimateRowsCountQuery(query), crp).getPrimaryResults
+          client
+            .executeQuery(database, generateEstimateRowsCountQuery(query), crp)
+            .getPrimaryResults
         res.next()
         res.getCurrentRow
       },
@@ -972,7 +1012,8 @@ object KustoDataSourceUtils {
     if (estimatedCount == 0) {
       Await.result(
         Future {
-          val res = client.execute(database, generateCountQuery(query), crp).getPrimaryResults
+          val res =
+            client.executeQuery(database, generateCountQuery(query), crp).getPrimaryResults
           res.next()
           res.getInt(0)
         },

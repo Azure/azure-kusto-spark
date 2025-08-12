@@ -63,7 +63,7 @@ private[kusto] object KustoTestUtils {
     val query = s"$table | count"
 
     while (rowCount < expectedNumberOfRows && timeElapsedMs < timeoutMs) {
-      val result = kustoAdminClient.execute(database, query).getPrimaryResults
+      val result = kustoAdminClient.executeQuery(database, query).getPrimaryResults
       result.next()
       rowCount = result.getInt(0)
       Thread.sleep(sleepPeriodMs)
@@ -77,7 +77,7 @@ private[kusto] object KustoTestUtils {
       }
       tryDropAllTablesByPrefix(kustoAdminClient, database, tableCleanupPrefix)
     } else {
-      kustoAdminClient.execute(database, generateDropTablesCommand(table))
+      kustoAdminClient.executeMgmt(database, generateDropTablesCommand(table))
     }
 
     if (expectedNumberOfRows >= 0) {
@@ -99,13 +99,13 @@ private[kusto] object KustoTestUtils {
       database: String,
       tablePrefix: String): Unit = {
     try {
-      val res = kustoAdminClient.execute(
+      val res = kustoAdminClient.executeMgmt(
         database,
         generateFindCurrentTempTablesCommand(Array(tablePrefix)))
       val tablesToCleanup = res.getPrimaryResults.getData.asScala.map(row => row.get(0))
 
       if (tablesToCleanup.nonEmpty) {
-        kustoAdminClient.execute(
+        kustoAdminClient.executeMgmt(
           database,
           generateDropTablesCommand(tablesToCleanup.mkString(",")))
       }
@@ -128,7 +128,7 @@ private[kusto] object KustoTestUtils {
       kustoConnectionOptions.accessToken)
 
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
-    kustoAdminClient.execute(
+    kustoAdminClient.executeMgmt(
       kustoConnectionOptions.database,
       generateTempTableCreateCommand(table, targetSchema))
     table
