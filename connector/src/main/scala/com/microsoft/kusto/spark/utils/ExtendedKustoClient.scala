@@ -215,9 +215,7 @@ class ExtendedKustoClient(
             command,
             newIncrementedCrp(Some(crp), activityName, retryNumber))
         } else {
-          KDSU.logDebug(
-            myName,
-            s"Executing query command: $command, retry number: $retryNumber")
+          KDSU.logDebug(myName, s"Executing query command: $command, retry number: $retryNumber")
           engineClient.executeQuery(
             database,
             command,
