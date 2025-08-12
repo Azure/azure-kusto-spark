@@ -204,20 +204,12 @@ class ExtendedKustoClient(
       isMgmtCommand: Boolean = true,
       retryConfig: Option[RetryConfig] = None): KustoOperationResult = {
 
-    val startsWithDot =
-      StringUtils.isNotEmpty(command) && StringUtils.trim(command).startsWith(DOT)
-
-    val commandType = if (isMgmtCommand || startsWithDot) {
-      "management"
-    } else {
-      "query"
-    }
     KDSU.retryApplyFunction(
       retryNumber => {
         if (isMgmtCommand) {
           KDSU.logDebug(
             myName,
-            s"Executing $commandType command: $command, retry number: $retryNumber")
+            s"Executing management command: $command, retry number: $retryNumber")
           engineClient.executeMgmt(
             database,
             command,
@@ -225,7 +217,7 @@ class ExtendedKustoClient(
         } else {
           KDSU.logDebug(
             myName,
-            s"Executing $commandType command: $command, retry number: $retryNumber")
+            s"Executing query command: $command, retry number: $retryNumber")
           engineClient.executeQuery(
             database,
             command,
@@ -233,7 +225,7 @@ class ExtendedKustoClient(
         }
       },
       retryConfig.getOrElse(this.retryConfig),
-      s"Execute $commandType command with retries")
+      s"Execute command with retries")
   }
 
   private def newIncrementedCrp(
