@@ -37,13 +37,13 @@ import com.microsoft.kusto.spark.utils.KustoDataSourceUtils.extractSchemaFromRes
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import io.github.resilience4j.core.IntervalFunction
 import io.github.resilience4j.retry.RetryConfig
-import org.apache.commons.lang3.StringUtils
+//import org.apache.commons.lang3.StringUtils
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.commons.lang3.time.DurationFormatUtils
 import org.apache.log4j.Level
 import org.apache.spark.sql.types.StructType
 
-import java.time.{Instant, OffsetDateTime}
+import java.time.Instant
 import java.util.{StringJoiner, UUID}
 import scala.collection.JavaConverters._
 import scala.concurrent.duration.FiniteDuration
@@ -66,7 +66,6 @@ class ExtendedKustoClient(
   RetryConfig.ofDefaults()
   private val retryConfig = buildRetryConfig
   private val retryConfigAsyncOp = buildRetryConfigForAsyncOp
-  private val DOT = "."
 
   private val myName = this.getClass.getSimpleName
   private val durationFormat = "dd:HH:mm:ss"
@@ -128,7 +127,7 @@ class ExtendedKustoClient(
 
     if (writeOptions.writeMode == WriteMode.Transactional) {
       // Create a temporary table with the kusto or dataframe parsed schema with retention and delete set to after the
-      // write operation times out. Engine recommended keeping the retention although we use auto delete.
+      // write operation times out. Engine recommended keeping the retention, although we use auto delete.
       executeEngine(
         database,
         generateTempTableCreateCommand(tmpTableName, tmpTableSchema),
@@ -233,7 +232,7 @@ class ExtendedKustoClient(
     var prefix: Option[String] = None
     if (maybeCrp.isDefined) {
       val currentId = maybeCrp.get.getClientRequestId
-      if (StringUtils.isNoneBlank(currentId)) {
+      if (StringUtils.isNotBlank(currentId)) {
         prefix = Some(currentId + ";")
       }
     }
@@ -256,7 +255,7 @@ class ExtendedKustoClient(
       case exception: Exception =>
         KDSU.logDebug(
           myName,
-          s"Exception in repoting ingestion result : ${exception.getMessage} ")
+          s"Exception in reporting ingestion result : ${exception.getMessage} ")
     }
   }
 
@@ -265,7 +264,7 @@ class ExtendedKustoClient(
     val transientStorage =
       storage.map(c => new TransientStorageCredentials(c.containerUrl + c.sas))
     val endpointSuffix = transientStorage.head.domainSuffix
-    if (StringUtils.isNoneBlank(endpointSuffix)) {
+    if (StringUtils.isNotBlank(endpointSuffix)) {
       new TransientStorageParameters(transientStorage.toArray, endpointSuffix)
     } else {
       new TransientStorageParameters(transientStorage.toArray)
@@ -315,7 +314,7 @@ class ExtendedKustoClient(
     }
   }
 
-  def moveExtentsWithRetries(
+  private def moveExtentsWithRetries(
       batchSize: Option[Int],
       totalAmount: Int,
       database: String,
@@ -430,7 +429,7 @@ class ExtendedKustoClient(
         KDSU.logDebug(
           myName,
           s"Moving extents batch succeeded at retry: $retry," +
-            s" $batchSizeString consecutive successfull batches: $consecutiveSuccesses, successes this " +
+            s" $batchSizeString consecutive successful batches: $consecutiveSuccesses, successes this " +
             s"batch: ${res.get.count()}," +
             s" extentsProcessed: $extentsProcessed, backoff: $delayPeriodBetweenCalls, total:$totalAmount")
 
@@ -440,7 +439,7 @@ class ExtendedKustoClient(
     }
   }
 
-  def handleRetryFail(
+  private def handleRetryFail(
       curBatchSize: Int,
       retry: Int,
       currentSleepTime: Int,
@@ -462,7 +461,7 @@ class ExtendedKustoClient(
     }
   }
 
-  def handleNoResults(
+  private def handleNoResults(
       totalAmount: Int,
       extentsProcessed: Int,
       database: String,
@@ -485,7 +484,7 @@ class ExtendedKustoClient(
     extentsLeftRes.getInt(0) != 0
   }
 
-  def findErrorInResult(res: KustoResultSetTable): (Boolean, Object) = {
+  private def findErrorInResult(res: KustoResultSetTable): (Boolean, Object) = {
     var error: Object = null
     var failed = false
     if (KDSU.getLoggingLevel == Level.DEBUG) {
@@ -517,7 +516,7 @@ class ExtendedKustoClient(
     (failed, error)
   }
 
-  def shouldUseMaterializedViewFlag(
+  private def shouldUseMaterializedViewFlag(
       database: String,
       targetTable: String,
       crp: ClientRequestProperties): Boolean = {
@@ -696,7 +695,7 @@ class ExtendedKustoClient(
 }
 
 object ExtendedKustoClient {
-  val DefaultDb: String = "NetDefaultDB"
+  private val DefaultDb: String = "NetDefaultDB"
   val BaseIntervalMs: Long = 1000L
   val MaxRetryIntervalMs: Long = 1000L * 10
 }

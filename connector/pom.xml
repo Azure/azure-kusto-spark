@@ -12,11 +12,6 @@
     </parent>
     <dependencies>
         <dependency>
-            <groupId>org.apache.commons</groupId>
-            <artifactId>commons-lang3</artifactId>
-            <version>3.17.0</version>
-        </dependency>
-        <dependency>
             <groupId>com.microsoft.azure.kusto</groupId>
             <artifactId>kusto-data</artifactId>
             <version>${kusto.sdk.version}</version>
@@ -127,10 +122,6 @@
             <version>${hadoop.version}</version>
             <scope>provided</scope>
             <exclusions>
-                <exclusion>
-                    <artifactId>commons-lang</artifactId>
-                    <groupId>commons-lang</groupId>
-                </exclusion>
                 <exclusion>
                     <artifactId>jsr305</artifactId>
                     <groupId>com.google.code.findbugs</groupId>

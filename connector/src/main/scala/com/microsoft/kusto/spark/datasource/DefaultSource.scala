@@ -5,18 +5,13 @@ package com.microsoft.kusto.spark.datasource
 
 import java.security.InvalidParameterException
 import java.util.concurrent.TimeUnit
-import com.microsoft.azure.kusto.data.ClientRequestProperties
+import com.microsoft.azure.kusto.data.{ClientRequestProperties, StringUtils}
 import com.microsoft.kusto.spark.authentication.{KeyVaultAuthentication, KustoAuthentication}
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, KustoWriter}
-import com.microsoft.kusto.spark.utils.{
-  KeyVaultUtils,
-  KustoQueryUtils,
-  KustoConstants => KCONST,
-  KustoDataSourceUtils => KDSU
-}
+import com.microsoft.kusto.spark.utils.{KeyVaultUtils, KustoQueryUtils, KustoConstants => KCONST, KustoDataSourceUtils => KDSU}
 import com.microsoft.kusto.spark.utils.KustoDataSourceUtils.SourceParameters
-import org.apache.commons.lang3.StringUtils
+//import org.apache.commons.lang3.StringUtils
 import org.apache.spark.sql.sources.{
   BaseRelation,
   CreatableRelationProvider,
@@ -38,7 +33,7 @@ class DefaultSource
   var requestId: Option[String] = None
   val myName: String = this.getClass.getSimpleName
 
-  def initCommonParams(sourceParams: SourceParameters): Unit = {
+  private def initCommonParams(sourceParams: SourceParameters): Unit = {
     keyVaultAuthentication = sourceParams.keyVaultAuth
     kustoCoordinates = sourceParams.kustoCoordinates
     authenticationParameters = Some(sourceParams.authenticationParameters)
@@ -85,7 +80,7 @@ class DefaultSource
     createRelation(sqlContext, adjustParametersForBaseRelation(parameters, limit))
   }
 
-  def adjustParametersForBaseRelation(
+  private def adjustParametersForBaseRelation(
       parameters: Map[String, String],
       limit: Option[Int]): Map[String, String] = {
     if (limit.isDefined) {
@@ -102,8 +97,8 @@ class DefaultSource
       parameters: Map[String, String]): BaseRelation = {
     val readOptions = KDSU.getReadParameters(parameters, sqlContext)
     if (authenticationParameters.isEmpty) {
-      // Parse parameters if haven't got parsed before
-      val sourceParameters = KDSU.parseSourceParameters(parameters, true)
+      // Parse parameters if they haven't got parsed before
+      val sourceParameters = KDSU.parseSourceParameters(parameters, allowProxy = true)
       initCommonParams(sourceParameters)
     }
 
@@ -132,7 +127,7 @@ class DefaultSource
         // If any of the storage parameters defined a SAS we will take endpoint suffix from there
         transientStorageParams.get.storageCredentials.foreach(st => {
           st.validate()
-          if (StringUtils.isNoneBlank(st.domainSuffix)) {
+          if (StringUtils.isNotBlank(st.domainSuffix)) {
             transientStorageParams.get.endpointSuffix = st.domainSuffix
           }
         })
