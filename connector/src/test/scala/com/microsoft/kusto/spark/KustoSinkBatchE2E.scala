@@ -8,11 +8,25 @@ import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.kusto.spark.KustoTestUtils.getSystemTestOptions
 import com.microsoft.kusto.spark.common.KustoDebugOptions
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.{CreateIfNotExist, FailIfNotExist}
-import com.microsoft.kusto.spark.datasink.{IngestionStorageParameters, KustoSinkOptions, SchemaAdjustmentMode, SinkTableCreationMode, WriteMode}
+import com.microsoft.kusto.spark.datasink.{
+  IngestionStorageParameters,
+  KustoSinkOptions,
+  SchemaAdjustmentMode,
+  SinkTableCreationMode,
+  WriteMode
+}
 import com.microsoft.kusto.spark.datasource.{KustoSourceOptions, ReadMode}
 import com.microsoft.kusto.spark.sql.extension.SparkExtension.DataFrameReaderExtension
-import com.microsoft.kusto.spark.utils.CslCommandsGenerator.{generateTableAlterStreamIngestionCommand, generateTableCreateCommand, generateTempTableCreateCommand}
-import com.microsoft.kusto.spark.utils.{KustoConstants, KustoQueryUtils, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.CslCommandsGenerator.{
+  generateTableAlterStreamIngestionCommand,
+  generateTableCreateCommand,
+  generateTempTableCreateCommand
+}
+import com.microsoft.kusto.spark.utils.{
+  KustoConstants,
+  KustoQueryUtils,
+  KustoDataSourceUtils => KDSU
+}
 //import org.apache.commons.lang3.StringUtils
 import org.apache.spark.SparkContext
 import org.apache.spark.sql._

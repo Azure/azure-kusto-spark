@@ -9,7 +9,12 @@ import com.microsoft.azure.kusto.data.{ClientRequestProperties, StringUtils}
 import com.microsoft.kusto.spark.authentication.{KeyVaultAuthentication, KustoAuthentication}
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, KustoWriter}
-import com.microsoft.kusto.spark.utils.{KeyVaultUtils, KustoQueryUtils, KustoConstants => KCONST, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.{
+  KeyVaultUtils,
+  KustoQueryUtils,
+  KustoConstants => KCONST,
+  KustoDataSourceUtils => KDSU
+}
 import com.microsoft.kusto.spark.utils.KustoDataSourceUtils.SourceParameters
 //import org.apache.commons.lang3.StringUtils
 import org.apache.spark.sql.sources.{

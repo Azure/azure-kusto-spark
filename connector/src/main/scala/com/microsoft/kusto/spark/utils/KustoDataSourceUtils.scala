@@ -4,13 +4,22 @@
 package com.microsoft.kusto.spark.utils
 
 import com.azure.core.credential.TokenRequestContext
-import com.azure.identity.{AzureCliCredentialBuilder, ChainedTokenCredentialBuilder, DeviceCodeCredentialBuilder}
+import com.azure.identity.{
+  AzureCliCredentialBuilder,
+  ChainedTokenCredentialBuilder,
+  DeviceCodeCredentialBuilder
+}
 import com.fasterxml.jackson.core.`type`.TypeReference
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.node.ArrayNode
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import com.microsoft.azure.kusto.data.exceptions.{DataClientException, DataServiceException}
-import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties, KustoResultSetTable, StringUtils}
+import com.microsoft.azure.kusto.data.{
+  Client,
+  ClientRequestProperties,
+  KustoResultSetTable,
+  StringUtils
+}
 import com.microsoft.kusto.spark.authentication._
 import com.microsoft.kusto.spark.common.{KustoCoordinates, KustoDebugOptions}
 import com.microsoft.kusto.spark.datasink.KustoWriter.TempIngestionTablePrefix
@@ -19,9 +28,18 @@ import com.microsoft.kusto.spark.datasink.WriteMode.WriteMode
 import com.microsoft.kusto.spark.datasink.{SchemaAdjustmentMode, _}
 import com.microsoft.kusto.spark.datasource.ReadMode.ReadMode
 import com.microsoft.kusto.spark.datasource._
-import com.microsoft.kusto.spark.exceptions.{FailedOperationException, TimeoutAwaitingPendingOperationException}
+import com.microsoft.kusto.spark.exceptions.{
+  FailedOperationException,
+  TimeoutAwaitingPendingOperationException
+}
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
-import com.microsoft.kusto.spark.utils.KustoConstants.{DefaultBatchingLimit, DefaultExtentsCountForSplitMergePerNode, DefaultMaxRetriesOnMoveExtents, DefaultMaxStreamingBytesUncompressed, OneMegaByte}
+import com.microsoft.kusto.spark.utils.KustoConstants.{
+  DefaultBatchingLimit,
+  DefaultExtentsCountForSplitMergePerNode,
+  DefaultMaxRetriesOnMoveExtents,
+  DefaultMaxStreamingBytesUncompressed,
+  OneMegaByte
+}
 import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
 import io.github.resilience4j.retry.{Retry, RetryConfig}
 import io.vavr.CheckedFunction0
