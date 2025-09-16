@@ -38,45 +38,13 @@ For Scala/Java applications using Maven project definitions,
 link your application with the artifact below to use the Azure Data Explorer Connector for Spark. 
 > Note: Versions prior to 2.5.1 can no longer ingest to an existing table.
 
-```
-groupId = com.microsoft.azure.kusto
-artifactId = kusto-spark_3.0_2.12
-version = 5.3.0
-```
-
 **In Maven**:
 
-Look for the following coordinates: 
-```
-com.microsoft.azure.kusto:kusto-spark_3.0_2.12:5.3.0
-```
+The Spark 3.x library is published at the following location [kusto-spark_3.0_2.12](https://mvnrepository.com/artifact/com.microsoft.azure.kusto/kusto-spark_3.0).
 
 Or clone this repository and build it locally to add it to your local maven repository,.
 The jar can also be found under the [released package](https://github.com/Azure/azure-kusto-spark/releases)
 
- ```xml
-    <dependency>
-        <groupId>com.microsoft.azure.kusto</groupId>
-        <artifactId>kusto-spark_3.0_2.12</artifactId>
-        <version>5.2.2</version>
-    </dependency>
-```
-
-**In SBT**:
-
-```scala
-libraryDependencies ++= Seq(
-  "com.microsoft.azure.kusto" %% "kusto-spark_3.0" % "5.2.2"
-)
-```
-
-**In Databricks**:
-
-Libraries -> Install New -> Maven -> copy the following coordinates:
-
-```
-com.microsoft.azure.kusto:kusto-spark_3.0_2.12:5.2.2
-```
 
 #### Building Samples Module
 Samples are packaged as a separate module with the following artifact
@@ -96,7 +64,7 @@ use the following artifact:
 
 To use the connector, you need:
 
-- Java 1.8 SDK installed
+- Java 1.8+ SDK installed
 - [Maven 3.x](https://maven.apache.org/download.cgi) installed
 - Spark - with the version aligned with the artifact ID (either 2.4 or 3.0)
 
