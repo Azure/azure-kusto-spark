@@ -527,7 +527,7 @@ class ExtendedKustoClient(
         generateIsTableMaterializedViewSourceCommand(targetTable),
         "isTableMV",
         crp).getPrimaryResults
-    // Added a check just to be sure that
+    // Check that the result set is not null and has at least one row before accessing it
     if (!Objects.isNull(isDestinationTableMaterializedViewSourceResult) &&
       isDestinationTableMaterializedViewSourceResult.hasNext) {
       isDestinationTableMaterializedViewSourceResult.next()
