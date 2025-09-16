@@ -44,7 +44,7 @@ import org.apache.log4j.Level
 import org.apache.spark.sql.types.StructType
 
 import java.time.{Instant, OffsetDateTime}
-import java.util.{StringJoiner, UUID}
+import java.util.{Objects, StringJoiner, UUID}
 import scala.collection.JavaConverters._
 import scala.concurrent.duration.FiniteDuration
 
@@ -527,18 +527,13 @@ class ExtendedKustoClient(
         generateIsTableMaterializedViewSourceCommand(targetTable),
         "isTableMV",
         crp).getPrimaryResults
-    isDestinationTableMaterializedViewSourceResult.next()
-    val isDestinationTableMaterializedViewSource: Boolean =
-      isDestinationTableMaterializedViewSourceResult.getLong(0) > 0
-    if (isDestinationTableMaterializedViewSource) {
-      val res =
-        executeEngine(
-          database,
-          generateIsTableEngineV3(targetTable),
-          "isTableV3",
-          crp).getPrimaryResults
-      res.next()
-      res.getBoolean(0)
+    // Added a check just to be sure that
+    if (!Objects.isNull(isDestinationTableMaterializedViewSourceResult) &&
+      isDestinationTableMaterializedViewSourceResult.hasNext) {
+      isDestinationTableMaterializedViewSourceResult.next()
+      val isDestinationTableMaterializedViewSource: Boolean =
+        isDestinationTableMaterializedViewSourceResult.getLong(0) > 0
+      isDestinationTableMaterializedViewSource
     } else {
       false
     }
