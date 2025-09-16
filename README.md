@@ -40,7 +40,7 @@ link your application with the artifact below to use the Azure Data Explorer Con
 
 **In Maven**:
 
-The Spark 3.x library is published at the following location [kusto-spark_3.0_2.12](https://mvnrepository.com/artifact/com.microsoft.azure.kusto/kusto-spark_3.0)
+The Spark 3.x library is published at the following location [kusto-spark_3.0_2.12](https://mvnrepository.com/artifact/com.microsoft.azure.kusto/kusto-spark_3.0).
 
 Or clone this repository and build it locally to add it to your local maven repository,.
 The jar can also be found under the [released package](https://github.com/Azure/azure-kusto-spark/releases)
