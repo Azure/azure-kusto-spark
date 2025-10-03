@@ -6,6 +6,7 @@ package com.microsoft.kusto.spark.utils
 import com.fasterxml.jackson.databind.node.ArrayNode
 import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import com.microsoft.azure.kusto.data._
+import com.microsoft.azure.kusto.data.StringUtils
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.exceptions.KustoDataExceptionBase
 import com.microsoft.azure.kusto.ingest.resources.ResourceWithSas
@@ -37,7 +38,6 @@ import com.microsoft.kusto.spark.utils.KustoDataSourceUtils.extractSchemaFromRes
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import io.github.resilience4j.core.IntervalFunction
 import io.github.resilience4j.retry.RetryConfig
-import org.apache.commons.lang3.StringUtils
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.commons.lang3.time.DurationFormatUtils
 import org.apache.log4j.Level
@@ -233,7 +233,7 @@ class ExtendedKustoClient(
     var prefix: Option[String] = None
     if (maybeCrp.isDefined) {
       val currentId = maybeCrp.get.getClientRequestId
-      if (StringUtils.isNoneBlank(currentId)) {
+      if (StringUtils.isNotBlank(currentId)) {
         prefix = Some(currentId + ";")
       }
     }
@@ -265,7 +265,7 @@ class ExtendedKustoClient(
     val transientStorage =
       storage.map(c => new TransientStorageCredentials(c.containerUrl + c.sas))
     val endpointSuffix = transientStorage.head.domainSuffix
-    if (StringUtils.isNoneBlank(endpointSuffix)) {
+    if (StringUtils.isNotBlank(endpointSuffix)) {
       new TransientStorageParameters(transientStorage.toArray, endpointSuffix)
     } else {
       new TransientStorageParameters(transientStorage.toArray)

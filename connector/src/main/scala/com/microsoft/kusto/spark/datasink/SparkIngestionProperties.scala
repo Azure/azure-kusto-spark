@@ -3,6 +3,8 @@
 
 package com.microsoft.kusto.spark.datasink
 
+import com.microsoft.azure.kusto.data.StringUtils
+
 import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility
 import com.fasterxml.jackson.annotation.PropertyAccessor
 import com.fasterxml.jackson.databind.ObjectMapper
@@ -12,7 +14,6 @@ import com.microsoft.azure.kusto.ingest.IngestionMapping.IngestionMappingKind
 import java.util
 import com.microsoft.azure.kusto.ingest.{IngestionMapping, IngestionProperties}
 import org.apache.commons.collections.CollectionUtils
-import org.apache.commons.lang3.StringUtils
 
 import java.security.InvalidParameterException
 import java.time.Instant
@@ -52,7 +53,7 @@ class SparkIngestionProperties(
         "Ingest by tags / Drop by tags / Additional tags / Creation Time are not supported for streaming ingestion " +
           "through SparkIngestionProperties")
     }
-    if (StringUtils.isNotEmpty(this.csvMapping)) {
+    if (!StringUtils.isEmpty(this.csvMapping)) {
       throw new InvalidParameterException(
         "CSVMapping cannot be used with Spark streaming ingestion")
     }

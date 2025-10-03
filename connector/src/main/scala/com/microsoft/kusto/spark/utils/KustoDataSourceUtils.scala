@@ -3,6 +3,7 @@
 
 package com.microsoft.kusto.spark.utils
 
+import com.microsoft.azure.kusto.data.StringUtils
 import com.azure.core.credential.TokenRequestContext
 import com.azure.identity.{
   AzureCliCredentialBuilder,
@@ -38,7 +39,6 @@ import com.microsoft.kusto.spark.utils.KustoConstants.{
 import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
 import io.github.resilience4j.retry.{Retry, RetryConfig}
 import io.vavr.CheckedFunction0
-import org.apache.commons.lang3.StringUtils
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.http.client.utils.URIBuilder
 import org.apache.log4j.{Level, Logger}
