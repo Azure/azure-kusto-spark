@@ -592,7 +592,7 @@ object KustoDataSourceUtils {
 
     val isMappingAlreadyPresent = maybeSparkIngestionProperties match {
       case Some(sparkIngestionProperties) =>
-        StringUtils.isNotEmpty(sparkIngestionProperties.csvMapping) || StringUtils.isNotEmpty(
+        !StringUtils.isEmpty(sparkIngestionProperties.csvMapping) || !StringUtils.isEmpty(
           sparkIngestionProperties.csvMappingNameReference)
       case None => false
     }
@@ -995,13 +995,13 @@ object KustoDataSourceUtils {
      */
     val estimatedCount = maybeEstimatedCount match {
       case Some(ecStr: String) =>
-        if (StringUtils.isBlank(ecStr) || !StringUtils.isNumeric(ecStr)) /* Empty estimate */ 0
+        if (StringUtils.isBlank(ecStr) || !ecStr.forall(_.isDigit)) /* Empty estimate */ 0
         else ecStr.toInt
       case Some(ecInt: java.lang.Number) =>
         ecInt.intValue() // Is a numeric , get the int value back
       case Some(ecObj: Object) =>
         val ecStr = Option(ecObj).map(_.toString).getOrElse("0")
-        if (StringUtils.isBlank(ecStr) || !StringUtils.isNumeric(ecStr)) {
+        if (StringUtils.isBlank(ecStr) || !ecStr.forall(_.isDigit)) {
           0 // Empty estimate
         } else {
           ecStr.toInt
