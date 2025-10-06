@@ -10,40 +10,22 @@ import com.microsoft.azure.kusto.data.StringUtils
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.exceptions.KustoDataExceptionBase
 import com.microsoft.azure.kusto.ingest.resources.ResourceWithSas
-import com.microsoft.azure.kusto.ingest.{
-  IngestClientFactory,
-  ManagedStreamingIngestClient,
-  QueuedIngestClient
-}
+import com.microsoft.azure.kusto.ingest.{IngestClientFactory, ManagedStreamingIngestClient, QueuedIngestClient}
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.KustoWriter.DelayPeriodBetweenCalls
-import com.microsoft.kusto.spark.datasink.{
-  IngestionStorageParameters,
-  SinkTableCreationMode,
-  SparkIngestionProperties,
-  WriteMode,
-  WriteOptions
-}
-import com.microsoft.kusto.spark.datasource.{
-  TransientStorageCredentials,
-  TransientStorageParameters
-}
-import com.microsoft.kusto.spark.exceptions.{FailedOperationException, RetriesExhaustedException}
+import com.microsoft.kusto.spark.datasink.{IngestionStorageParameters, SinkTableCreationMode, SparkIngestionProperties, WriteMode, WriteOptions}
+import com.microsoft.kusto.spark.datasource.{TransientStorageCredentials, TransientStorageParameters}
+import com.microsoft.kusto.spark.exceptions.{ExceptionUtils, FailedOperationException, RetriesExhaustedException}
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
-import com.microsoft.kusto.spark.utils.KustoConstants.{
-  MaxCommandsRetryAttempts,
-  MaxSleepOnMoveExtentsMillis
-}
+import com.microsoft.kusto.spark.utils.KustoConstants.{MaxCommandsRetryAttempts, MaxSleepOnMoveExtentsMillis}
 import com.microsoft.kusto.spark.utils.KustoDataSourceUtils.extractSchemaFromResultTable
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import io.github.resilience4j.core.IntervalFunction
 import io.github.resilience4j.retry.RetryConfig
-import org.apache.commons.lang3.exception.ExceptionUtils
-import org.apache.commons.lang3.time.DurationFormatUtils
 import org.apache.log4j.Level
 import org.apache.spark.sql.types.StructType
 
-import java.time.{Instant, OffsetDateTime}
+import java.time.{Duration, Instant, OffsetDateTime}
 import java.util.{StringJoiner, UUID}
 import scala.collection.JavaConverters._
 import scala.concurrent.duration.FiniteDuration
@@ -66,10 +48,8 @@ class ExtendedKustoClient(
   RetryConfig.ofDefaults()
   private val retryConfig = buildRetryConfig
   private val retryConfigAsyncOp = buildRetryConfigForAsyncOp
-  private val DOT = "."
 
   private val myName = this.getClass.getSimpleName
-  private val durationFormat = "dd:HH:mm:ss"
 
   def initializeTablesBySchema(
       tableCoordinates: KustoCoordinates,
@@ -156,14 +136,13 @@ class ExtendedKustoClient(
           "refreshBatchingPolicy")
       }
       if (configureRetentionPolicy) {
+        val cleanupDuration = Duration.ofMillis(writeOptions.autoCleanupTime.toMillis)
+        val durationFormat = String.format("%02d:%02d:%02d:%02d", cleanupDuration.toDays, cleanupDuration.toHours, cleanupDuration.toMinutes, cleanupDuration.toMillis/1000)
         executeEngine(
           database,
           generateTableAlterRetentionPolicy(
             tmpTableName,
-            DurationFormatUtils.formatDuration(
-              writeOptions.autoCleanupTime.toMillis,
-              durationFormat,
-              true),
+            durationFormat,
             recoverable = false),
           "alterRetentionPolicy",
           crp)
@@ -383,7 +362,7 @@ class ExtendedKustoClient(
           }
           failed = true
         case ex: KustoDataExceptionBase =>
-          error = ExceptionUtils.getStackTrace(ex)
+          error = ExceptionUtils.getRootCauseStackTrace(ex)
           failed = true
       }
 

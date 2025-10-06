@@ -5,11 +5,7 @@ package com.microsoft.kusto.spark.utils
 
 import com.microsoft.azure.kusto.data.StringUtils
 import com.azure.core.credential.TokenRequestContext
-import com.azure.identity.{
-  AzureCliCredentialBuilder,
-  ChainedTokenCredentialBuilder,
-  DeviceCodeCredentialBuilder
-}
+import com.azure.identity.{AzureCliCredentialBuilder, ChainedTokenCredentialBuilder, DeviceCodeCredentialBuilder}
 import com.fasterxml.jackson.core.`type`.TypeReference
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.node.ArrayNode
@@ -24,22 +20,12 @@ import com.microsoft.kusto.spark.datasink.WriteMode.WriteMode
 import com.microsoft.kusto.spark.datasink.{SchemaAdjustmentMode, _}
 import com.microsoft.kusto.spark.datasource.ReadMode.ReadMode
 import com.microsoft.kusto.spark.datasource._
-import com.microsoft.kusto.spark.exceptions.{
-  FailedOperationException,
-  TimeoutAwaitingPendingOperationException
-}
+import com.microsoft.kusto.spark.exceptions.{ExceptionUtils, FailedOperationException, TimeoutAwaitingPendingOperationException}
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
-import com.microsoft.kusto.spark.utils.KustoConstants.{
-  DefaultBatchingLimit,
-  DefaultExtentsCountForSplitMergePerNode,
-  DefaultMaxRetriesOnMoveExtents,
-  DefaultMaxStreamingBytesUncompressed,
-  OneMegaByte
-}
+import com.microsoft.kusto.spark.utils.KustoConstants.{DefaultBatchingLimit, DefaultExtentsCountForSplitMergePerNode, DefaultMaxRetriesOnMoveExtents, DefaultMaxStreamingBytesUncompressed, OneMegaByte}
 import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
 import io.github.resilience4j.retry.{Retry, RetryConfig}
 import io.vavr.CheckedFunction0
-import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.http.client.utils.URIBuilder
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -50,15 +36,7 @@ import java.net.URI
 import java.security.InvalidParameterException
 import java.util
 import java.util.concurrent.{Callable, CountDownLatch, TimeUnit}
-import java.util.{
-  NoSuchElementException,
-  Objects,
-  Properties,
-  StringJoiner,
-  Timer,
-  TimerTask,
-  UUID
-}
+import java.util.{NoSuchElementException, Objects, Properties, StringJoiner, Timer, TimerTask, UUID}
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}

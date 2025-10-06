@@ -8,17 +8,13 @@ import com.azure.storage.blob.BlobServiceClientBuilder
 import com.azure.storage.blob.sas.{BlobContainerSasPermission, BlobServiceSasSignatureValues}
 import com.microsoft.azure.kusto.data.StringUtils
 import com.microsoft.azure.kusto.data.exceptions.{DataServiceException, KustoDataExceptionBase}
-import com.microsoft.azure.kusto.ingest.exceptions.{
-  IngestionClientException,
-  IngestionServiceException
-}
+import com.microsoft.azure.kusto.ingest.exceptions.{IngestionClientException, IngestionServiceException}
 import com.microsoft.kusto.spark.datasink.IngestionStorageParameters
-import com.microsoft.kusto.spark.exceptions.NoStorageContainersException
+import com.microsoft.kusto.spark.exceptions.{ExceptionUtils, NoStorageContainersException}
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import io.github.resilience4j.core.IntervalFunction
 import io.github.resilience4j.retry.{Retry, RetryConfig}
 import io.vavr.CheckedFunction0
-import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.http.conn.HttpHostConnectException
 
 import java.time.{Clock, Instant, OffsetDateTime}
