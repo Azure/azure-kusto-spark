@@ -136,13 +136,11 @@ class ExtendedKustoClient(
           "refreshBatchingPolicy")
       }
       if (configureRetentionPolicy) {
-        val cleanupDuration = Duration.ofMillis(writeOptions.autoCleanupTime.toMillis)
-        val durationFormat = String.format("%02d:%02d:%02d:%02d", cleanupDuration.toDays, cleanupDuration.toHours, cleanupDuration.toMinutes, cleanupDuration.toMillis/1000)
         executeEngine(
           database,
           generateTableAlterRetentionPolicy(
             tmpTableName,
-            durationFormat,
+            formatDuration(Duration.ofMillis(writeOptions.autoCleanupTime.toMillis)),
             recoverable = false),
           "alterRetentionPolicy",
           crp)
@@ -157,6 +155,15 @@ class ExtendedKustoClient(
         myName,
         s"Successfully created temporary table $tmpTableName, will be deleted after completing the operation")
     }
+  }
+
+  private def formatDuration(duration: Duration): String = {
+    val totalSeconds = duration.getSeconds
+    val days = totalSeconds / (24 * 3600)
+    val hours = (totalSeconds % (24 * 3600)) / 3600
+    val minutes = (totalSeconds % 3600) / 60
+    val seconds = totalSeconds % 60
+    String.format("%02d:%02d:%02d:%02d", Long.box(days), Long.box(hours), Long.box(minutes), Long.box(seconds))
   }
 
   def executeDM(

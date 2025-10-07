@@ -81,12 +81,6 @@
             <groupId>com.microsoft.azure</groupId>
             <artifactId>azure-storage</artifactId>
             <version>${azure.storage.version}</version>
-            <exclusions>
-                <exclusion>
-                    <artifactId>commons-lang3</artifactId>
-                    <groupId>org.apache.commons</groupId>
-                </exclusion>
-            </exclusions>
         </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>
@@ -119,10 +113,6 @@
             <version>${hadoop.version}</version>
             <scope>provided</scope>
             <exclusions>
-                <exclusion>
-                    <artifactId>commons-lang3</artifactId>
-                    <groupId>org.apache.commons</groupId>
-                </exclusion>
                 <exclusion>
                     <artifactId>jsr305</artifactId>
                     <groupId>com.google.code.findbugs</groupId>
