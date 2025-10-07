@@ -461,7 +461,7 @@ class ExtendedKustoClient(
       myName,
       s"""moving extents to '$targetTable' failed,
         retry number: $retry ${if (error == null) ""
-        else s", error: ${error.asInstanceOf[String]}"}.
+        else s", error: $error"}.
         Sleeping for: $currentSleepTime""")
     Thread.sleep(currentSleepTime)
     val increasedSleepTime = Math.min(MaxSleepOnMoveExtentsMillis, currentSleepTime * 2)

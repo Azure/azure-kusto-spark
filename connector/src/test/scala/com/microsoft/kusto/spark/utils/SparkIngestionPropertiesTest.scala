@@ -4,7 +4,7 @@
 package com.microsoft.kusto.spark.utils
 
 import com.microsoft.kusto.spark.datasink.SparkIngestionProperties
-import org.apache.commons.lang.builder.EqualsBuilder
+import org.apache.commons.lang3.builder.EqualsBuilder
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.prop.TableDrivenPropertyChecks.forAll
 import org.scalatest.prop.Tables.Table

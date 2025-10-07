@@ -13,7 +13,6 @@ import com.microsoft.azure.kusto.ingest.IngestionMapping.IngestionMappingKind
 
 import java.util
 import com.microsoft.azure.kusto.ingest.{IngestionMapping, IngestionProperties}
-import org.apache.commons.collections.CollectionUtils
 
 import java.security.InvalidParameterException
 import java.time.Instant
