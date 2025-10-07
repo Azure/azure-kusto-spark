@@ -10,14 +10,34 @@ import com.microsoft.azure.kusto.data.StringUtils
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.exceptions.KustoDataExceptionBase
 import com.microsoft.azure.kusto.ingest.resources.ResourceWithSas
-import com.microsoft.azure.kusto.ingest.{IngestClientFactory, ManagedStreamingIngestClient, QueuedIngestClient}
+import com.microsoft.azure.kusto.ingest.{
+  IngestClientFactory,
+  ManagedStreamingIngestClient,
+  QueuedIngestClient
+}
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.KustoWriter.DelayPeriodBetweenCalls
-import com.microsoft.kusto.spark.datasink.{IngestionStorageParameters, SinkTableCreationMode, SparkIngestionProperties, WriteMode, WriteOptions}
-import com.microsoft.kusto.spark.datasource.{TransientStorageCredentials, TransientStorageParameters}
-import com.microsoft.kusto.spark.exceptions.{ExceptionUtils, FailedOperationException, RetriesExhaustedException}
+import com.microsoft.kusto.spark.datasink.{
+  IngestionStorageParameters,
+  SinkTableCreationMode,
+  SparkIngestionProperties,
+  WriteMode,
+  WriteOptions
+}
+import com.microsoft.kusto.spark.datasource.{
+  TransientStorageCredentials,
+  TransientStorageParameters
+}
+import com.microsoft.kusto.spark.exceptions.{
+  ExceptionUtils,
+  FailedOperationException,
+  RetriesExhaustedException
+}
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
-import com.microsoft.kusto.spark.utils.KustoConstants.{MaxCommandsRetryAttempts, MaxSleepOnMoveExtentsMillis}
+import com.microsoft.kusto.spark.utils.KustoConstants.{
+  MaxCommandsRetryAttempts,
+  MaxSleepOnMoveExtentsMillis
+}
 import com.microsoft.kusto.spark.utils.KustoDataSourceUtils.extractSchemaFromResultTable
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import io.github.resilience4j.core.IntervalFunction
@@ -163,7 +183,12 @@ class ExtendedKustoClient(
     val hours = (totalSeconds % (24 * 3600)) / 3600
     val minutes = (totalSeconds % 3600) / 60
     val seconds = totalSeconds % 60
-    String.format("%02d:%02d:%02d:%02d", Long.box(days), Long.box(hours), Long.box(minutes), Long.box(seconds))
+    String.format(
+      "%02d:%02d:%02d:%02d",
+      Long.box(days),
+      Long.box(hours),
+      Long.box(minutes),
+      Long.box(seconds))
   }
 
   def executeDM(

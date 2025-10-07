@@ -8,7 +8,14 @@ import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.{KustoCoordinates, KustoDebugOptions}
 import com.microsoft.kusto.spark.datasink.{KustoWriter, WriteOptions}
 import com.microsoft.kusto.spark.exceptions.ExceptionUtils
-import com.microsoft.kusto.spark.utils.{ExtendedKustoClient, KustoClientCache, KustoConstants, KustoCustomDebugWriteOptions, KustoQueryUtils, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.{
+  ExtendedKustoClient,
+  KustoClientCache,
+  KustoConstants,
+  KustoCustomDebugWriteOptions,
+  KustoQueryUtils,
+  KustoDataSourceUtils => KDSU
+}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
