@@ -69,7 +69,7 @@ class ExtendedKustoClient(
   private val retryConfig = buildRetryConfig
   private val retryConfigAsyncOp = buildRetryConfigForAsyncOp
 
-  private val myName = this.getClass.getSimpleName
+  private val className = this.getClass.getSimpleName
 
   def initializeTablesBySchema(
       tableCoordinates: KustoCoordinates,
@@ -172,7 +172,7 @@ class ExtendedKustoClient(
           crp)
       }
       KDSU.logInfo(
-        myName,
+        className,
         s"Successfully created temporary table $tmpTableName, will be deleted after completing the operation")
     }
   }
@@ -219,14 +219,14 @@ class ExtendedKustoClient(
       retryNumber => {
         if (isMgmtCommand) {
           KDSU.logDebug(
-            myName,
+            className,
             s"Executing management command: $command, retry number: $retryNumber")
           engineClient.executeMgmt(
             database,
             command,
             newIncrementedCrp(Some(crp), activityName, retryNumber))
         } else {
-          KDSU.logDebug(myName, s"Executing query command: $command, retry number: $retryNumber")
+          KDSU.logDebug(className, s"Executing query command: $command, retry number: $retryNumber")
           engineClient.executeQuery(
             database,
             command,
@@ -266,7 +266,7 @@ class ExtendedKustoClient(
     } catch {
       case exception: Exception =>
         KDSU.logDebug(
-          myName,
+          className,
           s"Exception in repoting ingestion result : ${exception.getMessage} ")
     }
   }
@@ -368,7 +368,7 @@ class ExtendedKustoClient(
           samplePeriod = KustoConstants.DefaultPeriodicSamplePeriod,
           writeOptions.timeout,
           s"move extents to destination table '$targetTable' ",
-          myName,
+          className,
           writeOptions.requestId)
         // TODO: use count over the show operations
         res = Some(
@@ -435,16 +435,14 @@ class ExtendedKustoClient(
           // After curBatchSize size has decreased - we can lower it again according to original batch size
           curBatchSize = Math.min(curBatchSize * 2, batchSize.getOrElse(curBatchSize * 2))
         }
-
         extentsProcessed += res.get.count()
         val batchSizeString = if (batchSize.isDefined) s"maxBatch: $curBatchSize," else ""
         KDSU.logDebug(
-          myName,
+          className,
           s"Moving extents batch succeeded at retry: $retry," +
             s" $batchSizeString consecutive successfull batches: $consecutiveSuccesses, successes this " +
             s"batch: ${res.get.count()}," +
             s" extentsProcessed: $extentsProcessed, backoff: $delayPeriodBetweenCalls, total:$totalAmount")
-
         retry = 0
         delayPeriodBetweenCalls = DelayPeriodBetweenCalls
       }
@@ -458,7 +456,7 @@ class ExtendedKustoClient(
       targetTable: String,
       error: Object): (Int, Int) = {
     KDSU.logWarn(
-      myName,
+      className,
       s"""moving extents to '$targetTable' failed,
         retry number: $retry ${if (error == null) ""
         else s", error: $error"}.
@@ -473,7 +471,7 @@ class ExtendedKustoClient(
     }
   }
 
-  def handleNoResults(
+  private def handleNoResults(
       totalAmount: Int,
       extentsProcessed: Int,
       database: String,
@@ -481,7 +479,7 @@ class ExtendedKustoClient(
       crp: ClientRequestProperties): Boolean = {
     // Could we get here ?
     KDSU.logFatal(
-      myName,
+      className,
       "Some extents were not processed and we got an empty move " +
         s"result'${totalAmount - extentsProcessed}' Please open issue if you see this trace. At: https://github" +
         ".com/Azure/azure-kusto-spark/issues")
@@ -508,7 +506,7 @@ class ExtendedKustoClient(
           failed = true
           if (i > 0) {
             KDSU.logFatal(
-              myName,
+              className,
               "Failed extent was not reported on all extents!." +
                 "Please open issue if you see this trace. At: https://github.com/Azure/azure-kusto-spark/issues")
           }
@@ -612,7 +610,7 @@ class ExtendedKustoClient(
           samplePeriod = KustoConstants.DefaultPeriodicSamplePeriod,
           timeout,
           cmdToTrace,
-          myName,
+          className,
           requestId)
       },
       retryConfigAsyncOp,
@@ -654,11 +652,11 @@ class ExtendedKustoClient(
       crp: ClientRequestProperties): Unit = {
     try {
       executeEngine(database, generateTableDropCommand(tmpTableName), "tableDrop", crp)
-      KDSU.logInfo(myName, s"Temporary table '$tmpTableName' deleted successfully")
+      KDSU.logInfo(className, s"Temporary table '$tmpTableName' deleted successfully")
     } catch {
       case exception: Exception =>
         KDSU.reportExceptionAndThrow(
-          myName,
+          className,
           exception,
           s"deleting temporary table $tmpTableName",
           database)
@@ -707,7 +705,7 @@ class ExtendedKustoClient(
 }
 
 object ExtendedKustoClient {
-  val DefaultDb: String = "NetDefaultDB"
+  private val DefaultDb: String = "NetDefaultDB"
   val BaseIntervalMs: Long = 1000L
   val MaxRetryIntervalMs: Long = 1000L * 10
 }
