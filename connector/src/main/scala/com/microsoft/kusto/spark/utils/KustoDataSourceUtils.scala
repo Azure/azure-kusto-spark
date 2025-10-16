@@ -3,6 +3,7 @@
 
 package com.microsoft.kusto.spark.utils
 
+import com.microsoft.azure.kusto.data.StringUtils
 import com.azure.core.credential.TokenRequestContext
 import com.azure.identity.{
   AzureCliCredentialBuilder,
@@ -24,6 +25,7 @@ import com.microsoft.kusto.spark.datasink.{SchemaAdjustmentMode, _}
 import com.microsoft.kusto.spark.datasource.ReadMode.ReadMode
 import com.microsoft.kusto.spark.datasource._
 import com.microsoft.kusto.spark.exceptions.{
+  ExceptionUtils,
   FailedOperationException,
   TimeoutAwaitingPendingOperationException
 }
@@ -38,8 +40,6 @@ import com.microsoft.kusto.spark.utils.KustoConstants.{
 import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
 import io.github.resilience4j.retry.{Retry, RetryConfig}
 import io.vavr.CheckedFunction0
-import org.apache.commons.lang3.StringUtils
-import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.http.client.utils.URIBuilder
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -592,7 +592,7 @@ object KustoDataSourceUtils {
 
     val isMappingAlreadyPresent = maybeSparkIngestionProperties match {
       case Some(sparkIngestionProperties) =>
-        StringUtils.isNotEmpty(sparkIngestionProperties.csvMapping) || StringUtils.isNotEmpty(
+        !StringUtils.isEmpty(sparkIngestionProperties.csvMapping) || !StringUtils.isEmpty(
           sparkIngestionProperties.csvMappingNameReference)
       case None => false
     }
@@ -995,13 +995,13 @@ object KustoDataSourceUtils {
      */
     val estimatedCount = maybeEstimatedCount match {
       case Some(ecStr: String) =>
-        if (StringUtils.isBlank(ecStr) || !StringUtils.isNumeric(ecStr)) /* Empty estimate */ 0
+        if (StringUtils.isBlank(ecStr) || !ecStr.forall(_.isDigit)) /* Empty estimate */ 0
         else ecStr.toInt
       case Some(ecInt: java.lang.Number) =>
         ecInt.intValue() // Is a numeric , get the int value back
       case Some(ecObj: Object) =>
         val ecStr = Option(ecObj).map(_.toString).getOrElse("0")
-        if (StringUtils.isBlank(ecStr) || !StringUtils.isNumeric(ecStr)) {
+        if (StringUtils.isBlank(ecStr) || !ecStr.forall(_.isDigit)) {
           0 // Empty estimate
         } else {
           ecStr.toInt

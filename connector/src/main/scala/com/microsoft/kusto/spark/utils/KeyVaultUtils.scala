@@ -3,6 +3,7 @@
 
 package com.microsoft.kusto.spark.utils
 
+import com.microsoft.azure.kusto.data.StringUtils
 import com.azure.security.keyvault.secrets.SecretClient
 import com.azure.security.keyvault.secrets.models.KeyVaultSecret
 import com.microsoft.kusto.spark.authentication.{
@@ -12,7 +13,6 @@ import com.microsoft.kusto.spark.authentication.{
   KeyVaultCertificateAuthentication
 }
 import com.microsoft.kusto.spark.datasource.TransientStorageCredentials
-import org.apache.commons.lang3.StringUtils
 
 import java.io.IOException
 import java.util.Objects

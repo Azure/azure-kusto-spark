@@ -6,19 +6,18 @@ package com.microsoft.kusto.spark.utils
 import com.azure.identity.{DefaultAzureCredentialBuilder, ManagedIdentityCredentialBuilder}
 import com.azure.storage.blob.BlobServiceClientBuilder
 import com.azure.storage.blob.sas.{BlobContainerSasPermission, BlobServiceSasSignatureValues}
+import com.microsoft.azure.kusto.data.StringUtils
 import com.microsoft.azure.kusto.data.exceptions.{DataServiceException, KustoDataExceptionBase}
 import com.microsoft.azure.kusto.ingest.exceptions.{
   IngestionClientException,
   IngestionServiceException
 }
 import com.microsoft.kusto.spark.datasink.IngestionStorageParameters
-import com.microsoft.kusto.spark.exceptions.NoStorageContainersException
+import com.microsoft.kusto.spark.exceptions.{ExceptionUtils, NoStorageContainersException}
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import io.github.resilience4j.core.IntervalFunction
 import io.github.resilience4j.retry.{Retry, RetryConfig}
 import io.vavr.CheckedFunction0
-import org.apache.commons.lang3.StringUtils
-import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.http.conn.HttpHostConnectException
 
 import java.time.{Clock, Instant, OffsetDateTime}
@@ -197,7 +196,7 @@ class ContainerProvider(
           s"${ingestionStorageParameter.storageUrl}/${ingestionStorageParameter.containerName}",
           s"$normalizedSas"))
     } else {
-      if (StringUtils.isNotEmpty(ingestionStorageParameter.sas)) {
+      if (!StringUtils.isEmpty(ingestionStorageParameter.sas)) {
         KDSU.logInfo(className, "Using SAS token from ingestion storage parameter")
         val normalizedSas = ingestionStorageParameter.sas
         (
@@ -248,7 +247,7 @@ object ContainerProvider {
       cacheExpirySeconds: Long,
       listPermissions: Boolean,
       ingestionStorageParameter: IngestionStorageParameters): String = {
-    val credential = if (StringUtils.isNotEmpty(ingestionStorageParameter.userMsi)) {
+    val credential = if (!StringUtils.isEmpty(ingestionStorageParameter.userMsi)) {
       new ManagedIdentityCredentialBuilder()
         .clientId(ingestionStorageParameter.userMsi)
         .build()

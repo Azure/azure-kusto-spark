@@ -2,10 +2,11 @@
 // Licensed under the MIT License.
 package com.microsoft.kusto.spark.datasink
 
+import com.microsoft.azure.kusto.data.StringUtils
+
 import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility
 import com.fasterxml.jackson.annotation.PropertyAccessor
 import com.fasterxml.jackson.databind.ObjectMapper
-import org.apache.commons.lang3.StringUtils
 
 import java.io.Serializable
 import java.util.Objects
@@ -48,7 +49,7 @@ class IngestionStorageParameters(
   }
 
   override def toString: String = {
-    s"storageUrl: $storageUrl, containerName: $containerName, userMsi: $userMsi, is-sas: ${StringUtils
-        .isNotEmpty(sas)}"
+    s"storageUrl: $storageUrl, containerName: $containerName, userMsi: $userMsi, is-sas: ${!StringUtils
+        .isEmpty(sas)}"
   }
 }
