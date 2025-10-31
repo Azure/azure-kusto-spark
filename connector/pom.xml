@@ -4,7 +4,7 @@
     <modelVersion>4.0.0</modelVersion>
     <artifactId>kusto-spark_${spark.version.major}_${scala.version.major}</artifactId>
     <name>Spark Kusto connector</name>
-    <description>Kusto connector for Spark to query and ingest data</description>
+    <description>Kusto connector for Spark to query and ingest data dummy</description>
     <parent>
         <artifactId>azure-kusto-spark</artifactId>
         <groupId>com.microsoft.azure.kusto</groupId>
