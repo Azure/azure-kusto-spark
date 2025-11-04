@@ -115,7 +115,7 @@ class WriterTests extends AnyFlatSpec with Matchers {
   }
 
   "finalizeFileWrite" should "should flush and close buffers" in {
-    val gzip = mock(classOf[GZIPOutputStream])
+    /*val gzip = mock(classOf[GZIPOutputStream])
     val buffer = mock(classOf[BufferedWriter])
     val csvWriter = CountingWriter(buffer)
 
@@ -126,7 +126,36 @@ class WriterTests extends AnyFlatSpec with Matchers {
     verify(gzip, times(1)).close()
 
     verify(buffer, times(1)).flush()
-    verify(buffer, times(1)).close()
+    verify(buffer, times(1)).close()*/
+
+    val byteArrayOutputStream = new ByteArrayOutputStream()
+    val gzip = new GZIPOutputStream(byteArrayOutputStream)
+    val outputStreamWriter = new OutputStreamWriter(gzip, StandardCharsets.UTF_8)
+    val buffer = new BufferedWriter(outputStreamWriter)
+    val csvWriter = CountingWriter(buffer)
+
+    // Write some data to ensure the streams are actually working
+    buffer.write("test data")
+
+    val fileWriteResource = BlobWriteResource(buffer, gzip, csvWriter, null, null)
+
+    // Before finalize, the output should be empty or incomplete (buffered)
+    val beforeFinalize = byteArrayOutputStream.size()
+
+    // Finalize should flush and close everything
+    KustoWriter.finalizeBlobWrite(fileWriteResource)
+
+    // After finalize, data should be flushed and streams closed
+    val afterFinalize = byteArrayOutputStream.size()
+
+    // Verify that data was actually written (gzip compressed output should be > 0)
+    afterFinalize should be > 0
+
+    // Verify streams are closed by attempting to write again (should throw exception)
+    an[Exception] should be thrownBy {
+      buffer.write("more data")
+      buffer.flush()
+    }
   }
 
   "getColumnsSchema" should "parse table schema correctly" in {

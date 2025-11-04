@@ -198,7 +198,7 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
       .map(x => (x.getString(0), x.getInt(1), x.getDecimal(2)))
       .collect()
       .sortBy(_._2)
-    assert(orig.deep == result.deep)
+    assert(orig.sameElements(result))
   }
 
   "KustoSource" should "execute a read query on Kusto cluster in single mode" in {

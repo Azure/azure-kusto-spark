@@ -29,12 +29,16 @@
             <!--suppress MavenPropertyInParent -->
             <version>${revision}</version>
         </dependency>
-        <!-- https://mvnrepository.com/artifact/com.microsoft.azure/azure-eventhubs-spark -->
+        <!-- Azure EventHubs Spark Connector - Currently unavailable for Scala 2.13 / Spark 4.0
+             The azure-eventhubs-spark connector does not yet have a release for Scala 2.13.
+             This affects SparkStreamingKustoSink.scala sample only.
+             For EventHubs integration, consider using the newer azure-messaging-eventhubs library.
         <dependency>
             <groupId>com.microsoft.azure</groupId>
             <artifactId>azure-eventhubs-spark_${scala.version.major}</artifactId>
             <version>2.3.22</version>
         </dependency>
+        -->
         <dependency>
             <groupId>org.apache.spark</groupId>
             <artifactId>spark-sql_${scala.version.major}</artifactId>
@@ -53,6 +57,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
+                <version>${maven.compile.plugin.version}</version>
                 <configuration>
                     <source>8</source>
                     <target>8</target>
@@ -61,6 +66,7 @@
             <plugin>
                 <groupId>org.antipathy</groupId>
                 <artifactId>mvn-scalafmt_${scala.version.major}</artifactId>
+                <version>1.1.1640084764.9f463a9</version>
                 <configuration>
                     <configLocation>${project.parent.basedir}/.scalafmt.conf</configLocation> <!-- path to config -->
                 </configuration>

@@ -18,15 +18,15 @@
         <slf4j.version>2.0.17</slf4j.version>
 
         <!-- Provided-scoped dependency versions (provided by runtime/Spark/Hadoop) -->
-        <scala.version.major>2.12</scala.version.major>
-        <scala.version.minor>17</scala.version.minor>
-        <spark.version.major>3.0</spark.version.major>
-        <spark.version.minor>3</spark.version.minor>
+        <scala.version.major>2.13</scala.version.major>
+        <scala.version.minor>16</scala.version.minor>
+        <spark.version.major>4.0</spark.version.major>
+        <spark.version.minor>0</spark.version.minor>
         <hadoop.version>3.4.1</hadoop.version>
 
         <!-- Test-scoped dependency versions -->
         <awaitility.version>4.3.0</awaitility.version>
-        <mockito.version>4.11.0</mockito.version>
+        <mockito.version>5.2.0</mockito.version>
         <scalamock.version>5.2.0</scalamock.version>
         <scalatest.version>3.2.17</scalatest.version>
         <scalatest.maven.version>2.2.0</scalatest.maven.version>
@@ -38,7 +38,7 @@
         <typelevel.scalafix.version>0.5.0</typelevel.scalafix.version>
 
         <!-- Build & plugin versions and general build properties -->
-        <maven.compile.plugin.version>3.10.1</maven.compile.plugin.version>
+        <maven.compile.plugin.version>3.13.0</maven.compile.plugin.version>
         <maven.flatten.version>1.4.1</maven.flatten.version>
         <maven.jar.plugin.version>3.3.0</maven.jar.plugin.version>
         <maven.shade.plugin.version>3.6.0</maven.shade.plugin.version>
@@ -48,8 +48,8 @@
         <scala.maven.plugin.version>4.9.5</scala.maven.plugin.version>
         <scalastyle.maven.plugin.version>1.0.0</scalastyle.maven.plugin.version>
         <xml.maven.plugin.version>1.1.0</xml.maven.plugin.version>
-        <java.source.version>1.8</java.source.version>
-        <java.target.version>1.8</java.target.version>
+        <java.source.version>21</java.source.version>
+        <java.target.version>21</java.target.version>
     </properties>
     <inceptionYear>2018</inceptionYear>
     <scm>

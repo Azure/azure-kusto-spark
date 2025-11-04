@@ -180,7 +180,7 @@ class KustoPruneAndFilterE2E extends AnyFlatSpec with BeforeAndAfterAll {
       .sortBy(_._2)
 
     // Verify correctness, without pruning and filtering
-    assert(orig.deep == result.deep)
+    assert(orig.sameElements(result))
 
     val dfResultPruned = spark.read
       .kusto(kustoTestConnectionOptions.cluster, kustoTestConnectionOptions.database, query, conf)
@@ -193,7 +193,7 @@ class KustoPruneAndFilterE2E extends AnyFlatSpec with BeforeAndAfterAll {
     val origPruned = orig.map(x => x._1).sorted
 
     assert(dfResultPruned.length == origPruned.length)
-    assert(origPruned.deep == dfResultPruned.deep)
+    assert(origPruned.sameElements(dfResultPruned))
 
     // Cleanup
     KustoTestUtils.tryDropAllTablesByPrefix(
@@ -268,7 +268,7 @@ class KustoPruneAndFilterE2E extends AnyFlatSpec with BeforeAndAfterAll {
       .sortBy(x => x.getAs[Int](1))
 
     val expected = Array(Row("row-20", 20), Row("row-21", 21))
-    assert(dfFiltered.deep == expected.deep)
+    assert(dfFiltered.sameElements(expected))
 
     // Cleanup
     KustoTestUtils.tryDropAllTablesByPrefix(

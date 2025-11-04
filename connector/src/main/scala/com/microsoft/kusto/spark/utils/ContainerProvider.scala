@@ -167,7 +167,7 @@ class ContainerProvider(
       className,
       s"Got ${storage.length} storage SAS with command :'$command'. from service 'ingest-$clusterAlias'")
     lastRefresh = Instant.now(Clock.systemUTC())
-    storageUris = scala.util.Random.shuffle(storage)
+    storageUris = scala.util.Random.shuffle(storage.toSeq)
     roundRobinIdx = 0
     storage(roundRobinIdx)
   }
