@@ -34,44 +34,38 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
       maybeExceptionThrown: Option[Throwable] = None,
       getRMOccurances: Int = 1): ExtendedKustoClient = {
     val mockIngestClient: QueuedIngestClient = mock[QueuedIngestClient]
-    
-    // Instead of mocking IngestionResourceManager with Mockito,
-    // create a stub implementation
-    val mockIngestionResourceManager = new IngestionResourceManager(null, null) {
-      override def getShuffledContainers: java.util.List[ContainerWithSas] = {
+    val mockIngestionResourceManager: IngestionResourceManager =
+      Mockito.mock[IngestionResourceManager](classOf[IngestionResourceManager])
+        
         maybeExceptionThrown match {
-          case Some(exception) =>
-            throw exception
-          case None =>
+      case Some(exception) =>
+        Mockito
+          .when(mockIngestionResourceManager.getShuffledContainers)
+          .thenThrow(
+            exception,
+            exception,
+            exception,
+            exception,
+            exception,
+            exception,
+            exception,
+            exception)
+          . // throws exception 8 times due to retry
+          thenAnswer(_ => List(getMockContainerWithSas(1), getMockContainerWithSas(2)).asJava)
+      case None =>
             if (hasEmptyResults) {
-              Collections.emptyList()
+          Mockito
+            .when(mockIngestionResourceManager.getShuffledContainers)
+            .thenAnswer(_ => Collections.EMPTY_LIST)
             } else {
-              // Create real ContainerWithSas objects
-              val container1Url = "https://sacc1.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0"
-              val container2Url = "https://sacc2.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0"
-              val sas = "?sv=2018-03-28&sr=c&sp=rw"
-              
-              val blob1 = new com.azure.storage.blob.BlobContainerAsyncClientBuilder()
-                .endpoint(container1Url)
-                .buildAsyncClient()
-              val blob2 = new com.azure.storage.blob.BlobContainerAsyncClientBuilder()
-                .endpoint(container2Url)
-                .buildAsyncClient()
-              
-              java.util.Arrays.asList(
-                new ContainerWithSas(blob1, sas),
-                new ContainerWithSas(blob2, sas)
-              )
+          Mockito
+            .when(mockIngestionResourceManager.getShuffledContainers)
+            .thenAnswer(_ => List(getMockContainerWithSas(1), getMockContainerWithSas(2)).asJava)
             }
         }
-      }
-    }
-    
-    (mockIngestClient.getResourceManager _)
-      .expects()
-      .repeated(getRMOccurances)
-      .returning(mockIngestionResourceManager)
-      
+    // Expecting getResourceManager to be called maxCommandsRetryAttempts i.e. 8 times.
+    mockIngestClient.getResourceManager _ expects () repeated getRMOccurances times () returning mockIngestionResourceManager
+    // Unfortunately we cannot Mock this class as there is a member variable that is a val and cannot be mocked
     new ExtendedKustoClient(
       new ConnectionStringBuilder("https://somecluster.eastus.kusto.windows.net/"),
       new ConnectionStringBuilder("https://ingest-somecluster.eastus.kusto.windows.net"),
@@ -93,7 +87,6 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
     Mockito.when(mockResultsOne.getSas).thenAnswer(_ => "?sv=2018-03-28&sr=c&sp=rw")
     Mockito.when(mockResultsOne.getAsyncContainer).thenAnswer(_ => blobResultsOne)
     mockResultsOne
-
   }
   // happy path
   "ContainerProvider returns a container" should "from RM" in {
@@ -187,7 +180,7 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
       .getContainer() should have message "IOError when trying to retrieve CloudInfo"
   }
 
-    it should "generate new SAS token when cache is expired" in {
+  it should "generate new SAS token when cache is expired" in {
     val ingestionContainer1 =
       "https://custom.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0"
     val ingestionStorageParam =
