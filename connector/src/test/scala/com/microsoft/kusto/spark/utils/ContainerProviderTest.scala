@@ -21,7 +21,7 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
 import java.util.Collections
-import scala.collection.JavaConverters.seqAsJavaListConverter
+import scala.jdk.CollectionConverters._
 
 class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
   private val CACHE_EXPIRY_SEC = 30
@@ -64,7 +64,10 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
             }
         }
     // Expecting getResourceManager to be called maxCommandsRetryAttempts i.e. 8 times.
-    mockIngestClient.getResourceManager _ expects () repeated getRMOccurances times () returning mockIngestionResourceManager
+    (mockIngestClient.getResourceManager _)
+      .expects()
+      .repeated(getRMOccurances)
+      .returning(mockIngestionResourceManager)
     // Unfortunately we cannot Mock this class as there is a member variable that is a val and cannot be mocked
     new ExtendedKustoClient(
       new ConnectionStringBuilder("https://somecluster.eastus.kusto.windows.net/"),
