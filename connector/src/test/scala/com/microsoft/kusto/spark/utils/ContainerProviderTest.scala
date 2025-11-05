@@ -79,17 +79,25 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
   }
 
   private def getMockContainerWithSas(index: Int): ContainerWithSas = {
-    val mockResultsOne: ContainerWithSas =
-      Mockito.mock[ContainerWithSas](classOf[ContainerWithSas])
-    val blobResultsOne: BlobContainerAsyncClient =
-      Mockito.mock[BlobContainerAsyncClient](classOf[BlobContainerAsyncClient])
-    Mockito
-      .when(blobResultsOne.getBlobContainerUrl)
-      .thenAnswer(_ =>
-        s"https://sacc$index.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0")
-    Mockito.when(mockResultsOne.getSas).thenAnswer(_ => "?sv=2018-03-28&sr=c&sp=rw")
-    Mockito.when(mockResultsOne.getAsyncContainer).thenAnswer(_ => blobResultsOne)
-    mockResultsOne
+    // Use Mockito.mock with lenient settings to work around Java 21 module restrictions
+    // Set withoutInvocationListeners to reduce byte-buddy instrumentation
+    val mockContainer = Mockito.mock(
+      classOf[ContainerWithSas],
+      Mockito.withSettings().lenient())
+    
+    val containerUrl = s"https://sacc$index.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0"
+    val sas = "?sv=2018-03-28&sr=c&sp=rw"
+    
+    // Mock the getAsyncContainer to return a minimal mock
+    val mockBlobContainer = Mockito.mock(
+      classOf[BlobContainerAsyncClient],
+      Mockito.withSettings().lenient())
+    
+    Mockito.when(mockBlobContainer.getBlobContainerUrl).thenReturn(containerUrl)
+    Mockito.when(mockContainer.getAsyncContainer).thenReturn(mockBlobContainer)
+    Mockito.when(mockContainer.getSas).thenReturn(sas)
+    
+    mockContainer
   }
   // happy path
   "ContainerProvider returns a container" should "from RM" in {
