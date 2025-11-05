@@ -36,8 +36,8 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
     val mockIngestClient: QueuedIngestClient = mock[QueuedIngestClient]
     val mockIngestionResourceManager: IngestionResourceManager =
       Mockito.mock[IngestionResourceManager](classOf[IngestionResourceManager])
-        
-        maybeExceptionThrown match {
+
+    maybeExceptionThrown match {
       case Some(exception) =>
         Mockito
           .when(mockIngestionResourceManager.getShuffledContainers)
@@ -53,16 +53,16 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
           . // throws exception 8 times due to retry
           thenAnswer(_ => List(getMockContainerWithSas(1), getMockContainerWithSas(2)).asJava)
       case None =>
-            if (hasEmptyResults) {
+        if (hasEmptyResults) {
           Mockito
             .when(mockIngestionResourceManager.getShuffledContainers)
             .thenAnswer(_ => Collections.EMPTY_LIST)
-            } else {
+        } else {
           Mockito
             .when(mockIngestionResourceManager.getShuffledContainers)
             .thenAnswer(_ => List(getMockContainerWithSas(1), getMockContainerWithSas(2)).asJava)
-            }
         }
+    }
     // Expecting getResourceManager to be called maxCommandsRetryAttempts i.e. 8 times.
     (mockIngestClient.getResourceManager _)
       .expects()
@@ -79,12 +79,13 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
   }
 
   // Test stub to avoid Mockito issues with Java 21 module system
-  private class TestContainerWithSas(index: Int) extends ContainerWithSas(
-    s"https://sacc$index.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0?sv=2018-03-28&sr=c&sp=rw",
-    null) {
-    
+  private class TestContainerWithSas(index: Int)
+      extends ContainerWithSas(
+        s"https://sacc$index.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0?sv=2018-03-28&sr=c&sp=rw",
+        null) {
+
     private val sasToken = "?sv=2018-03-28&sr=c&sp=rw"
-    
+
     override def getSas: String = sasToken
   }
 
@@ -201,33 +202,30 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
     val cacheTimeoutSec = 3
     // Create a testable subclass that tracks calls
     var generateCallCount = 0
-    val containerProvider = new ContainerProvider(
-      extendedMockClient,
-      clusterAlias,
-      command,
-      cacheTimeoutSec) {
-      override def generateSasKey(
-          cacheExpirySeconds: Long,
-          listPermissions: Boolean,
-          ingestionStorageParameter: IngestionStorageParameters): String = {
-        generateCallCount = generateCallCount + 1
-        s"?mockedSasToken-$generateCallCount"
+    val containerProvider =
+      new ContainerProvider(extendedMockClient, clusterAlias, command, cacheTimeoutSec) {
+        override def generateSasKey(
+            cacheExpirySeconds: Long,
+            listPermissions: Boolean,
+            ingestionStorageParameter: IngestionStorageParameters): String = {
+          generateCallCount = generateCallCount + 1
+          s"?mockedSasToken-$generateCallCount"
+        }
       }
-    }
-    
+
     // First call should generate a new SAS token
     containerProvider.getContainer(Some(arrIngestionStorageParams)).sas should equal(
       "?mockedSasToken-1")
     generateCallCount should equal(1)
-    
+
     // Second call should return from cache (no new generation)
     containerProvider.getContainer(Some(arrIngestionStorageParams)).sas should equal(
       "?mockedSasToken-1")
     generateCallCount should equal(1) // Should still be 1 (from cache)
-    
+
     // Wait for cache to expire
     Thread.sleep((cacheTimeoutSec + 1) * 1000)
-    
+
     // Third call should generate a new SAS token (cache expired)
     containerProvider.getContainer(Some(arrIngestionStorageParams)).sas should equal(
       "?mockedSasToken-2")
