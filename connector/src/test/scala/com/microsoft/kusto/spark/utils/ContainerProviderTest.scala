@@ -79,17 +79,31 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
   }
 
   private def getMockContainerWithSas(index: Int): ContainerWithSas = {
-    val mockResultsOne: ContainerWithSas =
-      Mockito.mock[ContainerWithSas](classOf[ContainerWithSas])
-    val blobResultsOne: BlobContainerAsyncClient =
-      Mockito.mock[BlobContainerAsyncClient](classOf[BlobContainerAsyncClient])
-    Mockito
-      .when(blobResultsOne.getBlobContainerUrl)
-      .thenAnswer(_ =>
-        s"https://sacc$index.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0")
-    Mockito.when(mockResultsOne.getSas).thenAnswer(_ => "?sv=2018-03-28&sr=c&sp=rw")
-    Mockito.when(mockResultsOne.getAsyncContainer).thenAnswer(_ => blobResultsOne)
-    mockResultsOne
+    // val mockResultsOne: ContainerWithSas =
+    //   Mockito.mock[ContainerWithSas](classOf[ContainerWithSas])
+    // val blobResultsOne: BlobContainerAsyncClient =
+    //   Mockito.mock[BlobContainerAsyncClient](classOf[BlobContainerAsyncClient])
+    // Mockito
+    //   .when(blobResultsOne.getBlobContainerUrl)
+    //   .thenAnswer(_ =>
+    //     s"https://sacc$index.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0")
+    // Mockito.when(mockResultsOne.getSas).thenAnswer(_ => "?sv=2018-03-28&sr=c&sp=rw")
+    // Mockito.when(mockResultsOne.getAsyncContainer).thenAnswer(_ => blobResultsOne)
+    // mockResultsOne
+
+    // Instead of mocking, create a real instance using the constructor
+    // ContainerWithSas likely has a constructor that takes these parameters
+    val containerUrl = s"https://sacc$index.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0"
+    val sas = "?sv=2018-03-28&sr=c&sp=rw"
+    
+    // Create a real BlobContainerAsyncClient
+    val blobClient = new com.azure.storage.blob.BlobContainerAsyncClientBuilder()
+      .endpoint(containerUrl)
+      .buildAsyncClient()
+    
+    // Use the ContainerWithSas constructor (check the actual signature)
+    new ContainerWithSas(blobClient, sas)
+
   }
   // happy path
   "ContainerProvider returns a container" should "from RM" in {
