@@ -245,6 +245,7 @@ private[kusto] object KustoReader {
       .map(params =>
         s"wasbs://${params.blobContainer}" +
           s"@${params.storageAccountName}.blob.${storage.endpointSuffix}/$directory")
+      .toIndexedSeq
     KDSU.logInfo(
       className,
       s"Finished exporting from Kusto to ${paths.mkString(",")}" +

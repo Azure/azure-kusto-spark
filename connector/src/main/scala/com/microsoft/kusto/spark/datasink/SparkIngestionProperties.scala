@@ -29,7 +29,7 @@ class SparkIngestionProperties(
     var csvMappingNameReference: String = null)
     extends Serializable {
   // C'tor for serialization
-  def this() {
+  def this() = {
     this(false)
   }
 

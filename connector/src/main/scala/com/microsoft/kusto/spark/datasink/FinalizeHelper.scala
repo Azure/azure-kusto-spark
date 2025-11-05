@@ -26,7 +26,7 @@ import org.apache.spark.util.CollectionAccumulator
 
 import java.time.Instant
 import java.util.concurrent.TimeUnit
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.{Await, Future, TimeoutException}
 

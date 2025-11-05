@@ -192,7 +192,8 @@ private[kusto] object CslCommandsGenerator {
           .exists(compressed => "none".equalsIgnoreCase(compressed))) ""
       else "compressed"
     val additionalOptionsString = additionalExportOptions
-      .filterKeys(key => !defaultKeySet.contains(key))
+      .view.filterKeys(key => !defaultKeySet.contains(key))
+      .toMap
       .map { case (k, v) =>
         s"""$k="$v""""
       }

@@ -12,7 +12,7 @@ import org.apache.spark.sql.types.{StructType, _}
 import java.sql.Timestamp
 import java.time.Instant
 import java.util
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.collection.mutable
 
 object KustoResponseDeserializer {

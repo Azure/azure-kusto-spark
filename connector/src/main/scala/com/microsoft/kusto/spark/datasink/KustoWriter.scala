@@ -53,7 +53,7 @@ import java.time.{Clock, Duration, Instant}
 import java.util
 import java.util.zip.GZIPOutputStream
 import java.util.{TimeZone, UUID}
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.{Failure, Success, Try}
 import java.time.ZoneId
@@ -275,7 +275,7 @@ object KustoWriter {
       KDSU.logWarn(
         className,
         s"sink to Kusto table '${parameters.coordinates.table.get}' with no rows to write " +
-          s"on partition ${TaskContext.getPartitionId} $batchIdForTracing")
+          s"on partition ${TaskContext.getPartitionId()} $batchIdForTracing")
     } else {
       val ingestionProperties = getIngestionProperties(
         parameters.writeOptions,
@@ -478,7 +478,7 @@ object KustoWriter {
               className,
               e,
               "Streaming ingestion in partition " +
-                s"${TaskContext.getPartitionId.toString} for requestId: '${writeOptions.requestId} failed")
+                s"${TaskContext.getPartitionId().toString} for requestId: '${writeOptions.requestId} failed")
         }
       },
       this.retryConfig,
@@ -491,7 +491,7 @@ object KustoWriter {
       partitionsResults: CollectionAccumulator[PartitionResult],
       ingestionProperties: IngestionProperties,
       parameters: KustoWriteResource): Unit = {
-    val partitionId = TaskContext.getPartitionId
+    val partitionId = TaskContext.getPartitionId()
     KDSU.logInfo(
       className,
       s"Processing partition: '$partitionId' in requestId: '${parameters.writeOptions.requestId}'$batchIdForTracing")
@@ -563,8 +563,8 @@ object KustoWriter {
       ingestionProperties: IngestionProperties,
       partitionsResults: CollectionAccumulator[PartitionResult],
       batchIdForTracing: String): Unit = {
-    val partitionId = TaskContext.getPartitionId
-    val partitionIdString = TaskContext.getPartitionId.toString
+    val partitionId = TaskContext.getPartitionId()
+    val partitionIdString = TaskContext.getPartitionId().toString
     val taskMap = new ConcurrentHashMap[String, BlobWriteResource]()
 
     def ingest(

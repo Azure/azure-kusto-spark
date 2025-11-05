@@ -23,7 +23,7 @@ import org.apache.http.conn.HttpHostConnectException
 import java.time.{Clock, Instant, OffsetDateTime}
 import java.util.concurrent.ConcurrentHashMap
 import java.util.function.Predicate
-import scala.collection.JavaConverters.asScalaBufferConverter
+import scala.jdk.CollectionConverters.ListHasAsScala
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
