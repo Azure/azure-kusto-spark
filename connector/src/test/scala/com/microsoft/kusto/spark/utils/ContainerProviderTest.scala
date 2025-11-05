@@ -78,26 +78,18 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
     }
   }
 
+  // Test stub to avoid Mockito issues with Java 21 module system
+  private class TestContainerWithSas(index: Int) extends ContainerWithSas(
+    s"https://sacc$index.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0?sv=2018-03-28&sr=c&sp=rw",
+    null) {
+    
+    private val sasToken = "?sv=2018-03-28&sr=c&sp=rw"
+    
+    override def getSas: String = sasToken
+  }
+
   private def getMockContainerWithSas(index: Int): ContainerWithSas = {
-    // Use Mockito.mock with lenient settings to work around Java 21 module restrictions
-    // Set withoutInvocationListeners to reduce byte-buddy instrumentation
-    val mockContainer = Mockito.mock(
-      classOf[ContainerWithSas],
-      Mockito.withSettings().lenient())
-    
-    val containerUrl = s"https://sacc$index.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0"
-    val sas = "?sv=2018-03-28&sr=c&sp=rw"
-    
-    // Mock the getAsyncContainer to return a minimal mock
-    val mockBlobContainer = Mockito.mock(
-      classOf[BlobContainerAsyncClient],
-      Mockito.withSettings().lenient())
-    
-    Mockito.when(mockBlobContainer.getBlobContainerUrl).thenReturn(containerUrl)
-    Mockito.when(mockContainer.getAsyncContainer).thenReturn(mockBlobContainer)
-    Mockito.when(mockContainer.getSas).thenReturn(sas)
-    
-    mockContainer
+    new TestContainerWithSas(index)
   }
   // happy path
   "ContainerProvider returns a container" should "from RM" in {
