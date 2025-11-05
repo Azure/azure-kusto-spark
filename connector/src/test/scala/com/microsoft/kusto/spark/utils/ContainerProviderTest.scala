@@ -94,9 +94,6 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
     Mockito.when(mockResultsOne.getAsyncContainer).thenAnswer(_ => blobResultsOne)
     mockResultsOne
 
-    Instead of mocking, create a real instance using the constructor
-    ContainerWithSas likely has a constructor that takes these parameters
-
   }
   // happy path
   "ContainerProvider returns a container" should "from RM" in {
