@@ -34,41 +34,44 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
       maybeExceptionThrown: Option[Throwable] = None,
       getRMOccurances: Int = 1): ExtendedKustoClient = {
     val mockIngestClient: QueuedIngestClient = mock[QueuedIngestClient]
-    val mockIngestionResourceManager: IngestionResourceManager =
-      Mockito.mock[IngestionResourceManager](classOf[IngestionResourceManager])
-
-    maybeExceptionThrown match {
-      case Some(exception) =>
-        Mockito
-          .when(mockIngestionResourceManager.getShuffledContainers)
-          .thenThrow(
-            exception,
-            exception,
-            exception,
-            exception,
-            exception,
-            exception,
-            exception,
-            exception)
-          . // throws exception 8 times due to retry
-          thenAnswer(_ => List(getMockContainerWithSas(1), getMockContainerWithSas(2)).asJava)
-      case None =>
-        if (hasEmptyResults) {
-          Mockito
-            .when(mockIngestionResourceManager.getShuffledContainers)
-            .thenAnswer(_ => Collections.EMPTY_LIST)
-        } else {
-          Mockito
-            .when(mockIngestionResourceManager.getShuffledContainers)
-            .thenAnswer(_ => List(getMockContainerWithSas(1), getMockContainerWithSas(2)).asJava)
+    
+    // Instead of mocking IngestionResourceManager with Mockito,
+    // create a stub implementation
+    val mockIngestionResourceManager = new IngestionResourceManager(null, null) {
+      override def getShuffledContainers: java.util.List[ContainerWithSas] = {
+        maybeExceptionThrown match {
+          case Some(exception) =>
+            throw exception
+          case None =>
+            if (hasEmptyResults) {
+              Collections.emptyList()
+            } else {
+              // Create real ContainerWithSas objects
+              val container1Url = "https://sacc1.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0"
+              val container2Url = "https://sacc2.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0"
+              val sas = "?sv=2018-03-28&sr=c&sp=rw"
+              
+              val blob1 = new com.azure.storage.blob.BlobContainerAsyncClientBuilder()
+                .endpoint(container1Url)
+                .buildAsyncClient()
+              val blob2 = new com.azure.storage.blob.BlobContainerAsyncClientBuilder()
+                .endpoint(container2Url)
+                .buildAsyncClient()
+              
+              java.util.Arrays.asList(
+                new ContainerWithSas(blob1, sas),
+                new ContainerWithSas(blob2, sas)
+              )
+            }
         }
+      }
     }
-    // Expecting getResourceManager to be called maxCommandsRetryAttempts i.e. 8 times.
+    
     (mockIngestClient.getResourceManager _)
       .expects()
       .repeated(getRMOccurances)
       .returning(mockIngestionResourceManager)
-    // Unfortunately we cannot Mock this class as there is a member variable that is a val and cannot be mocked
+      
     new ExtendedKustoClient(
       new ConnectionStringBuilder("https://somecluster.eastus.kusto.windows.net/"),
       new ConnectionStringBuilder("https://ingest-somecluster.eastus.kusto.windows.net"),
@@ -79,30 +82,20 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
   }
 
   private def getMockContainerWithSas(index: Int): ContainerWithSas = {
-    // val mockResultsOne: ContainerWithSas =
-    //   Mockito.mock[ContainerWithSas](classOf[ContainerWithSas])
-    // val blobResultsOne: BlobContainerAsyncClient =
-    //   Mockito.mock[BlobContainerAsyncClient](classOf[BlobContainerAsyncClient])
-    // Mockito
-    //   .when(blobResultsOne.getBlobContainerUrl)
-    //   .thenAnswer(_ =>
-    //     s"https://sacc$index.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0")
-    // Mockito.when(mockResultsOne.getSas).thenAnswer(_ => "?sv=2018-03-28&sr=c&sp=rw")
-    // Mockito.when(mockResultsOne.getAsyncContainer).thenAnswer(_ => blobResultsOne)
-    // mockResultsOne
+    val mockResultsOne: ContainerWithSas =
+      Mockito.mock[ContainerWithSas](classOf[ContainerWithSas])
+    val blobResultsOne: BlobContainerAsyncClient =
+      Mockito.mock[BlobContainerAsyncClient](classOf[BlobContainerAsyncClient])
+    Mockito
+      .when(blobResultsOne.getBlobContainerUrl)
+      .thenAnswer(_ =>
+        s"https://sacc$index.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0")
+    Mockito.when(mockResultsOne.getSas).thenAnswer(_ => "?sv=2018-03-28&sr=c&sp=rw")
+    Mockito.when(mockResultsOne.getAsyncContainer).thenAnswer(_ => blobResultsOne)
+    mockResultsOne
 
-    // Instead of mocking, create a real instance using the constructor
-    // ContainerWithSas likely has a constructor that takes these parameters
-    val containerUrl = s"https://sacc$index.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0"
-    val sas = "?sv=2018-03-28&sr=c&sp=rw"
-    
-    // Create a real BlobContainerAsyncClient
-    val blobClient = new com.azure.storage.blob.BlobContainerAsyncClientBuilder()
-      .endpoint(containerUrl)
-      .buildAsyncClient()
-    
-    // Use the ContainerWithSas constructor (check the actual signature)
-    new ContainerWithSas(blobClient, sas)
+    Instead of mocking, create a real instance using the constructor
+    ContainerWithSas likely has a constructor that takes these parameters
 
   }
   // happy path
