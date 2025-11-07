@@ -3,7 +3,6 @@
 
 package com.microsoft.kusto.spark.datasink
 
-
 import java.io.CharArrayWriter
 import java.math.BigInteger
 import java.time.temporal.ChronoUnit
