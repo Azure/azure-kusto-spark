@@ -674,7 +674,7 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>${maven.compile.plugin.version}</version>
                 <configuration>
-     <release>21</release>
+                    <release>${java.source.version}</release>
                 </configuration>
             </plugin>
             <plugin>
