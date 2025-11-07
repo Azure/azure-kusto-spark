@@ -9,9 +9,9 @@
     <version>${revision}</version>
     <properties>
         <!-- Compile-scoped dependency versions -->
-        <revision>6.0.0</revision>
+        <revision>7.0.0</revision>
         <kusto.shade.prefix>kusto_connector_shaded</kusto.shade.prefix>
-        <azure.bom.version>1.2.28</azure.bom.version>
+        <azure.bom.version>1.3.2</azure.bom.version>
         <azure.storage.version>8.6.6</azure.storage.version>
         <fasterxml.jackson.version>2.19.2</fasterxml.jackson.version>
         <kusto.sdk.version>7.0.3</kusto.sdk.version>
@@ -31,8 +31,8 @@
         <scalatest.version>3.2.17</scalatest.version>
         <scalatest.maven.version>2.2.0</scalatest.maven.version>
         <specs2.version>3.6.5</specs2.version>
-        <scalafix.core.version>0.11.1</scalafix.core.version>
-        <scalafix.version>0.1.8_0.11.0</scalafix.version>
+        <scalafix.core.version>0.14.4</scalafix.core.version>
+        <scalafix.version>0.1.10_0.14.2</scalafix.version>
         <scala.rewrites.version>0.1.5</scala.rewrites.version>
         <scalafmt.plugin.version>1.1.1640084764.9f463a9</scalafmt.plugin.version>
         <typelevel.scalafix.version>0.5.0</typelevel.scalafix.version>
