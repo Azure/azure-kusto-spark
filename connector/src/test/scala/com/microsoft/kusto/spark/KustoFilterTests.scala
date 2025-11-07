@@ -165,7 +165,7 @@ class KustoFilterTests extends AnyFlatSpec with MockFactory with Matchers {
       StructType(Seq(StructField("ColA", StringType), StructField("ColB", IntegerType)))
     val filters: Array[Filter] =
       Array(StringEndsWith("ColA", "EndingString"), LessThanOrEqual("ColB", 5))
-    val expr = KustoFilter.buildFiltersClause(testSchema, filters)
+    val expr = KustoFilter.buildFiltersClause(testSchema, filters.toIndexedSeq)
 
     expr shouldBe " | where ['ColA'] endswith_cs 'EndingString' and ['ColB'] <= 5"
   }
@@ -175,7 +175,7 @@ class KustoFilterTests extends AnyFlatSpec with MockFactory with Matchers {
       StructType(Seq(StructField("ColA", StringType), StructField("ColB", IntegerType)))
     val filters: Array[Filter] =
       Array(StringEndsWith("ColA", "EndingString"), LessThanOrEqual("ColNotInTheSchema", 5))
-    val expr = KustoFilter.buildFiltersClause(testSchema, filters)
+    val expr = KustoFilter.buildFiltersClause(testSchema, filters.toIndexedSeq)
 
     expr shouldBe " | where ['ColA'] endswith_cs 'EndingString'"
   }

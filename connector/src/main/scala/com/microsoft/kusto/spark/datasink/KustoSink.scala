@@ -10,10 +10,9 @@ import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import org.apache.spark.sql.execution.streaming.Sink
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.DataFrame
 
 class KustoSink(
-    sqlContext: SQLContext,
     tableCoordinates: KustoCoordinates,
     authentication: KustoAuthentication,
     writeOptions: WriteOptions,

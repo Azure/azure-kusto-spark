@@ -15,7 +15,6 @@ import com.microsoft.kusto.spark.datasource.{
 }
 import com.microsoft.kusto.spark.utils.KustoClientCache.ClusterAndAuth
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
-import org.apache.spark.SparkContext
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.sql.{SQLContext, SparkSession}
 import org.scalamock.scalatest.MockFactory
@@ -38,7 +37,6 @@ class KustoSourceTests extends AnyFlatSpec with MockFactory with Matchers with B
     .master(f"local[$nofExecutors]")
     .getOrCreate()
 
-  private var sc: SparkContext = _
   private var sqlContext: SQLContext = _
   private val cluster: String = "KustoCluster"
   private val database: String = "KustoDatabase"
@@ -49,15 +47,11 @@ class KustoSourceTests extends AnyFlatSpec with MockFactory with Matchers with B
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-
-    sc = spark.sparkContext
     sqlContext = spark.sqlContext
   }
 
   override def afterAll(): Unit = {
     super.afterAll()
-
-    // sc.stop()
   }
 
   "KustoDataSource" should "recognize Kusto and get the correct schema" in {
