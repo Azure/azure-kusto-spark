@@ -22,8 +22,7 @@ import com.microsoft.kusto.spark.sql.extension.SparkExtension._
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
 import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.hadoop.util.ComparableVersion
-import org.apache.spark.SparkContext
-import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode, SparkSession}
+import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.flatspec.AnyFlatSpec
 
@@ -44,25 +43,15 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
     .appName("KustoSink")
     .master(f"local[$nofExecutors]")
     .getOrCreate()
-  private var sc: SparkContext = _
-  private var sqlContext: SQLContext = _
-
   private val table =
     KustoQueryUtils.simplifyName(s"KustoSparkReadWriteTest_${UUID.randomUUID()}")
   private val className = this.getClass.getSimpleName
-  private lazy val ingestUrl =
-    new StringBuffer(KDSU.getEngineUrlFromAliasIfNeeded(kustoConnectionOptions.cluster)).toString
-      .replace("https://", "https://ingest-")
 
   private lazy val maybeKustoAdminClient: Option[Client] = Some(
     ClientFactory.createClient(
       ConnectionStringBuilder.createWithAadAccessTokenAuthentication(
         kustoConnectionOptions.cluster,
         kustoConnectionOptions.accessToken)))
-
-  private lazy val maybeKustoDmClient: Option[Client] = Some(
-    ClientFactory.createClient(ConnectionStringBuilder
-      .createWithAadAccessTokenAuthentication(ingestUrl, kustoConnectionOptions.accessToken)))
 
   private val loggingLevel: Option[String] = Option(System.getProperty("logLevel"))
   loggingLevel match {
@@ -72,8 +61,6 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
   }
   override def beforeAll(): Unit = {
     super.beforeAll()
-    sc = spark.sparkContext
-    sqlContext = spark.sqlContext
     Try(
       maybeKustoAdminClient.get.executeMgmt(
         kustoConnectionOptions.database,
@@ -108,7 +95,6 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
         }
       case None => KDSU.logWarn(className, s"Admin client is null, could not drop table $table ")
     }
-    // sc.stop()
   }
 
   // Init dataFrame

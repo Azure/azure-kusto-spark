@@ -3,7 +3,6 @@
 
 package com.microsoft.kusto.spark.utils
 
-import com.azure.storage.blob.BlobContainerAsyncClient
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.Client
 import com.microsoft.azure.kusto.ingest.exceptions.IngestionServiceException
@@ -11,9 +10,7 @@ import com.microsoft.azure.kusto.ingest.resources.ContainerWithSas
 import com.microsoft.azure.kusto.ingest.{IngestionResourceManager, QueuedIngestClient}
 import com.microsoft.kusto.spark.datasink.IngestionStorageParameters
 import com.microsoft.kusto.spark.exceptions.NoStorageContainersException
-import org.mockito.ArgumentMatchers.{any, anyBoolean, anyLong}
 import org.mockito.Mockito
-import org.mockito.Mockito.{doAnswer, spy}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalamock.scalatest.MockFactory

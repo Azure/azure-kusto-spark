@@ -18,7 +18,7 @@ import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreatio
 import com.microsoft.kusto.spark.datasink.WriteMode.WriteMode
 import com.microsoft.kusto.spark.exceptions.SchemaMatchException
 import com.microsoft.kusto.spark.utils.DataTypeMapping.getSparkTypeToKustoTypeMap
-import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import org.apache.spark.sql.types.StructType
 
 object KustoIngestionUtils {
   private[kusto] def adjustSchema(

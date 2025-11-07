@@ -10,7 +10,6 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
-import org.mockito.Mockito._
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
@@ -83,7 +82,7 @@ class WriterTests extends AnyFlatSpec with Matchers {
     val byteArrayOutputStream = new ByteArrayOutputStream()
     val streamWriter = new OutputStreamWriter(byteArrayOutputStream)
     val writer = new BufferedWriter(streamWriter)
-    var csvWriter = CountingWriter(writer)
+    val csvWriter = CountingWriter(writer)
     RowCSVWriterUtils.writeRowAsCSV(
       dfRow,
       df.schema,
@@ -115,19 +114,6 @@ class WriterTests extends AnyFlatSpec with Matchers {
   }
 
   "finalizeFileWrite" should "should flush and close buffers" in {
-    /*val gzip = mock(classOf[GZIPOutputStream])
-    val buffer = mock(classOf[BufferedWriter])
-    val csvWriter = CountingWriter(buffer)
-
-    val fileWriteResource = BlobWriteResource(buffer, gzip, csvWriter, null, null)
-    KustoWriter.finalizeBlobWrite(fileWriteResource)
-
-    verify(gzip, times(1)).flush()
-    verify(gzip, times(1)).close()
-
-    verify(buffer, times(1)).flush()
-    verify(buffer, times(1)).close()*/
-
     val byteArrayOutputStream = new ByteArrayOutputStream()
     val gzip = new GZIPOutputStream(byteArrayOutputStream)
     val outputStreamWriter = new OutputStreamWriter(gzip, StandardCharsets.UTF_8)
@@ -136,12 +122,9 @@ class WriterTests extends AnyFlatSpec with Matchers {
 
     // Write some data to ensure the streams are actually working
     buffer.write("test data")
-
     val fileWriteResource = BlobWriteResource(buffer, gzip, csvWriter, null, null)
-
     // Before finalize, the output should be empty or incomplete (buffered)
-    val beforeFinalize = byteArrayOutputStream.size()
-
+    val _ = byteArrayOutputStream.size()
     // Finalize should flush and close everything
     KustoWriter.finalizeBlobWrite(fileWriteResource)
 
@@ -272,10 +255,10 @@ class WriterTests extends AnyFlatSpec with Matchers {
       StructType(WriterTests.asSchema(someDecimalSchema)))
 
     val dfRow: InternalRow = df.queryExecution.toRdd.collect().head
-    val dfRow2 = dateDf.queryExecution.toRdd.collect.head
-    val dfRows3 = emptyArraysDf.queryExecution.toRdd.collect
-    val dfRows4 = someDecimalDf.queryExecution.toRdd.collect
-    val dfRows5 = otherDecimalDf.queryExecution.toRdd.collect
+    val dfRow2 = dateDf.queryExecution.toRdd.collect().head
+    val dfRows3 = emptyArraysDf.queryExecution.toRdd.collect()
+    val dfRows4 = someDecimalDf.queryExecution.toRdd.collect()
+    val dfRows5 = otherDecimalDf.queryExecution.toRdd.collect()
 
     val byteArrayOutputStream = new ByteArrayOutputStream()
     val streamWriter = new OutputStreamWriter(byteArrayOutputStream)

@@ -569,7 +569,6 @@ object KustoWriter {
 
     def ingest(
         blobResource: BlobWriteResource,
-        size: Long,
         sas: String,
         flushImmediately: Boolean = false,
         blobUUID: String,
@@ -670,7 +669,6 @@ object KustoWriter {
             finalizeBlobWrite(blobWriter)
             ingest(
               blobWriter,
-              blobWriter.csvWriter.getCounter,
               blobWriter.sas,
               flushImmediately =
                 !parameters.writeOptions.kustoCustomDebugWriteOptions.disableFlushImmediately,
@@ -693,7 +691,6 @@ object KustoWriter {
       } else {
         ingest(
           lastBlobWriter,
-          lastBlobWriter.csvWriter.getCounter,
           lastBlobWriter.sas,
           flushImmediately = false,
           curBlobUUID,
@@ -703,7 +700,7 @@ object KustoWriter {
     if (parameters.writeOptions.kustoCustomDebugWriteOptions.ensureNoDuplicatedBlobs && taskMap
         .size() > 0) {
       taskMap.forEach((uuid, bw) => {
-        ingest(bw, bw.csvWriter.getCounter, bw.sas, flushImmediately = false, uuid, kustoClient)
+        ingest(bw, bw.sas, flushImmediately = false, uuid, kustoClient)
       })
     }
   }
