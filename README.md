@@ -21,6 +21,12 @@ This connector works with the following spark environments:
 
 ## Changelog
 
+**⚠️ Breaking changes in versions 7.x** - Apache Spark 4.0 upgrade. This version is NOT backward compatible with Spark 3.x runtimes. See compatibility notice above.
+
+- ✅ **Spark 4.0+**: Supported (Scala 2.13, Java 21)
+- ❌ **Spark 3.x**: NOT supported - use connector version 6.x or earlier
+
+
 **Breaking changes in versions 5.2.x** - From these versions, the published packages are shaded and packaged as a self contained jar. This is to avoid issues with common OSS libraries, spark runtimes and/or application dependencies.
 
 For major changes from previous releases, please refer to [Releases](https://github.com/Azure/azure-kusto-spark/releases).
