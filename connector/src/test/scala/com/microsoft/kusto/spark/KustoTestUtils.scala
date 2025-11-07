@@ -31,7 +31,7 @@ import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
 
 import java.security.InvalidParameterException
 import java.util.{Collections, UUID}
-import scala.collection.JavaConverters.asScalaBufferConverter
+import scala.jdk.CollectionConverters.ListHasAsScala
 import scala.collection.mutable
 import scala.concurrent.TimeoutException
 import scala.util.Try

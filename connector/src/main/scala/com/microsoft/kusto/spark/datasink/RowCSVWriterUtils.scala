@@ -3,9 +3,7 @@
 
 package com.microsoft.kusto.spark.datasink
 
-import com.microsoft.kusto.spark.datasink.KustoWriter.className
-
-import java.io.{ByteArrayOutputStream, CharArrayWriter, PrintStream}
+import java.io.CharArrayWriter
 import java.math.BigInteger
 import java.time.temporal.ChronoUnit
 import java.time.{Instant, LocalDateTime, ZoneId}
@@ -15,8 +13,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils, MapData}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
-import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST, KustoDataSourceUtils => KDSU}
 
 object RowCSVWriterUtils {
   def writeRowAsCSV(

@@ -17,7 +17,7 @@ class TransientStorageParameters(
     var endpointSuffix: String = KustoDataSourceUtils.DefaultDomainPostfix) {
 
   // C'tor for serialization
-  def this() {
+  def this() = {
     this(Array())
   }
 
@@ -46,7 +46,7 @@ final case class TransientStorageCredentials() {
   var sasUrl: String = _
   var domainSuffix: String = _
 
-  def this(storageAccountName: String, storageAccountKey: String, blobContainer: String) {
+  def this(storageAccountName: String, storageAccountKey: String, blobContainer: String) = {
     this()
     this.blobContainer = blobContainer
     this.storageAccountName = storageAccountName
@@ -54,7 +54,7 @@ final case class TransientStorageCredentials() {
     validate()
   }
 
-  def this(sas: String) {
+  def this(sas: String) = {
     this()
     sasUrl = sas
     parseSas(sas)

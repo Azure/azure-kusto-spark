@@ -28,7 +28,6 @@ import com.microsoft.kusto.spark.utils.{
   KustoQueryUtils,
   KustoDataSourceUtils => KDSU
 }
-import org.apache.spark.SparkContext
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.functions.lit
@@ -38,16 +37,13 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.prop.TableDrivenPropertyChecks
 import org.scalatest.prop.Tables.Table
 
-import java.{lang, util}
 import java.math.{BigDecimal, RoundingMode}
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.stream.Collectors
 import scala.collection.immutable
-import scala.concurrent.duration.SECONDS
 
 class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
   private val className = this.getClass.getSimpleName
@@ -91,19 +87,16 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
     .getOrCreate()
 
   private lazy val kustoTestConnectionOptions = getSystemTestOptions
-  private var sc: SparkContext = _
   private var sqlContext: SQLContext = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
 
-    sc = spark.sparkContext
     sqlContext = spark.sqlContext
   }
 
   override def afterAll(): Unit = {
     super.afterAll()
-    // sc.stop()
   }
 
   val expectedNumberOfRows: Int = 1 * 1000

@@ -44,7 +44,7 @@ class IngestionStorageParameters(
     val sas: String)
     extends Serializable {
   // C'tor for serialization
-  def this() {
+  def this() = {
     this("", "", "", "")
   }
 

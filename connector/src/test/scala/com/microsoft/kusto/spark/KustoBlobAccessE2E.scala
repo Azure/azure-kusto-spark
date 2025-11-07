@@ -30,7 +30,7 @@ import org.scalatest.flatspec.AnyFlatSpec
 
 import java.security.InvalidParameterException
 import java.util.UUID
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 class KustoBlobAccessE2E extends AnyFlatSpec with BeforeAndAfterAll {
   private val myName = this.getClass.getSimpleName

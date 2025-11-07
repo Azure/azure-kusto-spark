@@ -14,15 +14,13 @@ import com.microsoft.kusto.spark.datasink.{
   WriteMode
 }
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
-import org.apache.spark.SparkContext
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.sql.types.DataTypes.IntegerType
 import org.apache.spark.sql.types.{StringType, StructType}
-import org.apache.spark.sql.{SQLContext, SparkSession}
+import org.apache.spark.sql.SparkSession
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.flatspec.AnyFlatSpec
 
-import java.security.InvalidParameterException
 import java.util.UUID
 
 class KustoSinkStreamingE2E extends AnyFlatSpec with BeforeAndAfterAll {
@@ -34,18 +32,13 @@ class KustoSinkStreamingE2E extends AnyFlatSpec with BeforeAndAfterAll {
     .appName("KustoSink")
     .master("local[4]")
     .getOrCreate()
-  private var sc: SparkContext = _
-  private var sqlContext: SQLContext = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    sc = spark.sparkContext
-    sqlContext = spark.sqlContext
   }
 
   override def afterAll(): Unit = {
     super.afterAll()
-    // sc.stop()
   }
   private lazy val kustoTestConnectionOptions = getSystemTestOptions
   val csvPath: String = System.getProperty("path", "connector/src/test/resources/TestData/csv")
@@ -67,7 +60,7 @@ class KustoSinkStreamingE2E extends AnyFlatSpec with BeforeAndAfterAll {
 
     val consoleQ = csvDf.writeStream
       .format("console")
-      .trigger(Trigger.Once)
+      .trigger(Trigger.AvailableNow())
     consoleQ.start()
 
     val sp = new SparkIngestionProperties
@@ -88,7 +81,7 @@ class KustoSinkStreamingE2E extends AnyFlatSpec with BeforeAndAfterAll {
         KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS -> SinkTableCreationMode.CreateIfNotExist.toString,
         KustoDebugOptions.KUSTO_ENSURE_NO_DUPLICATED_BLOBS -> true.toString,
         KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON -> sp.toString))
-      .trigger(Trigger.Once)
+      .trigger(Trigger.AvailableNow())
 
     kustoQ.start().awaitTermination(sleepTimeTillTableCreate)
 
@@ -121,7 +114,7 @@ class KustoSinkStreamingE2E extends AnyFlatSpec with BeforeAndAfterAll {
 
     val consoleQ = csvDf.writeStream
       .format("console")
-      .trigger(Trigger.Once)
+      .trigger(Trigger.AvailableNow())
 
     consoleQ.start().awaitTermination()
 
@@ -135,7 +128,7 @@ class KustoSinkStreamingE2E extends AnyFlatSpec with BeforeAndAfterAll {
         KustoSinkOptions.KUSTO_DATABASE -> kustoTestConnectionOptions.database,
         KustoSinkOptions.KUSTO_AAD_APP_ID -> kustoTestConnectionOptions.accessToken,
         KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC -> "true"))
-      .trigger(Trigger.Once)
+      .trigger(Trigger.AvailableNow())
 
     kustoQ.start().awaitTermination()
 
@@ -179,7 +172,7 @@ class KustoSinkStreamingE2E extends AnyFlatSpec with BeforeAndAfterAll {
         KustoSinkOptions.KUSTO_DATABASE -> kustoTestConnectionOptions.database,
         KustoSinkOptions.KUSTO_ACCESS_TOKEN -> kustoTestConnectionOptions.accessToken,
         KustoSinkOptions.KUSTO_WRITE_MODE -> WriteMode.KustoStreaming.toString))
-      .trigger(Trigger.Once)
+      .trigger(Trigger.AvailableNow())
 
     kustoQ.start().awaitTermination()
 
@@ -212,7 +205,7 @@ class KustoSinkStreamingE2E extends AnyFlatSpec with BeforeAndAfterAll {
         KustoSinkOptions.KUSTO_ACCESS_TOKEN -> kustoTestConnectionOptions.accessToken,
         KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS -> SinkTableCreationMode.CreateIfNotExist.toString,
         KustoSinkOptions.KUSTO_WRITE_MODE -> WriteMode.KustoStreaming.toString))
-      .trigger(Trigger.Once)
+      .trigger(Trigger.AvailableNow())
     kustoQ.start().awaitTermination()
     KustoTestUtils.validateResultsAndCleanup(
       kustoAdminClient,

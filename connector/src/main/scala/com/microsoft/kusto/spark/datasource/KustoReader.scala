@@ -6,7 +6,7 @@ package com.microsoft.kusto.spark.datasource
 import com.azure.core.credential.AzureSasCredential
 import com.azure.storage.blob.BlobContainerClientBuilder
 import com.azure.storage.common.StorageSharedKeyCredential
-import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties, KustoResultSetTable}
+import com.microsoft.azure.kusto.data.{ClientRequestProperties, KustoResultSetTable}
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasource.ReadMode.ReadMode
@@ -14,7 +14,6 @@ import com.microsoft.kusto.spark.utils.{
   CslCommandsGenerator,
   ExtendedKustoClient,
   KustoAzureFsSetupCache,
-  KustoBlobStorageUtils,
   KustoDataSourceUtils => KDSU
 }
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -245,6 +244,7 @@ private[kusto] object KustoReader {
       .map(params =>
         s"wasbs://${params.blobContainer}" +
           s"@${params.storageAccountName}.blob.${storage.endpointSuffix}/$directory")
+      .toIndexedSeq
     KDSU.logInfo(
       className,
       s"Finished exporting from Kusto to ${paths.mkString(",")}" +

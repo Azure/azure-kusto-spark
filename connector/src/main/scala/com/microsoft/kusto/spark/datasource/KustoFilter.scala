@@ -16,7 +16,7 @@ object KustoFilter {
       filtering: KustoFiltering): String = {
     originalQuery + KustoFilter.buildFiltersClause(
       kustoSchema.sparkSchema,
-      filtering.filters) + KustoFilter.buildColumnsClause(
+      filtering.filters.toIndexedSeq) + KustoFilter.buildColumnsClause(
       filtering.columns,
       kustoSchema.toStringCastedColumns)
   }
