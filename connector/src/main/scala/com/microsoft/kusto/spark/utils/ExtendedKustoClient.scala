@@ -46,7 +46,7 @@ import org.apache.log4j.Level
 import org.apache.spark.sql.types.StructType
 
 import java.time.{Duration, Instant, OffsetDateTime}
-import java.util.{StringJoiner, UUID}
+import java.util.{Objects, StringJoiner, UUID}
 import scala.collection.JavaConverters._
 import scala.concurrent.duration.FiniteDuration
 
