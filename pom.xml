@@ -9,7 +9,7 @@
     <version>${revision}</version>
     <properties>
         <!-- Compile-scoped dependency versions -->
-        <revision>6.0.0</revision>
+        <revision>6.0.1</revision>
         <kusto.shade.prefix>kusto_connector_shaded</kusto.shade.prefix>
         <azure.bom.version>1.2.28</azure.bom.version>
         <azure.storage.version>8.6.6</azure.storage.version>
