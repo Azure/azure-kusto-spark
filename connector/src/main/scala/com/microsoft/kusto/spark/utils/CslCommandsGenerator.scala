@@ -124,11 +124,17 @@ private[kusto] object CslCommandsGenerator {
       batchSize: Option[Int],
       isDestinationTableMaterializedViewSource: Boolean = false): String = {
     val withClause =
-      if (batchSize.isDefined)
+      if (batchSize.isDefined) {
         s"""with(extentsShowFilteringRuntimePolicy='{"MaximumResultsCount":${batchSize.get}}')"""
-      else ""
+      } else {
+        ""
+      }
     val setNewIngestionTime: String =
-      if (isDestinationTableMaterializedViewSource) "with(SetNewIngestionTime=true)" else ""
+      if (isDestinationTableMaterializedViewSource) {
+        "with(SetNewIngestionTime=true)"
+      } else {
+        ""
+      }
     s""".move async extents to table $destinationTableName $setNewIngestionTime with(extentCreatedOnFrom='${timerange(
         0)}', extentCreatedOnTo='${timerange(1)}') <|
        .show table $sourceTableName extents $withClause;
@@ -176,8 +182,11 @@ private[kusto] object CslCommandsGenerator {
         storage.authMethod match {
           case AuthMethod.Key => s""";" h@"${storage.storageAccountKey}""""
           case AuthMethod.Sas =>
-            if (storage.sasKey(0) == '?') s"""" h@"${storage.sasKey}""""
-            else s"""?" h@"${storage.sasKey}""""
+            if (storage.sasKey(0) == '?') {
+              s"""" h@"${storage.sasKey}""""
+            } else {
+              s"""?" h@"${storage.sasKey}""""
+            }
           case AuthMethod.Impersonation =>
             s"""${TransientStorageParameters.ImpersonationString}""""
         }
@@ -189,9 +198,12 @@ private[kusto] object CslCommandsGenerator {
     val compress =
       if (additionalExportOptions
           .get("compressed")
-          .exists(compressed => "none".equalsIgnoreCase(compressed))) ""
-      else "compressed"
-    val additionalOptionsString = additionalExportOptions
+          .exists(compressed => "none".equalsIgnoreCase(compressed))) {
+        ""
+      } else {
+        "compressed"
+      }
+    val additionalOptionsString = additionalExportOptions.view
       .filterKeys(key => !defaultKeySet.contains(key))
       .map { case (k, v) =>
         s"""$k="$v""""
@@ -234,9 +246,11 @@ private[kusto] object CslCommandsGenerator {
       period: String,
       recoverable: Boolean): String = {
     s""".alter table ${KustoQueryUtils.normalizeTableName(
-        tmpTableName)} policy retention '{ "SoftDeletePeriod": "$period", "Recoverability":"${if (recoverable)
+        tmpTableName)} policy retention '{ "SoftDeletePeriod": "$period", "Recoverability":"${if (recoverable) {
         "Enabled"
-      else "Disabled"}" }' """
+      } else {
+        "Disabled"
+      }}" }' """
   }
 
   def generateTableAlterAutoDeletePolicy(tmpTableName: String, expiryDate: Instant): String = {
@@ -269,7 +283,7 @@ private[kusto] object CslCommandsGenerator {
   }
 
   def generateExtentTagsDropByPrefixCommand(tableName: String, prefix: String): String = {
-    s""".drop async extent tags <|
+    s""".drop async table $tableName extent tags <|
          .show table $tableName extents
          | where isnotempty(Tags)
          | extend Tags = split(Tags, '\\r\\n')
