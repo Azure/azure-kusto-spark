@@ -200,7 +200,7 @@ private[kusto] object CslCommandsGenerator {
         "compressed"
       }
     val additionalOptionsString = additionalExportOptions
-      .filterKeys(key => !defaultKeySet.contains(key))
+      .filter { case (k, _) => !defaultKeySet.contains(k) }
       .map { case (k, v) =>
         s"""$k="$v""""
       }
