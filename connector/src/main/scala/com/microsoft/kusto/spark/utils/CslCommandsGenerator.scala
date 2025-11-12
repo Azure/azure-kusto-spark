@@ -98,10 +98,6 @@ private[kusto] object CslCommandsGenerator {
     s""".show materialized-views | where SourceTable == '$destinationTableName' | count"""
   }
 
-  def generateIsTableEngineV3(tableName: String): String = {
-    s""".show table ${tableName} details | project todynamic(ShardingPolicy).UseShardEngine"""
-  }
-
   def generateTableMoveExtentsCommand(
       sourceTableName: String,
       destinationTableName: String,
