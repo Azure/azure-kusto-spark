@@ -267,6 +267,18 @@ private[kusto] object KustoReader {
             config.set(
               s"fs.azure.account.key.${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}",
               s"${storage.storageAccountKey}")
+            config.set("fs.azure.account.hns.enabled", "false")
+            config.set(
+              "fs.defaultFS",
+              s"abfss://${storage.blobContainer}@${storage.storageAccountName}.${storageParameters.endpointSuffix}")
+            config.set("fs.azure.fns.account.service.type", "BLOB")
+            config.set("fs.azure.account.auth.type", "SAS")
+            config.set(
+              s"fs.azure.sas.${storage.blobContainer}.${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}",
+              s"${storage.sasKey}")
+            config.set(
+              "fs.azure.sas.token.provider.type",
+              "org.apache.hadoop.fs.azurebfs.extensions.SASTokenProvider")
           }
         case AuthMethod.Sas =>
           if (!KustoAzureFsSetupCache.updateAndGetPrevSas(
