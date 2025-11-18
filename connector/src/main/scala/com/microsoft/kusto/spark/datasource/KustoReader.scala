@@ -181,7 +181,7 @@ private[kusto] object KustoReader {
       endpointSuffix: String): Boolean = {
     if (params.authMethod == AuthMethod.Impersonation) {
       val url =
-        s"wasbs://${params.blobContainer}@${params.storageAccountName}.blob.$endpointSuffix"
+        s"abfs://${params.blobContainer}@${params.storageAccountName}.blob.$endpointSuffix"
       val hadoopConf = spark.sparkContext.hadoopConfiguration
       val fs = FileSystem.get(new URI(url), hadoopConf)
 
@@ -275,8 +275,25 @@ private[kusto] object KustoReader {
               storage.sasKey,
               now)) {
             config.set(
-              s"fs.azure.sas.${storage.blobContainer}.${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}",
+              s"fs.azure.sas.fixed.token.${storage.blobContainer}.${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}",
               s"${storage.sasKey}")
+            config.set(
+              s"fs.azure.sas.${storage.blobContainer}.${storage.storageAccountName}",
+              s"${storage.sasKey}")
+            config.set(
+              "fs.azure.account.hns.enabled","false")
+            config.set(
+              "fs.defaultFS",s"abfss://${storage.blobContainer}@${storage.storageAccountName}.${storageParameters.endpointSuffix}")
+            config.set(
+              "fs.azure.fns.account.service.type","BLOB")
+            config.set(
+              "fs.azure.account.auth.type","SAS")
+            config.set(
+              s"fs.azure.sas.${storage.blobContainer}.${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}",
+              s"${storage.sasKey}"
+            )
+            config.set(
+              "fs.azure.sas.token.provider.type","org.apache.hadoop.fs.azurebfs.extensions.SASTokenProvider")
           }
         case _ =>
       }
