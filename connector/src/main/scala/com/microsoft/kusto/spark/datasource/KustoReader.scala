@@ -10,12 +10,7 @@ import com.microsoft.azure.kusto.data.{ClientRequestProperties, KustoResultSetTa
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasource.ReadMode.ReadMode
-import com.microsoft.kusto.spark.utils.{
-  CslCommandsGenerator,
-  ExtendedKustoClient,
-  KustoAzureFsSetupCache,
-  KustoDataSourceUtils => KDSU
-}
+import com.microsoft.kusto.spark.utils.{CslCommandsGenerator, ExtendedKustoClient, KustoAzureFsSetupCache, KustoDataSourceUtils => KDSU}
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.util.ComparableVersion
 import org.apache.spark.Partition
@@ -184,7 +179,6 @@ private[kusto] object KustoReader {
         s"abfs://${params.blobContainer}@${params.storageAccountName}.blob.$endpointSuffix"
       val hadoopConf = spark.sparkContext.hadoopConfiguration
       val fs = FileSystem.get(new URI(url), hadoopConf)
-
       val path = new Path(url + s"/$directory")
       fs.exists(path)
     } else {
@@ -238,11 +232,10 @@ private[kusto] object KustoReader {
         options,
         filtering)
     }
-
     val paths = storage.storageCredentials
       .filter(params => dirExist(request.sparkSession, params, directory, storage.endpointSuffix))
       .map(params =>
-        s"wasbs://${params.blobContainer}" +
+        s"abfs://${params.blobContainer}" +
           s"@${params.storageAccountName}.blob.${storage.endpointSuffix}/$directory")
       .toIndexedSeq
     KDSU.logInfo(
@@ -268,17 +261,6 @@ private[kusto] object KustoReader {
               s"fs.azure.account.key.${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}",
               s"${storage.storageAccountKey}")
             config.set("fs.azure.account.hns.enabled", "false")
-            config.set(
-              "fs.defaultFS",
-              s"abfss://${storage.blobContainer}@${storage.storageAccountName}.${storageParameters.endpointSuffix}")
-            config.set("fs.azure.fns.account.service.type", "BLOB")
-            config.set("fs.azure.account.auth.type", "SAS")
-            config.set(
-              s"fs.azure.sas.${storage.blobContainer}.${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}",
-              s"${storage.sasKey}")
-            config.set(
-              "fs.azure.sas.token.provider.type",
-              "org.apache.hadoop.fs.azurebfs.extensions.SASTokenProvider")
           }
         case AuthMethod.Sas =>
           if (!KustoAzureFsSetupCache.updateAndGetPrevSas(
@@ -287,25 +269,9 @@ private[kusto] object KustoReader {
               storage.sasKey,
               now)) {
             config.set(
-              s"fs.azure.sas.fixed.token.${storage.blobContainer}.${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}",
-              s"${storage.sasKey}")
-            config.set(
-              s"fs.azure.sas.${storage.blobContainer}.${storage.storageAccountName}",
-              s"${storage.sasKey}")
-            config.set(
-              "fs.azure.account.hns.enabled","false")
-            config.set(
-              "fs.defaultFS",s"abfss://${storage.blobContainer}@${storage.storageAccountName}.${storageParameters.endpointSuffix}")
-            config.set(
-              "fs.azure.fns.account.service.type","BLOB")
-            config.set(
-              "fs.azure.account.auth.type","SAS")
-            config.set(
               s"fs.azure.sas.${storage.blobContainer}.${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}",
-              s"${storage.sasKey}"
-            )
-            config.set(
-              "fs.azure.sas.token.provider.type","org.apache.hadoop.fs.azurebfs.extensions.SASTokenProvider")
+              s"${storage.sasKey}")
+            config.set("fs.azure.account.hns.enabled","false")
           }
         case _ =>
       }
