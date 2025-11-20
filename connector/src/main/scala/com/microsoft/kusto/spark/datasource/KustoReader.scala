@@ -181,7 +181,7 @@ private[kusto] object KustoReader {
       endpointSuffix: String): Boolean = {
     if (params.authMethod == AuthMethod.Impersonation) {
       val url =
-        s"wasbs://${params.blobContainer}@${params.storageAccountName}.blob.$endpointSuffix"
+        s"abfs://${params.blobContainer}@${params.storageAccountName}.blob.$endpointSuffix"
       val hadoopConf = spark.sparkContext.hadoopConfiguration
       val fs = FileSystem.get(new URI(url), hadoopConf)
 
@@ -242,7 +242,7 @@ private[kusto] object KustoReader {
     val paths = storage.storageCredentials
       .filter(params => dirExist(request.sparkSession, params, directory, storage.endpointSuffix))
       .map(params =>
-        s"wasbs://${params.blobContainer}" +
+        s"abfs://${params.blobContainer}" +
           s"@${params.storageAccountName}.blob.${storage.endpointSuffix}/$directory")
       .toIndexedSeq
     KDSU.logInfo(
@@ -277,6 +277,24 @@ private[kusto] object KustoReader {
             config.set(
               s"fs.azure.sas.${storage.blobContainer}.${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}",
               s"${storage.sasKey}")
+            config.set("fs.azure.account.auth.type","SAS")
+            val sasWithoutQuestionMark =
+              if (storage.sasKey.startsWith("?")) storage.sasKey.substring(1) else storage.sasKey
+            config.set(s"fs.azure.sas.fixed.token.${storage.blobContainer}.${storage.storageAccountName}",sasWithoutQuestionMark)
+            // Add these lines inside the setupBlobAccess method, after obtaining 'config'
+            config.set("fs.azure.account.hns.enabled", "false")
+            config.set("fs.defaultFS", s"abfss://${storage.blobContainer}@${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}")
+            config.set("fs.azure.fns.account.service.type", "BLOB")
+
+            request.sparkSession.conf.set(
+              s"fs.azure.sas.${storage.blobContainer}.${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}",
+              s"${storage.sasKey}")
+            request.sparkSession.conf.set("fs.azure.account.auth.type","SAS")
+            request.sparkSession.conf.set(s"fs.azure.sas.fixed.token.${storage.blobContainer}.${storage.storageAccountName}",sasWithoutQuestionMark)
+            // Add these lines inside the setupBlobAccess method, after obtaining 'config'
+            request.sparkSession.conf.set("fs.azure.account.hns.enabled", "false")
+            request.sparkSession.conf.set("fs.defaultFS", s"abfss://${storage.blobContainer}@${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}")
+            request.sparkSession.conf.set("fs.azure.fns.account.service.type", "BLOB")
           }
         case _ =>
       }
