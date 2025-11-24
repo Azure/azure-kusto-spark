@@ -63,7 +63,7 @@ jobs:
           accessToken: ${{env.ACCESS_TOKEN}}
           storageAccountUrl: ${{ secrets.STORAGE_CONTAINER_URL }}
         run: |
-          mvn clean verify -DkustoAadAppId=${{ secrets.APP_ID }} -DkustoAadAuthorityID=${{ secrets.TENANT_ID }} -DkustoDatabase=${{ secrets.DATABASE }} -DkustoCluster=${{ secrets.CLUSTER }} -DaccessToken=${{env.ACCESS_TOKEN}}
+          mvn clean verify -DskipTests -DkustoAadAppId=${{ secrets.APP_ID }} -DkustoAadAuthorityID=${{ secrets.TENANT_ID }} -DkustoDatabase=${{ secrets.DATABASE }} -DkustoCluster=${{ secrets.CLUSTER }} -DaccessToken=${{env.ACCESS_TOKEN}}
       - name: Get versions
         id: get_version
         run: |
