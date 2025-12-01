@@ -73,8 +73,7 @@ class DefaultSource
       if (sinkParameters.writeOptions.writeResultLimit.equalsIgnoreCase(
           KustoSinkOptions.NONE_RESULT_LIMIT)) {
         None
-      }
-      else {
+      } else {
         try {
           Some(sinkParameters.writeOptions.writeResultLimit.toInt)
         } catch {

@@ -198,8 +198,7 @@ private[kusto] case class KustoRelation(
     val getSchemaQuery =
       if (KustoQueryUtils.isQuery(query)) {
         KustoQueryUtils.getQuerySchemaQuery(normalizedQuery)
-      }
-      else {
+      } else {
         ""
       }
     if (getSchemaQuery.isEmpty) {
