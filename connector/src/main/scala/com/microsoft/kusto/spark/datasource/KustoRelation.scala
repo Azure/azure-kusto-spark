@@ -196,8 +196,12 @@ private[kusto] case class KustoRelation(
       throw new InvalidParameterException("Query is empty")
     }
     val getSchemaQuery =
-      if (KustoQueryUtils.isQuery(query)) KustoQueryUtils.getQuerySchemaQuery(normalizedQuery)
-      else ""
+      if (KustoQueryUtils.isQuery(query)) {
+        KustoQueryUtils.getQuerySchemaQuery(normalizedQuery)
+      }
+      else {
+        ""
+      }
     if (getSchemaQuery.isEmpty) {
       throw new RuntimeException(
         "Spark connector cannot run Kusto commands. Please provide a valid query")

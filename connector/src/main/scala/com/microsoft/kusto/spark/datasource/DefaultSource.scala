@@ -36,9 +36,9 @@ class DefaultSource
   var keyVaultAuthentication: Option[KeyVaultAuthentication] = None
   var clientRequestProperties: Option[ClientRequestProperties] = None
   var requestId: Option[String] = None
-  val myName: String = this.getClass.getSimpleName
+  private val className: String = this.getClass.getSimpleName
 
-  def initCommonParams(sourceParams: SourceParameters): Unit = {
+  private def initCommonParams(sourceParams: SourceParameters): Unit = {
     keyVaultAuthentication = sourceParams.keyVaultAuth
     kustoCoordinates = sourceParams.kustoCoordinates
     authenticationParameters = Some(sourceParams.authenticationParameters)
@@ -71,7 +71,9 @@ class DefaultSource
 
     val limit =
       if (sinkParameters.writeOptions.writeResultLimit.equalsIgnoreCase(
-          KustoSinkOptions.NONE_RESULT_LIMIT)) None
+          KustoSinkOptions.NONE_RESULT_LIMIT)) {
+        None
+      }
       else {
         try {
           Some(sinkParameters.writeOptions.writeResultLimit.toInt)
@@ -152,7 +154,7 @@ class DefaultSource
       TimeUnit.SECONDS)
 
     KDSU.logInfo(
-      myName,
+      className,
       s"Finished serializing parameters for reading: {requestId: $requestId, timeout: $timeout, readMode: ${readOptions.readMode
           .getOrElse("Default")}, clientRequestProperties: $clientRequestProperties")
     KustoRelation(
