@@ -15,7 +15,7 @@
         <azure.storage.version>8.6.6</azure.storage.version>
         <fasterxml.jackson.version>2.19.2</fasterxml.jackson.version>
         <java.source.version>21</java.source.version>
-        <kusto.sdk.version>7.0.3</kusto.sdk.version>
+        <kusto.sdk.version>7.0.4</kusto.sdk.version>
         <slf4j.version>2.0.17</slf4j.version>
 
         <!-- Provided-scoped dependency versions (provided by runtime/Spark/Hadoop) -->
