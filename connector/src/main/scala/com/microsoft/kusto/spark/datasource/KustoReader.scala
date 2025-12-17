@@ -260,7 +260,7 @@ private[kusto] object KustoReader {
       storageProtocol: String = "wasbs"): Unit = {
     val config = request.sparkSession.sparkContext.hadoopConfiguration
     val now = Instant.now(Clock.systemUTC())
-    val useAbfs = storageProtocol == "abfs"
+    val useAbfs = storageProtocol == "abfs" || storageProtocol == "abfss"
     
     for (storage <- storageParameters.storageCredentials) {
       storage.authMethod match {
@@ -291,11 +291,12 @@ private[kusto] object KustoReader {
               // ABFS SAS token configuration
               config.set(
                 "fs.azure.account.auth.type", "SAS")
+              config.set(s"fs.azure.account.hns.enabled.${storage.storageAccountName}.blob.core.windows.net", "false")
               config.set("fs.azure.account.hns.enabled", "false")
-              config.set(s"fs.azure.sas.fixed.token.${storage.blobContainer}.${storage.storageAccountName}",
-                s"${storage.sasKey}")
               config.set(
                 s"fs.azure.sas.${storage.blobContainer}.${storage.storageAccountName}.dfs.${storageParameters.endpointSuffix}",
+                s"${storage.sasKey}")
+              config.set(s"fs.azure.sas.fixed.token.${storage.blobContainer}.${storage.storageAccountName}.dfs.${storageParameters.endpointSuffix}",
                 s"${storage.sasKey}")
             } else {
               // WASBS SAS token configuration

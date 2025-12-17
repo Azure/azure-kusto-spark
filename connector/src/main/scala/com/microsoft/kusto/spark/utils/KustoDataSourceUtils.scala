@@ -137,9 +137,9 @@ object KustoDataSourceUtils {
     val storageProtocol = parameters.get(KustoSourceOptions.STORAGE_PROTOCOL) match {
       case Some(protocol) =>
         val normalizedProtocol = protocol.trim.toLowerCase(Locale.ROOT)
-        if (normalizedProtocol != "wasbs" && normalizedProtocol != "abfs") {
+        if (normalizedProtocol != "wasbs" && normalizedProtocol != "abfs" && normalizedProtocol != "abfss") {
           val errorMessage = s"Invalid value for ${KustoSourceOptions.STORAGE_PROTOCOL}: '$protocol'. " +
-            s"Must be either 'wasbs' or 'abfs'."
+            s"Must be either 'wasbs', 'abfs', or 'abfss'."
           logError(className, errorMessage)
           throw new IllegalArgumentException(errorMessage)
         }

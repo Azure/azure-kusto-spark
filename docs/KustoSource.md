@@ -130,10 +130,14 @@ If set to 'true', query executed on kusto cluster will include the filters.
 
 * **STORAGE_PROTOCOL**:
   'storageProtocol' - Specifies the storage protocol to use when reading from blob storage in distributed mode. 
-  Valid values are 'wasbs' (Windows Azure Storage Blob Service) or 'abfs' (Azure Blob File System). 
+  Valid values are:
+  - 'wasbs' (Windows Azure Storage Blob Service) - default
+  - 'abfs' (Azure Blob File System over HTTP)
+  - 'abfss' (Azure Blob File System over HTTPS - recommended for secure connections)
+  
   Defaults to 'wasbs' if not specified.
   This option is only valid when using 'ForceDistributedMode' as the read mode.
-  Example: .option("storageProtocol", "abfs")
+  Example: .option("storageProtocol", "abfss")
   
   **Important**: This option can only be used with KUSTO_READ_MODE='ForceDistributedMode'. If specified with any other read mode, an error will be thrown.
  
