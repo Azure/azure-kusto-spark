@@ -243,7 +243,8 @@ private[kusto] object KustoReader {
     }
 
     val paths = storage.storageCredentials
-      .filter(params => dirExist(request.sparkSession, params, directory, storage.endpointSuffix, protocol))
+      .filter(params =>
+        dirExist(request.sparkSession, params, directory, storage.endpointSuffix, protocol))
       .map(params =>
         s"$protocol://${params.blobContainer}" +
           s"@${params.storageAccountName}.blob.${storage.endpointSuffix}/$directory")
@@ -259,9 +260,10 @@ private[kusto] object KustoReader {
       storageParameters: TransientStorageParameters,
       storageProtocol: String = "wasbs"): Unit = {
     val config = request.sparkSession.sparkContext.hadoopConfiguration
+    val sparkConf = request.sparkSession.conf
     val now = Instant.now(Clock.systemUTC())
     val useAbfs = storageProtocol == "abfs" || storageProtocol == "abfss"
-    
+
     for (storage <- storageParameters.storageCredentials) {
       storage.authMethod match {
         case AuthMethod.Key =>
@@ -288,16 +290,32 @@ private[kusto] object KustoReader {
               storage.sasKey,
               now)) {
             if (useAbfs) {
-              // ABFS SAS token configuration
+              // ABFS SAS token configuration - Hadoop configuration
+              config.set("fs.azure.account.auth.type", "SAS")
               config.set(
-                "fs.azure.account.auth.type", "SAS")
-              config.set(s"fs.azure.account.hns.enabled.${storage.storageAccountName}.blob.core.windows.net", "false")
+                s"fs.azure.account.hns.enabled.${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}",
+                "false")
               config.set("fs.azure.account.hns.enabled", "false")
               config.set(
-                s"fs.azure.sas.${storage.blobContainer}.${storage.storageAccountName}.dfs.${storageParameters.endpointSuffix}",
+                s"fs.azure.sas.${storage.blobContainer}.${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}",
                 s"${storage.sasKey}")
-              config.set(s"fs.azure.sas.fixed.token.${storage.blobContainer}.${storage.storageAccountName}.dfs.${storageParameters.endpointSuffix}",
+              config.set(
+                s"fs.azure.sas.fixed.token.${storage.blobContainer}.${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}",
                 s"${storage.sasKey}")
+              
+              // Start: ABFS SAS token configuration - Spark configuration
+              sparkConf.set("fs.azure.account.auth.type", "SAS")
+              sparkConf.set(
+                s"fs.azure.account.hns.enabled.${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}",
+                "false")
+              sparkConf.set("fs.azure.account.hns.enabled", "false")
+              sparkConf.set(
+                s"fs.azure.sas.${storage.blobContainer}.${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}",
+                s"${storage.sasKey}")
+              sparkConf.set(
+                s"fs.azure.sas.fixed.token.${storage.blobContainer}.${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}",
+                s"${storage.sasKey}")
+              // End: ABFS SAS token configuration - Spark configuration
             } else {
               // WASBS SAS token configuration
               config.set(
