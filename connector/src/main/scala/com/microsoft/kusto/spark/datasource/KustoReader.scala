@@ -272,10 +272,10 @@ private[kusto] object KustoReader {
               storage.storageAccountKey,
               now)) {
             if (useAbfs) {
-              // ABFS uses OAuth or SharedKey authentication
-              config.set(
-                s"fs.azure.account.key.${storage.storageAccountName}.dfs.${storageParameters.endpointSuffix}",
-                s"${storage.storageAccountKey}")
+              // ABFS with Account Key auth is not supported
+              throw new InvalidParameterException(
+                s"Storage protocol '$storageProtocol' with Account Key authentication is not supported yet. " +
+                  "Please use SAS based authentication or switch to 'wasbs' protocol.")
             } else {
               // WASBS uses the blob endpoint
               config.set(
@@ -290,7 +290,7 @@ private[kusto] object KustoReader {
               storage.sasKey,
               now)) {
             if (useAbfs) {
-              
+
               // Start: ABFS SAS token configuration - Spark configuration
               sparkConf.set("fs.azure.account.auth.type", "SAS")
               sparkConf.set(
