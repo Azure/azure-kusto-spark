@@ -48,7 +48,7 @@ class KustoDataSourceUtilsTest extends AnyFlatSpec with MockFactory {
       distributedReadModeTransientCacheEnabled = true,
       None,
       Map("sizeLimit" -> "250", "compressionType" -> "gzip", "async" -> "none"),
-      "abfss")
+      Some("abfss"))
     assert(actualReadOptions != null)
     assert(actualReadOptions == expectedResult)
   }
