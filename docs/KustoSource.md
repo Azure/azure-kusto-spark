@@ -135,11 +135,15 @@ If set to 'true', query executed on kusto cluster will include the filters.
   - 'abfs' (Azure Blob File System over HTTP)
   - 'abfss' (Azure Blob File System over HTTPS - recommended for secure connections)
   
-  Defaults to 'wasbs' if not specified.
+  Defaults to 'wasbs' if not specified. The default should work in most cases.
   This option is only valid when using 'ForceDistributedMode' as the read mode.
   Example: .option("storageProtocol", "abfss")
   
-  **Important**: This option can only be used with KUSTO_READ_MODE='ForceDistributedMode'. If specified with any other read mode, an error will be thrown.
+  **Important**: 
+  - This option can only be used with KUSTO_READ_MODE='ForceDistributedMode'. If specified with any other read mode, an error will be thrown.
+  - ABFS/ABFSS protocols require the platform to support Azure Hadoop libraries version >= 3.4.2
+  - If your platform does not support WASB (legacy blob storage), migrating to ABFS is recommended
+  - ABFS with Account Key authentication is not currently supported; use SAS authentication instead
  
 #### Transient Storage Parameters
 When reading data from Kusto in 'distributed' mode, the data is exported from Kusto into a blob storage every time the corresponding RDD is materialized.

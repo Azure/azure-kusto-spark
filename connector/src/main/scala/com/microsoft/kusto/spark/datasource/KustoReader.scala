@@ -14,6 +14,7 @@ import com.microsoft.kusto.spark.utils.{
   CslCommandsGenerator,
   ExtendedKustoClient,
   KustoAzureFsSetupCache,
+  KustoConstants => KCONST,
   KustoDataSourceUtils => KDSU
 }
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -180,7 +181,7 @@ private[kusto] object KustoReader {
       params: TransientStorageCredentials,
       directory: String,
       endpointSuffix: String,
-      storageProtocol: String = "wasbs"): Boolean = {
+      storageProtocol: String = KCONST.storageProtocolWasbs): Boolean = {
     if (params.authMethod == AuthMethod.Impersonation) {
       val url =
         s"$storageProtocol://${params.blobContainer}@${params.storageAccountName}.blob.$endpointSuffix"
@@ -225,7 +226,7 @@ private[kusto] object KustoReader {
       className,
       s"Starting exporting data from Kusto to blob storage in Distributed mode. requestId: ${request.requestId}")
 
-    val protocol = options.storageProtocol.getOrElse("wasbs")
+    val protocol = options.storageProtocol.getOrElse(KCONST.storageProtocolWasbs)
     setupBlobAccess(request, storage, protocol)
     val partitions = calculatePartitions(options.partitionOptions)
     val reader = new KustoReader(kustoClient)
@@ -258,11 +259,12 @@ private[kusto] object KustoReader {
   private[kusto] def setupBlobAccess(
       request: KustoReadRequest,
       storageParameters: TransientStorageParameters,
-      storageProtocol: String = "wasbs"): Unit = {
+      storageProtocol: String = KCONST.storageProtocolWasbs): Unit = {
     val config = request.sparkSession.sparkContext.hadoopConfiguration
     val sparkConf = request.sparkSession.conf
     val now = Instant.now(Clock.systemUTC())
-    val useAbfs = storageProtocol == "abfs" || storageProtocol == "abfss"
+    val useAbfs = KCONST.storageProtocolAbfs.equalsIgnoreCase(
+      storageProtocol) || KCONST.storageProtocolAbfss.equalsIgnoreCase(storageProtocol)
 
     for (storage <- storageParameters.storageCredentials) {
       storage.authMethod match {
