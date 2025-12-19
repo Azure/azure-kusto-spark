@@ -38,7 +38,8 @@ class KustoDataSourceUtilsTest extends AnyFlatSpec with MockFactory {
       KustoSourceOptions.KUSTO_AAD_APP_ID -> "AppId",
       KustoSourceOptions.KUSTO_AAD_APP_SECRET -> "AppKey",
       KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID -> "Tenant",
-      KustoSourceOptions.KUSTO_EXPORT_OPTIONS_JSON -> "{\"sizeLimit\":250,\"compressionType\":\"gzip\",\"async\":\"none\"}")
+      KustoSourceOptions.KUSTO_EXPORT_OPTIONS_JSON -> "{\"sizeLimit\":250,\"compressionType\":\"gzip\",\"async\":\"none\"}",
+      KustoSourceOptions.STORAGE_PROTOCOL -> "abfss")
     // a no interaction mock only for test
     val actualReadOptions = KustoDataSourceUtils.getReadParameters(conf, null)
     val expectedResult = KustoReadOptions(
@@ -46,7 +47,8 @@ class KustoDataSourceUtilsTest extends AnyFlatSpec with MockFactory {
       PartitionOptions(1, None, None),
       distributedReadModeTransientCacheEnabled = true,
       None,
-      Map("sizeLimit" -> "250", "compressionType" -> "gzip", "async" -> "none"))
+      Map("sizeLimit" -> "250", "compressionType" -> "gzip", "async" -> "none"),
+      "abfss")
     assert(actualReadOptions != null)
     assert(actualReadOptions == expectedResult)
   }
