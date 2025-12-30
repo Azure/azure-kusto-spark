@@ -40,6 +40,8 @@ object KustoSourceOptions extends KustoOptions {
   // rolled-out for export, this additional parameter can be used as options for the export.
   // Setting useNativeParquetWriter=true will fail for Spark versions < 3.3.0
   val KUSTO_EXPORT_OPTIONS_JSON: String = newOption("kustoExportOptionsJson")
+
+  val STORAGE_PROTOCOL: String = newOption("storageProtocol")
 }
 
 object ReadMode extends Enumeration {
