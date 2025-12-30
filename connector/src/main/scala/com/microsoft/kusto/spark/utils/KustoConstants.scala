@@ -41,6 +41,9 @@ object KustoConstants {
   val EmptyString = ""
   val QueueRetryAttempts = 1
   val SourceLocationColumnName = "ingestion_source_location_url_blob_internal"
+  val storageProtocolAbfs = "abfs"
+  val storageProtocolAbfss = "abfss"
+  val storageProtocolWasbs = "wasbs"
 
   object Schema {
     val NAME: String = "Name"

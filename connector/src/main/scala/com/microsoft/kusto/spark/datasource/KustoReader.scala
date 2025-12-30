@@ -14,7 +14,7 @@ import com.microsoft.kusto.spark.utils.{
   CslCommandsGenerator,
   ExtendedKustoClient,
   KustoAzureFsSetupCache,
-  KustoBlobStorageUtils,
+  KustoConstants => KCONST,
   KustoDataSourceUtils => KDSU
 }
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -54,7 +54,8 @@ private[kusto] case class KustoReadOptions(
     partitionOptions: PartitionOptions,
     distributedReadModeTransientCacheEnabled: Boolean = false,
     queryFilterPushDown: Option[Boolean],
-    additionalExportOptions: Map[String, String] = Map.empty)
+    additionalExportOptions: Map[String, String] = Map.empty,
+    storageProtocol: Option[String] = None)
 
 private[kusto] case class PartitionOptions(
     amount: Int,
@@ -179,10 +180,11 @@ private[kusto] object KustoReader {
       spark: SparkSession,
       params: TransientStorageCredentials,
       directory: String,
-      endpointSuffix: String): Boolean = {
+      endpointSuffix: String,
+      storageProtocol: String = KCONST.storageProtocolWasbs): Boolean = {
     if (params.authMethod == AuthMethod.Impersonation) {
       val url =
-        s"wasbs://${params.blobContainer}@${params.storageAccountName}.blob.$endpointSuffix"
+        s"$storageProtocol://${params.blobContainer}@${params.storageAccountName}.blob.$endpointSuffix"
       val hadoopConf = spark.sparkContext.hadoopConfiguration
       val fs = FileSystem.get(new URI(url), hadoopConf)
 
@@ -224,7 +226,8 @@ private[kusto] object KustoReader {
       className,
       s"Starting exporting data from Kusto to blob storage in Distributed mode. requestId: ${request.requestId}")
 
-    setupBlobAccess(request, storage)
+    val protocol = options.storageProtocol.getOrElse(KCONST.storageProtocolWasbs)
+    setupBlobAccess(request, storage, protocol)
     val partitions = calculatePartitions(options.partitionOptions)
     val reader = new KustoReader(kustoClient)
     val directory = s"${request.kustoCoordinates.database}/dir${UUID.randomUUID()}/"
@@ -241,9 +244,10 @@ private[kusto] object KustoReader {
     }
 
     val paths = storage.storageCredentials
-      .filter(params => dirExist(request.sparkSession, params, directory, storage.endpointSuffix))
+      .filter(params =>
+        dirExist(request.sparkSession, params, directory, storage.endpointSuffix, protocol))
       .map(params =>
-        s"wasbs://${params.blobContainer}" +
+        s"$protocol://${params.blobContainer}" +
           s"@${params.storageAccountName}.blob.${storage.endpointSuffix}/$directory")
     KDSU.logInfo(
       className,
@@ -254,9 +258,14 @@ private[kusto] object KustoReader {
 
   private[kusto] def setupBlobAccess(
       request: KustoReadRequest,
-      storageParameters: TransientStorageParameters): Unit = {
+      storageParameters: TransientStorageParameters,
+      storageProtocol: String = KCONST.storageProtocolWasbs): Unit = {
     val config = request.sparkSession.sparkContext.hadoopConfiguration
+    val sparkConf = request.sparkSession.conf
     val now = Instant.now(Clock.systemUTC())
+    val useAbfs = KCONST.storageProtocolAbfs.equalsIgnoreCase(
+      storageProtocol) || KCONST.storageProtocolAbfss.equalsIgnoreCase(storageProtocol)
+
     for (storage <- storageParameters.storageCredentials) {
       storage.authMethod match {
         case AuthMethod.Key =>
@@ -264,9 +273,17 @@ private[kusto] object KustoReader {
               storage.storageAccountName,
               storage.storageAccountKey,
               now)) {
-            config.set(
-              s"fs.azure.account.key.${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}",
-              s"${storage.storageAccountKey}")
+            if (useAbfs) {
+              // ABFS with Account Key auth is not supported
+              throw new InvalidParameterException(
+                s"Storage protocol '$storageProtocol' with Account Key authentication is not supported yet. " +
+                  "Please use SAS based authentication or switch to 'wasbs' protocol.")
+            } else {
+              // WASBS uses the blob endpoint
+              config.set(
+                s"fs.azure.account.key.${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}",
+                s"${storage.storageAccountKey}")
+            }
           }
         case AuthMethod.Sas =>
           if (!KustoAzureFsSetupCache.updateAndGetPrevSas(
@@ -274,16 +291,37 @@ private[kusto] object KustoReader {
               storage.storageAccountName,
               storage.sasKey,
               now)) {
-            config.set(
-              s"fs.azure.sas.${storage.blobContainer}.${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}",
-              s"${storage.sasKey}")
+            if (useAbfs) {
+
+              // Start: ABFS SAS token configuration - Spark configuration
+              sparkConf.set("fs.azure.account.auth.type", "SAS")
+              sparkConf.set(
+                s"fs.azure.account.hns.enabled.${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}",
+                "false")
+              sparkConf.set(
+                s"fs.azure.sas.fixed.token.${storage.blobContainer}.${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}",
+                s"${storage.sasKey}")
+              // End: ABFS SAS token configuration - Spark configuration
+            } else {
+              // WASBS SAS token configuration
+              config.set(
+                s"fs.azure.sas.${storage.blobContainer}.${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}",
+                s"${storage.sasKey}")
+            }
           }
         case _ =>
       }
     }
 
     if (!KustoAzureFsSetupCache.updateAndGetPrevNativeAzureFs(now)) {
-      config.set("fs.azure", "org.apache.hadoop.fs.azure.NativeAzureFileSystem")
+      if (useAbfs) {
+        // ABFS uses the SecureAzureBlobFileSystem
+        config.set("fs.abfs.impl", "org.apache.hadoop.fs.azurebfs.SecureAzureBlobFileSystem")
+        config.set("fs.abfss.impl", "org.apache.hadoop.fs.azurebfs.SecureAzureBlobFileSystem")
+      } else {
+        // WASBS uses NativeAzureFileSystem
+        config.set("fs.azure", "org.apache.hadoop.fs.azure.NativeAzureFileSystem")
+      }
     }
   }
 
