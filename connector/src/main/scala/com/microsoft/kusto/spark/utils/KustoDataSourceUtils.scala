@@ -147,12 +147,12 @@ object KustoDataSourceUtils {
           throw new IllegalArgumentException(errorMessage)
         }
         // Validate that storageProtocol is only used with ForceDistributedMode
-        if (readMode.isDefined && readMode.get != ReadMode.ForceDistributedMode) {
+        /*if (readMode.isDefined && readMode.get != ReadMode.ForceDistributedMode) {
           val errorMessage = s"${KustoSourceOptions.STORAGE_PROTOCOL} can only be used with " +
             s"${KustoSourceOptions.KUSTO_READ_MODE}='ForceDistributedMode'"
           logError(className, errorMessage)
           throw new IllegalArgumentException(errorMessage)
-        }
+        }*/
         Some(normalizedProtocol)
       case None => Some(KCONST.storageProtocolWasbs)
     }
