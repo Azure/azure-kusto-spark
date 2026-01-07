@@ -141,7 +141,7 @@ If set to 'true', query executed on kusto cluster will include the filters.
   
   **Important**: 
   - This option can only be used with KUSTO_READ_MODE='ForceDistributedMode'. If specified with any other read mode, an error will be thrown.
-  - ABFS/ABFSS protocols require the platform to support Azure Hadoop libraries version >= 3.4.2
+  - ABFS/ABFSS protocols require that the platform include Azure Hadoop/ABFS client libraries with ABFS/ABFSS support (for example, a Spark/Hadoop distribution that supports abfs:// and abfss:// URIs)
   - If your platform does not support WASB (legacy blob storage), migrating to ABFS is recommended
   - ABFS with Account Key authentication is not currently supported; use SAS authentication instead
  

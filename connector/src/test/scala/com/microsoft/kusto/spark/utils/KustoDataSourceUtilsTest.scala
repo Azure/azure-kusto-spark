@@ -68,6 +68,71 @@ class KustoDataSourceUtilsTest extends AnyFlatSpec with MockFactory {
         "a value \"sizeLimit\":250,\"compressionType\":\"gzip\",\"async\":\"none\"} that cannot be parsed as Map")
   }
 
+  "ReadParameters" should "throw an exception when an invalid storageProtocol is passed" in {
+    val conf: Map[String, String] = Map(
+      KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceDistributedMode.toString,
+      KustoSourceOptions.KUSTO_AAD_APP_ID -> "AppId",
+      KustoSourceOptions.KUSTO_AAD_APP_SECRET -> "AppKey",
+      KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID -> "Tenant",
+      KustoSourceOptions.STORAGE_PROTOCOL -> "invalid_protocol")
+    val illegalArgumentException =
+      intercept[IllegalArgumentException](KustoDataSourceUtils.getReadParameters(conf, null))
+    assert(
+      illegalArgumentException.getMessage == "Invalid value for storageProtocol: 'invalid_protocol'. " +
+        "Must be either 'wasbs', 'abfs', or 'abfss'.")
+  }
+
+  "ReadParameters" should "throw an exception when storageProtocol is used with non-ForceDistributedMode" in {
+    val conf: Map[String, String] = Map(
+      KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceSingleMode.toString,
+      KustoSourceOptions.KUSTO_AAD_APP_ID -> "AppId",
+      KustoSourceOptions.KUSTO_AAD_APP_SECRET -> "AppKey",
+      KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID -> "Tenant",
+      KustoSourceOptions.STORAGE_PROTOCOL -> "abfss")
+    val illegalArgumentException =
+      intercept[IllegalArgumentException](KustoDataSourceUtils.getReadParameters(conf, null))
+    assert(
+      illegalArgumentException.getMessage == "storageProtocol can only be used with " +
+        "readMode='ForceDistributedMode'")
+  }
+
+  "ReadParameters" should "accept valid storageProtocol values in case-insensitive manner" in {
+    val testCombinations =
+      Table(
+        "protocolValue",
+        "wasbs",
+        "WASBS",
+        "Wasbs",
+        "abfs",
+        "ABFS",
+        "Abfs",
+        "abfss",
+        "ABFSS",
+        "Abfss")
+    forAll(testCombinations) { protocolValue =>
+      val conf: Map[String, String] = Map(
+        KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceDistributedMode.toString,
+        KustoSourceOptions.KUSTO_AAD_APP_ID -> "AppId",
+        KustoSourceOptions.KUSTO_AAD_APP_SECRET -> "AppKey",
+        KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID -> "Tenant",
+        KustoSourceOptions.STORAGE_PROTOCOL -> protocolValue)
+      val actualReadOptions = KustoDataSourceUtils.getReadParameters(conf, null)
+      assert(actualReadOptions.storageProtocol.isDefined)
+      assert(actualReadOptions.storageProtocol.get.equalsIgnoreCase(protocolValue.trim))
+    }
+  }
+
+  "ReadParameters" should "default to wasbs when storageProtocol is not specified" in {
+    val conf: Map[String, String] = Map(
+      KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceDistributedMode.toString,
+      KustoSourceOptions.KUSTO_AAD_APP_ID -> "AppId",
+      KustoSourceOptions.KUSTO_AAD_APP_SECRET -> "AppKey",
+      KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID -> "Tenant")
+    val actualReadOptions = KustoDataSourceUtils.getReadParameters(conf, null)
+    assert(actualReadOptions.storageProtocol.isDefined)
+    assert(actualReadOptions.storageProtocol.get == "wasbs")
+  }
+
   "WriteParameters" should "throw an exception streaming writeMode passes in unsupported SparkIngestionProperties" in {
 
     val testCombinations =

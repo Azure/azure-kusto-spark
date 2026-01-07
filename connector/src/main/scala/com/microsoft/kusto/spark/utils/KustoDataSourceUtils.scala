@@ -49,7 +49,6 @@ import java.io.InputStream
 import java.net.URI
 import java.security.InvalidParameterException
 import java.util
-import java.util.Locale
 import java.util.concurrent.{Callable, CountDownLatch, TimeUnit}
 import java.util.{
   NoSuchElementException,

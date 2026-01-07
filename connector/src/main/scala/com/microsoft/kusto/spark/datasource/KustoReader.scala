@@ -276,7 +276,7 @@ private[kusto] object KustoReader {
             if (useAbfs) {
               // ABFS with Account Key auth is not supported
               throw new InvalidParameterException(
-                s"Storage protocol '$storageProtocol' with Account Key authentication is not supported yet. " +
+                s"Storage protocol '$storageProtocol' with Account Key authentication is not supported. " +
                   "Please use SAS based authentication or switch to 'wasbs' protocol.")
             } else {
               // WASBS uses the blob endpoint
