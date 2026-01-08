@@ -97,6 +97,11 @@
             <artifactId>resilience4j-core</artifactId>
             <version>${resilience4j.version}</version>
         </dependency>
+        <dependency>
+            <groupId>io.vavr</groupId>
+            <artifactId>vavr</artifactId>
+            <version>${io.vavr.version}</version>
+        </dependency>
         <!--might need 3.2.0 here for local run query-->
         <dependency>
             <groupId>org.scala-lang</groupId>
@@ -517,6 +522,10 @@
                                     <shadedPattern>${kusto.shade.prefix}.org.apache.common</shadedPattern>
                                 </relocation>
                                 <!-- IO -->
+                                <relocation>
+                                    <pattern>io.vavr</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.io.vavr</shadedPattern>
+                                </relocation>
                                 <relocation>
                                     <pattern>io.github</pattern>
                                     <shadedPattern>${kusto.shade.prefix}.io.github</shadedPattern>

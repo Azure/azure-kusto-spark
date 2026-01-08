@@ -38,8 +38,8 @@ import com.microsoft.kusto.spark.utils.KustoConstants.{
   OneMegaByte
 }
 import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
-import io.github.resilience4j.core.functions.CheckedSupplier
 import io.github.resilience4j.retry.{Retry, RetryConfig}
+import io.vavr.CheckedFunction0
 import org.apache.http.client.utils.URIBuilder
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -671,10 +671,10 @@ object KustoDataSourceUtils {
 
   def retryApplyFunction[T](func: Int => T, retryConfig: RetryConfig, retryName: String): T = {
     val retry = Retry.of(retryName, retryConfig)
-    val f: CheckedSupplier[T] = new CheckedSupplier[T]() {
+    val f: CheckedFunction0[T] = new CheckedFunction0[T]() {
       var retry = 0
 
-      override def get(): T = {
+      override def apply(): T = {
         retry += 1
         func(retry)
       }
