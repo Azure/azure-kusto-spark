@@ -149,7 +149,7 @@ class ContainerProvider(
               storageUris(roundRobinIdx)
           }
         })
-      retryExecute.get()
+      retryExecute.apply()
     }
   }
 
