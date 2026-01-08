@@ -16,8 +16,8 @@ import com.microsoft.kusto.spark.datasink.IngestionStorageParameters
 import com.microsoft.kusto.spark.exceptions.{ExceptionUtils, NoStorageContainersException}
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import io.github.resilience4j.core.IntervalFunction
+import io.github.resilience4j.core.functions.CheckedSupplier
 import io.github.resilience4j.retry.{Retry, RetryConfig}
-import io.vavr.CheckedFunction0
 import org.apache.http.conn.HttpHostConnectException
 
 import java.time.{Clock, Instant, OffsetDateTime}
@@ -130,7 +130,7 @@ class ContainerProvider(
           storageUris(roundRobinIdx)
       }
     } else {
-      val retryExecute: CheckedFunction0[ContainerAndSas] = Retry.decorateCheckedSupplier(
+      val retryExecute: CheckedSupplier[ContainerAndSas] = Retry.decorateCheckedSupplier(
         Retry.of("refresh ingestion resources", retryConfigIngestionRefresh),
         () => {
           Try(client.ingestClient.getResourceManager.getShuffledContainers) match {
@@ -149,7 +149,7 @@ class ContainerProvider(
               storageUris(roundRobinIdx)
           }
         })
-      retryExecute.apply()
+      retryExecute.get()
     }
   }
 

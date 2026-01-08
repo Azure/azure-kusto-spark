@@ -82,20 +82,6 @@ class KustoDataSourceUtilsTest extends AnyFlatSpec with MockFactory {
         "Must be either 'wasbs', 'abfs', or 'abfss'.")
   }
 
-  "ReadParameters" should "throw an exception when storageProtocol is used with non-ForceDistributedMode" in {
-    val conf: Map[String, String] = Map(
-      KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceSingleMode.toString,
-      KustoSourceOptions.KUSTO_AAD_APP_ID -> "AppId",
-      KustoSourceOptions.KUSTO_AAD_APP_SECRET -> "AppKey",
-      KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID -> "Tenant",
-      KustoSourceOptions.STORAGE_PROTOCOL -> "abfss")
-    val illegalArgumentException =
-      intercept[IllegalArgumentException](KustoDataSourceUtils.getReadParameters(conf, null))
-    assert(
-      illegalArgumentException.getMessage == "storageProtocol can only be used with " +
-        "readMode='ForceDistributedMode'")
-  }
-
   "ReadParameters" should "accept valid storageProtocol values in case-insensitive manner" in {
     val testCombinations =
       Table(

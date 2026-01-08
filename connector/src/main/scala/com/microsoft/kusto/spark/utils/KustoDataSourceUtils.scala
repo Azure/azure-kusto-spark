@@ -38,8 +38,8 @@ import com.microsoft.kusto.spark.utils.KustoConstants.{
   OneMegaByte
 }
 import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
+import io.github.resilience4j.core.functions.CheckedSupplier
 import io.github.resilience4j.retry.{Retry, RetryConfig}
-import io.vavr.CheckedFunction0
 import org.apache.http.client.utils.URIBuilder
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -146,13 +146,6 @@ object KustoDataSourceUtils {
           logError(className, errorMessage)
           throw new IllegalArgumentException(errorMessage)
         }
-        // Validate that storageProtocol is only used with ForceDistributedMode
-        /*if (readMode.isDefined && readMode.get != ReadMode.ForceDistributedMode) {
-          val errorMessage = s"${KustoSourceOptions.STORAGE_PROTOCOL} can only be used with " +
-            s"${KustoSourceOptions.KUSTO_READ_MODE}='ForceDistributedMode'"
-          logError(className, errorMessage)
-          throw new IllegalArgumentException(errorMessage)
-        }*/
         Some(normalizedProtocol)
       case None => Some(KCONST.storageProtocolWasbs)
     }
@@ -678,10 +671,10 @@ object KustoDataSourceUtils {
 
   def retryApplyFunction[T](func: Int => T, retryConfig: RetryConfig, retryName: String): T = {
     val retry = Retry.of(retryName, retryConfig)
-    val f: CheckedFunction0[T] = new CheckedFunction0[T]() {
+    val f: CheckedSupplier[T] = new CheckedSupplier[T]() {
       var retry = 0
 
-      override def apply(): T = {
+      override def get(): T = {
         retry += 1
         func(retry)
       }

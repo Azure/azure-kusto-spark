@@ -87,6 +87,16 @@
             <artifactId>slf4j-api</artifactId>
             <version>${slf4j.version}</version>
         </dependency>
+        <dependency>
+            <groupId>io.github.resilience4j</groupId>
+            <artifactId>resilience4j-retry</artifactId>
+            <version>${resilience4j.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.github.resilience4j</groupId>
+            <artifactId>resilience4j-core</artifactId>
+            <version>${resilience4j.version}</version>
+        </dependency>
         <!--might need 3.2.0 here for local run query-->
         <dependency>
             <groupId>org.scala-lang</groupId>
@@ -507,10 +517,6 @@
                                     <shadedPattern>${kusto.shade.prefix}.org.apache.common</shadedPattern>
                                 </relocation>
                                 <!-- IO -->
-                                <relocation>
-                                    <pattern>io.vavr</pattern>
-                                    <shadedPattern>${kusto.shade.prefix}.io.vavr</shadedPattern>
-                                </relocation>
                                 <relocation>
                                     <pattern>io.github</pattern>
                                     <shadedPattern>${kusto.shade.prefix}.io.github</shadedPattern>
