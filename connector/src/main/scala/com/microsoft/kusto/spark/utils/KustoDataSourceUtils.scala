@@ -49,7 +49,6 @@ import java.io.InputStream
 import java.net.URI
 import java.security.InvalidParameterException
 import java.util
-import java.util.Locale
 import java.util.concurrent.{Callable, CountDownLatch, TimeUnit}
 import java.util.{
   NoSuchElementException,
@@ -144,13 +143,6 @@ object KustoDataSourceUtils {
           val errorMessage =
             s"Invalid value for ${KustoSourceOptions.STORAGE_PROTOCOL}: '$protocol'. " +
               s"Must be either '${KCONST.storageProtocolWasbs}', '${KCONST.storageProtocolAbfs}', or '${KCONST.storageProtocolAbfss}'."
-          logError(className, errorMessage)
-          throw new IllegalArgumentException(errorMessage)
-        }
-        // Validate that storageProtocol is only used with ForceDistributedMode
-        if (readMode.isDefined && readMode.get != ReadMode.ForceDistributedMode) {
-          val errorMessage = s"${KustoSourceOptions.STORAGE_PROTOCOL} can only be used with " +
-            s"${KustoSourceOptions.KUSTO_READ_MODE}='ForceDistributedMode'"
           logError(className, errorMessage)
           throw new IllegalArgumentException(errorMessage)
         }
