@@ -127,6 +127,23 @@ If set to 'true', query executed on kusto cluster will include the filters.
    _compressionType_ is defaulted to snappy and the command also specifies _compressed_ (to create .snappy.gz files), to turn extra compression off - it can be set to _none_ (**not recommended**)
   i.e .option("kustoExportOptionsJson", "{\"distribution\":\"per_node\"}")
 >Note: Connector versions >= 3.1.10 will automatically set useNativeParquetWriter=false if Spark version < 3.3.0 as Kusto service uses now vectorized parquet writer introduced in this version. Do not set to true for lower versions as it will fail. Users are advised to move to Spark 3.3.0 to leverage this new great performance enhancement on both Spark side and Kusto service side.
+
+* **STORAGE_PROTOCOL**:
+  'storageProtocol' - Specifies the storage protocol to use when reading from blob storage in distributed mode. 
+  Valid values are:
+  - 'wasbs' (Windows Azure Storage Blob Service) - default
+  - 'abfs' (Azure Blob File System over HTTP)
+  - 'abfss' (Azure Blob File System over HTTPS - recommended for secure connections)
+  
+  Defaults to 'wasbs' if not specified. The default should work in most cases.
+  This option is only valid when using 'ForceDistributedMode' as the read mode.
+  Example: .option("storageProtocol", "abfss")
+  
+  **Important**: 
+  - This option can only be used with KUSTO_READ_MODE='ForceDistributedMode'. If specified with any other read mode, an error will be thrown.
+  - ABFS/ABFSS protocols require the platform to support Azure Hadoop libraries version >= 3.4.2
+  - If your platform does not support WASB (legacy blob storage), migrating to ABFS is recommended
+  - ABFS with Account Key authentication is not currently supported; use SAS authentication instead
  
 #### Transient Storage Parameters
 When reading data from Kusto in 'distributed' mode, the data is exported from Kusto into a blob storage every time the corresponding RDD is materialized.

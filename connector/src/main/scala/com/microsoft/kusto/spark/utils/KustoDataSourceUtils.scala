@@ -132,12 +132,31 @@ object KustoDataSourceUtils {
         "User cannot specify namePrefix for additionalExportOptions as it can lead to unexpected behavior in reading output")
     }
 
+    // Validate storageProtocol option
+    val storageProtocol = parameters.get(KustoSourceOptions.STORAGE_PROTOCOL) match {
+      case Some(protocol) =>
+        val normalizedProtocol = protocol.trim
+        if (!KCONST.storageProtocolWasbs.equalsIgnoreCase(
+            normalizedProtocol) && !KCONST.storageProtocolAbfs.equalsIgnoreCase(
+            normalizedProtocol) && !KCONST.storageProtocolAbfss.equalsIgnoreCase(
+            normalizedProtocol)) {
+          val errorMessage =
+            s"Invalid value for ${KustoSourceOptions.STORAGE_PROTOCOL}: '$protocol'. " +
+              s"Must be either '${KCONST.storageProtocolWasbs}', '${KCONST.storageProtocolAbfs}', or '${KCONST.storageProtocolAbfss}'."
+          logError(className, errorMessage)
+          throw new IllegalArgumentException(errorMessage)
+        }
+        Some(normalizedProtocol)
+      case None => Some(KCONST.storageProtocolWasbs)
+    }
+
     KustoReadOptions(
       readMode,
       partitionOptions,
       distributedReadModeTransientCacheEnabled,
       queryFilterPushDown,
-      additionalExportOptions)
+      additionalExportOptions,
+      storageProtocol)
   }
 
   private def setNumPartitions(
