@@ -50,10 +50,6 @@ jobs:
           distribution: 'adopt'
           java-version: ${{ matrix.java }}
           cache: 'maven'
-      - name: Verify Java version
-        run: |
-          java -version
-          mvn -version
       - name: "Run az commands"
         run: |
           access_token=$(az account get-access-token --resource=${{ secrets.APP_ID }} --scope=${{ secrets.CLUSTER }}/.default --query accessToken -o tsv)
