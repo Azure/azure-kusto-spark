@@ -266,6 +266,24 @@ private[kusto] object KustoReader {
     val useAbfs = KCONST.storageProtocolAbfs.equalsIgnoreCase(
       storageProtocol) || KCONST.storageProtocolAbfss.equalsIgnoreCase(storageProtocol)
 
+    // Ensure storage endpoint domain is in the valid ABFS endpoints list
+    if (useAbfs) {
+      val endpointKey = "fs.azure.abfs.valid.endpoints"
+      val currentEndpoints = config.get(endpointKey, "")
+      val storageDomain = storageParameters.endpointSuffix
+      if (!currentEndpoints.contains(storageDomain)) {
+        val updatedEndpoints = if (currentEndpoints.isEmpty) {
+          storageDomain
+        } else {
+          s"$currentEndpoints,$storageDomain"
+        }
+        config.set(endpointKey, updatedEndpoints)
+        KDSU.logInfo(
+          className,
+          s"Updated $endpointKey from '$currentEndpoints' to '$updatedEndpoints'")
+      }
+    }
+
     for (storage <- storageParameters.storageCredentials) {
       storage.authMethod match {
         case AuthMethod.Key =>

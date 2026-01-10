@@ -10,6 +10,9 @@
         <groupId>com.microsoft.azure.kusto</groupId>
         <version>${revision}</version>
     </parent>
+    <properties>
+        <maven.deploy.skip>false</maven.deploy.skip>
+    </properties>
     <dependencies>
         <dependency>
             <groupId>com.microsoft.azure.kusto</groupId>
