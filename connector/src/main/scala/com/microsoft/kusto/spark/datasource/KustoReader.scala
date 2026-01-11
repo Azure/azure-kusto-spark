@@ -17,12 +17,13 @@ import com.microsoft.kusto.spark.utils.{
   KustoConstants => KCONST,
   KustoDataSourceUtils => KDSU
 }
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.util.ComparableVersion
 import org.apache.spark.Partition
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.sources.Filter
-import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.{Row, RuntimeConfig, SparkSession}
 
 import java.net.URI
 import java.security.InvalidParameterException
@@ -66,7 +67,8 @@ private[kusto] case class DistributedReadModeTransientCacheKey(
     query: String,
     kustoCoordinates: KustoCoordinates,
     authentication: KustoAuthentication)
-private[kusto] object KustoReader {
+
+object KustoReader {
   private val className = this.getClass.getSimpleName
   private val distributedReadModeTransientCache
       : concurrent.Map[DistributedReadModeTransientCacheKey, Seq[String]] =
@@ -266,6 +268,31 @@ private[kusto] object KustoReader {
     val useAbfs = KCONST.storageProtocolAbfs.equalsIgnoreCase(
       storageProtocol) || KCONST.storageProtocolAbfss.equalsIgnoreCase(storageProtocol)
 
+    setHadoopAuth(storageParameters, storageProtocol, config, sparkConf, now, useAbfs)
+
+    if (!KustoAzureFsSetupCache.updateAndGetPrevNativeAzureFs(now)) {
+      if (useAbfs) {
+        // ABFS uses the SecureAzureBlobFileSystem
+        config.set("fs.abfs.impl", "org.apache.hadoop.fs.azurebfs.SecureAzureBlobFileSystem")
+        config.set("fs.abfss.impl", "org.apache.hadoop.fs.azurebfs.SecureAzureBlobFileSystem")
+      } else {
+        // WASBS uses NativeAzureFileSystem
+        config.set("fs.azure", "org.apache.hadoop.fs.azure.NativeAzureFileSystem")
+      }
+    }
+  }
+
+  def setHadoopAuth(
+      storageParameters: TransientStorageParameters,
+      storageProtocol: String,
+      config: Configuration,
+      sparkConf: RuntimeConfig,
+      now: Instant,
+      useAbfs: Boolean): Unit = {
+    // Ensure storage endpoint domain is in the valid ABFS endpoints list
+    if (useAbfs) {
+      whitelistExportContainers(storageParameters, config)
+    }
     for (storage <- storageParameters.storageCredentials) {
       storage.authMethod match {
         case AuthMethod.Key =>
@@ -312,16 +339,24 @@ private[kusto] object KustoReader {
         case _ =>
       }
     }
+  }
 
-    if (!KustoAzureFsSetupCache.updateAndGetPrevNativeAzureFs(now)) {
-      if (useAbfs) {
-        // ABFS uses the SecureAzureBlobFileSystem
-        config.set("fs.abfs.impl", "org.apache.hadoop.fs.azurebfs.SecureAzureBlobFileSystem")
-        config.set("fs.abfss.impl", "org.apache.hadoop.fs.azurebfs.SecureAzureBlobFileSystem")
+  private def whitelistExportContainers(
+      storageParameters: TransientStorageParameters,
+      config: Configuration): Unit = {
+    val endpointKey = "fs.azure.abfs.valid.endpoints"
+    val currentEndpoints = config.get(endpointKey, "")
+    val storageDomain = storageParameters.endpointSuffix
+    if (!currentEndpoints.contains(storageDomain)) {
+      val updatedEndpoints = if (currentEndpoints.isEmpty) {
+        storageDomain
       } else {
-        // WASBS uses NativeAzureFileSystem
-        config.set("fs.azure", "org.apache.hadoop.fs.azure.NativeAzureFileSystem")
+        s"$currentEndpoints,$storageDomain"
       }
+      config.set(endpointKey, updatedEndpoints)
+      KDSU.logInfo(
+        className,
+        s"Updated $endpointKey from '$currentEndpoints' to '$updatedEndpoints'")
     }
   }
 
