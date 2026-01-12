@@ -10,7 +10,7 @@ permissions:
 on:
   push:
     tags:
-      - "v(2.4|3.0)_[0-9]+.[0-9]+.[0-9]+"
+      - "v(2.4|3.0|4.0)_[0-9]+.[0-9]+.[0-9]+"
   workflow_dispatch:
     inputs:
       tag:
@@ -32,7 +32,7 @@ jobs:
     environment: build
     strategy:
       matrix:
-        java: [ '8' ]
+        java: [ '21' ]
     name: Java ${{ matrix.java }}
     steps:
       - uses: actions/checkout@v4
