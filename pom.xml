@@ -180,15 +180,6 @@
                 </repository>
             </distributionManagement>
         </profile>
-        <profile>
-            <id>nexus</id>
-            <distributionManagement>
-                <repository>
-                    <id>nexus-releases</id>
-                    <url>http://localhost:8081/repository/maven-releases/</url>
-                </repository>
-            </distributionManagement>
-        </profile>
     </profiles>
     <dependencies>
         <!-- Compile Scope -->
