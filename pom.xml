@@ -9,7 +9,7 @@
     <version>${revision}</version>
     <properties>
         <!-- Compile-scoped dependency versions -->
-        <revision>7.0.3</revision>
+        <revision>7.0.3-snapshot-0.0.1</revision>
         <maven.deploy.skip>true</maven.deploy.skip>
         <kusto.shade.prefix>kusto_connector_shaded</kusto.shade.prefix>
         <azure.bom.version>1.2.28</azure.bom.version>

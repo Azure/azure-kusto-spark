@@ -389,6 +389,10 @@ object KustoReader {
     } else {
       storage.sasKey
     }
+    // Also set spark.hadoop config for compatibility with some Spark environments
+    val sparkHadoopConfigKey = s"spark.hadoop.$sasConfigKey"
+    config.set(sparkHadoopConfigKey, sasToken)
+    KDSU.logInfo(className, s"Set Spark Hadoop SAS config: $sparkHadoopConfigKey")
     config.set(sasConfigKey, sasToken)
     KDSU.logInfo(className, s"Set WASBS SAS config: $sasConfigKey")
   }
