@@ -54,7 +54,7 @@ class KustoReaderHadoopConfTest extends AnyFlatSpec with Matchers with BeforeAnd
 
   it should "strip leading '?' from WASBS SAS token" in {
     val now = freshTimestamp()
-    val storageParams = sasStorageParams("wsbstrip", "cstrip", "?sv=2022-01-01&sig=stripped")
+    val storageParams = sasStorageParams("wsbstrip", "cstrip", "sv=2022-01-01&sig=stripped")
 
     KustoReader.setHadoopAuth(
       storageParams, KCONST.storageProtocolWasbs, hadoopConfig, sparkConf, now, useAbfs = false)
