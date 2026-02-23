@@ -70,6 +70,22 @@ private[kusto] case class DistributedReadModeTransientCacheKey(
 
 object KustoReader {
   private val className = this.getClass.getSimpleName
+  private val sparkHadoopConfigPrefix = "spark.hadoop."
+
+  /**
+   * Sets a Hadoop configuration key on both the Hadoop Configuration object and the Spark session
+   * RuntimeConfig (with spark.hadoop. prefix). This ensures the configuration is propagated to
+   * all engines including Gluten/Velox which read from Spark session conf.
+   */
+  private def setHadoopConf(
+      config: Configuration,
+      sparkConf: RuntimeConfig,
+      key: String,
+      value: String): Unit = {
+    config.set(key, value)
+    sparkConf.set(s"$sparkHadoopConfigPrefix$key", value)
+  }
+
   private val distributedReadModeTransientCache
       : concurrent.Map[DistributedReadModeTransientCacheKey, Seq[String]] =
     new concurrent.TrieMap()
@@ -273,11 +289,23 @@ object KustoReader {
     if (!KustoAzureFsSetupCache.updateAndGetPrevNativeAzureFs(now)) {
       if (useAbfs) {
         // ABFS uses the SecureAzureBlobFileSystem
-        config.set("fs.abfs.impl", "org.apache.hadoop.fs.azurebfs.SecureAzureBlobFileSystem")
-        config.set("fs.abfss.impl", "org.apache.hadoop.fs.azurebfs.SecureAzureBlobFileSystem")
+        setHadoopConf(
+          config,
+          sparkConf,
+          "fs.abfs.impl",
+          "org.apache.hadoop.fs.azurebfs.SecureAzureBlobFileSystem")
+        setHadoopConf(
+          config,
+          sparkConf,
+          "fs.abfss.impl",
+          "org.apache.hadoop.fs.azurebfs.SecureAzureBlobFileSystem")
       } else {
         // WASBS uses NativeAzureFileSystem
-        config.set("fs.azure", "org.apache.hadoop.fs.azure.NativeAzureFileSystem")
+        setHadoopConf(
+          config,
+          sparkConf,
+          "fs.azure",
+          "org.apache.hadoop.fs.azure.NativeAzureFileSystem")
       }
     }
   }
@@ -291,12 +319,19 @@ object KustoReader {
       useAbfs: Boolean): Unit = {
     // Ensure storage endpoint domain is in the valid ABFS endpoints list
     if (useAbfs) {
-      whitelistExportContainers(storageParameters, config)
+      whitelistExportContainers(storageParameters, config, sparkConf)
     }
     for (storage <- storageParameters.storageCredentials) {
       storage.authMethod match {
         case AuthMethod.Key =>
-          handleAccountKeyAuth(storage, storageParameters, config, now, useAbfs, storageProtocol)
+          handleAccountKeyAuth(
+            storage,
+            storageParameters,
+            config,
+            sparkConf,
+            now,
+            useAbfs,
+            storageProtocol)
         case AuthMethod.Sas =>
           handleSasAuth(storage, storageParameters, config, sparkConf, now, useAbfs)
         case _ =>
@@ -308,6 +343,7 @@ object KustoReader {
       storage: TransientStorageCredentials,
       storageParameters: TransientStorageParameters,
       config: Configuration,
+      sparkConf: RuntimeConfig,
       now: Instant,
       useAbfs: Boolean,
       storageProtocol: String): Unit = {
@@ -322,7 +358,9 @@ object KustoReader {
           s"Storage protocol '$storageProtocol' with Account Key authentication is not supported yet. " +
             "Please use SAS based authentication or switch to 'wasbs' protocol.")
       } else {
-        config.set(
+        setHadoopConf(
+          config,
+          sparkConf,
           s"fs.azure.account.key.${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}",
           storage.storageAccountKey)
       }
@@ -355,9 +393,9 @@ object KustoReader {
 
     if (!wasCached) {
       if (useAbfs) {
-        setAbfsSasConfig(storage, storageParameters, sparkConf, sasConfigKey)
+        setAbfsSasConfig(storage, storageParameters, config, sparkConf, sasConfigKey)
       } else {
-        setWasbsSasConfig(storage, config, sasConfigKey)
+        setWasbsSasConfig(storage, config, sparkConf, sasConfigKey)
       }
     } else {
       KDSU.logInfo(className, s"SAS config cached for ${storage.storageAccountName}, skipping")
@@ -369,19 +407,23 @@ object KustoReader {
   private def setAbfsSasConfig(
       storage: TransientStorageCredentials,
       storageParameters: TransientStorageParameters,
+      config: Configuration,
       sparkConf: RuntimeConfig,
       sasConfigKey: String): Unit = {
-    sparkConf.set("fs.azure.account.auth.type", "SAS")
-    sparkConf.set(
+    setHadoopConf(config, sparkConf, "fs.azure.account.auth.type", "SAS")
+    setHadoopConf(
+      config,
+      sparkConf,
       s"fs.azure.account.hns.enabled.${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}",
       "false")
-    sparkConf.set(sasConfigKey, storage.sasKey)
+    setHadoopConf(config, sparkConf, sasConfigKey, storage.sasKey)
     KDSU.logInfo(className, s"Set ABFS SAS config: $sasConfigKey")
   }
 
   private def setWasbsSasConfig(
       storage: TransientStorageCredentials,
       config: Configuration,
+      sparkConf: RuntimeConfig,
       sasConfigKey: String): Unit = {
     // Remove leading '?' from SAS token if present, as WASBS expects token without it
     val sasToken = if (storage.sasKey.startsWith("?")) {
@@ -389,7 +431,7 @@ object KustoReader {
     } else {
       storage.sasKey
     }
-    config.set(sasConfigKey, sasToken)
+    setHadoopConf(config, sparkConf, sasConfigKey, sasToken)
     KDSU.logInfo(className, s"Set WASBS SAS config: $sasConfigKey")
   }
 
@@ -398,23 +440,20 @@ object KustoReader {
       sparkConf: RuntimeConfig,
       config: Configuration,
       useAbfs: Boolean): Unit = {
-    val isConfigSet = if (useAbfs) {
-      sparkConf.getOption(sasConfigKey).isDefined
-    } else {
-      config.get(sasConfigKey) != null
-    }
+    val hadoopConfigSet = config.get(sasConfigKey) != null
+    val sparkConfSet = sparkConf.getOption(s"$sparkHadoopConfigPrefix$sasConfigKey").isDefined
 
-    if (!isConfigSet) {
-      val configType = if (useAbfs) "SparkConf" else "HadoopConf"
+    if (!hadoopConfigSet && !sparkConfSet) {
       KDSU.logWarn(
         className,
-        s"WARNING: SAS config key '$sasConfigKey' NOT found in $configType after setup!")
+        s"WARNING: SAS config key '$sasConfigKey' NOT found in HadoopConf or SparkConf after setup!")
     }
   }
 
   private def whitelistExportContainers(
       storageParameters: TransientStorageParameters,
-      config: Configuration): Unit = {
+      config: Configuration,
+      sparkConf: RuntimeConfig): Unit = {
     val endpointKey = "fs.azure.abfs.valid.endpoints"
     val currentEndpoints = config.get(endpointKey, "")
     val storageDomain = storageParameters.endpointSuffix
@@ -424,7 +463,7 @@ object KustoReader {
       } else {
         s"$currentEndpoints,$storageDomain"
       }
-      config.set(endpointKey, updatedEndpoints)
+      setHadoopConf(config, sparkConf, endpointKey, updatedEndpoints)
       KDSU.logInfo(
         className,
         s"Updated $endpointKey from '$currentEndpoints' to '$updatedEndpoints'")
