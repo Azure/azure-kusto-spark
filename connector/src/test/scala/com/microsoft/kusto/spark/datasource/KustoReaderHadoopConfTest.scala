@@ -14,10 +14,10 @@ import java.time.Instant
 import java.time.temporal.ChronoUnit
 
 /**
- * Tests for the setHadoopConf dual-write behaviour: every Hadoop configuration key should
- * be written to both the Hadoop Configuration object AND the Spark RuntimeConfig (with the
- * spark.hadoop. prefix) so that engines like Gluten/Velox that read from Spark session conf
- * also pick them up.
+ * Tests for the setHadoopConf dual-write behaviour: every Hadoop configuration key should be
+ * written to both the Hadoop Configuration object AND the Spark RuntimeConfig (with the
+ * spark.hadoop. prefix) so that engines like Gluten/Velox that read from Spark session conf also
+ * pick them up.
  */
 class KustoReaderHadoopConfTest extends AnyFlatSpec with Matchers with BeforeAndAfterEach {
   private val sparkHadoopPrefix = "spark.hadoop."
@@ -43,7 +43,12 @@ class KustoReaderHadoopConfTest extends AnyFlatSpec with Matchers with BeforeAnd
     val storageParams = sasStorageParams("wsbsas1", "container1", "sv=2021-01-01&sig=test1")
 
     KustoReader.setHadoopAuth(
-      storageParams, KCONST.storageProtocolWasbs, hadoopConfig, sparkConf, now, useAbfs = false)
+      storageParams,
+      KCONST.storageProtocolWasbs,
+      hadoopConfig,
+      sparkConf,
+      now,
+      useAbfs = false)
 
     val expectedKey = "fs.azure.sas.container1.wsbsas1.blob.core.windows.net"
     hadoopConfig.get(expectedKey) should not be null
@@ -57,7 +62,12 @@ class KustoReaderHadoopConfTest extends AnyFlatSpec with Matchers with BeforeAnd
     val storageParams = sasStorageParams("wsbstrip", "cstrip", "sv=2022-01-01&sig=stripped")
 
     KustoReader.setHadoopAuth(
-      storageParams, KCONST.storageProtocolWasbs, hadoopConfig, sparkConf, now, useAbfs = false)
+      storageParams,
+      KCONST.storageProtocolWasbs,
+      hadoopConfig,
+      sparkConf,
+      now,
+      useAbfs = false)
 
     val expectedKey = "fs.azure.sas.cstrip.wsbstrip.blob.core.windows.net"
     hadoopConfig.get(expectedKey) should startWith("sv=")
@@ -73,7 +83,12 @@ class KustoReaderHadoopConfTest extends AnyFlatSpec with Matchers with BeforeAnd
     val storageParams = keyStorageParams("wsbkey1", "mykey123", "ckey1")
 
     KustoReader.setHadoopAuth(
-      storageParams, KCONST.storageProtocolWasbs, hadoopConfig, sparkConf, now, useAbfs = false)
+      storageParams,
+      KCONST.storageProtocolWasbs,
+      hadoopConfig,
+      sparkConf,
+      now,
+      useAbfs = false)
 
     val expectedKey = "fs.azure.account.key.wsbkey1.blob.core.windows.net"
     hadoopConfig.get(expectedKey) shouldBe "mykey123"
@@ -88,7 +103,12 @@ class KustoReaderHadoopConfTest extends AnyFlatSpec with Matchers with BeforeAnd
     val storageParams = sasStorageParams("abfsas1", "cabf1", "sv=2021-01-01&sig=abftest")
 
     KustoReader.setHadoopAuth(
-      storageParams, KCONST.storageProtocolAbfs, hadoopConfig, sparkConf, now, useAbfs = true)
+      storageParams,
+      KCONST.storageProtocolAbfs,
+      hadoopConfig,
+      sparkConf,
+      now,
+      useAbfs = true)
 
     // fs.azure.account.auth.type
     hadoopConfig.get("fs.azure.account.auth.type") shouldBe "SAS"
@@ -100,7 +120,12 @@ class KustoReaderHadoopConfTest extends AnyFlatSpec with Matchers with BeforeAnd
     val storageParams = sasStorageParams("abfhns1", "chns1", "sv=2021-01-01&sig=hnstest")
 
     KustoReader.setHadoopAuth(
-      storageParams, KCONST.storageProtocolAbfs, hadoopConfig, sparkConf, now, useAbfs = true)
+      storageParams,
+      KCONST.storageProtocolAbfs,
+      hadoopConfig,
+      sparkConf,
+      now,
+      useAbfs = true)
 
     val expectedKey = "fs.azure.account.hns.enabled.abfhns1.blob.core.windows.net"
     hadoopConfig.get(expectedKey) shouldBe "false"
@@ -112,7 +137,12 @@ class KustoReaderHadoopConfTest extends AnyFlatSpec with Matchers with BeforeAnd
     val storageParams = sasStorageParams("abftok1", "ctok1", "sv=2021-01-01&sig=toktest")
 
     KustoReader.setHadoopAuth(
-      storageParams, KCONST.storageProtocolAbfs, hadoopConfig, sparkConf, now, useAbfs = true)
+      storageParams,
+      KCONST.storageProtocolAbfs,
+      hadoopConfig,
+      sparkConf,
+      now,
+      useAbfs = true)
 
     val expectedKey = "fs.azure.sas.fixed.token.ctok1.abftok1.blob.core.windows.net"
     hadoopConfig.get(expectedKey) should include("sv=2021-01-01")
@@ -128,7 +158,12 @@ class KustoReaderHadoopConfTest extends AnyFlatSpec with Matchers with BeforeAnd
 
     val ex = intercept[java.security.InvalidParameterException] {
       KustoReader.setHadoopAuth(
-        storageParams, KCONST.storageProtocolAbfs, hadoopConfig, sparkConf, now, useAbfs = true)
+        storageParams,
+        KCONST.storageProtocolAbfs,
+        hadoopConfig,
+        sparkConf,
+        now,
+        useAbfs = true)
     }
     ex.getMessage should include("not supported")
   }
@@ -138,11 +173,19 @@ class KustoReaderHadoopConfTest extends AnyFlatSpec with Matchers with BeforeAnd
   // ---------------------------------------------------------------------------
   "setHadoopAuth (ABFS whitelist)" should "write valid endpoints to both HadoopConf and SparkConf" in {
     val now = freshTimestamp()
-    val storageParams = sasStorageParams("abfwl1", "cwl1", "sv=2021-01-01&sig=wltest",
+    val storageParams = sasStorageParams(
+      "abfwl1",
+      "cwl1",
+      "sv=2021-01-01&sig=wltest",
       endpointSuffix = "custom.domain.net")
 
     KustoReader.setHadoopAuth(
-      storageParams, KCONST.storageProtocolAbfs, hadoopConfig, sparkConf, now, useAbfs = true)
+      storageParams,
+      KCONST.storageProtocolAbfs,
+      hadoopConfig,
+      sparkConf,
+      now,
+      useAbfs = true)
 
     val endpointKey = "fs.azure.abfs.valid.endpoints"
     hadoopConfig.get(endpointKey) should include("custom.domain.net")
@@ -154,11 +197,19 @@ class KustoReaderHadoopConfTest extends AnyFlatSpec with Matchers with BeforeAnd
     // Pre-populate an existing endpoint
     hadoopConfig.set("fs.azure.abfs.valid.endpoints", "existing.domain.net")
 
-    val storageParams = sasStorageParams("abfwl2", "cwl2", "sv=2021-01-01&sig=wltest2",
+    val storageParams = sasStorageParams(
+      "abfwl2",
+      "cwl2",
+      "sv=2021-01-01&sig=wltest2",
       endpointSuffix = "new.domain.net")
 
     KustoReader.setHadoopAuth(
-      storageParams, KCONST.storageProtocolAbfs, hadoopConfig, sparkConf, now, useAbfs = true)
+      storageParams,
+      KCONST.storageProtocolAbfs,
+      hadoopConfig,
+      sparkConf,
+      now,
+      useAbfs = true)
 
     val endpoints = hadoopConfig.get("fs.azure.abfs.valid.endpoints")
     endpoints should include("existing.domain.net")
@@ -169,11 +220,19 @@ class KustoReaderHadoopConfTest extends AnyFlatSpec with Matchers with BeforeAnd
     val now = freshTimestamp()
     hadoopConfig.set("fs.azure.abfs.valid.endpoints", "same.domain.net")
 
-    val storageParams = sasStorageParams("abfwl3", "cwl3", "sv=2021-01-01&sig=wltest3",
+    val storageParams = sasStorageParams(
+      "abfwl3",
+      "cwl3",
+      "sv=2021-01-01&sig=wltest3",
       endpointSuffix = "same.domain.net")
 
     KustoReader.setHadoopAuth(
-      storageParams, KCONST.storageProtocolAbfs, hadoopConfig, sparkConf, now, useAbfs = true)
+      storageParams,
+      KCONST.storageProtocolAbfs,
+      hadoopConfig,
+      sparkConf,
+      now,
+      useAbfs = true)
 
     // Should appear exactly once
     val endpoints = hadoopConfig.get("fs.azure.abfs.valid.endpoints")
@@ -189,7 +248,12 @@ class KustoReaderHadoopConfTest extends AnyFlatSpec with Matchers with BeforeAnd
 
     // First call — populates cache
     KustoReader.setHadoopAuth(
-      storageParams, KCONST.storageProtocolWasbs, hadoopConfig, sparkConf, now, useAbfs = false)
+      storageParams,
+      KCONST.storageProtocolWasbs,
+      hadoopConfig,
+      sparkConf,
+      now,
+      useAbfs = false)
 
     val expectedKey = "fs.azure.sas.cc1.cache1.blob.core.windows.net"
     val firstValue = hadoopConfig.get(expectedKey)
@@ -200,7 +264,12 @@ class KustoReaderHadoopConfTest extends AnyFlatSpec with Matchers with BeforeAnd
 
     // Second call with same timestamp — should be cached, not overwritten
     KustoReader.setHadoopAuth(
-      storageParams, KCONST.storageProtocolWasbs, hadoopConfig, sparkConf, now, useAbfs = false)
+      storageParams,
+      KCONST.storageProtocolWasbs,
+      hadoopConfig,
+      sparkConf,
+      now,
+      useAbfs = false)
 
     hadoopConfig.get(expectedKey) shouldBe "MUTATED"
   }
@@ -220,8 +289,9 @@ class KustoReaderHadoopConfTest extends AnyFlatSpec with Matchers with BeforeAnd
       sasToken: String,
       endpointSuffix: String = "core.windows.net"): TransientStorageParameters = {
     new TransientStorageParameters(
-      Array(new TransientStorageCredentials(
-        s"https://$account.blob.$endpointSuffix/$container?$sasToken")),
+      Array(
+        new TransientStorageCredentials(
+          s"https://$account.blob.$endpointSuffix/$container?$sasToken")),
       endpointSuffix)
   }
 
