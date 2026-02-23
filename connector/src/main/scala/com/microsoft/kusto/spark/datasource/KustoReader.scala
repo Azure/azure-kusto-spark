@@ -72,10 +72,11 @@ object KustoReader {
   private val className = this.getClass.getSimpleName
   private val sparkHadoopConfigPrefix = "spark.hadoop."
 
-  /** Sets a Hadoop configuration key on both the Hadoop Configuration object and the
-    * Spark session RuntimeConfig (with spark.hadoop. prefix). This ensures the configuration
-    * is propagated to all engines including Gluten/Velox which read from Spark session conf.
-    */
+  /**
+   * Sets a Hadoop configuration key on both the Hadoop Configuration object and the Spark session
+   * RuntimeConfig (with spark.hadoop. prefix). This ensures the configuration is propagated to
+   * all engines including Gluten/Velox which read from Spark session conf.
+   */
   private def setHadoopConf(
       config: Configuration,
       sparkConf: RuntimeConfig,
@@ -288,11 +289,23 @@ object KustoReader {
     if (!KustoAzureFsSetupCache.updateAndGetPrevNativeAzureFs(now)) {
       if (useAbfs) {
         // ABFS uses the SecureAzureBlobFileSystem
-        setHadoopConf(config, sparkConf, "fs.abfs.impl", "org.apache.hadoop.fs.azurebfs.SecureAzureBlobFileSystem")
-        setHadoopConf(config, sparkConf, "fs.abfss.impl", "org.apache.hadoop.fs.azurebfs.SecureAzureBlobFileSystem")
+        setHadoopConf(
+          config,
+          sparkConf,
+          "fs.abfs.impl",
+          "org.apache.hadoop.fs.azurebfs.SecureAzureBlobFileSystem")
+        setHadoopConf(
+          config,
+          sparkConf,
+          "fs.abfss.impl",
+          "org.apache.hadoop.fs.azurebfs.SecureAzureBlobFileSystem")
       } else {
         // WASBS uses NativeAzureFileSystem
-        setHadoopConf(config, sparkConf, "fs.azure", "org.apache.hadoop.fs.azure.NativeAzureFileSystem")
+        setHadoopConf(
+          config,
+          sparkConf,
+          "fs.azure",
+          "org.apache.hadoop.fs.azure.NativeAzureFileSystem")
       }
     }
   }
@@ -311,7 +324,14 @@ object KustoReader {
     for (storage <- storageParameters.storageCredentials) {
       storage.authMethod match {
         case AuthMethod.Key =>
-          handleAccountKeyAuth(storage, storageParameters, config, sparkConf, now, useAbfs, storageProtocol)
+          handleAccountKeyAuth(
+            storage,
+            storageParameters,
+            config,
+            sparkConf,
+            now,
+            useAbfs,
+            storageProtocol)
         case AuthMethod.Sas =>
           handleSasAuth(storage, storageParameters, config, sparkConf, now, useAbfs)
         case _ =>
