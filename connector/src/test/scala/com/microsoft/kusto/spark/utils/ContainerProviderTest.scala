@@ -3,7 +3,6 @@
 
 package com.microsoft.kusto.spark.utils
 
-import com.azure.storage.blob.BlobContainerAsyncClient
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.Client
 import com.microsoft.azure.kusto.ingest.exceptions.IngestionServiceException
@@ -11,9 +10,7 @@ import com.microsoft.azure.kusto.ingest.resources.ContainerWithSas
 import com.microsoft.azure.kusto.ingest.{IngestionResourceManager, QueuedIngestClient}
 import com.microsoft.kusto.spark.datasink.IngestionStorageParameters
 import com.microsoft.kusto.spark.exceptions.NoStorageContainersException
-import org.mockito.ArgumentMatchers.{any, anyBoolean, anyLong}
 import org.mockito.Mockito
-import org.mockito.Mockito.{doAnswer, spy}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalamock.scalatest.MockFactory
@@ -21,7 +18,7 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
 import java.util.Collections
-import scala.collection.JavaConverters.seqAsJavaListConverter
+import scala.jdk.CollectionConverters._
 
 class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
   private val CACHE_EXPIRY_SEC = 30
@@ -64,7 +61,10 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
         }
     }
     // Expecting getResourceManager to be called maxCommandsRetryAttempts i.e. 8 times.
-    mockIngestClient.getResourceManager _ expects () repeated getRMOccurances times () returning mockIngestionResourceManager
+    (mockIngestClient.getResourceManager _)
+      .expects()
+      .repeated(getRMOccurances)
+      .returning(mockIngestionResourceManager)
     // Unfortunately we cannot Mock this class as there is a member variable that is a val and cannot be mocked
     new ExtendedKustoClient(
       new ConnectionStringBuilder("https://somecluster.eastus.kusto.windows.net/"),
@@ -75,18 +75,19 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
     }
   }
 
+  // Test stub to avoid Mockito issues with Java 21 module system
+  private class TestContainerWithSas(index: Int)
+      extends ContainerWithSas(
+        s"https://sacc$index.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0?sv=2018-03-28&sr=c&sp=rw",
+        null) {
+
+    private val sasToken = "?sv=2018-03-28&sr=c&sp=rw"
+
+    override def getSas: String = sasToken
+  }
+
   private def getMockContainerWithSas(index: Int): ContainerWithSas = {
-    val mockResultsOne: ContainerWithSas =
-      Mockito.mock[ContainerWithSas](classOf[ContainerWithSas])
-    val blobResultsOne: BlobContainerAsyncClient =
-      Mockito.mock[BlobContainerAsyncClient](classOf[BlobContainerAsyncClient])
-    Mockito
-      .when(blobResultsOne.getBlobContainerUrl)
-      .thenAnswer(_ =>
-        s"https://sacc$index.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0")
-    Mockito.when(mockResultsOne.getSas).thenAnswer(_ => "?sv=2018-03-28&sr=c&sp=rw")
-    Mockito.when(mockResultsOne.getAsyncContainer).thenAnswer(_ => blobResultsOne)
-    mockResultsOne
+    new TestContainerWithSas(index)
   }
   // happy path
   "ContainerProvider returns a container" should "from RM" in {
@@ -196,26 +197,36 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
       mockDmClient = mockDmClient,
       getRMOccurances = 0)
     val cacheTimeoutSec = 3
+    // Create a testable subclass that tracks calls
+    var generateCallCount = 0
     val containerProvider =
-      new ContainerProvider(extendedMockClient, clusterAlias, command, cacheTimeoutSec)
-    val mockContainerProvider = spy[ContainerProvider](containerProvider)
-    val mockedSasKey = "?mockedSasToken"
-    var count = 0
-    doAnswer(answer(_ => {
-      count = count + 1
-      s"$mockedSasKey-$count"
-    }))
-      .when(mockContainerProvider)
-      .generateSasKey(anyLong(), anyBoolean(), any[IngestionStorageParameters]())
-    // This will fail if it is not returned from the cache!
-    mockContainerProvider.getContainer(Some(arrIngestionStorageParams)).sas should equal(
-      s"$mockedSasKey-1")
-    mockContainerProvider.getContainer(Some(arrIngestionStorageParams)).sas should equal(
-      s"$mockedSasKey-1")
-    // this is greater by 1s
+      new ContainerProvider(extendedMockClient, clusterAlias, command, cacheTimeoutSec) {
+        override def generateSasKey(
+            cacheExpirySeconds: Long,
+            listPermissions: Boolean,
+            ingestionStorageParameter: IngestionStorageParameters): String = {
+          generateCallCount = generateCallCount + 1
+          s"?mockedSasToken-$generateCallCount"
+        }
+      }
+
+    // First call should generate a new SAS token
+    containerProvider.getContainer(Some(arrIngestionStorageParams)).sas should equal(
+      "?mockedSasToken-1")
+    generateCallCount should equal(1)
+
+    // Second call should return from cache (no new generation)
+    containerProvider.getContainer(Some(arrIngestionStorageParams)).sas should equal(
+      "?mockedSasToken-1")
+    generateCallCount should equal(1) // Should still be 1 (from cache)
+
+    // Wait for cache to expire
     Thread.sleep((cacheTimeoutSec + 1) * 1000)
-    mockContainerProvider.getContainer(Some(arrIngestionStorageParams)).sas should equal(
-      s"$mockedSasKey-2")
+
+    // Third call should generate a new SAS token (cache expired)
+    containerProvider.getContainer(Some(arrIngestionStorageParams)).sas should equal(
+      "?mockedSasToken-2")
+    generateCallCount should equal(2) // Should now be 2 (cache expired, regenerated)
   }
 
   def answer[T](f: InvocationOnMock => T): Answer[T] = { (invocation: InvocationOnMock) =>

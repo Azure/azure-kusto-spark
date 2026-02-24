@@ -17,7 +17,7 @@ trait KustoAuthentication {
 
   override def toString: String = KustoConstants.EmptyString
 
-  override def hashCode(): Int = this.hashCode()
+  override def hashCode(): Int = Int.MinValue
 }
 
 abstract class KeyVaultAuthentication(uri: String, authority: String) extends KustoAuthentication

@@ -6,13 +6,13 @@ import java.io.ByteArrayOutputStream
 import java.util
 
 class ByteArrayOutputStreamWithOffset extends ByteArrayOutputStream {
-  def this(bytes: Array[Byte], index: Int) {
+  def this(bytes: Array[Byte], index: Int) = {
     this()
     buf = bytes
     count = index
   }
 
-  def this(size: Int) {
+  def this(size: Int) = {
     this()
     buf = new Array[Byte](size)
   }

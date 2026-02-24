@@ -37,7 +37,7 @@ object ExceptionUtils {
       }
       frames ++= trace
     }
-    frames
+    frames.toSeq
   }
 
   def getStackFrameList(throwable: Throwable): Seq[String] = {
@@ -53,10 +53,10 @@ object ExceptionUtils {
         list += token
       } else if (traceStarted) {
         // Stop after stack frames
-        return list
+        return list.toSeq
       }
     }
-    list
+    list.toSeq
   }
 
   def getStackTrace(throwable: Throwable): String = {

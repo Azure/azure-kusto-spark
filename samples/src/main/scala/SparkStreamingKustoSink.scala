@@ -1,3 +1,10 @@
+// NOTE: This sample requires the azure-eventhubs-spark connector which is currently
+// not available for Scala 2.13 / Spark 4.0. To use this sample, you would need to
+// either use Spark 3.x with Scala 2.12, or wait for the EventHubs connector to be
+// updated for Spark 4.0, or use an alternative EventHubs client library.
+//
+// See: https://github.com/Azure/azure-event-hubs-spark
+
 import java.util.concurrent.TimeUnit
 
 import com.microsoft.kusto.spark.datasink.KustoSinkOptions

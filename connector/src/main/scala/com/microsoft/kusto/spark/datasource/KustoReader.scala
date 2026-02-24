@@ -6,7 +6,7 @@ package com.microsoft.kusto.spark.datasource
 import com.azure.core.credential.AzureSasCredential
 import com.azure.storage.blob.BlobContainerClientBuilder
 import com.azure.storage.common.StorageSharedKeyCredential
-import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties, KustoResultSetTable}
+import com.microsoft.azure.kusto.data.{ClientRequestProperties, KustoResultSetTable}
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasource.ReadMode.ReadMode

@@ -194,7 +194,7 @@
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-lang3</artifactId>
-            <version>3.18.0</version>
+            <version>3.19.0</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
@@ -210,6 +210,7 @@
             </resource>
         </resources>
         <testSourceDirectory>src/test/scala</testSourceDirectory>
+        <sourceDirectory>src/main/scala</sourceDirectory>
         <plugins>
             <plugin>
                 <!-- see http://davidb.github.com/scala-maven-plugin -->
@@ -224,24 +225,23 @@
                         </goals>
                         <configuration>
                             <args>
-                                <arg>-dependencyfile</arg>
-                                <arg>${project.build.directory}/.scala_dependencies</arg>
                                 <arg>-deprecation</arg>
                                 <arg>-feature</arg>
+                                <arg>-unchecked</arg>
+                                <arg>-explaintypes</arg>
                             </args>
                         </configuration>
                     </execution>
                 </executions>
                 <configuration>
-                    <addScalacArgs>-target:jvm-1.8</addScalacArgs>
                     <args>
                         <arg>-Ywarn-unused</arg> <!-- if you need exactly RemoveUnused -->
                     </args>
                     <compilerPlugins>
                         <compilerPlugin>
                             <groupId>org.scalameta</groupId>
-                            <artifactId>semanticdb-scalac_${scala.version.major}.${scala.version.minor}</artifactId>
-                            <version>4.8.14</version>
+                            <artifactId>semanticdb-scalac_2.13.15</artifactId>
+                            <version>4.11.2</version>
                         </compilerPlugin>
                     </compilerPlugins>
                 </configuration>
@@ -268,7 +268,7 @@
                     <junitxml>.</junitxml>
                     <filereports>TestSuiteReport.txt</filereports>
                     <tagsToExclude>KustoE2E</tagsToExclude>
-                    <argLine>-Xms512m</argLine>
+                    <argLine>-Xms512m --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.lang.invoke=ALL-UNNAMED --add-opens=java.base/java.lang.reflect=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED --add-opens=java.base/java.net=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.util.concurrent=ALL-UNNAMED --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED --add-opens=java.base/sun.nio.ch=ALL-UNNAMED --add-opens=java.base/sun.nio.cs=ALL-UNNAMED --add-opens=java.base/sun.security.action=ALL-UNNAMED --add-opens=java.base/sun.util.calendar=ALL-UNNAMED --add-opens=java.security.jgss/sun.security.krb5=ALL-UNNAMED -Djdk.reflect.useDirectMethodHandle=false</argLine>
                     <!-- Comma separated list of JUnit test class names to execute -->
                     <!--jUnitClasses>samples.AppTest</jUnitClasses-->
                 </configuration>
@@ -692,8 +692,7 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>${maven.compile.plugin.version}</version>
                 <configuration>
-                    <source>${java.source.version}</source>
-                    <target>${java.target.version}</target>
+                    <release>${java.source.version}</release>
                 </configuration>
             </plugin>
             <plugin>

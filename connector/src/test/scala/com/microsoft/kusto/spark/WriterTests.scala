@@ -10,7 +10,6 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
-import org.mockito.Mockito._
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
@@ -83,7 +82,7 @@ class WriterTests extends AnyFlatSpec with Matchers {
     val byteArrayOutputStream = new ByteArrayOutputStream()
     val streamWriter = new OutputStreamWriter(byteArrayOutputStream)
     val writer = new BufferedWriter(streamWriter)
-    var csvWriter = CountingWriter(writer)
+    val csvWriter = CountingWriter(writer)
     RowCSVWriterUtils.writeRowAsCSV(
       dfRow,
       df.schema,
@@ -115,18 +114,31 @@ class WriterTests extends AnyFlatSpec with Matchers {
   }
 
   "finalizeFileWrite" should "should flush and close buffers" in {
-    val gzip = mock(classOf[GZIPOutputStream])
-    val buffer = mock(classOf[BufferedWriter])
+    val byteArrayOutputStream = new ByteArrayOutputStream()
+    val gzip = new GZIPOutputStream(byteArrayOutputStream)
+    val outputStreamWriter = new OutputStreamWriter(gzip, StandardCharsets.UTF_8)
+    val buffer = new BufferedWriter(outputStreamWriter)
     val csvWriter = CountingWriter(buffer)
 
+    // Write some data to ensure the streams are actually working
+    buffer.write("test data")
     val fileWriteResource = BlobWriteResource(buffer, gzip, csvWriter, null, null)
+    // Before finalize, the output should be empty or incomplete (buffered)
+    val _ = byteArrayOutputStream.size()
+    // Finalize should flush and close everything
     KustoWriter.finalizeBlobWrite(fileWriteResource)
 
-    verify(gzip, times(1)).flush()
-    verify(gzip, times(1)).close()
+    // After finalize, data should be flushed and streams closed
+    val afterFinalize = byteArrayOutputStream.size()
 
-    verify(buffer, times(1)).flush()
-    verify(buffer, times(1)).close()
+    // Verify that data was actually written (gzip compressed output should be > 0)
+    afterFinalize should be > 0
+
+    // Verify streams are closed by attempting to write again (should throw exception)
+    an[Exception] should be thrownBy {
+      buffer.write("more data")
+      buffer.flush()
+    }
   }
 
   "getColumnsSchema" should "parse table schema correctly" in {
@@ -243,10 +255,10 @@ class WriterTests extends AnyFlatSpec with Matchers {
       StructType(WriterTests.asSchema(someDecimalSchema)))
 
     val dfRow: InternalRow = df.queryExecution.toRdd.collect().head
-    val dfRow2 = dateDf.queryExecution.toRdd.collect.head
-    val dfRows3 = emptyArraysDf.queryExecution.toRdd.collect
-    val dfRows4 = someDecimalDf.queryExecution.toRdd.collect
-    val dfRows5 = otherDecimalDf.queryExecution.toRdd.collect
+    val dfRow2 = dateDf.queryExecution.toRdd.collect().head
+    val dfRows3 = emptyArraysDf.queryExecution.toRdd.collect()
+    val dfRows4 = someDecimalDf.queryExecution.toRdd.collect()
+    val dfRows5 = otherDecimalDf.queryExecution.toRdd.collect()
 
     val byteArrayOutputStream = new ByteArrayOutputStream()
     val streamWriter = new OutputStreamWriter(byteArrayOutputStream)

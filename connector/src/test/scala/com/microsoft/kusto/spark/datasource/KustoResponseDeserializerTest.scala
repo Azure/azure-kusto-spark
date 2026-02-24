@@ -7,7 +7,7 @@ import com.microsoft.azure.kusto.data.KustoOperationResult
 import org.scalatest.flatspec.AnyFlatSpec
 
 import java.sql.Timestamp
-import scala.collection.JavaConverters.collectionAsScalaIterableConverter
+import scala.jdk.CollectionConverters.CollectionHasAsScala
 import scala.io.Source
 
 class KustoResponseDeserializerTest extends AnyFlatSpec {

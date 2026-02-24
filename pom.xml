@@ -12,36 +12,35 @@
         <revision>7.0.4</revision>
         <maven.deploy.skip>true</maven.deploy.skip>
         <kusto.shade.prefix>kusto_connector_shaded</kusto.shade.prefix>
-        <azure.bom.version>1.2.28</azure.bom.version>
+        <azure.bom.version>1.3.2</azure.bom.version>
         <azure.storage.version>8.6.6</azure.storage.version>
         <fasterxml.jackson.version>2.19.2</fasterxml.jackson.version>
+        <java.source.version>21</java.source.version>
         <kusto.sdk.version>7.0.5</kusto.sdk.version>
         <resilience4j.version>1.7.1</resilience4j.version>
         <io.vavr.version>0.10.4</io.vavr.version>
         <slf4j.version>2.0.17</slf4j.version>
 
         <!-- Provided-scoped dependency versions (provided by runtime/Spark/Hadoop) -->
-        <scala.version.major>2.12</scala.version.major>
-        <scala.version.minor>17</scala.version.minor>
-        <spark.version.major>3.0</spark.version.major>
-        <spark.version.minor>3</spark.version.minor>
-        <hadoop.version>3.4.1</hadoop.version>
+        <scala.version.major>2.13</scala.version.major>
+        <scala.version.minor>16</scala.version.minor>
+        <spark.version.major>4.0</spark.version.major>
+        <spark.version.minor>0</spark.version.minor>
+        <hadoop.version>3.4.2</hadoop.version>
 
         <!-- Test-scoped dependency versions -->
         <awaitility.version>4.3.0</awaitility.version>
-        <mockito.version>4.11.0</mockito.version>
-        <scalamock.version>5.2.0</scalamock.version>
+        <mockito.version>5.2.0</mockito.version>
+        <scalamock.version>7.5.1</scalamock.version>
         <scalatest.version>3.2.17</scalatest.version>
         <scalatest.maven.version>2.2.0</scalatest.maven.version>
-        <specs2.version>3.6.5</specs2.version>
-        <scalafix.core.version>0.11.1</scalafix.core.version>
-        <scalafix.version>0.1.8_0.11.0</scalafix.version>
+        <scalafix.core.version>0.14.4</scalafix.core.version>
+        <scalafix.version>0.1.10_0.14.2</scalafix.version>
         <scala.rewrites.version>0.1.5</scala.rewrites.version>
-        <scalafmt.plugin.version>1.1.1640084764.9f463a9</scalafmt.plugin.version>
         <typelevel.scalafix.version>0.5.0</typelevel.scalafix.version>
 
         <!-- Build & plugin versions and general build properties -->
-        <maven.compile.plugin.version>3.10.1</maven.compile.plugin.version>
+        <maven.compile.plugin.version>3.13.0</maven.compile.plugin.version>
         <maven.flatten.version>1.4.1</maven.flatten.version>
         <maven.jar.plugin.version>3.3.0</maven.jar.plugin.version>
         <maven.shade.plugin.version>3.6.0</maven.shade.plugin.version>
@@ -51,8 +50,6 @@
         <scala.maven.plugin.version>4.9.5</scala.maven.plugin.version>
         <scalastyle.maven.plugin.version>1.0.0</scalastyle.maven.plugin.version>
         <xml.maven.plugin.version>1.1.0</xml.maven.plugin.version>
-        <java.source.version>1.8</java.source.version>
-        <java.target.version>1.8</java.target.version>
     </properties>
     <inceptionYear>2018</inceptionYear>
     <scm>
@@ -112,6 +109,8 @@
                     <artifactId>spotless-maven-plugin</artifactId>
                     <version>2.28.0</version>
                     <configuration>
+                        <!-- Use Unix line endings (LF) to match project standard and CI environment -->
+                        <lineEndings>UNIX</lineEndings>
                         <scala>
                             <scalafmt>
                                 <version>3.5.9</version>

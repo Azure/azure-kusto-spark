@@ -47,7 +47,7 @@ import org.apache.spark.sql.types.StructType
 
 import java.time.{Duration, Instant, OffsetDateTime}
 import java.util.{Objects, StringJoiner, UUID}
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.concurrent.duration.FiniteDuration
 
 class ExtendedKustoClient(
