@@ -9,6 +9,7 @@ import org.apache.spark.sql.types.{
   DataType,
   DataTypes,
   DecimalType,
+  FloatType,
   MapType,
   StructType
 }
@@ -22,6 +23,7 @@ object DataTypeMapping {
     "timespan" -> StringType,
     "bool" -> BooleanType,
     "real" -> DoubleType,
+    "float" -> DoubleType, // "float" is a legacy alias for "real" in Kusto
 
     /*
     Kusto uses floating decimal points and spark uses fixed decimal points. The compromise scenario is to use the system
@@ -60,6 +62,7 @@ object DataTypeMapping {
 
   def getSparkTypeToKustoTypeMap(fieldType: DataType): String = {
     if (fieldType.isInstanceOf[DecimalType]) "decimal"
+    else if (fieldType.isInstanceOf[FloatType]) "real"
     else if (fieldType.isInstanceOf[ArrayType] || fieldType.isInstanceOf[StructType] || fieldType
         .isInstanceOf[MapType]) "dynamic"
     else DataTypeMapping.SparkTypeToKustoTypeMap.getOrElse(fieldType, "string")

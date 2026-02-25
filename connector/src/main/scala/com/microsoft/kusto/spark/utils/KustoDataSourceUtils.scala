@@ -239,8 +239,11 @@ object KustoDataSourceUtils {
     val tableSchemaBuilder = new StringJoiner(",")
     for (i <- 0 until result.size()) {
       // Each row contains {Name, CslType, Type}, converted to (Name:CslType) pairs
+      val cslType = result.get(i).get(KustoConstants.Schema.CSLTYPE).asText()
+      // Normalize legacy type aliases: "float" is not a valid Kusto column type, map it to "real"
+      val normalizedCslType = if (cslType.equalsIgnoreCase("float")) "real" else cslType
       tableSchemaBuilder.add(
-        s"['${result.get(i).get(KustoConstants.Schema.NAME).asText()}']:${result.get(i).get(KustoConstants.Schema.CSLTYPE).asText()}")
+        s"['${result.get(i).get(KustoConstants.Schema.NAME).asText()}']:$normalizedCslType")
     }
 
     tableSchemaBuilder.toString
