@@ -28,7 +28,7 @@ import com.microsoft.kusto.spark.utils.{
   KustoQueryUtils,
   KustoDataSourceUtils => KDSU
 }
-import org.apache.spark.sql._
+import org.apache.spark.sql.{DataFrame, Row, SQLContext, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.functions.lit
 import org.awaitility.Awaitility

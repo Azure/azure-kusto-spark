@@ -17,13 +17,13 @@ import com.microsoft.kusto.spark.utils.{
   KustoDataSourceUtils => KDSU
 }
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.sources._
+import org.apache.spark.sql.sources.{BaseRelation, Filter, InsertableRelation, PrunedFilteredScan}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, Row, SQLContext, SparkSession}
 
 import java.security.InvalidParameterException
 import java.util.Locale
-import scala.concurrent.duration._
+import scala.concurrent.duration.FiniteDuration
 import scala.util.{Failure, Success, Try}
 
 private[kusto] case class KustoRelation(

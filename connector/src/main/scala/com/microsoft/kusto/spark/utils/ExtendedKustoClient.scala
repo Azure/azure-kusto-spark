@@ -5,8 +5,14 @@ package com.microsoft.kusto.spark.utils
 
 import com.fasterxml.jackson.databind.node.ArrayNode
 import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
-import com.microsoft.azure.kusto.data._
-import com.microsoft.azure.kusto.data.StringUtils
+import com.microsoft.azure.kusto.data.{
+  Client,
+  ClientFactory,
+  ClientRequestProperties,
+  KustoOperationResult,
+  KustoResultSetTable,
+  StringUtils
+}
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.exceptions.KustoDataExceptionBase
 import com.microsoft.azure.kusto.ingest.resources.ResourceWithSas
@@ -33,7 +39,28 @@ import com.microsoft.kusto.spark.exceptions.{
   FailedOperationException,
   RetriesExhaustedException
 }
-import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
+import com.microsoft.kusto.spark.utils.CslCommandsGenerator.{
+  generateClearStreamingIngestionCacheCommand,
+  generateCreateTableMappingCommand,
+  generateCreateTmpStorageCommand,
+  generateExtentsCountCommand,
+  generateFetchTableIngestByTagsCommand,
+  generateGetExportContainersCommand,
+  generateIsTableMaterializedViewSourceCommand,
+  generateNodesCountCommand,
+  generateRefreshBatchingPolicyCommand,
+  generateShowOperationDetails,
+  generateShowTableMappingsCommand,
+  generateTableAlterAutoDeletePolicy,
+  generateTableAlterIngestionBatchingPolicyCommand,
+  generateTableAlterRetentionPolicy,
+  generateTableAlterStreamIngestionCommand,
+  generateTableCreateCommand,
+  generateTableDropCommand,
+  generateTableMoveExtentsAsyncCommand,
+  generateTableShowIngestionBatchingPolicyCommand,
+  generateTempTableCreateCommand
+}
 import com.microsoft.kusto.spark.utils.KustoConstants.{
   MaxCommandsRetryAttempts,
   MaxSleepOnMoveExtentsMillis

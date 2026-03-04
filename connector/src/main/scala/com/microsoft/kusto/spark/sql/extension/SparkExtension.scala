@@ -7,7 +7,7 @@ import com.microsoft.azure.kusto.data.ClientRequestProperties
 import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SparkIngestionProperties}
 import com.microsoft.kusto.spark.datasource.KustoSourceOptions
 import org.apache.spark.sql.streaming.DataStreamWriter
-import org.apache.spark.sql.{DataFrameWriter, _}
+import org.apache.spark.sql.{DataFrame, DataFrameReader, DataFrameWriter, Row, SaveMode}
 
 object SparkExtension {
 
@@ -61,7 +61,8 @@ object SparkExtension {
         database: String,
         table: String,
         conf: Map[String, String] = Map.empty[String, String],
-        sparkIngestionProperties: Option[SparkIngestionProperties] = None): DataStreamWriter[Row] = {
+        sparkIngestionProperties: Option[SparkIngestionProperties] = None)
+        : DataStreamWriter[Row] = {
       if (sparkIngestionProperties.isDefined) {
         df.option(
           KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON,

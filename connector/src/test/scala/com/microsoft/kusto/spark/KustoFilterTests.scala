@@ -4,8 +4,38 @@
 package com.microsoft.kusto.spark
 
 import com.microsoft.kusto.spark.datasource.{KustoFilter, KustoFiltering, KustoSchema}
-import org.apache.spark.sql.sources._
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.sources.{
+  And,
+  EqualNullSafe,
+  EqualTo,
+  Filter,
+  GreaterThan,
+  GreaterThanOrEqual,
+  In,
+  IsNotNull,
+  IsNull,
+  LessThan,
+  LessThanOrEqual,
+  Not,
+  Or,
+  StringContains,
+  StringEndsWith,
+  StringStartsWith
+}
+import org.apache.spark.sql.types.{
+  BooleanType,
+  ByteType,
+  DateType,
+  DoubleType,
+  FloatType,
+  IntegerType,
+  LongType,
+  ShortType,
+  StringType,
+  StructField,
+  StructType,
+  TimestampType
+}
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers

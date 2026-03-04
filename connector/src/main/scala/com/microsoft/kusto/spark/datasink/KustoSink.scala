@@ -3,8 +3,6 @@
 
 package com.microsoft.kusto.spark.datasink
 
-import java.io._
-
 import com.microsoft.azure.kusto.data.ClientRequestProperties
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}

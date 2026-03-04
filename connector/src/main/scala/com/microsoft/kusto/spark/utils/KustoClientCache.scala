@@ -7,7 +7,16 @@ import java.net.URI
 import java.util.concurrent.ConcurrentHashMap
 import java.util.{Collections, function}
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
-import com.microsoft.kusto.spark.authentication._
+import com.microsoft.kusto.spark.authentication.{
+  AadApplicationAuthentication,
+  AadApplicationCertificateAuthentication,
+  KeyVaultAuthentication,
+  KustoAccessTokenAuthentication,
+  KustoAuthentication,
+  KustoTokenProviderAuthentication,
+  KustoUserPromptAuthentication,
+  ManagedIdentityAuthentication
+}
 import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
 import org.apache.http.client.utils.URIBuilder
 import org.apache.spark.SPARK_VERSION

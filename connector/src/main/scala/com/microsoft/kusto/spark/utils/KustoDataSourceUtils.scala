@@ -16,20 +16,51 @@ import com.fasterxml.jackson.databind.node.ArrayNode
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import com.microsoft.azure.kusto.data.exceptions.{DataClientException, DataServiceException}
 import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties, KustoResultSetTable}
-import com.microsoft.kusto.spark.authentication._
+import com.microsoft.kusto.spark.authentication.{
+  AadApplicationAuthentication,
+  AadApplicationCertificateAuthentication,
+  KeyVaultAppAuthentication,
+  KeyVaultAuthentication,
+  KeyVaultCertificateAuthentication,
+  KustoAccessTokenAuthentication,
+  KustoAuthentication,
+  KustoTokenProviderAuthentication,
+  KustoUserPromptAuthentication,
+  ManagedIdentityAuthentication
+}
 import com.microsoft.kusto.spark.common.{KustoCoordinates, KustoDebugOptions}
 import com.microsoft.kusto.spark.datasink.KustoWriter.TempIngestionTablePrefix
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
 import com.microsoft.kusto.spark.datasink.WriteMode.WriteMode
-import com.microsoft.kusto.spark.datasink.{SchemaAdjustmentMode, _}
+import com.microsoft.kusto.spark.datasink.{
+  IngestionStorageParameters,
+  KustoSinkOptions,
+  SchemaAdjustmentMode,
+  SinkTableCreationMode,
+  SparkIngestionProperties,
+  WriteMode,
+  WriteOptions
+}
 import com.microsoft.kusto.spark.datasource.ReadMode.ReadMode
-import com.microsoft.kusto.spark.datasource._
+import com.microsoft.kusto.spark.datasource.{
+  KustoReadOptions,
+  KustoResponseDeserializer,
+  KustoSchema,
+  KustoSourceOptions,
+  PartitionOptions,
+  ReadMode,
+  TransientStorageParameters
+}
 import com.microsoft.kusto.spark.exceptions.{
   ExceptionUtils,
   FailedOperationException,
   TimeoutAwaitingPendingOperationException
 }
-import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
+import com.microsoft.kusto.spark.utils.CslCommandsGenerator.{
+  generateCountQuery,
+  generateEstimateRowsCountQuery,
+  generateOperationsShowCommand
+}
 import com.microsoft.kusto.spark.utils.KustoConstants.{
   DefaultBatchingLimit,
   DefaultExtentsCountForSplitMergePerNode,
@@ -60,7 +91,7 @@ import java.util.{
   UUID
 }
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.duration._
+import scala.concurrent.duration.{Duration, FiniteDuration}
 import scala.concurrent.{Await, Future}
 import scala.util.{Failure, Success, Try}
 
@@ -465,12 +496,11 @@ object KustoDataSourceUtils {
     }
     try {
       writeModeParam = parameters.get(KustoSinkOptions.KUSTO_WRITE_MODE)
-      writeMode =
-        if (writeModeParam.isEmpty) {
-          WriteMode.Transactional
-        } else {
-          WriteMode.withName(writeModeParam.get)
-        }
+      writeMode = if (writeModeParam.isEmpty) {
+        WriteMode.Transactional
+      } else {
+        WriteMode.withName(writeModeParam.get)
+      }
     } catch {
       case _: NoSuchElementException =>
         throw new InvalidParameterException(s"No such WriteMode option: '${writeModeParam.get}'")
@@ -598,16 +628,16 @@ object KustoDataSourceUtils {
         s"$minimalExtentsCountForSplitMergePerNode, " +
         s"'adjustSchema': $adjustSchema, 'autoCleanupTime': $autoCleanupTime" +
         (if (writeOptions.userTempTableName.isDefined) {
-          s", userTempTableName: ${userTempTableName.get}"
-        } else {
-          ""
-        }) +
+           s", userTempTableName: ${userTempTableName.get}"
+         } else {
+           ""
+         }) +
         s", disableFlushImmediately: $disableFlushImmediately" +
         (if (ensureNoDupBlobs) {
-          "ensureNoDupBlobs: true"
-        } else {
-          ""
-        }))
+           "ensureNoDupBlobs: true"
+         } else {
+           ""
+         }))
     SinkParameters(writeOptions, sourceParameters)
   }
 
@@ -830,12 +860,11 @@ object KustoDataSourceUtils {
             if (waitedTime > TimeUnit.MINUTES.toMillis(1)) {
               maxWaitTime = maxWaitTimeAfterMinute
             }
-            currentWaitTime =
-              if (currentWaitTime + currentWaitTime > maxWaitTime) {
-                maxWaitTime
-              } else {
-                currentWaitTime + currentWaitTime
-              }
+            currentWaitTime = if (currentWaitTime + currentWaitTime > maxWaitTime) {
+              maxWaitTime
+            } else {
+              currentWaitTime + currentWaitTime
+            }
             t.schedule(new ExponentialBackoffTask(), currentWaitTime)
           }
         } catch {
@@ -915,7 +944,7 @@ object KustoDataSourceUtils {
       ReadMaxWaitTime.toMillis.toInt)
 
     var success = true
-    if (timeOut < FiniteDuration.apply(0, SECONDS)) {
+    if (timeOut < FiniteDuration.apply(0, TimeUnit.SECONDS)) {
       task.await()
     } else {
       if (!task.await(timeoutInMillis, TimeUnit.MILLISECONDS)) {

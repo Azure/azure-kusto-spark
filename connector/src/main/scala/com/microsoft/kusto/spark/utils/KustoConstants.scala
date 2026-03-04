@@ -4,7 +4,7 @@
 package com.microsoft.kusto.spark.utils
 
 import java.util.concurrent.TimeUnit
-import scala.concurrent.duration._
+import scala.concurrent.duration.{Duration, FiniteDuration}
 
 object KustoConstants {
   // Setting high value to have no timeout on Await commands

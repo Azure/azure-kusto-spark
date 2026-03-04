@@ -4,7 +4,14 @@
 package com.microsoft.kusto.spark.utils
 
 import java.io.{FileInputStream, IOException}
-import java.security._
+import java.security.{
+  KeyStore,
+  KeyStoreException,
+  NoSuchAlgorithmException,
+  NoSuchProviderException,
+  PrivateKey,
+  UnrecoverableKeyException
+}
 import java.security.cert.{CertificateException, X509Certificate}
 
 object CertUtils {

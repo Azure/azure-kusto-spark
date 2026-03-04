@@ -13,7 +13,11 @@ import com.microsoft.kusto.spark.datasink.{
   SparkIngestionProperties,
   WriteMode
 }
-import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
+import com.microsoft.kusto.spark.utils.CslCommandsGenerator.{
+  generateClearStreamingIngestionCacheCommand,
+  generateTableAlterStreamIngestionCommand,
+  generateTempTableCreateCommand
+}
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.sql.types.DataTypes.IntegerType
 import org.apache.spark.sql.types.{StringType, StructType}

@@ -5,8 +5,25 @@ package com.microsoft.kusto.spark.datasource
 
 import java.sql.{Date, Timestamp}
 
-import org.apache.spark.sql.sources._
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.sources.{
+  And,
+  EqualNullSafe,
+  EqualTo,
+  Filter,
+  GreaterThan,
+  GreaterThanOrEqual,
+  In,
+  IsNotNull,
+  IsNull,
+  LessThan,
+  LessThanOrEqual,
+  Not,
+  Or,
+  StringContains,
+  StringEndsWith,
+  StringStartsWith
+}
+import org.apache.spark.sql.types.{DataType, DateType, StringType, StructType, TimestampType}
 
 object KustoFilter {
   // Augment the original query to include column pruning and filtering

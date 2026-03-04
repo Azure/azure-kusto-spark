@@ -3,14 +3,23 @@
 
 package com.microsoft.kusto.spark.utils
 
-import org.apache.spark.sql.types.DataTypes._
 import org.apache.spark.sql.types.{
   ArrayType,
+  BooleanType,
+  ByteType,
   DataType,
   DataTypes,
+  DateType,
   DecimalType,
+  DoubleType,
+  FloatType,
+  IntegerType,
+  LongType,
   MapType,
-  StructType
+  ShortType,
+  StringType,
+  StructType,
+  TimestampType
 }
 
 object DataTypeMapping {
@@ -61,7 +70,8 @@ object DataTypeMapping {
   def getSparkTypeToKustoTypeMap(fieldType: DataType): String = {
     if (fieldType.isInstanceOf[DecimalType]) {
       "decimal"
-    } else if (fieldType.isInstanceOf[ArrayType] || fieldType.isInstanceOf[StructType] || fieldType
+    } else if (fieldType.isInstanceOf[ArrayType] || fieldType
+        .isInstanceOf[StructType] || fieldType
         .isInstanceOf[MapType]) {
       "dynamic"
     } else {

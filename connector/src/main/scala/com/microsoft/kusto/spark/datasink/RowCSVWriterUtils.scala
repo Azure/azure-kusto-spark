@@ -12,7 +12,26 @@ import java.util.Base64
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils, MapData}
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.{
+  ArrayType,
+  BinaryType,
+  BooleanType,
+  ByteType,
+  DataType,
+  DateType,
+  Decimal,
+  DecimalType,
+  DoubleType,
+  FloatType,
+  IntegerType,
+  LongType,
+  MapType,
+  ShortType,
+  StringType,
+  StructField,
+  StructType,
+  TimestampType
+}
 
 object RowCSVWriterUtils {
   def writeRowAsCSV(

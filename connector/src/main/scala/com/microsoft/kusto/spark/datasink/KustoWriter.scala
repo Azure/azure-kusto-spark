@@ -45,7 +45,13 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.CollectionAccumulator
 import reactor.core.publisher.Mono
 
-import java.io._
+import java.io.{
+  BufferedWriter,
+  ByteArrayInputStream,
+  CharArrayWriter,
+  IOException,
+  OutputStreamWriter
+}
 import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.security.InvalidParameterException

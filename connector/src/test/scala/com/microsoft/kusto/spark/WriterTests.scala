@@ -4,11 +4,29 @@
 package com.microsoft.kusto.spark
 
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.microsoft.kusto.spark.datasink._
+import com.microsoft.kusto.spark.datasink.{
+  BlobWriteResource,
+  CountingWriter,
+  KustoWriter,
+  RowCSVWriterUtils
+}
 import com.microsoft.kusto.spark.utils.{KustoConstants, KustoDataSourceUtils => KDSU}
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.{
+  ArrayType,
+  BinaryType,
+  BooleanType,
+  DataType,
+  DataTypes,
+  DateType,
+  IntegerType,
+  MapType,
+  StringType,
+  StructField,
+  StructType,
+  TimestampType
+}
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -54,6 +72,7 @@ class WriterTests extends AnyFlatSpec with Matchers {
         .format("json")
         .option("header", "true")
         .load("src/test/resources/TestData/json/TestDynamicFields.json")
+    }
   }
 
   "convertRowToCsv" should "convert the row as expected" in {

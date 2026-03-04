@@ -19,7 +19,11 @@ import com.microsoft.kusto.spark.datasource.{
   TransientStorageParameters
 }
 import com.microsoft.kusto.spark.sql.extension.SparkExtension._
-import com.microsoft.kusto.spark.utils.CslCommandsGenerator._
+import com.microsoft.kusto.spark.utils.CslCommandsGenerator.{
+  generateAlterIngestionBatchingPolicyCommand,
+  generateTableAlterAutoDeletePolicy,
+  generateTableDropCommand
+}
 import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.hadoop.util.ComparableVersion
 import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
