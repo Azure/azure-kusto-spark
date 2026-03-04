@@ -403,6 +403,7 @@ class WriterTests extends AnyFlatSpec with Matchers {
 object WriterTests {
   def asRows[U](values: List[U]): List[Row] = {
     values.map {
+      case null => Row(null) // scalastyle:off null
       case row: Row => row.asInstanceOf[Row]
       case prod: Product => Row(prod.productIterator.toList: _*)
       case any: Any => Row(any)
