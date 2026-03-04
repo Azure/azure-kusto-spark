@@ -23,6 +23,7 @@ import org.scalatest.matchers.should.Matchers
 import java.util
 import scala.jdk.CollectionConverters._
 
+// scalastyle:off null - test code uses null for stub constructors
 class ExtendedKustoClientTests extends AnyFlatSpec with Matchers {
   private val kustoCoordinates = KustoCoordinates("", "", "database", Some("table"))
   class ExtendedKustoClientStub(
@@ -59,7 +60,7 @@ class ExtendedKustoClientTests extends AnyFlatSpec with Matchers {
     val tags = new util.ArrayList[String]
     tags.add("tag")
     stubbedClient.tagsToReturn = tags
-    props.ingestIfNotExists = util.Collections.singletonList("otherTag")
+    props.ingestIfNotExists = Some(util.Collections.singletonList("otherTag"))
     val shouldIngestWhenNoOverlap =
       stubbedClient.shouldIngestData(kustoCoordinates, Some(props), tableExists = true, null)
     shouldIngestWhenNoOverlap shouldEqual true

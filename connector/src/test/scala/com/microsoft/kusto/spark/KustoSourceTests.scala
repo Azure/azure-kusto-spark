@@ -26,6 +26,7 @@ import java.security.InvalidParameterException
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration.Duration
 
+// scalastyle:off null - test code uses null for mock parameters
 class KustoSourceTests extends AnyFlatSpec with MockFactory with Matchers with BeforeAndAfterAll {
   private val loggingLevel: Option[String] = Option(System.getProperty("logLevel"))
   if (loggingLevel.isDefined) KDSU.setLoggingLevel(loggingLevel.get)

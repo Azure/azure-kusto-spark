@@ -376,7 +376,7 @@ class ExtendedKustoClient(
         KustoConstants.DefaultMaxRetriesOnMoveExtents,
         writeOptions.kustoCustomDebugWriteOptions.maxRetriesOnMoveExtents)
     while (extentsProcessed < totalAmount) {
-      var error: Object = null
+      var error: Option[Object] = None
       var res: Option[KustoResultSetTable] = None
       var failed = false
       // Execute move batch and keep any transient error for handling
@@ -421,16 +421,16 @@ class ExtendedKustoClient(
         // issues that might be solved in retries even if engine reports them as permanent
         case ex: FailedOperationException =>
           if (ex.getResult.isDefined) {
-            error = ex.getResult.get.getString("Status")
+            error = Some(ex.getResult.get.getString("Status"))
           }
           failed = true
         case ex: KustoDataExceptionBase =>
-          error = ExceptionUtils.getRootCauseStackTrace(ex)
+          error = Some(ExceptionUtils.getRootCauseStackTrace(ex))
           failed = true
       }
 
       // When some node fails the move - it will put "failed" as the target extent id
-      if (res.isDefined && error == null) {
+      if (res.isDefined && error.isEmpty) {
         val errorInResult = findErrorInResult(res.get)
         failed = errorInResult._1
         error = errorInResult._2
@@ -487,15 +487,11 @@ class ExtendedKustoClient(
       retry: Int,
       currentSleepTime: Int,
       targetTable: String,
-      error: Object): (Int, Int) = {
+      error: Option[Object]): (Int, Int) = {
     KDSU.logWarn(
       className,
       s"""moving extents to '$targetTable' failed,
-        retry number: $retry ${if (error == null) {
-          ""
-        } else {
-          s", error: $error"
-        }}.
+        retry number: $retry ${error.map(e => s", error: $e").getOrElse("")}.
         Sleeping for: $currentSleepTime""")
     Thread.sleep(currentSleepTime)
     val increasedSleepTime = Math.min(MaxSleepOnMoveExtentsMillis, currentSleepTime * 2)
@@ -531,15 +527,16 @@ class ExtendedKustoClient(
     extentsLeftRes.getInt(0) != 0
   }
 
-  def findErrorInResult(res: KustoResultSetTable): (Boolean, Object) = {
-    var error: Object = null
+  def findErrorInResult(res: KustoResultSetTable): (Boolean, Option[Object]) = {
+    var error: Option[Object] = None
     var failed = false
     if (KDSU.getLoggingLevel == Level.DEBUG) {
       var i = 0
       while (res.next() && !failed) {
         val targetExtent = res.getString(1)
-        error = res.getObject(2)
-        if (targetExtent == "Failed" || StringUtils.isNotBlank(error.asInstanceOf[String])) {
+        error = Option(res.getObject(2))
+        if (targetExtent == "Failed" || StringUtils
+            .isNotBlank(error.map(_.asInstanceOf[String]).orNull)) {
           failed = true
           if (i > 0) {
             KDSU.logFatal(
@@ -553,8 +550,9 @@ class ExtendedKustoClient(
     } else {
       if (res.next()) {
         val targetExtent = res.getString(1)
-        error = res.getObject(2)
-        if (targetExtent == "Failed" || StringUtils.isNotBlank(error.asInstanceOf[String])) {
+        error = Option(res.getObject(2))
+        if (targetExtent == "Failed" || StringUtils
+            .isNotBlank(error.map(_.asInstanceOf[String]).orNull)) {
           failed = true
         }
         // TODO handle specific errors
@@ -591,22 +589,24 @@ class ExtendedKustoClient(
       tableExists: Boolean,
       crp: ClientRequestProperties): Boolean = {
     if (tableExists && maybeSparkIngestionProperties.isDefined) {
-      val ingestIfNotExistsTags = maybeSparkIngestionProperties.orNull.ingestIfNotExists
-      if (ingestIfNotExistsTags != null && !ingestIfNotExistsTags.isEmpty) {
-        val ingestIfNotExistsTagsSet = ingestIfNotExistsTags.asScala.toSet
+      val ingestIfNotExistsTags = maybeSparkIngestionProperties.flatMap(_.ingestIfNotExists)
+      if (ingestIfNotExistsTags.exists(!_.isEmpty)) {
+        val ingestIfNotExistsTagsSet = ingestIfNotExistsTags.get.asScala.toSet
         val res =
           fetchTableExtentsTags(tableCoordinates.database, tableCoordinates.table.get, crp)
         if (res.next()) {
           val tagsArray = res.getObject(0).asInstanceOf[ArrayNode]
-          for (i <- 0 until tagsArray.size()) {
-            if (ingestIfNotExistsTagsSet.contains(tagsArray.get(i).asText())) {
-              return false
-            }
-          }
+          !(0 until tagsArray.size()).exists(i =>
+            ingestIfNotExistsTagsSet.contains(tagsArray.get(i).asText()))
+        } else {
+          true
         }
+      } else {
+        true
       }
+    } else {
+      true
     }
-    true
   }
 
   def fetchTableExtentsTags(

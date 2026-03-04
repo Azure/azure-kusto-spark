@@ -52,7 +52,7 @@ object KustoIngestionUtils {
         KustoDataSourceUtils.logDebug(
           this.getClass.getSimpleName,
           s"Using CSV mapping : $mapping")
-        ingestionProperties.csvMapping = mapping
+        ingestionProperties.csvMapping = Some(mapping)
     }
   }
 
@@ -111,8 +111,7 @@ object KustoIngestionUtils {
 
   private def validateMappingParameters(ingestionProperties: SparkIngestionProperties): Unit = {
     require(
-      ingestionProperties.csvMappingNameReference == null
-        || ingestionProperties.csvMappingNameReference.isEmpty,
+      ingestionProperties.csvMappingNameReference.forall(_.isEmpty),
       "Sink options SparkIngestionProperties.csvMappingNameReference and adjustSchema." +
         "GenerateDynamicCsvMapping are not compatible. Use only one.")
   }

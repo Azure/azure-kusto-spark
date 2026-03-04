@@ -159,7 +159,7 @@ object KustoWriter {
           targetSchema,
           writeOptions,
           crp,
-          stagingTableIngestionProperties.creationTime == null)
+          stagingTableIngestionProperties.creationTime.isEmpty)
       }
 
       if (writeOptions.writeMode == WriteMode.Transactional) {
@@ -266,10 +266,7 @@ object KustoWriter {
   }
 
   private def getCreationTime(ingestionProperties: SparkIngestionProperties): Instant = {
-    Option(ingestionProperties.creationTime) match {
-      case Some(creationTimeVal) => creationTimeVal
-      case None => Instant.now(Clock.systemUTC())
-    }
+    ingestionProperties.creationTime.getOrElse(Instant.now(Clock.systemUTC()))
   }
 
   private def ingestRowsIntoTempTbl(
@@ -347,7 +344,7 @@ object KustoWriter {
       writeOptions: WriteOptions): SparkIngestionProperties = {
     val sparkIngestionProperties =
       writeOptions.maybeSparkIngestionProperties.getOrElse(new SparkIngestionProperties())
-    sparkIngestionProperties.ingestIfNotExists = new util.ArrayList()
+    sparkIngestionProperties.ingestIfNotExists = Some(new util.ArrayList())
     sparkIngestionProperties
   }
 
@@ -511,6 +508,7 @@ object KustoWriter {
       clientCache.ingestKcsb.getClusterUrl,
       Mono.just(parameters.cloudInfo))
 
+    // scalastyle:off null - Java SDK RequestRetryOptions requires null for default values
     val reqRetryOpts = new RequestRetryOptions(
       RetryPolicyType.FIXED,
       KCONST.QueueRetryAttempts,
@@ -518,6 +516,7 @@ object KustoWriter {
       null,
       null,
       null)
+    // scalastyle:on null
     ingestClient.setQueueRequestOptions(reqRetryOpts)
     // We force blocking here, since the driver can only complete the ingestion process
     // once all partitions are ingested into the temporary table
@@ -552,8 +551,10 @@ object KustoWriter {
     val options = new BlobRequestOptions()
     val concurrentRequestCount = 4 // Should be configured from outside
     options.setConcurrentRequestCount(concurrentRequestCount)
+    // scalastyle:off null - Azure Blob SDK requires null for default access conditions
     val gzip: GZIPOutputStream = new GZIPOutputStream(
       currentBlob.openOutputStream(null, options, null))
+    // scalastyle:on null
 
     val writer = new OutputStreamWriter(gzip, StandardCharsets.UTF_8)
 
@@ -619,7 +620,9 @@ object KustoWriter {
               <!-- The statuses of the ingestion operations are now set in the ingestion result -->
               val blobUrlWithSas =
                 s"${blobResource.blob.getStorageUri.getPrimaryUri.toString}${blobResource.sas}"
+              // scalastyle:off null - Java SDK ContainerWithSas accepts null for SAS token
               val containerWithSas = new ContainerWithSas(blobUrlWithSas, null)
+              // scalastyle:on null
               kustoClient.reportIngestionResult(containerWithSas, success = true)
               x
             case Failure(e: Throwable) =>
@@ -630,9 +633,11 @@ object KustoWriter {
                   s"$partitionIdString for requestId: '${parameters.writeOptions.requestId}")
               val blobUrlWithSas =
                 s"${blobResource.blob.getStorageUri.getPrimaryUri.toString}${blobResource.sas}"
+              // scalastyle:off null - Java SDK ContainerWithSas accepts null for SAS token
               val containerWithSas = new ContainerWithSas(blobUrlWithSas, null)
               kustoClient.reportIngestionResult(containerWithSas, success = false)
               null
+            // scalastyle:on null
           }
         },
         this.retryConfig,

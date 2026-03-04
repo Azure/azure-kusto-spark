@@ -21,12 +21,12 @@ class SparkIngestionPropertiesTest extends AnyFlatSpec {
 
     val sp = new SparkIngestionProperties(
       flushImmediately = true,
-      csvMappingNameReference = "mapy",
-      ingestByTags = ingestByTags,
-      creationTime = Instant.now(Clock.systemUTC()),
-      ingestIfNotExists = ingestByTags,
-      additionalTags = ingestByTags,
-      csvMapping = "[{\"Column\": \"a\", \"Properties\": {\"Ordinal\": \"0\"}}]")
+      csvMappingNameReference = Some("mapy"),
+      ingestByTags = Some(ingestByTags),
+      creationTime = Some(Instant.now(Clock.systemUTC())),
+      ingestIfNotExists = Some(ingestByTags),
+      additionalTags = Some(ingestByTags),
+      csvMapping = Some("[{\"Column\": \"a\", \"Properties\": {\"Ordinal\": \"0\"}}]"))
     val stringProps = sp.toString
     val spFromString = SparkIngestionProperties.fromString(stringProps)
 
@@ -34,7 +34,7 @@ class SparkIngestionPropertiesTest extends AnyFlatSpec {
     val ingestByTags2 = new java.util.ArrayList[String]
     val tag2 = "dummyTag2"
     ingestByTags.add(tag2)
-    sp.ingestByTags = ingestByTags2
+    sp.ingestByTags = Some(ingestByTags2)
     assert(!EqualsBuilder.reflectionEquals(spFromString, sp))
 
     val ingestionProperties = spFromString
@@ -49,34 +49,34 @@ class SparkIngestionPropertiesTest extends AnyFlatSpec {
       Table(
         ("ingestByTags", "dropByTags", "additionalTags", "creationTime", "isInvalid"),
         (
-          Collections.emptyList[String](),
-          Collections.emptyList[String](),
-          Collections.emptyList[String](),
-          Instant.now(Clock.systemUTC()),
+          Some(Collections.emptyList[String]()),
+          Some(Collections.emptyList[String]()),
+          Some(Collections.emptyList[String]()),
+          Some(Instant.now(Clock.systemUTC())),
           true),
         (
-          Collections.singletonList("ingestTag"),
-          Collections.emptyList[String](),
-          Collections.emptyList[String](),
-          null,
+          Some(Collections.singletonList("ingestTag")),
+          Some(Collections.emptyList[String]()),
+          Some(Collections.emptyList[String]()),
+          None,
           true),
         (
-          Collections.emptyList[String](),
-          Collections.singletonList("dropTag"),
-          Collections.emptyList[String](),
-          null,
+          Some(Collections.emptyList[String]()),
+          Some(Collections.singletonList("dropTag")),
+          Some(Collections.emptyList[String]()),
+          None,
           true),
         (
-          Collections.singletonList("ingestTag"),
-          Collections.singletonList("dropTag"),
-          Collections.singletonList("additionalTag"),
-          Instant.now(Clock.systemUTC()),
+          Some(Collections.singletonList("ingestTag")),
+          Some(Collections.singletonList("dropTag")),
+          Some(Collections.singletonList("additionalTag")),
+          Some(Instant.now(Clock.systemUTC())),
           true),
         (
-          Collections.emptyList[String](),
-          Collections.emptyList[String](),
-          Collections.emptyList[String](),
-          null,
+          Some(Collections.emptyList[String]()),
+          Some(Collections.emptyList[String]()),
+          Some(Collections.emptyList[String]()),
+          None,
           false))
     forAll(testCombinations) {
       (ingestByTags, dropByTags, additionalTags, creationTime, isInvalid) =>

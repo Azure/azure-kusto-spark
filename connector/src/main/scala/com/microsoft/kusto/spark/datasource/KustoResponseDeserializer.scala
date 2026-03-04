@@ -12,7 +12,7 @@ import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import java.sql.Timestamp
 import java.time.Instant
 import java.util
-import scala.jdk.CollectionConverters._
+import scala.collection.JavaConverters.asScalaBufferConverter
 import scala.collection.mutable
 
 object KustoResponseDeserializer {
@@ -89,7 +89,7 @@ class KustoResponseDeserializer(val kustoResult: KustoResultSetTable) {
         .toArray()
         .zipWithIndex
         .map(column => {
-          if (column._1 == null) null else valueTransformers(column._2)(column._1)
+          Option(column._1).map(v => valueTransformers(column._2)(v)).orNull
         })
       value.add(new GenericRowWithSchema(genericRow, schema.sparkSchema))
     })

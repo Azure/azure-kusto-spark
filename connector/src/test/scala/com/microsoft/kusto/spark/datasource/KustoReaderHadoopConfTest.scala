@@ -19,6 +19,7 @@ import java.time.temporal.ChronoUnit
  * spark.hadoop. prefix) so that engines like Gluten/Velox that read from Spark session conf also
  * pick them up.
  */
+// scalastyle:off null - test assertions use 'should not be null'
 class KustoReaderHadoopConfTest extends AnyFlatSpec with Matchers with BeforeAndAfterEach {
   private val sparkHadoopPrefix = "spark.hadoop."
   private val SasVersion = "sv=2021-01-01"

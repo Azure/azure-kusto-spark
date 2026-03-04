@@ -61,9 +61,9 @@ final case class TransientStorageCredentials() {
   }
 
   def authMethod: AuthMethod.AuthMethod = {
-    sasKey match {
-      case null => AuthMethod.Key
-      case TransientStorageParameters.ImpersonationString => AuthMethod.Impersonation
+    Option(sasKey) match {
+      case None => AuthMethod.Key
+      case Some(TransientStorageParameters.ImpersonationString) => AuthMethod.Impersonation
       case _ => AuthMethod.Sas
     }
   }

@@ -45,6 +45,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.immutable
 
+// scalastyle:off null - test code uses null for Spark literal values
 class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
   private val className = this.getClass.getSimpleName
   private val rowId = new AtomicInteger(1)

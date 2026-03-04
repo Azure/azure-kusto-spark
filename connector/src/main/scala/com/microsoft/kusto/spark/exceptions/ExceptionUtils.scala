@@ -110,10 +110,6 @@ object ExceptionUtils {
 
   def getRootCause(throwable: Throwable): Throwable = {
     val list = getThrowableList(throwable)
-    if (list.isEmpty) {
-      null
-    } else {
-      list.lastOption.orNull
-    }
+    list.lastOption.orNull
   }
 }

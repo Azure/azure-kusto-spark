@@ -21,6 +21,7 @@ import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
 import java.util.UUID
 
+// scalastyle:off null - test code uses null for Spark literal values
 class KustoSinkSchemaAdjustmentE2E
     extends AnyFlatSpec
     with BeforeAndAfterEach
@@ -137,7 +138,7 @@ class KustoSinkSchemaAdjustmentE2E
         df,
         testTable,
         schemaAdjustmentMode,
-        new SparkIngestionProperties(csvMappingNameReference = "testError"))
+        new SparkIngestionProperties(csvMappingNameReference = Some("testError")))
 
     }
     assert(thrown.getMessage.contains("are not compatible"))

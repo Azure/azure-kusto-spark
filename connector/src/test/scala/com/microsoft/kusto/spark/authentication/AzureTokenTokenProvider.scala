@@ -8,10 +8,10 @@ import org.apache.hadoop.fs.azurebfs.oauth2.{AccessTokenProvider, AzureADToken}
 class AzureTokenTokenProvider extends AccessTokenProvider {
 
   override def refreshToken(): AzureADToken = {
-    AzureTokenTokenProvider.azureADToken
+    AzureTokenTokenProvider.azureADToken.orNull
   }
 }
 
 object AzureTokenTokenProvider {
-  var azureADToken: AzureADToken = null
+  var azureADToken: Option[AzureADToken] = None
 }

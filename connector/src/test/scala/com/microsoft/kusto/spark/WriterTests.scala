@@ -39,6 +39,7 @@ import java.time.format.DateTimeFormatter
 import java.util.TimeZone
 import java.util.zip.GZIPOutputStream
 
+// scalastyle:off null - test code uses null for test fixtures and Java interop
 class WriterTests extends AnyFlatSpec with Matchers {
 
   private val AppName = "SimpleKustoDataSink"
@@ -106,7 +107,9 @@ class WriterTests extends AnyFlatSpec with Matchers {
     val df: DataFrame = getDF(isNestedSchema = false)
     val dfRow: InternalRow = df.queryExecution.toRdd.collect().head
     val expected =
+      // scalastyle:off line.size.limit
       """"[true,false,null]","[1,2,3,null]",,"value","[""a"",""b"",""c"",null]","[[""a"",""b"",""c""],null]","{""bool"":true,""dict_ar"":[{""int"":1,""string"":""a""},{""int"":2,""string"":""b""}],""int"":1,""int_ar"":[1,2,3],""string"":""abc"",""string_ar"":[""a"",""b"",""c""]}""""
+        // scalastyle:on line.size.limit
         .concat(lineSep)
 
     val byteArrayOutputStream = new ByteArrayOutputStream()
@@ -173,7 +176,9 @@ class WriterTests extends AnyFlatSpec with Matchers {
 
   "getColumnsSchema" should "parse table schema correctly" in {
     // Verify part of the following schema:
+    // scalastyle:off line.size.limit
     // "{\"Name\":\"Subscriptions\",\"OrderedColumns\":[{\"Name\":\"SubscriptionGuid\",\"Type\":\"System.String\",\"CslType\":\"string\"},{\"Name\":\"Identifier\",\"Type\":\"System.String\",\"CslType\":\"string\"},{\"Name\":\"SomeNumber\",\"Type\":\"System.Int64\",\"CslType\":\"long\"},{\"Name\":\"IsCurrent\",\"Type\":\"System.SByte\",\"CslType\":\"bool\"},{\"Name\":\"LastModifiedOn\",\"Type\":\"System.DateTime\",\"CslType\":\"datetime\"},{\"Name\":\"IntegerValue\",\"Type\":\"System.Int32\",\"CslType\":\"int\"}]}"
+    // scalastyle:on line.size.limit
     val element1 = objectMapper.createObjectNode
     element1.put(KustoConstants.Schema.CSLTYPE, "string")
     element1.put(KustoConstants.Schema.NAME, "SubscriptionGuid")
@@ -305,7 +310,9 @@ class WriterTests extends AnyFlatSpec with Matchers {
 
     writer.flush()
     val res1 = byteArrayOutputStream.toString
+    // scalastyle:off line.size.limit
     res1 shouldEqual "\"{\"\"asd\"\":{\"\"arrayStrings\"\":[\"\"stringVal\\n\\r\\\\\\\"\"\"\"]},\"\"asd2\"\":{\"\"arrayStrings\"\":[\"\"stringVal2\\b\\f\"\"]}}\"" + lineSep
+    // scalastyle:on line.size.limit
     val sdf = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSSSS")
 
     byteArrayOutputStream.reset()

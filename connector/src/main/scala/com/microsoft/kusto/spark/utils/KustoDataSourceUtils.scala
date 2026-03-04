@@ -322,7 +322,7 @@ object KustoDataSourceUtils {
     val keyVaultCertKey = parameters.getOrElse(KustoDebugOptions.KEY_VAULT_CERTIFICATE_KEY, "")
     val accessToken: String = parameters.getOrElse(KustoSourceOptions.KUSTO_ACCESS_TOKEN, "")
     val userPrompt: Option[String] = parameters.get(KustoSourceOptions.KUSTO_USER_PROMPT)
-    var authentication: KustoAuthentication = null
+    var authentication: Option[KustoAuthentication] = None
     var keyVaultAuthentication: Option[KeyVaultAuthentication] = None
 
     val managedIdentityAuth: Boolean =
@@ -363,20 +363,22 @@ object KustoDataSourceUtils {
     if (applicationId.nonEmpty) {
       // Application authentication
       if (applicationKey.nonEmpty) {
-        authentication = AadApplicationAuthentication(applicationId, applicationKey, authorityId)
+        authentication = Some(
+          AadApplicationAuthentication(applicationId, applicationKey, authorityId))
       } else if (applicationCertPath.nonEmpty) {
-        authentication = AadApplicationCertificateAuthentication(
-          applicationId,
-          applicationCertPath,
-          applicationCertPassword,
-          authorityId)
+        authentication = Some(
+          AadApplicationCertificateAuthentication(
+            applicationId,
+            applicationCertPath,
+            applicationCertPassword,
+            authorityId))
       }
     } else if (managedIdentityAuth) {
       // Authentication for managed Identity
-      authentication = ManagedIdentityAuthentication(maybeManagedClientId)
+      authentication = Some(ManagedIdentityAuthentication(maybeManagedClientId))
     } else if (accessToken.nonEmpty) {
       // Authentication by token
-      authentication = KustoAccessTokenAuthentication(accessToken)
+      authentication = Some(KustoAccessTokenAuthentication(accessToken))
     } else if (tokenProviderCoordinates.nonEmpty) {
       // Authentication by token provider
       val classLoader = Thread.currentThread().getContextClassLoader
@@ -386,17 +388,17 @@ object KustoDataSourceUtils {
         .newInstance(parameters)
       val tokenProviderCallback = c1.asInstanceOf[Callable[String]]
 
-      authentication = KustoTokenProviderAuthentication(tokenProviderCallback)
+      authentication = Some(KustoTokenProviderAuthentication(tokenProviderCallback))
     } else if (keyVaultUri.isEmpty) {
       if (userPrompt.isDefined) {
         // Use only for local run where you can open the browser and logged in as your user
-        authentication = KustoUserPromptAuthentication(authorityId)
+        authentication = Some(KustoUserPromptAuthentication(authorityId))
       } else {
         logWarn(
           "parseSourceParameters",
           "No authentication method was supplied - using device code authentication. The token should last for one hour")
         val accessToken = getAccessTokenFallback(clusterUrl, authorityId)
-        authentication = KustoAccessTokenAuthentication(accessToken)
+        authentication = Some(KustoAccessTokenAuthentication(accessToken))
       }
     }
     (authentication, keyVaultAuthentication)
@@ -459,7 +461,8 @@ object KustoDataSourceUtils {
 
     val ingestionUri = parameters.get(KustoSinkOptions.KUSTO_INGESTION_URI)
     SourceParameters(
-      authentication,
+      authentication.getOrElse(
+        throw new IllegalArgumentException("Could not resolve authentication method")),
       KustoCoordinates(clusterUrl.get, alias.get, database.get, table, ingestionUri),
       keyVaultAuthentication,
       requestId,
@@ -497,9 +500,10 @@ object KustoDataSourceUtils {
     var maxRetriesOnMoveExtents: Int = 0
     try {
       tableCreationParam = parameters.get(KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS)
-      tableCreation =
+      tableCreation = {
         if (tableCreationParam.isEmpty) SinkTableCreationMode.FailIfNotExist
         else SinkTableCreationMode.withName(tableCreationParam.get)
+      }
     } catch {
       case _: NoSuchElementException =>
         throw new InvalidParameterException(
@@ -664,8 +668,8 @@ object KustoDataSourceUtils {
 
     val isMappingAlreadyPresent = maybeSparkIngestionProperties match {
       case Some(sparkIngestionProperties) =>
-        !StringUtils.isEmpty(sparkIngestionProperties.csvMapping) || !StringUtils.isEmpty(
-          sparkIngestionProperties.csvMappingNameReference)
+        sparkIngestionProperties.csvMapping.exists(s => !StringUtils.isEmpty(s)) ||
+        sparkIngestionProperties.csvMappingNameReference.exists(s => !StringUtils.isEmpty(s))
       case None => false
     }
 

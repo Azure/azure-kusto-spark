@@ -145,8 +145,8 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
     val tag = "dummyTag"
     ingestByTags.add(tag)
     val sp = new SparkIngestionProperties()
-    sp.ingestByTags = ingestByTags
-    sp.creationTime = Instant.now(Clock.systemUTC())
+    sp.ingestByTags = Some(ingestByTags)
+    sp.creationTime = Some(Instant.now(Clock.systemUTC()))
 
     dfOrig.write
       .format("com.microsoft.kusto.spark.datasource")

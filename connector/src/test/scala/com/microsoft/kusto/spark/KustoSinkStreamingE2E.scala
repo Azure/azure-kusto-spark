@@ -74,8 +74,8 @@ class KustoSinkStreamingE2E extends AnyFlatSpec with BeforeAndAfterAll {
     val sp = new SparkIngestionProperties
     val tags = new java.util.ArrayList[String]()
     tags.add("tagytag")
-    sp.ingestByTags = tags
-    sp.ingestIfNotExists = tags
+    sp.ingestByTags = Some(tags)
+    sp.ingestIfNotExists = Some(tags)
 
     spark.conf.set(CheckpointLocationKey, CheckpointLocationValue)
 

@@ -30,6 +30,7 @@ import org.scalatest.prop.Tables.Table
 import java.security.InvalidParameterException
 import scala.collection.mutable
 
+// scalastyle:off null - test code uses null for mock parameters
 class KustoDataSourceUtilsTest extends AnyFlatSpec with MockFactory {
   private val TestAppId = "AppId"
   private val TestAppKey = "AppKey"
@@ -221,7 +222,7 @@ class KustoDataSourceUtilsTest extends AnyFlatSpec with MockFactory {
 
   s"$testName" should "throw IllegalArgumentException when addSourceLocationTransform is true and ingestion properties contain mapping" in {
     val sparkIngestionProperties = new SparkIngestionProperties()
-    sparkIngestionProperties.csvMapping = "csv_mapping"
+    sparkIngestionProperties.csvMapping = Some("csv_mapping")
 
     val exception = intercept[IllegalArgumentException] {
       KustoDataSourceUtils.validateAndCreateWriteDebugOptions(

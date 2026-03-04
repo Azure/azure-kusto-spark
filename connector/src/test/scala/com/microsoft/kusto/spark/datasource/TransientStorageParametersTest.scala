@@ -20,7 +20,12 @@ class TransientStorageParametersTest extends AnyFlatSpec {
     val tsString = transientStorageParameters.toString()
     transientStorageParameters.storageCredentials.length shouldEqual 2
 
-    tsString shouldEqual s"[BlobContainer: kusto ,Storage: ateststorage , IsSasKeyDefined: true${System.lineSeparator()}BlobContainer: kusto2 ,Storage: ateststorage2 , IsSasKeyDefined: true, domain: core.windows.net]"
+    val expectedPrefix =
+      "[BlobContainer: kusto ,Storage: ateststorage , IsSasKeyDefined: true"
+    val expectedSuffix =
+      "BlobContainer: kusto2 ,Storage: ateststorage2 " +
+        ", IsSasKeyDefined: true, domain: core.windows.net]"
+    tsString shouldEqual s"$expectedPrefix${System.lineSeparator()}$expectedSuffix"
   }
   "TransientStorageCredentials ToString" should "parse SAS and not print tokens " in {
     val transientStorageCredentials = new TransientStorageCredentials(

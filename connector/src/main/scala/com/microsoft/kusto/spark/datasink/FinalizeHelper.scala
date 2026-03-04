@@ -74,7 +74,10 @@ object FinalizeHelper {
           } else {
             KDSU.logWarn(
               myName,
-              "IMPORTANT: It's highly recommended to set pollingOnDriver to true on production!\tRead here why https://github.com/Azure/azure-kusto-spark/blob/master/docs/KustoSink.md#supported-options")
+              "IMPORTANT: It's highly recommended to set pollingOnDriver " +
+                "to true on production!\tRead here why " +
+                "https://github.com/Azure/azure-kusto-spark/blob/master/" +
+                "docs/KustoSink.md#supported-options")
             // Specifiying numSlices = 1 so that only one task is created
             val resultsRdd =
               sparkContext.parallelize(partitionsResults.value.asScala.toSeq, numSlices = 1)

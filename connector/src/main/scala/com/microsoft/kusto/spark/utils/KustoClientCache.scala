@@ -96,6 +96,7 @@ object KustoClientCache {
             app.password,
             app.authority))
       case userPrompt: KustoUserPromptAuthentication =>
+        // scalastyle:off null - Java SDK createWithUserPrompt requires null for username
         (
           ConnectionStringBuilder.createWithUserPrompt(
             clusterAndAuth.engineUri,
@@ -105,6 +106,7 @@ object KustoClientCache {
             clusterAndAuth.ingestUri,
             userPrompt.authority,
             null))
+      // scalastyle:on null
       case userToken: KustoAccessTokenAuthentication =>
         (
           ConnectionStringBuilder.createWithAadAccessTokenAuthentication(
@@ -131,6 +133,7 @@ object KustoClientCache {
           ConnectionStringBuilder.createWithAzureCli(clusterAndAuth.ingestUri))
     }
 
+    // scalastyle:off null - Java SDK setConnectorDetails requires null for optional fields
     engineKcsb.setConnectorDetails(
       KCONST.ClientName,
       KustoDataSourceUtils.Version,
@@ -147,6 +150,7 @@ object KustoClientCache {
       false,
       null,
       Collections.singletonMap("spark.version", SPARK_VERSION))
+    // scalastyle:on null
 
     new ExtendedKustoClient(engineKcsb, ingestKcsb, clusterAndAuth.clusterAlias)
   }

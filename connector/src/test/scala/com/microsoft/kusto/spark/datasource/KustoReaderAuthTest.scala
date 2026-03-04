@@ -13,6 +13,7 @@ import org.scalatest.matchers.should.Matchers
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 
+// scalastyle:off null - test assertions use 'should not be null'
 class KustoReaderAuthTest extends AnyFlatSpec with Matchers with BeforeAndAfterEach {
   private val DefaultEndpointSuffix = "core.windows.net"
   private val TestKey = "testkey123"

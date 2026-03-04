@@ -42,6 +42,7 @@ import org.scalatest.matchers.should.Matchers
 
 import java.sql.{Date, Timestamp}
 
+// scalastyle:off null - test code tests null-safe equality
 class KustoFilterTests extends AnyFlatSpec with MockFactory with Matchers {
 
   private val StringCol = "string"

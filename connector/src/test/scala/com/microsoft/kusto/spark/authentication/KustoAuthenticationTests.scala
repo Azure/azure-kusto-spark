@@ -8,6 +8,7 @@ import org.scalatest.flatspec.AnyFlatSpec
 
 import java.util.concurrent.Callable
 
+// scalastyle:off null - test code uses null for optional authority parameter
 private[authentication] object AuthTestConstants {
   val TokenKey = "token"
   val Uri1 = "uri1"
