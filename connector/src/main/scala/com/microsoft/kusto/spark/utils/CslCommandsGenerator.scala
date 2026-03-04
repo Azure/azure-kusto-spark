@@ -11,8 +11,9 @@ import com.microsoft.kusto.spark.datasource.{
 }
 
 private[kusto] object CslCommandsGenerator {
+  private final val CompressedKey = "compressed"
   private final val defaultKeySet =
-    Set("compressionType", "namePrefix", "sizeLimit", "compressed", "async")
+    Set("compressionType", "namePrefix", "sizeLimit", CompressedKey, "async")
   def generateFetchTableIngestByTagsCommand(table: String): String = {
     s""".show table $table  extents;
        $$command_results
@@ -193,11 +194,11 @@ private[kusto] object CslCommandsGenerator {
     // if we pass in compress as 'none' explicitly then do not compress, else compress
     val compress =
       if (additionalExportOptions
-          .get("compressed")
+          .get(CompressedKey)
           .exists(compressed => "none".equalsIgnoreCase(compressed))) {
         ""
       } else {
-        "compressed"
+        CompressedKey
       }
     val additionalOptionsString = additionalExportOptions
       .filter { case (k, _) => !defaultKeySet.contains(k) }

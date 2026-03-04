@@ -53,6 +53,13 @@ class KustoPruneAndFilterE2E extends AnyFlatSpec with BeforeAndAfterAll {
 
   private val loggingLevel: Option[String] = Option(System.getProperty("logLevel"))
   if (loggingLevel.isDefined) KDSU.setLoggingLevel(loggingLevel.get)
+  private val ColA = "ColA"
+  private val NameCol = "name"
+  private val ValueCol = "value"
+  private val StorageAccountProp = "storageAccount"
+  private val ContainerProp = "container"
+  private val BlobKeyProp = "blobKey"
+  private val BlobSasProp = "blobSas"
 
   "KustoSource" should "apply pruning and filtering when reading in single mode" taggedAs KustoE2E in {
     val table: String = System.getProperty(KustoSinkOptions.KUSTO_TABLE)
@@ -66,7 +73,7 @@ class KustoPruneAndFilterE2E extends AnyFlatSpec with BeforeAndAfterAll {
 
     val df = spark.read
       .kusto(kustoTestConnectionOptions.cluster, kustoTestConnectionOptions.database, query, conf)
-      .select("ColA")
+      .select(ColA)
     df.show()
   }
 
@@ -75,10 +82,10 @@ class KustoPruneAndFilterE2E extends AnyFlatSpec with BeforeAndAfterAll {
     val query: String =
       System.getProperty(KustoSourceOptions.KUSTO_QUERY, s"$table | where (toint(ColB) % 1 == 0)")
 
-    val storageAccount: String = System.getProperty("storageAccount")
-    val container: String = System.getProperty("container")
-    val blobKey: String = System.getProperty("blobKey")
-    val blobSas: String = System.getProperty("blobSas")
+    val storageAccount: String = System.getProperty(StorageAccountProp)
+    val container: String = System.getProperty(ContainerProp)
+    val blobKey: String = System.getProperty(BlobKeyProp)
+    val blobSas: String = System.getProperty(BlobSasProp)
     val conf = if (blobSas == null) {
       val storage = new TransientStorageParameters(
         Array(new TransientStorageCredentials(storageAccount, blobKey, container)))
@@ -113,15 +120,15 @@ class KustoPruneAndFilterE2E extends AnyFlatSpec with BeforeAndAfterAll {
     val expectedNumberOfRows: Int = 100
     val rows: immutable.IndexedSeq[(String, Int)] =
       (1 to expectedNumberOfRows).map(v => (newRow(), v))
-    val dfOrig = rows.toDF("name", "value")
+    val dfOrig = rows.toDF(NameCol, ValueCol)
     val query =
       KustoQueryUtils.simplifyName(s"KustoSparkReadWriteWithFiltersTest_${UUID.randomUUID()}")
 
     // Storage account parameters
-    val storageAccount: String = System.getProperty("storageAccount")
-    val container: String = System.getProperty("container")
-    val blobKey: String = System.getProperty("blobKey")
-    val blobSas: String = System.getProperty("blobSas")
+    val storageAccount: String = System.getProperty(StorageAccountProp)
+    val container: String = System.getProperty(ContainerProp)
+    val blobKey: String = System.getProperty(BlobKeyProp)
+    val blobSas: String = System.getProperty(BlobSasProp)
 
     // Create a new table.
     val engineKcsb = ConnectionStringBuilder.createWithAadAccessTokenAuthentication(
@@ -167,13 +174,13 @@ class KustoPruneAndFilterE2E extends AnyFlatSpec with BeforeAndAfterAll {
       conf)
 
     val orig = dfOrig
-      .select("name", "value")
+      .select(NameCol, ValueCol)
       .rdd
       .map(x => (x.getString(0), x.getInt(1)))
       .collect()
       .sortBy(_._2)
     val result = dfResult
-      .select("ColA", "ColB")
+      .select(ColA, "ColB")
       .rdd
       .map(x => (x.getString(0), x.getInt(1)))
       .collect()
@@ -184,8 +191,8 @@ class KustoPruneAndFilterE2E extends AnyFlatSpec with BeforeAndAfterAll {
 
     val dfResultPruned = spark.read
       .kusto(kustoTestConnectionOptions.cluster, kustoTestConnectionOptions.database, query, conf)
-      .select("ColA")
-      .sort("ColA")
+      .select(ColA)
+      .sort(ColA)
       .collect()
       .map(x => x.getString(0))
       .sorted
@@ -210,15 +217,15 @@ class KustoPruneAndFilterE2E extends AnyFlatSpec with BeforeAndAfterAll {
     val expectedNumberOfRows: Int = 100
     val rows: immutable.IndexedSeq[(String, Int)] =
       (1 to expectedNumberOfRows).map(v => (newRow(), v))
-    val dfOrig = rows.toDF("name", "value")
+    val dfOrig = rows.toDF(NameCol, ValueCol)
     val query =
       KustoQueryUtils.simplifyName(s"KustoSparkReadWriteWithFiltersTest_${UUID.randomUUID()}")
 
     // Storage account parameters
-    val storageAccount: String = System.getProperty("storageAccount")
-    val container: String = System.getProperty("container")
-    val blobKey: String = System.getProperty("blobKey")
-    val blobSas: String = System.getProperty("blobSas")
+    val storageAccount: String = System.getProperty(StorageAccountProp)
+    val container: String = System.getProperty(ContainerProp)
+    val blobKey: String = System.getProperty(BlobKeyProp)
+    val blobSas: String = System.getProperty(BlobSasProp)
 
     // Create a new table.
     val engineKcsb = ConnectionStringBuilder.createWithAadAccessTokenAuthentication(

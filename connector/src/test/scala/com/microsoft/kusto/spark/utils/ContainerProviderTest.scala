@@ -24,6 +24,7 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
   private val CACHE_EXPIRY_SEC = 30
   private val SLEEP_TIME_SEC = 10
   private val clusterAlias = "ingest-cluster"
+  private val createTempStorageCommand = ".create tempstorage"
 
   private def createExtendedKustoMockClient(
       hasEmptyResults: Boolean = false,
@@ -93,7 +94,7 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
   "ContainerProvider returns a container" should "from RM" in {
     val mockDmClient = mock[Client]
 
-    val command = ".create tempstorage"
+    val command = createTempStorageCommand
     /*
       Invoke and test
      */
@@ -143,8 +144,8 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
   }
 
   "ContainerProvider" should "fail in the case when call succeeds but returns no storage" in {
-    val clusterAlias = "ingest-cluster"
-    val command = ".create tempstorage"
+
+    val command = createTempStorageCommand
 
     val mockDmClient = mock[Client]
     /*
@@ -164,7 +165,7 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
   }
 
   "ContainerProvider" should "retry and return a container in case of a temporary HTTPException" in {
-    val clusterAlias = "ingest-cluster"
+
     val command = ".get ingestion resources"
     /*
       Invoke and test
@@ -188,7 +189,7 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
       new IngestionStorageParameters(ingestionContainer1, "container", "msi", "")
     val arrIngestionStorageParams = Array(ingestionStorageParam)
     val mockDmClient = mock[Client]
-    val command = ".create tempstorage"
+    val command = createTempStorageCommand
     /*
       Invoke and test
      */

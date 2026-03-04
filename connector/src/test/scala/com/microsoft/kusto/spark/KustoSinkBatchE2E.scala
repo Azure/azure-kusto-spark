@@ -51,6 +51,23 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
   private val rowId2 = new AtomicInteger(1)
   private val timeoutMs: Int = 8 * 60 * 1000 // 8 minutes
   private val sleepTimeTillTableCreate: Int = 3 * 60 * 1000 // 2 minutes
+  private val KustoDataSourceFormat = "com.microsoft.kusto.spark.datasource"
+  private val NameCol = "name"
+  private val ValueCol = "value"
+  private val TrueStr = "true"
+  private val ColAColBSchema = "ColA:string, ColB:int"
+  private val AllTypesCols: Seq[String] = Seq(
+    "String",
+    "Int",
+    "Date",
+    "Boolean",
+    "short",
+    "Byte",
+    "floatie",
+    "Timestamp",
+    "Double",
+    "BigDecimal",
+    "Long")
   private def newRow(): String = s"row-${rowId.getAndIncrement()}"
   private def newAllDataTypesRow(v: Int): (
       String,
@@ -132,23 +149,12 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
         Double,
         java.math.BigDecimal,
         Long)] = (1 to expectedNumberOfRows).map(v => newAllDataTypesRow(v))
-    val dfOrig = dataTypesRows.toDF(
-      "String",
-      "Int",
-      "Date",
-      "Boolean",
-      "short",
-      "Byte",
-      "floatie",
-      "Timestamp",
-      "Double",
-      "BigDecimal",
-      "Long")
+    val dfOrig = dataTypesRows.toDF(AllTypesCols: _*)
     sqlContext.sql("select current_timestamp()").show(false)
 
     dfOrig.write
-      .format("com.microsoft.kusto.spark.datasource")
-      .partitionBy("value")
+      .format(KustoDataSourceFormat)
+      .partitionBy(ValueCol)
       .option(KustoSinkOptions.KUSTO_CLUSTER, kustoTestConnectionOptions.cluster)
       .option(KustoSinkOptions.KUSTO_DATABASE, kustoTestConnectionOptions.database)
       .option(KustoSinkOptions.KUSTO_TABLE, table)
@@ -276,52 +282,19 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
     }
 
     val orig = dfOrig
-      .select(
-        "String",
-        "Int",
-        "Date",
-        "Boolean",
-        "short",
-        "Byte",
-        "floatie",
-        "Timestamp",
-        "Double",
-        "BigDecimal",
-        "Long")
+      .select(AllTypesCols.head, AllTypesCols.tail: _*)
       .rdd
       .map(x => getRowOriginal(x))
       .collect()
       .sortBy(_._2)
     val result = dfResultDist
-      .select(
-        "String",
-        "Int",
-        "Date",
-        "Boolean",
-        "short",
-        "Byte",
-        "floatie",
-        "Timestamp",
-        "Double",
-        "BigDecimal",
-        "Long")
+      .select(AllTypesCols.head, AllTypesCols.tail: _*)
       .rdd
       .map(x => getRowFromKusto(x))
       .collect()
       .sortBy(_._2)
     val resultSingle = dfResultSingle
-      .select(
-        "String",
-        "Int",
-        "Date",
-        "Boolean",
-        "short",
-        "Byte",
-        "floatie",
-        "Timestamp",
-        "Double",
-        "BigDecimal",
-        "Long")
+      .select(AllTypesCols.head, AllTypesCols.tail: _*)
       .rdd
       .map(x => getRowFromKusto(x))
       .collect()
@@ -360,7 +333,7 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
     "KustoBatchSinkSync" should s"also ingest simple data to a Kusto cluster for $testName" in {
       import spark.implicits._
       var skipAssertions = false
-      val df = rows.toDF("name", "value")
+      val df = rows.toDF(NameCol, ValueCol)
       val prefix = s"KustoBatchSinkE2E_Ingest_$testName"
       val table = KustoQueryUtils.simplifyName(s"${prefix}_${UUID.randomUUID()}")
       val engineKcsb = ConnectionStringBuilder.createWithAadAccessTokenAuthentication(
@@ -369,12 +342,12 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
       val kustoAdminClient = ClientFactory.createClient(engineKcsb)
       kustoAdminClient.executeMgmt(
         kustoTestConnectionOptions.database,
-        generateTempTableCreateCommand(table, columnsTypesAndNames = "ColA:string, ColB:int"))
+        generateTempTableCreateCommand(table, columnsTypesAndNames = ColAColBSchema))
 
       if (testName == "DMStorage") {
         df.write
-          .format("com.microsoft.kusto.spark.datasource")
-          .partitionBy("value")
+          .format(KustoDataSourceFormat)
+          .partitionBy(ValueCol)
           .option(KustoSinkOptions.KUSTO_CLUSTER, kustoTestConnectionOptions.cluster)
           .option(KustoSinkOptions.KUSTO_DATABASE, kustoTestConnectionOptions.database)
           .option(KustoSinkOptions.KUSTO_TABLE, table)
@@ -398,8 +371,8 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
           //            s"""[{"storageUrl":"$storageUrl" , "
           //              |containerName": "$containerName"}]""".stripMargin
           df.write
-            .format("com.microsoft.kusto.spark.datasource")
-            .partitionBy("value")
+            .format(KustoDataSourceFormat)
+            .partitionBy(ValueCol)
             .option(KustoSinkOptions.KUSTO_CLUSTER, kustoTestConnectionOptions.cluster)
             .option(KustoSinkOptions.KUSTO_DATABASE, kustoTestConnectionOptions.database)
             .option(KustoSinkOptions.KUSTO_TABLE, table)
@@ -424,7 +397,7 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
   }
 
   "KustoBatchSinkAsync" should "ingest structured data to a Kusto cluster in async mode" taggedAs KustoE2E in {
-    val df = rows.toDF("name", "value")
+    val df = rows.toDF(NameCol, ValueCol)
     val prefix = "KustoBatchSinkE2EIngestAsync"
     val table = KustoQueryUtils.simplifyName(s"${prefix}_${UUID.randomUUID()}")
     val engineKcsb = ConnectionStringBuilder.createWithAadAccessTokenAuthentication(
@@ -433,15 +406,15 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
     kustoAdminClient.executeMgmt(
       kustoTestConnectionOptions.database,
-      generateTempTableCreateCommand(table, columnsTypesAndNames = "ColA:string, ColB:int"))
+      generateTempTableCreateCommand(table, columnsTypesAndNames = ColAColBSchema))
 
     df.write
-      .format("com.microsoft.kusto.spark.datasource")
+      .format(KustoDataSourceFormat)
       .option(KustoSinkOptions.KUSTO_CLUSTER, kustoTestConnectionOptions.cluster)
       .option(KustoSinkOptions.KUSTO_DATABASE, kustoTestConnectionOptions.database)
       .option(KustoSinkOptions.KUSTO_TABLE, table)
       .option(KustoSinkOptions.KUSTO_ACCESS_TOKEN, kustoTestConnectionOptions.accessToken)
-      .option(KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC, "true")
+      .option(KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC, TrueStr)
       .mode(SaveMode.Append)
       .save()
 
@@ -455,7 +428,7 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
   }
 
   "KustoBatchSinkStreaming" should "ingest structured data to a Kusto cluster in stream ingestion mode" taggedAs KustoE2E in {
-    val df = rows.toDF("name", "value")
+    val df = rows.toDF(NameCol, ValueCol)
     val prefix = "KustoBatchSinkE2EIngestStreamIngestion"
     val table = KustoQueryUtils.simplifyName(s"${prefix}_${UUID.randomUUID()}")
     val engineKcsb = ConnectionStringBuilder.createWithAadAccessTokenAuthentication(
@@ -464,7 +437,7 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
     kustoAdminClient.executeMgmt(
       kustoTestConnectionOptions.database,
-      generateTempTableCreateCommand(table, columnsTypesAndNames = "ColA:string, ColB:int"))
+      generateTempTableCreateCommand(table, columnsTypesAndNames = ColAColBSchema))
     kustoAdminClient.executeMgmt(
       kustoTestConnectionOptions.database,
       generateTableAlterStreamIngestionCommand(table))
@@ -472,7 +445,7 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
     Thread.sleep(sleepTimeTillTableCreate)
 
     df.write
-      .format("com.microsoft.kusto.spark.datasource")
+      .format(KustoDataSourceFormat)
       .option(KustoSinkOptions.KUSTO_CLUSTER, kustoTestConnectionOptions.cluster)
       .option(KustoSinkOptions.KUSTO_DATABASE, kustoTestConnectionOptions.database)
       .option(KustoSinkOptions.KUSTO_TABLE, table)
@@ -529,7 +502,7 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
         s"TargetColumnExists: $targetColumnExists , WriteMode: $writeMode and TableCreateMode: $tableCreationMode" in {
           val testName =
             s"${schemaAdjustmentMode.toString.substring(0, 3)}_${writeMode.toString.substring(0, 3)}"
-          val df = rows.toDF("name", "value").withColumn("WriteMode", lit(writeMode.toString))
+          val df = rows.toDF(NameCol, ValueCol).withColumn("WriteMode", lit(writeMode.toString))
           val prefix = s"KustoBatchSinkE2E_Ingest_$testName"
           val table = KustoQueryUtils.simplifyName(s"${prefix}_${UUID.randomUUID()}")
 
@@ -550,8 +523,8 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
           if (!targetColumnExists) {
             intercept[Exception] {
               df.write
-                .format("com.microsoft.kusto.spark.datasource")
-                .partitionBy("value")
+                .format(KustoDataSourceFormat)
+                .partitionBy(ValueCol)
                 .option(KustoSinkOptions.KUSTO_CLUSTER, kustoTestConnectionOptions.cluster)
                 .option(KustoSinkOptions.KUSTO_DATABASE, kustoTestConnectionOptions.database)
                 .option(KustoSinkOptions.KUSTO_TABLE, table)
@@ -559,7 +532,7 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
                   KustoSinkOptions.KUSTO_ACCESS_TOKEN,
                   kustoTestConnectionOptions.accessToken)
                 .option(KustoSinkOptions.KUSTO_ADJUST_SCHEMA, schemaAdjustmentMode.toString)
-                .option(KustoDebugOptions.KUSTO_ADD_SOURCE_LOCATION_TRANSFORM, "true")
+                .option(KustoDebugOptions.KUSTO_ADD_SOURCE_LOCATION_TRANSFORM, TrueStr)
                 .option(KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS, tableCreationMode.toString)
                 .option(KustoSinkOptions.KUSTO_WRITE_MODE, writeMode.toString)
                 .option(KustoSinkOptions.KUSTO_TIMEOUT_LIMIT, (8 * 60).toString)
@@ -578,8 +551,8 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
             assert(queryResults.isEmpty, s"Expected no results for query: $query")
           } else {
             df.write
-              .format("com.microsoft.kusto.spark.datasource")
-              .partitionBy("value")
+              .format(KustoDataSourceFormat)
+              .partitionBy(ValueCol)
               .option(KustoSinkOptions.KUSTO_CLUSTER, kustoTestConnectionOptions.cluster)
               .option(KustoSinkOptions.KUSTO_DATABASE, kustoTestConnectionOptions.database)
               .option(KustoSinkOptions.KUSTO_TABLE, table)
@@ -588,7 +561,7 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
                 KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS,
                 SinkTableCreationMode.CreateIfNotExist.toString)
               .option(KustoSinkOptions.KUSTO_ADJUST_SCHEMA, schemaAdjustmentMode.toString)
-              .option(KustoDebugOptions.KUSTO_ADD_SOURCE_LOCATION_TRANSFORM, "true")
+              .option(KustoDebugOptions.KUSTO_ADD_SOURCE_LOCATION_TRANSFORM, TrueStr)
               .option(KustoSinkOptions.KUSTO_WRITE_MODE, writeMode.toString)
               .option(KustoSinkOptions.KUSTO_TIMEOUT_LIMIT, (8 * 60).toString)
               .mode(SaveMode.Append)

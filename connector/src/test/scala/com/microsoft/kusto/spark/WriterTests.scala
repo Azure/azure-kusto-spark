@@ -41,14 +41,23 @@ import java.util.zip.GZIPOutputStream
 
 class WriterTests extends AnyFlatSpec with Matchers {
 
+  private val AppName = "SimpleKustoDataSink"
+  private val MasterLocal = "local[*]"
+  private val SparkTestingKey = "spark.testing"
+  private val SparkUiEnabledKey = "spark.ui.enabled"
+  private val TrueStr = "true"
+  private val FalseStr = "false"
+  private val Utc = "UTC"
+  private val ConvertRowToCsv = "convertRowToCsv"
+
   val objectMapper = new ObjectMapper
 
   val lineSep: String = System.lineSeparator()
   val sparkConf: SparkConf = new SparkConf()
-    .set("spark.testing", "true")
-    .set("spark.ui.enabled", "false")
-    .setAppName("SimpleKustoDataSink")
-    .setMaster("local[*]")
+    .set(SparkTestingKey, TrueStr)
+    .set(SparkUiEnabledKey, FalseStr)
+    .setAppName(AppName)
+    .setMaster(MasterLocal)
   val sparkSession: SparkSession = SparkSession.builder().config(sparkConf).getOrCreate()
 
   def getDF(isNestedSchema: Boolean): DataFrame = {
@@ -64,18 +73,18 @@ class WriterTests extends AnyFlatSpec with Matchers {
     if (isNestedSchema) {
       sparkSession.read
         .format("csv")
-        .option("header", "false")
+        .option("header", FalseStr)
         .schema(customSchema)
         .load("src/test/resources/ShortTestData/ShortTestData.csv")
     } else {
       sparkSession.read
         .format("json")
-        .option("header", "true")
+        .option("header", TrueStr)
         .load("src/test/resources/TestData/json/TestDynamicFields.json")
     }
   }
 
-  "convertRowToCsv" should "convert the row as expected" in {
+  ConvertRowToCsv should "convert the row as expected" in {
     val df: DataFrame = getDF(isNestedSchema = true)
     val dfRow: InternalRow = df.queryExecution.toRdd.collect().head
 
@@ -86,14 +95,14 @@ class WriterTests extends AnyFlatSpec with Matchers {
     RowCSVWriterUtils.writeRowAsCSV(
       dfRow,
       df.schema,
-      TimeZone.getTimeZone("UTC").toZoneId,
+      TimeZone.getTimeZone(Utc).toZoneId,
       csvWriter)
     writer.flush()
     writer.close()
     byteArrayOutputStream.toString() shouldEqual "\"John,\"\" Doe\",1" + lineSep
   }
 
-  "convertRowToCsv" should "convert the row as expected, including nested types." in {
+  ConvertRowToCsv should "convert the row as expected, including nested types." in {
     val df: DataFrame = getDF(isNestedSchema = false)
     val dfRow: InternalRow = df.queryExecution.toRdd.collect().head
     val expected =
@@ -107,7 +116,7 @@ class WriterTests extends AnyFlatSpec with Matchers {
     RowCSVWriterUtils.writeRowAsCSV(
       dfRow,
       df.schema,
-      TimeZone.getTimeZone("UTC").toZoneId,
+      TimeZone.getTimeZone(Utc).toZoneId,
       csvWriter)
     writer.flush()
     val got = byteArrayOutputStream.toString()
@@ -115,7 +124,7 @@ class WriterTests extends AnyFlatSpec with Matchers {
     got shouldEqual expected
   }
 
-  "convertRowToCsv" should "calculate row size as expected" in {
+  ConvertRowToCsv should "calculate row size as expected" in {
     val df: DataFrame = getDF(isNestedSchema = true)
     val dfRow: InternalRow = df.queryExecution.toRdd.collect().head
     val expectedSize = ("\"John,\"\" Doe\",1" + lineSep).getBytes(StandardCharsets.UTF_8).length
@@ -127,7 +136,7 @@ class WriterTests extends AnyFlatSpec with Matchers {
     RowCSVWriterUtils.writeRowAsCSV(
       dfRow,
       df.schema,
-      TimeZone.getTimeZone("UTC").toZoneId,
+      TimeZone.getTimeZone(Utc).toZoneId,
       csvWriter)
     writer.flush()
     writer.close()
@@ -190,12 +199,12 @@ class WriterTests extends AnyFlatSpec with Matchers {
     parsedSchema shouldEqual "['SubscriptionGuid']:string,['Identifier']:string,['SomeNumber']:long"
   }
 
-  "convertRowToCsv" should "convert the row as expected with maps and right escaping" in {
+  ConvertRowToCsv should "convert the row as expected with maps and right escaping" in {
     val sparkConf: SparkConf = new SparkConf()
-      .set("spark.testing", "true")
-      .set("spark.ui.enabled", "false")
-      .setAppName("SimpleKustoDataSink")
-      .setMaster("local[*]")
+      .set(SparkTestingKey, TrueStr)
+      .set(SparkUiEnabledKey, FalseStr)
+      .setAppName(AppName)
+      .setMaster(MasterLocal)
     val sparkSession: SparkSession = SparkSession.builder().config(sparkConf).getOrCreate()
 
     val someData =
@@ -330,12 +339,12 @@ class WriterTests extends AnyFlatSpec with Matchers {
       lineSep + "\"-0.1000000000\"" + lineSep
   }
 
-  "convertRowToCsv" should "convert the row as expected with binary data" in {
+  ConvertRowToCsv should "convert the row as expected with binary data" in {
     val sparkConf: SparkConf = new SparkConf()
-      .set("spark.testing", "true")
-      .set("spark.ui.enabled", "false")
-      .setAppName("SimpleKustoDataSink")
-      .setMaster("local[*]")
+      .set(SparkTestingKey, TrueStr)
+      .set(SparkUiEnabledKey, FalseStr)
+      .setAppName(AppName)
+      .setMaster(MasterLocal)
     val sparkSession: SparkSession = SparkSession.builder().config(sparkConf).getOrCreate()
     val byteArrayOutputStream = new ByteArrayOutputStream()
     val streamWriter = new OutputStreamWriter(byteArrayOutputStream)
@@ -359,17 +368,17 @@ class WriterTests extends AnyFlatSpec with Matchers {
     RowCSVWriterUtils.writeRowAsCSV(
       dfRows(0),
       df.schema,
-      TimeZone.getTimeZone("UTC").toZoneId,
+      TimeZone.getTimeZone(Utc).toZoneId,
       csvWriter)
     RowCSVWriterUtils.writeRowAsCSV(
       dfRows(1),
       df.schema,
-      TimeZone.getTimeZone("UTC").toZoneId,
+      TimeZone.getTimeZone(Utc).toZoneId,
       csvWriter)
     RowCSVWriterUtils.writeRowAsCSV(
       dfRows(2),
       df.schema,
-      TimeZone.getTimeZone("UTC").toZoneId,
+      TimeZone.getTimeZone(Utc).toZoneId,
       csvWriter)
 
     writer.flush()

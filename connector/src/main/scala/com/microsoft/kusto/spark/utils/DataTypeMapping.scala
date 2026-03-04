@@ -24,58 +24,70 @@ import org.apache.spark.sql.types.{
 
 object DataTypeMapping {
 
+  // Kusto type name constants
+  private val KustoString = "string"
+  private val KustoLong = "long"
+  private val KustoDatetime = "datetime"
+  private val KustoTimespan = "timespan"
+  private val KustoBool = "bool"
+  private val KustoReal = "real"
+  private val KustoDecimal = "decimal"
+  private val KustoGuid = "guid"
+  private val KustoInt = "int"
+  private val KustoDynamic = "dynamic"
+
   val KustoTypeToSparkTypeMap: Map[String, DataType] = Map(
-    "string" -> StringType,
-    "long" -> LongType,
-    "datetime" -> TimestampType, // Kusto datetime is equivalent to TimestampType
-    "timespan" -> StringType,
-    "bool" -> BooleanType,
-    "real" -> DoubleType,
+    KustoString -> StringType,
+    KustoLong -> LongType,
+    KustoDatetime -> TimestampType, // Kusto datetime is equivalent to TimestampType
+    KustoTimespan -> StringType,
+    KustoBool -> BooleanType,
+    KustoReal -> DoubleType,
 
     /*
     Kusto uses floating decimal points and spark uses fixed decimal points. The compromise scenario is to use the system
     default of 38,18 used in the spark framework.https://github.com/apache/spark/blob
     /1439d9b275e844b5b595126bc97d2b44f6e859ed/sql/catalyst/src/main/scala/org/apache/spark/sql/types/DecimalType.scala#L131
      */
-    "decimal" -> DecimalType.SYSTEM_DEFAULT,
-    "guid" -> StringType,
-    "int" -> IntegerType,
-    "dynamic" -> StringType)
+    KustoDecimal -> DecimalType.SYSTEM_DEFAULT,
+    KustoGuid -> StringType,
+    KustoInt -> IntegerType,
+    KustoDynamic -> StringType)
 
   val KustoJavaTypeToSparkTypeMap: Map[String, DataType] = Map(
-    "string" -> StringType,
+    KustoString -> StringType,
     "int64" -> LongType,
-    "datetime" -> TimestampType,
-    "timespan" -> StringType,
+    KustoDatetime -> TimestampType,
+    KustoTimespan -> StringType,
     "sbyte" -> BooleanType,
     "double" -> DoubleType,
     "sqldecimal" -> DecimalType.SYSTEM_DEFAULT,
-    "guid" -> StringType,
+    KustoGuid -> StringType,
     "int32" -> IntegerType,
     "object" -> StringType)
 
   val SparkTypeToKustoTypeMap: Map[DataType, String] = Map(
-    StringType -> "string",
-    BooleanType -> "bool",
-    DateType -> "datetime",
-    TimestampType -> "datetime",
-    DataTypes.createDecimalType() -> "decimal",
-    DoubleType -> "real",
-    FloatType -> "real",
-    ByteType -> "int",
-    IntegerType -> "int",
-    LongType -> "long",
-    ShortType -> "int")
+    StringType -> KustoString,
+    BooleanType -> KustoBool,
+    DateType -> KustoDatetime,
+    TimestampType -> KustoDatetime,
+    DataTypes.createDecimalType() -> KustoDecimal,
+    DoubleType -> KustoReal,
+    FloatType -> KustoReal,
+    ByteType -> KustoInt,
+    IntegerType -> KustoInt,
+    LongType -> KustoLong,
+    ShortType -> KustoInt)
 
   def getSparkTypeToKustoTypeMap(fieldType: DataType): String = {
     if (fieldType.isInstanceOf[DecimalType]) {
-      "decimal"
+      KustoDecimal
     } else if (fieldType.isInstanceOf[ArrayType] || fieldType
         .isInstanceOf[StructType] || fieldType
         .isInstanceOf[MapType]) {
-      "dynamic"
+      KustoDynamic
     } else {
-      DataTypeMapping.SparkTypeToKustoTypeMap.getOrElse(fieldType, "string")
+      DataTypeMapping.SparkTypeToKustoTypeMap.getOrElse(fieldType, KustoString)
     }
   }
 }

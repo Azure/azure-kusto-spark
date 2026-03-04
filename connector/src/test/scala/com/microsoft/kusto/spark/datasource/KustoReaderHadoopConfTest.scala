@@ -21,6 +21,11 @@ import java.time.temporal.ChronoUnit
  */
 class KustoReaderHadoopConfTest extends AnyFlatSpec with Matchers with BeforeAndAfterEach {
   private val sparkHadoopPrefix = "spark.hadoop."
+  private val SasVersion = "sv=2021-01-01"
+  private val TestAccountKey = "mykey123"
+  private val CustomDomain = "custom.domain.net"
+  private val SameDomain = "same.domain.net"
+  private val AbfsValidEndpointsKey = "fs.azure.abfs.valid.endpoints"
   private var spark: SparkSession = _
   private var sparkConf: RuntimeConfig = _
   private var hadoopConfig: Configuration = _
@@ -52,9 +57,9 @@ class KustoReaderHadoopConfTest extends AnyFlatSpec with Matchers with BeforeAnd
 
     val expectedKey = "fs.azure.sas.container1.wsbsas1.blob.core.windows.net"
     hadoopConfig.get(expectedKey) should not be null
-    hadoopConfig.get(expectedKey) should include("sv=2021-01-01")
+    hadoopConfig.get(expectedKey) should include(SasVersion)
     sparkConf.getOption(s"$sparkHadoopPrefix$expectedKey") shouldBe defined
-    sparkConf.get(s"$sparkHadoopPrefix$expectedKey") should include("sv=2021-01-01")
+    sparkConf.get(s"$sparkHadoopPrefix$expectedKey") should include(SasVersion)
   }
 
   it should "strip leading '?' from WASBS SAS token" in {
@@ -80,7 +85,7 @@ class KustoReaderHadoopConfTest extends AnyFlatSpec with Matchers with BeforeAnd
   // ---------------------------------------------------------------------------
   "setHadoopAuth (WASBS + Key)" should "write account key to both HadoopConf and SparkConf" in {
     val now = freshTimestamp()
-    val storageParams = keyStorageParams("wsbkey1", "mykey123", "ckey1")
+    val storageParams = keyStorageParams("wsbkey1", TestAccountKey, "ckey1")
 
     KustoReader.setHadoopAuth(
       storageParams,
@@ -91,8 +96,8 @@ class KustoReaderHadoopConfTest extends AnyFlatSpec with Matchers with BeforeAnd
       useAbfs = false)
 
     val expectedKey = "fs.azure.account.key.wsbkey1.blob.core.windows.net"
-    hadoopConfig.get(expectedKey) shouldBe "mykey123"
-    sparkConf.get(s"$sparkHadoopPrefix$expectedKey") shouldBe "mykey123"
+    hadoopConfig.get(expectedKey) shouldBe TestAccountKey
+    sparkConf.get(s"$sparkHadoopPrefix$expectedKey") shouldBe TestAccountKey
   }
 
   // ---------------------------------------------------------------------------
@@ -145,8 +150,8 @@ class KustoReaderHadoopConfTest extends AnyFlatSpec with Matchers with BeforeAnd
       useAbfs = true)
 
     val expectedKey = "fs.azure.sas.fixed.token.ctok1.abftok1.blob.core.windows.net"
-    hadoopConfig.get(expectedKey) should include("sv=2021-01-01")
-    sparkConf.get(s"$sparkHadoopPrefix$expectedKey") should include("sv=2021-01-01")
+    hadoopConfig.get(expectedKey) should include(SasVersion)
+    sparkConf.get(s"$sparkHadoopPrefix$expectedKey") should include(SasVersion)
   }
 
   // ---------------------------------------------------------------------------
@@ -177,7 +182,7 @@ class KustoReaderHadoopConfTest extends AnyFlatSpec with Matchers with BeforeAnd
       "abfwl1",
       "cwl1",
       "sv=2021-01-01&sig=wltest",
-      endpointSuffix = "custom.domain.net")
+      endpointSuffix = CustomDomain)
 
     KustoReader.setHadoopAuth(
       storageParams,
@@ -187,15 +192,15 @@ class KustoReaderHadoopConfTest extends AnyFlatSpec with Matchers with BeforeAnd
       now,
       useAbfs = true)
 
-    val endpointKey = "fs.azure.abfs.valid.endpoints"
-    hadoopConfig.get(endpointKey) should include("custom.domain.net")
-    sparkConf.get(s"$sparkHadoopPrefix$endpointKey") should include("custom.domain.net")
+    val endpointKey = AbfsValidEndpointsKey
+    hadoopConfig.get(endpointKey) should include(CustomDomain)
+    sparkConf.get(s"$sparkHadoopPrefix$endpointKey") should include(CustomDomain)
   }
 
   it should "append to existing endpoints rather than overwrite" in {
     val now = freshTimestamp()
     // Pre-populate an existing endpoint
-    hadoopConfig.set("fs.azure.abfs.valid.endpoints", "existing.domain.net")
+    hadoopConfig.set(AbfsValidEndpointsKey, "existing.domain.net")
 
     val storageParams = sasStorageParams(
       "abfwl2",
@@ -211,20 +216,17 @@ class KustoReaderHadoopConfTest extends AnyFlatSpec with Matchers with BeforeAnd
       now,
       useAbfs = true)
 
-    val endpoints = hadoopConfig.get("fs.azure.abfs.valid.endpoints")
+    val endpoints = hadoopConfig.get(AbfsValidEndpointsKey)
     endpoints should include("existing.domain.net")
     endpoints should include("new.domain.net")
   }
 
   it should "not duplicate an already-whitelisted domain" in {
     val now = freshTimestamp()
-    hadoopConfig.set("fs.azure.abfs.valid.endpoints", "same.domain.net")
+    hadoopConfig.set(AbfsValidEndpointsKey, SameDomain)
 
-    val storageParams = sasStorageParams(
-      "abfwl3",
-      "cwl3",
-      "sv=2021-01-01&sig=wltest3",
-      endpointSuffix = "same.domain.net")
+    val storageParams =
+      sasStorageParams("abfwl3", "cwl3", "sv=2021-01-01&sig=wltest3", endpointSuffix = SameDomain)
 
     KustoReader.setHadoopAuth(
       storageParams,
@@ -235,8 +237,8 @@ class KustoReaderHadoopConfTest extends AnyFlatSpec with Matchers with BeforeAnd
       useAbfs = true)
 
     // Should appear exactly once
-    val endpoints = hadoopConfig.get("fs.azure.abfs.valid.endpoints")
-    endpoints shouldBe "same.domain.net"
+    val endpoints = hadoopConfig.get(AbfsValidEndpointsKey)
+    endpoints shouldBe SameDomain
   }
 
   // ---------------------------------------------------------------------------

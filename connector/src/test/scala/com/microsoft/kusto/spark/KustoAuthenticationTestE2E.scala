@@ -27,6 +27,8 @@ class KustoAuthenticationTestE2E extends AnyFlatSpec {
   val keyVaultAppId: String = System.getProperty(KustoSinkOptions.KEY_VAULT_APP_ID)
   val keyVaultAppKey: String = System.getProperty(KustoSinkOptions.KEY_VAULT_APP_KEY)
   val keyVaultUri: String = System.getProperty(KustoSinkOptions.KEY_VAULT_URI)
+  private val NameCol = "name"
+  private val ValueCol = "value"
 
   "keyVaultAuthentication" should "use key vault for authentication and retracting kusto app auth params" taggedAs KustoE2E in {
     import spark.implicits._
@@ -42,7 +44,7 @@ class KustoAuthenticationTestE2E extends AnyFlatSpec {
       kustoConnectionOptions.accessToken)
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
 
-    val df = rows.toDF("name", "value")
+    val df = rows.toDF(NameCol, ValueCol)
     val conf: Map[String, String] = Map(
       KustoSinkOptions.KEY_VAULT_URI -> keyVaultUri,
       KustoSinkOptions.KEY_VAULT_APP_ID -> (if (keyVaultAppId == null) "" else keyVaultAppId),
@@ -60,8 +62,8 @@ class KustoAuthenticationTestE2E extends AnyFlatSpec {
       kustoConnectionOptions.database,
       table,
       conf)
-    val result = dfResult.select("name", "value").rdd.collect().sortBy(x => x.getInt(1))
-    val orig = df.select("name", "value").rdd.collect().sortBy(x => x.getInt(1))
+    val result = dfResult.select(NameCol, ValueCol).rdd.collect().sortBy(x => x.getInt(1))
+    val orig = df.select(NameCol, ValueCol).rdd.collect().sortBy(x => x.getInt(1))
 
     assert(result.diff(orig).isEmpty)
   }
@@ -78,7 +80,7 @@ class KustoAuthenticationTestE2E extends AnyFlatSpec {
       ConnectionStringBuilder.createWithAadManagedIdentity(kustoConnectionOptions.cluster)
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
 
-    val df = rows.toDF("name", "value")
+    val df = rows.toDF(NameCol, ValueCol)
     val conf: Map[String, String] =
       Map(KustoSinkOptions.KUSTO_MANAGED_IDENTITY_AUTH -> true.toString)
 
@@ -89,8 +91,8 @@ class KustoAuthenticationTestE2E extends AnyFlatSpec {
       kustoConnectionOptions.database,
       table,
       conf)
-    val result = dfResult.select("name", "value").rdd.collect().sortBy(x => x.getInt(1))
-    val orig = df.select("name", "value").rdd.collect().sortBy(x => x.getInt(1))
+    val result = dfResult.select(NameCol, ValueCol).rdd.collect().sortBy(x => x.getInt(1))
+    val orig = df.select(NameCol, ValueCol).rdd.collect().sortBy(x => x.getInt(1))
 
     assert(result.diff(orig).isEmpty)
   }
@@ -112,7 +114,7 @@ class KustoAuthenticationTestE2E extends AnyFlatSpec {
       kustoConnectionOptions.cluster,
       fallbackToken)
     val kustoAdminClient = ClientFactory.createClient(engineKcsb)
-    val df = rows.toDF("name", "value")
+    val df = rows.toDF(NameCol, ValueCol)
     val conf: Map[String, String] = Map(
       KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS -> SinkTableCreationMode.CreateIfNotExist.toString)
     df.write.kusto(kustoConnectionOptions.cluster, kustoConnectionOptions.database, table, conf)

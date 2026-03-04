@@ -45,6 +45,9 @@ class KustoSinkStreamingE2E extends AnyFlatSpec with BeforeAndAfterAll {
     super.afterAll()
   }
   private lazy val kustoTestConnectionOptions = getSystemTestOptions
+  private val CheckpointLocationKey = "spark.sql.streaming.checkpointLocation"
+  private val CheckpointLocationValue = "target/temp/checkpoint"
+  private val KustoSinkProviderFormat = "com.microsoft.kusto.spark.datasink.KustoSinkProvider"
   val csvPath: String = System.getProperty("path", "connector/src/test/resources/TestData/csv")
   val customSchema: StructType = new StructType()
     .add("colA", StringType, nullable = true)
@@ -73,10 +76,10 @@ class KustoSinkStreamingE2E extends AnyFlatSpec with BeforeAndAfterAll {
     sp.ingestByTags = tags
     sp.ingestIfNotExists = tags
 
-    spark.conf.set("spark.sql.streaming.checkpointLocation", "target/temp/checkpoint")
+    spark.conf.set(CheckpointLocationKey, CheckpointLocationValue)
 
     val kustoQ = csvDf.writeStream
-      .format("com.microsoft.kusto.spark.datasink.KustoSinkProvider")
+      .format(KustoSinkProviderFormat)
       .options(Map(
         KustoSinkOptions.KUSTO_CLUSTER -> kustoTestConnectionOptions.cluster,
         KustoSinkOptions.KUSTO_TABLE -> table,
@@ -122,10 +125,10 @@ class KustoSinkStreamingE2E extends AnyFlatSpec with BeforeAndAfterAll {
 
     consoleQ.start().awaitTermination()
 
-    spark.conf.set("spark.sql.streaming.checkpointLocation", "target/temp/checkpoint")
+    spark.conf.set(CheckpointLocationKey, CheckpointLocationValue)
 
     val kustoQ = csvDf.writeStream
-      .format("com.microsoft.kusto.spark.datasink.KustoSinkProvider")
+      .format(KustoSinkProviderFormat)
       .options(Map(
         KustoSinkOptions.KUSTO_CLUSTER -> kustoTestConnectionOptions.cluster,
         KustoSinkOptions.KUSTO_TABLE -> table,
@@ -166,10 +169,10 @@ class KustoSinkStreamingE2E extends AnyFlatSpec with BeforeAndAfterAll {
       .schema(customSchema)
       .csv(csvPath)
 
-    spark.conf.set("spark.sql.streaming.checkpointLocation", "target/temp/checkpoint")
+    spark.conf.set(CheckpointLocationKey, CheckpointLocationValue)
 
     val kustoQ = csvDf.writeStream
-      .format("com.microsoft.kusto.spark.datasink.KustoSinkProvider")
+      .format(KustoSinkProviderFormat)
       .options(Map(
         KustoSinkOptions.KUSTO_CLUSTER -> kustoTestConnectionOptions.cluster,
         KustoSinkOptions.KUSTO_TABLE -> table,
@@ -199,9 +202,9 @@ class KustoSinkStreamingE2E extends AnyFlatSpec with BeforeAndAfterAll {
     val csvDf = spark.readStream
       .schema(customSchema)
       .csv(csvPath)
-    spark.conf.set("spark.sql.streaming.checkpointLocation", "target/temp/checkpoint")
+    spark.conf.set(CheckpointLocationKey, CheckpointLocationValue)
     val kustoQ = csvDf.writeStream
-      .format("com.microsoft.kusto.spark.datasink.KustoSinkProvider")
+      .format(KustoSinkProviderFormat)
       .options(Map(
         KustoSinkOptions.KUSTO_CLUSTER -> kustoTestConnectionOptions.cluster,
         KustoSinkOptions.KUSTO_TABLE -> table,

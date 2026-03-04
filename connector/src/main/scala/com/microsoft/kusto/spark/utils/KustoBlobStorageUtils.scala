@@ -8,6 +8,8 @@ import com.azure.storage.blob.models.BlobItem
 import com.microsoft.kusto.spark.datasource.TransientStorageCredentials
 
 object KustoBlobStorageUtils {
+  private val DefaultEndpointsProtocol = "DefaultEndpointsProtocol=https;"
+
   def deleteFromBlob(
       account: String,
       directory: String,
@@ -15,11 +17,11 @@ object KustoBlobStorageUtils {
       secret: String,
       keyIsSas: Boolean = false): Unit = {
     val storageConnectionString = if (keyIsSas) {
-      "DefaultEndpointsProtocol=https;" +
+      DefaultEndpointsProtocol +
         s"AccountName=$account;" +
         s"SharedAccessSignature=$secret"
     } else {
-      "DefaultEndpointsProtocol=https;" +
+      DefaultEndpointsProtocol +
         s"AccountName=$account;" +
         s"AccountKey=$secret"
     }
@@ -30,7 +32,7 @@ object KustoBlobStorageUtils {
   def deleteFromBlob(directory: String, sasKeyFullUrl: String): Unit = {
     val storageParams = new TransientStorageCredentials(sasKeyFullUrl)
     val storageConnectionString =
-      "DefaultEndpointsProtocol=https;" +
+      DefaultEndpointsProtocol +
         s"AccountName=${storageParams.storageAccountName};" +
         s"SharedAccessSignature=${storageParams.sasKey}"
 

@@ -11,25 +11,32 @@ import java.time.temporal.ChronoUnit
 import java.time.{Clock, Instant}
 class KustoAzureFsSetupCacheTest extends AnyFunSuite {
 
+  private val Account1 = "account1"
+  private val Secret1 = "secret1"
+  private val Secret2 = "secret2"
+  private val Container1 = "container1"
+  private val Now = "now"
+  private val ExpectedResult = "expectedResult"
+
   test("testUpdateAndGetPrevStorageAccountAccess") {
     val dataToTest = Table(
-      ("account", "secret", "now", "expectedResult"),
+      ("account", "secret", Now, ExpectedResult),
       // a non existing key
-      ("account1", "secret1", Instant.now(Clock.systemUTC()), false),
+      (Account1, Secret1, Instant.now(Clock.systemUTC()), false),
       // A key that is same but is expired
       (
-        "account1",
-        "secret1",
+        Account1,
+        Secret1,
         Instant
           .now(Clock.systemUTC())
           .minus(3 * KustoConstants.SparkSettingsRefreshMinutes, ChronoUnit.MINUTES),
         false),
       // A new secret value
-      ("account1", "secret2", Instant.now(Clock.systemUTC()), false),
+      (Account1, Secret2, Instant.now(Clock.systemUTC()), false),
       // Same secret
       (
-        "account1",
-        "secret2",
+        Account1,
+        Secret2,
         Instant
           .now(Clock.systemUTC())
           .minus(KustoConstants.SparkSettingsRefreshMinutes / 2, ChronoUnit.MINUTES),
@@ -69,7 +76,7 @@ class KustoAzureFsSetupCacheTest extends AnyFunSuite {
 
   test("testCheckIfRefreshNeeded") {
     val dataToTest = Table(
-      ("now", "expectedResult"),
+      (Now, ExpectedResult),
       // The cache is expired, so it will be re-set.The checkIfRefreshNeeded will return false, but the state is already true.
       (
         Instant
@@ -91,33 +98,33 @@ class KustoAzureFsSetupCacheTest extends AnyFunSuite {
 
   test("testUpdateAndGetPrevSas") {
     val dataToTest = Table(
-      ("container", "account", "secret", "now", "expectedResult"),
+      ("container", "account", "secret", Now, ExpectedResult),
       // a non existing key
-      ("container1", "account1", "secret1", Instant.now(Clock.systemUTC()), false),
+      (Container1, Account1, Secret1, Instant.now(Clock.systemUTC()), false),
       // A key that is same but is expired
       (
-        "container1",
-        "account1",
-        "secret1",
+        Container1,
+        Account1,
+        Secret1,
         Instant
           .now(Clock.systemUTC())
           .minus(3 * KustoConstants.SparkSettingsRefreshMinutes, ChronoUnit.MINUTES),
         false),
       // A new secret value
-      ("container1", "account1", "secret2", Instant.now(Clock.systemUTC()), false),
+      (Container1, Account1, Secret2, Instant.now(Clock.systemUTC()), false),
       // Same secret
       (
-        "container1",
-        "account1",
-        "secret2",
+        Container1,
+        Account1,
+        Secret2,
         Instant
           .now(Clock.systemUTC())
           .minus(KustoConstants.SparkSettingsRefreshMinutes / 2, ChronoUnit.MINUTES),
         true),
       // Container name changes. This should get set
-      ("container2", "account1", "secret2", Instant.now(Clock.systemUTC()), false),
+      ("container2", Account1, Secret2, Instant.now(Clock.systemUTC()), false),
       // Since the key exists, this should return true
-      ("container2", "account1", "secret2", Instant.now(), true))
+      ("container2", Account1, Secret2, Instant.now(), true))
 
     forAll(dataToTest) {
       (

@@ -12,50 +12,52 @@ import org.scalatest.prop.TableDrivenPropertyChecks.forAll
 import org.scalatest.prop.Tables.Table
 
 class CslCommandsGeneratorTest extends AnyFlatSpec {
+  private val Key1 = "key1"
+  private val Value1 = "value1"
+  private val ExportOption2 = "exportOption2"
+  private val Eo2 = "eo2"
+  private val CompressionTypeKey = "compressionType"
+  private val Gz = "gz"
+  private val Compressed = "compressed"
+  private val ExpectedOptionsWithGz =
+    "with ( namePrefix=\"storms/data/part1\", compressionType=\"gz\",key1=\"value1\",exportOption2=\"eo2\")"
+
   private val dataCombinations =
     Table(
-      ("additionalExportOptions", "expectedOptions", "compressed", "iteration"),
+      ("additionalExportOptions", "expectedOptions", Compressed, "iteration"),
       (
-        Map("key1" -> "value1", "exportOption2" -> "eo2", "sizeLimit" -> "1000"),
+        Map(Key1 -> Value1, ExportOption2 -> Eo2, "sizeLimit" -> "1000"),
         "with (sizeLimit=1048576000 , namePrefix=\"storms/data/part1\", " +
           "compressionType=\"snappy\",key1=\"value1\",exportOption2=\"eo2\")",
-        "compressed",
+        Compressed,
         1),
       // size is not provided. Hence this will fallback to default without size
       (
-        Map("key1" -> "value1", "exportOption2" -> "eo2", "compressionType" -> "gz"),
-        "with ( namePrefix=\"storms/data/part1\", compressionType=\"gz\",key1=\"value1\",exportOption2=\"eo2\")",
-        "compressed",
+        Map(Key1 -> Value1, ExportOption2 -> Eo2, CompressionTypeKey -> Gz),
+        ExpectedOptionsWithGz,
+        Compressed,
         2),
       // Though namePrefix is specified, we do not use this option and ignore this. This has downstream implications
       // where we read the exported data, better to lock this option atleast for now
       (
         Map(
-          "key1" -> "value1",
-          "exportOption2" -> "eo2",
-          "compressionType" -> "gz",
+          Key1 -> Value1,
+          ExportOption2 -> Eo2,
+          CompressionTypeKey -> Gz,
           "namePrefix" -> "Np-2"),
-        "with ( namePrefix=\"storms/data/part1\", compressionType=\"gz\",key1=\"value1\",exportOption2=\"eo2\")",
-        "compressed",
+        ExpectedOptionsWithGz,
+        Compressed,
         3),
       // when compressed is set as none, this should not appear in the command
       (
-        Map(
-          "key1" -> "value1",
-          "exportOption2" -> "eo2",
-          "compressionType" -> "gz",
-          "compressed" -> "none"),
-        "with ( namePrefix=\"storms/data/part1\", compressionType=\"gz\",key1=\"value1\",exportOption2=\"eo2\")",
+        Map(Key1 -> Value1, ExportOption2 -> Eo2, CompressionTypeKey -> Gz, Compressed -> "none"),
+        ExpectedOptionsWithGz,
         "",
         4),
       // when compressed is none , it should not be in the command
       (
-        Map(
-          "key1" -> "value1",
-          "exportOption2" -> "eo2",
-          "compressionType" -> "gz",
-          "compressed" -> "none"),
-        "with ( namePrefix=\"storms/data/part1\", compressionType=\"gz\",key1=\"value1\",exportOption2=\"eo2\")",
+        Map(Key1 -> Value1, ExportOption2 -> Eo2, CompressionTypeKey -> Gz, Compressed -> "none"),
+        ExpectedOptionsWithGz,
         "",
         5))
 

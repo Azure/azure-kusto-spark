@@ -99,6 +99,9 @@ object KustoDataSourceUtils {
 
   private final val className = this.getClass.getSimpleName
   private final val objectMapper = new ObjectMapper().registerModule(DefaultScalaModule)
+  private final val FalseStr = "false"
+  private final val KustoDomain = ".kusto."
+  private final val KustoDevDomain = ".kustodev."
 
   def getDedupTagsPrefix(requestId: String, batchId: String): String = s"${requestId}_$batchId"
 
@@ -131,7 +134,7 @@ object KustoDataSourceUtils {
       None
     }
     val distributedReadModeTransientCacheEnabled = parameters
-      .getOrElse(KustoSourceOptions.KUSTO_DISTRIBUTED_READ_MODE_TRANSIENT_CACHE, "false")
+      .getOrElse(KustoSourceOptions.KUSTO_DISTRIBUTED_READ_MODE_TRANSIENT_CACHE, FalseStr)
       .trim
       .toBoolean
     val queryFilterPushDown =
@@ -315,7 +318,7 @@ object KustoDataSourceUtils {
     var keyVaultAuthentication: Option[KeyVaultAuthentication] = None
 
     val managedIdentityAuth: Boolean =
-      parameters.getOrElse(KustoSourceOptions.KUSTO_MANAGED_IDENTITY_AUTH, "false").toBoolean
+      parameters.getOrElse(KustoSourceOptions.KUSTO_MANAGED_IDENTITY_AUTH, FalseStr).toBoolean
     val maybeManagedClientId: Option[String] =
       parameters.get(KustoSourceOptions.KUSTO_MANAGED_IDENTITY_CLIENT_ID)
 
@@ -517,9 +520,9 @@ object KustoDataSourceUtils {
         "tempTableName can only be used with FailIfNotExists table create mode and Transactional write mode.")
     }
     isAsync =
-      parameters.getOrElse(KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC, "false").trim.toBoolean
+      parameters.getOrElse(KustoSinkOptions.KUSTO_WRITE_ENABLE_ASYNC, FalseStr).trim.toBoolean
     val pollingOnDriver =
-      parameters.getOrElse(KustoSinkOptions.KUSTO_POLLING_ON_DRIVER, "false").trim.toBoolean
+      parameters.getOrElse(KustoSinkOptions.KUSTO_POLLING_ON_DRIVER, FalseStr).trim.toBoolean
 
     batchLimit = parameters
       .getOrElse(KustoSinkOptions.KUSTO_CLIENT_BATCHING_LIMIT, DefaultBatchingLimit.toString)
@@ -565,14 +568,14 @@ object KustoDataSourceUtils {
       TimeUnit.SECONDS)
 
     val disableFlushImmediately =
-      parameters.getOrElse(KustoDebugOptions.KUSTO_DISABLE_FLUSH_IMMEDIATELY, "false").toBoolean
+      parameters.getOrElse(KustoDebugOptions.KUSTO_DISABLE_FLUSH_IMMEDIATELY, FalseStr).toBoolean
 
     val ensureNoDupBlobs =
-      parameters.getOrElse(KustoDebugOptions.KUSTO_ENSURE_NO_DUPLICATED_BLOBS, "false").toBoolean
+      parameters.getOrElse(KustoDebugOptions.KUSTO_ENSURE_NO_DUPLICATED_BLOBS, FalseStr).toBoolean
 
     val addSourceLocationTransform =
       parameters
-        .getOrElse(KustoDebugOptions.KUSTO_ADD_SOURCE_LOCATION_TRANSFORM, "false")
+        .getOrElse(KustoDebugOptions.KUSTO_ADD_SOURCE_LOCATION_TRANSFORM, FalseStr)
         .toBoolean
 
     val ingestionPropertiesAsJson =
@@ -775,7 +778,7 @@ object KustoDataSourceUtils {
     } else if (cluster.equals(PlayFabClustersProxy)) {
       PlayFabClustersAlias
     } else if (cluster.startsWith(EnginePrefix)) {
-      if (!cluster.contains(".kusto.") && !cluster.contains(".kustodev.")) {
+      if (!cluster.contains(KustoDomain) && !cluster.contains(KustoDevDomain)) {
         throw new InvalidParameterException(
           "KUSTO_CLUSTER parameter accepts either a full url with https scheme or the cluster's" +
             "alias and tries to construct the full URL from it. Parameter given: " + cluster)
@@ -783,10 +786,10 @@ object KustoDataSourceUtils {
       val host = new URI(cluster).getHost
       val startIdx = if (host.startsWith(IngestPrefix)) IngestPrefix.length else 0
       val endIdx =
-        if (cluster.contains(".kustodev.")) {
-          host.indexOf(".kustodev.")
+        if (cluster.contains(KustoDevDomain)) {
+          host.indexOf(KustoDevDomain)
         } else {
-          host.indexOf(".kusto.")
+          host.indexOf(KustoDomain)
         }
       host.substring(startIdx, endIdx)
 
@@ -803,7 +806,7 @@ object KustoDataSourceUtils {
         val startIdx = IngestPrefix.length
         val uriBuilder = new URIBuilder()
         uriBuilder.setHost(
-          s"${host.substring(startIdx, host.indexOf(".kusto."))}.kusto.windows.net")
+          s"${host.substring(startIdx, host.indexOf(KustoDomain))}.kusto.windows.net")
         uriBuilder.setScheme("https").toString
       } else {
         cluster

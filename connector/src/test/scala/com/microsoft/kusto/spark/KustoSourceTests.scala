@@ -31,9 +31,11 @@ class KustoSourceTests extends AnyFlatSpec with MockFactory with Matchers with B
   if (loggingLevel.isDefined) KDSU.setLoggingLevel(loggingLevel.get)
 
   private val nofExecutors = 4
+  private val AppName = "KustoSource"
+  private val KustoDataSource = "KustoDataSource"
   private val spark: SparkSession = SparkSession
     .builder()
-    .appName("KustoSource")
+    .appName(AppName)
     .master(f"local[$nofExecutors]")
     .getOrCreate()
 
@@ -54,10 +56,10 @@ class KustoSourceTests extends AnyFlatSpec with MockFactory with Matchers with B
     super.afterAll()
   }
 
-  "KustoDataSource" should "recognize Kusto and get the correct schema" in {
+  KustoDataSource should "recognize Kusto and get the correct schema" in {
     val spark: SparkSession = SparkSession
       .builder()
-      .appName("KustoSource")
+      .appName(AppName)
       .master(f"local[$nofExecutors]")
       .getOrCreate()
 
@@ -81,7 +83,7 @@ class KustoSourceTests extends AnyFlatSpec with MockFactory with Matchers with B
     assert(df.schema.equals(expected))
   }
 
-  "KustoDataSource" should "fail with credentials in plain text" in {
+  KustoDataSource should "fail with credentials in plain text" in {
     val ksr = KustoRelation(
       KustoCoordinates(
         cluster,
@@ -103,7 +105,7 @@ class KustoSourceTests extends AnyFlatSpec with MockFactory with Matchers with B
       "[BlobContainer: someplace-0 ,Storage: storage , IsSasKeyDefined: true, domain: core.windows.net]"))
   }
 
-  "KustoDataSource" should "parse sas" in {
+  KustoDataSource should "parse sas" in {
     val sas = "https://storage.blob.core.customDom/upload/?<secret>"
     val params = new TransientStorageCredentials(sas)
     assert(params.domainSuffix.equals("core.customDom"))
@@ -113,19 +115,19 @@ class KustoSourceTests extends AnyFlatSpec with MockFactory with Matchers with B
     assert(params.authMethod.equals(AuthMethod.Sas))
   }
 
-  "KustoDataSource" should "fail in parsing with no sas key" in {
+  KustoDataSource should "fail in parsing with no sas key" in {
     val sas = "https://storage.blob.core.customDom/upload/"
     assertThrows[InvalidParameterException] { new TransientStorageCredentials(sas) }
   }
 
-  "KustoDataSource" should "fail in parsing with wrong sas url format" in {
+  KustoDataSource should "fail in parsing with wrong sas url format" in {
     val sas = "https://storage.blob.core.customDom/?<secret>"
     assertThrows[InvalidParameterException] {
       new TransientStorageCredentials(sas)
     }
   }
 
-  "KustoDataSource" should "match cluster default url pattern" in {
+  KustoDataSource should "match cluster default url pattern" in {
     val ingestUrl = "https://ingest-ohbitton.dev.kusto.windows.net"
     val engineUrl = "https://ohbitton.dev.kusto.windows.net"
     val expectedAlias = "ohbitton.dev"
@@ -142,7 +144,7 @@ class KustoSourceTests extends AnyFlatSpec with MockFactory with Matchers with B
     assert(engine2.equals(engineUrl))
   }
 
-  "KustoDataSource" should "match cluster custom domain url or aria old cluster" in {
+  KustoDataSource should "match cluster custom domain url or aria old cluster" in {
     val url = "https://ingest-ohbitton.dev.kusto.customDom"
     val engineUrl = "https://ohbitton.dev.kusto.customDom"
     val expectedAlias = "ohbitton.dev"

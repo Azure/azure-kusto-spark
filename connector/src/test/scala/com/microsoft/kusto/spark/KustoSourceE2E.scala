@@ -116,6 +116,10 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
     val minBigDecimalTest:BigDecimal = BigDecimal("-12345678901234567890.123456789012345678")
    */
   val expectedNumberOfRows: Int = 100
+  private val NameCol = "name"
+  private val ValueCol = "value"
+  private val DecCol = "dec"
+  private val KustoSource = "KustoSource"
   val rows: immutable.IndexedSeq[(String, Int, BigDecimal)] =
     (1 to expectedNumberOfRows).map(valueCol => {
       val nameCol = newRow()
@@ -129,7 +133,7 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
       }
       (nameCol, valueCol, decimalCol)
     })
-  val dfOrig: DataFrame = rows.toDF("name", "value", "dec")
+  val dfOrig: DataFrame = rows.toDF(NameCol, ValueCol, DecCol)
 
   "KustoConnector" should "write to a kusto table and read it back in default mode" in {
     // Create a new table.
@@ -177,13 +181,13 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
       table,
       conf)
     val orig = dfOrig
-      .select("name", "value", "dec")
+      .select(NameCol, ValueCol, DecCol)
       .rdd
       .map(x => (x.getString(0), x.getInt(1), x.getDecimal(2)))
       .collect()
       .sortBy(_._2)
     val result = dfResult
-      .select("name", "value", "dec")
+      .select(NameCol, ValueCol, DecCol)
       .rdd
       .map(x => (x.getString(0), x.getInt(1), x.getDecimal(2)))
       .collect()
@@ -191,14 +195,14 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
     assert(orig.sameElements(result))
   }
 
-  "KustoSource" should "execute a read query on Kusto cluster in single mode" in {
+  KustoSource should "execute a read query on Kusto cluster in single mode" in {
     val conf: Map[String, String] = Map(
       KustoSourceOptions.KUSTO_READ_MODE -> "ForceSingleMode",
       KustoSourceOptions.KUSTO_ACCESS_TOKEN -> kustoConnectionOptions.accessToken)
     validateRead(conf)
   }
 
-  "KustoSource" should "execute a read query with transient storage and impersonation in distributed mode" in {
+  KustoSource should "execute a read query with transient storage and impersonation in distributed mode" in {
     // Use sas delegation to create a SAS key for the test storage
     val sas = KustoTestUtils.generateSasDelegationWithAzCli(
       kustoConnectionOptions.storageContainerUrl.get)
@@ -238,7 +242,7 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
     }
   }
 
-  "KustoSource" should "read distributed, transient cache change the filter but execute once" in {
+  KustoSource should "read distributed, transient cache change the filter but execute once" in {
     import spark.implicits._
     val table = KustoQueryUtils.simplifyName(s"KustoSparkReadWriteTest_${UUID.randomUUID()}")
 

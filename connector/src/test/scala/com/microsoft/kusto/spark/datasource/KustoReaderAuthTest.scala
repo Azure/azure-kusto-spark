@@ -14,6 +14,8 @@ import java.time.Instant
 import java.time.temporal.ChronoUnit
 
 class KustoReaderAuthTest extends AnyFlatSpec with Matchers with BeforeAndAfterEach {
+  private val DefaultEndpointSuffix = "core.windows.net"
+  private val TestKey = "testkey123"
   private var sparkConf: RuntimeConfig = _
   override def beforeEach(): Unit = {
     sparkConf = SparkSession
@@ -31,7 +33,7 @@ class KustoReaderAuthTest extends AnyFlatSpec with Matchers with BeforeAndAfterE
       Array(
         new TransientStorageCredentials(
           "https://testaccount.blob.core.windows.net/testcontainer?sv=2021-01-01&sig=test")),
-      "core.windows.net")
+      DefaultEndpointSuffix)
 
     KustoReader.setHadoopAuth(
       storageParams,
@@ -51,8 +53,8 @@ class KustoReaderAuthTest extends AnyFlatSpec with Matchers with BeforeAndAfterE
     val now = Instant.now()
 
     val storageParams = new TransientStorageParameters(
-      Array(new TransientStorageCredentials("testaccount", "testkey123", "testcontainer")),
-      "core.windows.net")
+      Array(new TransientStorageCredentials("testaccount", TestKey, "testcontainer")),
+      DefaultEndpointSuffix)
 
     KustoReader.setHadoopAuth(
       storageParams,
@@ -63,7 +65,7 @@ class KustoReaderAuthTest extends AnyFlatSpec with Matchers with BeforeAndAfterE
       useAbfs = false)
 
     val accountKey = config.get("fs.azure.account.key.testaccount.blob.core.windows.net")
-    accountKey shouldBe "testkey123"
+    accountKey shouldBe TestKey
   }
 
   it should "configure ABFS with SAS token correctly" in {
@@ -75,7 +77,7 @@ class KustoReaderAuthTest extends AnyFlatSpec with Matchers with BeforeAndAfterE
       Array(
         new TransientStorageCredentials(
           "https://testaccount2.blob.core.windows.net/testcontainer2?sv=2021-01-01&sig=test")),
-      "core.windows.net")
+      DefaultEndpointSuffix)
 
     // Set up expectations before calling the method
 
@@ -94,8 +96,8 @@ class KustoReaderAuthTest extends AnyFlatSpec with Matchers with BeforeAndAfterE
     val now = Instant.now().minus(3 * KCONST.SparkSettingsRefreshMinutes, ChronoUnit.MINUTES)
 
     val storageParams = new TransientStorageParameters(
-      Array(new TransientStorageCredentials("testaccount3", "testkey123", "testcontainer3")),
-      "core.windows.net")
+      Array(new TransientStorageCredentials("testaccount3", TestKey, "testcontainer3")),
+      DefaultEndpointSuffix)
 
     val exception = intercept[java.security.InvalidParameterException] {
       KustoReader.setHadoopAuth(
