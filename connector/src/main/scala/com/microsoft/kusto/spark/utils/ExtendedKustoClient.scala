@@ -418,12 +418,14 @@ class ExtendedKustoClient(
           }
         if (extentsProcessed > 0) {
           // This is not the first move command
-          if (retry > secondMovesRetries)
+          if (retry > secondMovesRetries) {
             throw RetriesExhaustedException(
               s"Failed to move extents after $retry tries$extentsProcessedErrorString.")
-        } else if (retry > firstMoveRetries)
+          }
+        } else if (retry > firstMoveRetries) {
           throw RetriesExhaustedException(
             s"Failed to move extents after $retry tries$extentsProcessedErrorString.")
+        }
 
         // Lower batch size, increase delay
         val params =
@@ -460,8 +462,11 @@ class ExtendedKustoClient(
     KDSU.logWarn(
       className,
       s"""moving extents to '$targetTable' failed,
-        retry number: $retry ${if (error == null) ""
-        else s", error: $error"}.
+        retry number: $retry ${if (error == null) {
+          ""
+        } else {
+          s", error: $error"
+        }}.
         Sleeping for: $currentSleepTime""")
     Thread.sleep(currentSleepTime)
     val increasedSleepTime = Math.min(MaxSleepOnMoveExtentsMillis, currentSleepTime * 2)

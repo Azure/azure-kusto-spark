@@ -141,17 +141,24 @@ object RowCSVWriterUtils {
       ar: ArrayData,
       fieldsType: DataType,
       timeZone: ZoneId): String = {
-    if (ar.numElements() == 0) "[]"
-    else {
+    if (ar.numElements() == 0) {
+      "[]"
+    } else {
       val writer = EscapedWriter(new CharArrayWriter())
 
       writer.write('[')
-      if (ar.isNullAt(0)) writer.write("null")
-      else writeField(ar, fieldIndexInRow = 0, fieldsType, timeZone, writer, nested = true)
+      if (ar.isNullAt(0)) {
+        writer.write("null")
+      } else {
+        writeField(ar, fieldIndexInRow = 0, fieldsType, timeZone, writer, nested = true)
+      }
       for (x <- 1 until ar.numElements()) {
         writer.write(',')
-        if (ar.isNullAt(x)) writer.write("null")
-        else writeField(ar, x, fieldsType, timeZone, writer, nested = true)
+        if (ar.isNullAt(x)) {
+          writer.write("null")
+        } else {
+          writeField(ar, x, fieldsType, timeZone, writer, nested = true)
+        }
       }
       writer.write(']')
 

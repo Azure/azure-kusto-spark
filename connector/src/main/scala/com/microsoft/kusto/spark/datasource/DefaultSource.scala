@@ -71,8 +71,9 @@ class DefaultSource
 
     val limit =
       if (sinkParameters.writeOptions.writeResultLimit.equalsIgnoreCase(
-          KustoSinkOptions.NONE_RESULT_LIMIT)) None
-      else {
+          KustoSinkOptions.NONE_RESULT_LIMIT)) {
+        None
+      } else {
         try {
           Some(sinkParameters.writeOptions.writeResultLimit.toInt)
         } catch {

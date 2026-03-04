@@ -19,7 +19,14 @@ object ExceptionUtils {
   }
 
   def getRootCauseStackTraceList(throwable: Throwable): Seq[String] = {
-    if (throwable == null) return Seq.empty
+    if (throwable == null) {
+      Seq.empty
+    } else {
+      getRootCauseStackTraceListImpl(throwable)
+    }
+  }
+
+  private def getRootCauseStackTraceListImpl(throwable: Throwable): Seq[String] = {
     val throwables = getThrowables(throwable)
     val count = throwables.length
     val frames = ListBuffer[String]()
@@ -46,22 +53,23 @@ object ExceptionUtils {
     val frames = stackTrace.split(linebreak)
     val list = ListBuffer[String]()
     var traceStarted = false
-    for (token <- frames) {
+    var done = false
+    for (token <- frames if !done) {
       val at = token.indexOf("at")
       if (at != NOT_FOUND && token.substring(0, at).trim.isEmpty) {
         traceStarted = true
         list += token
       } else if (traceStarted) {
-        // Stop after stack frames
-        return list.toSeq
+        done = true
       }
     }
     list.toSeq
   }
 
   def getStackTrace(throwable: Throwable): String = {
-    if (throwable == null) ""
-    else {
+    if (throwable == null) {
+      ""
+    } else {
       val sw = new java.io.StringWriter()
       throwable.printStackTrace(new java.io.PrintWriter(sw, true))
       sw.toString
@@ -102,7 +110,10 @@ object ExceptionUtils {
 
   def getRootCause(throwable: Throwable): Throwable = {
     val list = getThrowableList(throwable)
-    if (list.isEmpty) null
-    else list.lastOption.orNull
+    if (list.isEmpty) {
+      null
+    } else {
+      list.lastOption.orNull
+    }
   }
 }

@@ -24,7 +24,7 @@ class KustoSink(
   val MessageSource = "KustoSink"
   @volatile private var latestBatchId = -1L
 
-  override def toString = "KustoSink"
+  override def toString: String = "KustoSink"
 
   override def addBatch(batchId: Long, data: DataFrame): Unit = {
     if (batchId <= latestBatchId) {

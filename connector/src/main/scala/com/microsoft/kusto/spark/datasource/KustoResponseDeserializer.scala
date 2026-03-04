@@ -38,7 +38,7 @@ class KustoResponseDeserializer(val kustoResult: KustoResultSetTable) {
       case "sbyte" => value: Any => value
       case "long" => {
         case i: Int => i.toLong
-        case value => value.asInstanceOf[Long]
+        case value: Any => value.asInstanceOf[Long]
       }
       case "double" => value: Any => value
       case "decimal" => value: Any => BigDecimal(value.asInstanceOf[String])
@@ -49,7 +49,7 @@ class KustoResponseDeserializer(val kustoResult: KustoResultSetTable) {
         case v: Int => v.toDouble
         case v: Long => v.toDouble
         case v: java.math.BigDecimal => v.doubleValue()
-        case v => v.asInstanceOf[Double]
+        case v: Any => v.asInstanceOf[Double]
       }
       case _ => value: Any => value.toString
     }

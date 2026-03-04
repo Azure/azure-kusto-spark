@@ -28,7 +28,9 @@ class KustoSinkProvider extends StreamSinkProvider with DataSourceRegister {
         KustoDataSourceUtils.mergeKeyVaultAndOptionsAuthentication(
           paramsFromKeyVault,
           Some(sinkParameters.sourceParametersResults.authenticationParameters))
-      } else sinkParameters.sourceParametersResults.authenticationParameters,
+      } else {
+        sinkParameters.sourceParametersResults.authenticationParameters
+      },
       sinkParameters.writeOptions,
       sinkParameters.sourceParametersResults.clientRequestProperties)
   }

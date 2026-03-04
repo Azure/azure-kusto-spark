@@ -163,8 +163,9 @@ object KustoDataSourceUtils {
       sqlContext: SQLContext,
       requestedNumPartitions: Option[String],
       partitioningMode: Option[String]): Int = {
-    if (requestedNumPartitions.isDefined) requestedNumPartitions.get.toInt
-    else {
+    if (requestedNumPartitions.isDefined) {
+      requestedNumPartitions.get.toInt
+    } else {
       partitioningMode match {
         case Some("hash") => sqlContext.getConf("spark.sql.shuffle.partitions", "10").toInt
         // In "auto" mode we don't explicitly partition the data:
@@ -465,8 +466,11 @@ object KustoDataSourceUtils {
     try {
       writeModeParam = parameters.get(KustoSinkOptions.KUSTO_WRITE_MODE)
       writeMode =
-        if (writeModeParam.isEmpty) WriteMode.Transactional
-        else WriteMode.withName(writeModeParam.get)
+        if (writeModeParam.isEmpty) {
+          WriteMode.Transactional
+        } else {
+          WriteMode.withName(writeModeParam.get)
+        }
     } catch {
       case _: NoSuchElementException =>
         throw new InvalidParameterException(s"No such WriteMode option: '${writeModeParam.get}'")
@@ -592,10 +596,18 @@ object KustoDataSourceUtils {
         s"'pollingOnDriver': ${writeOptions.pollingOnDriver}," +
         s"'maxRetriesOnMoveExtents':$maxRetriesOnMoveExtents, 'minimalExtentsCountForSplitMergePerNode':" +
         s"$minimalExtentsCountForSplitMergePerNode, " +
-        s"'adjustSchema': $adjustSchema, 'autoCleanupTime': $autoCleanupTime${if (writeOptions.userTempTableName.isDefined)
-            s", userTempTableName: ${userTempTableName.get}"
-          else ""}, disableFlushImmediately: $disableFlushImmediately${if (ensureNoDupBlobs) "ensureNoDupBlobs: true"
-          else ""}")
+        s"'adjustSchema': $adjustSchema, 'autoCleanupTime': $autoCleanupTime" +
+        (if (writeOptions.userTempTableName.isDefined) {
+          s", userTempTableName: ${userTempTableName.get}"
+        } else {
+          ""
+        }) +
+        s", disableFlushImmediately: $disableFlushImmediately" +
+        (if (ensureNoDupBlobs) {
+          "ensureNoDupBlobs: true"
+        } else {
+          ""
+        }))
     SinkParameters(writeOptions, sourceParameters)
   }
 
@@ -741,8 +753,11 @@ object KustoDataSourceUtils {
       val host = new URI(cluster).getHost
       val startIdx = if (host.startsWith(IngestPrefix)) IngestPrefix.length else 0
       val endIdx =
-        if (cluster.contains(".kustodev.")) host.indexOf(".kustodev.")
-        else host.indexOf(".kusto.")
+        if (cluster.contains(".kustodev.")) {
+          host.indexOf(".kustodev.")
+        } else {
+          host.indexOf(".kusto.")
+        }
       host.substring(startIdx, endIdx)
 
     } else {
@@ -816,8 +831,11 @@ object KustoDataSourceUtils {
               maxWaitTime = maxWaitTimeAfterMinute
             }
             currentWaitTime =
-              if (currentWaitTime + currentWaitTime > maxWaitTime) maxWaitTime
-              else currentWaitTime + currentWaitTime
+              if (currentWaitTime + currentWaitTime > maxWaitTime) {
+                maxWaitTime
+              } else {
+                currentWaitTime + currentWaitTime
+              }
             t.schedule(new ExponentialBackoffTask(), currentWaitTime)
           }
         } catch {
@@ -967,9 +985,11 @@ object KustoDataSourceUtils {
     val keyVaultCredential = KeyVaultUtils.getStorageParamsFromKeyVault(keyVaultAuthentication)
     try {
       val domainSuffix =
-        if (StringUtils.isNotBlank(keyVaultCredential.domainSuffix))
+        if (StringUtils.isNotBlank(keyVaultCredential.domainSuffix)) {
           keyVaultCredential.domainSuffix
-        else KustoDataSourceUtils.DefaultDomainPostfix
+        } else {
+          KustoDataSourceUtils.DefaultDomainPostfix
+        }
       Some(new TransientStorageParameters(Array(keyVaultCredential), domainSuffix))
     } catch {
       case ex: Exception =>
@@ -1014,8 +1034,11 @@ object KustoDataSourceUtils {
      */
     val estimatedCount = maybeEstimatedCount match {
       case Some(ecStr: String) =>
-        if (StringUtils.isBlank(ecStr) || !ecStr.forall(_.isDigit)) /* Empty estimate */ 0
-        else ecStr.toInt
+        if (StringUtils.isBlank(ecStr) || !ecStr.forall(_.isDigit)) {
+          0 // Empty estimate
+        } else {
+          ecStr.toInt
+        }
       case Some(ecInt: java.lang.Number) =>
         ecInt.intValue() // Is a numeric , get the int value back
       case Some(ecObj: Object) =>

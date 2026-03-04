@@ -27,8 +27,9 @@ object KustoFilter {
   }
 
   def buildColumnsClause(columns: Array[String], timespanColumns: Set[String]): String = {
-    if (columns.isEmpty) ""
-    else {
+    if (columns.isEmpty) {
+      ""
+    } else {
       " | project " + columns
         .map(col => if (timespanColumns.contains(col)) s"tostring(['$col'])" else s"['$col']")
         .mkString(", ")
@@ -137,6 +138,8 @@ object KustoFilter {
   private def getType(schema: StructType, attr: String): Option[DataType] = {
     if (schema.fieldNames.contains(attr)) {
       Some(schema(attr).dataType)
-    } else None
+    } else {
+      None
+    }
   }
 }

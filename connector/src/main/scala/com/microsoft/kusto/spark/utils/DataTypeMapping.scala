@@ -59,9 +59,13 @@ object DataTypeMapping {
     ShortType -> "int")
 
   def getSparkTypeToKustoTypeMap(fieldType: DataType): String = {
-    if (fieldType.isInstanceOf[DecimalType]) "decimal"
-    else if (fieldType.isInstanceOf[ArrayType] || fieldType.isInstanceOf[StructType] || fieldType
-        .isInstanceOf[MapType]) "dynamic"
-    else DataTypeMapping.SparkTypeToKustoTypeMap.getOrElse(fieldType, "string")
+    if (fieldType.isInstanceOf[DecimalType]) {
+      "decimal"
+    } else if (fieldType.isInstanceOf[ArrayType] || fieldType.isInstanceOf[StructType] || fieldType
+        .isInstanceOf[MapType]) {
+      "dynamic"
+    } else {
+      DataTypeMapping.SparkTypeToKustoTypeMap.getOrElse(fieldType, "string")
+    }
   }
 }

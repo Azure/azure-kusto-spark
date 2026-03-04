@@ -35,19 +35,21 @@ class WriterTests extends AnyFlatSpec with Matchers {
 
   def getDF(isNestedSchema: Boolean): DataFrame = {
     val customSchema =
-      if (isNestedSchema)
+      if (isNestedSchema) {
         StructType(
           Array(
             StructField(KustoConstants.Schema.NAME, StringType, nullable = true),
             StructField("Number", IntegerType, nullable = true)))
-      else null
-    if (isNestedSchema)
+      } else {
+        null
+      }
+    if (isNestedSchema) {
       sparkSession.read
         .format("csv")
         .option("header", "false")
         .schema(customSchema)
         .load("src/test/resources/ShortTestData/ShortTestData.csv")
-    else
+    } else {
       sparkSession.read
         .format("json")
         .option("header", "true")
@@ -362,7 +364,7 @@ object WriterTests {
     values.map {
       case row: Row => row.asInstanceOf[Row]
       case prod: Product => Row(prod.productIterator.toList: _*)
-      case any => Row(any)
+      case any: Any => Row(any)
     }
   }
 
