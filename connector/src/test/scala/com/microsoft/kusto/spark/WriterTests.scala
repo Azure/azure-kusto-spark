@@ -253,7 +253,7 @@ class WriterTests extends AnyFlatSpec with Matchers {
             .add("date", DateType, nullable = true)
             .add("time", TimestampType)
             .add("booly", BooleanType)
-            .add("deci", DataTypes.createDecimalType(20, 14)),
+            .add("deci", DataTypes.createDecimalType(20, 14)), // scalastyle:ignore magic.number
           valueContainsNull = true),
         nullable = true))
     val someEmptyArraysSchema = List(
@@ -262,7 +262,13 @@ class WriterTests extends AnyFlatSpec with Matchers {
         new StructType()
           .add("emptyArray", ArrayType(StringType, containsNull = true), nullable = true)
           .add("emptyString", StringType)))
-    val someDecimalSchema = List(StructField("BigDecimals", DataTypes.createDecimalType(38, 10)))
+    val someDecimalPrecision = 38
+    val someDecimalScale = 10
+    val someDecimalSchema =
+      List(
+        StructField(
+          "BigDecimals",
+          DataTypes.createDecimalType(someDecimalPrecision, someDecimalScale)))
 
     val df = sparkSession.createDataFrame(
       sparkSession.sparkContext.parallelize(WriterTests.asRows(someData)),

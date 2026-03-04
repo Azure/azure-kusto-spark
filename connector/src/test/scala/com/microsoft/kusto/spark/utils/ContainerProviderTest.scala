@@ -25,6 +25,7 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
   private val SLEEP_TIME_SEC = 10
   private val clusterAlias = "ingest-cluster"
   private val createTempStorageCommand = ".create tempstorage"
+  private val DefaultGetRMOccurrences = 8
 
   private def createExtendedKustoMockClient(
       hasEmptyResults: Boolean = false,
@@ -131,7 +132,7 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
     val extendedMockClientEmptyFail = createExtendedKustoMockClient(
       hasEmptyResults = true,
       mockDmClient = mockDmFailClient,
-      getRMOccurances = 8)
+      getRMOccurances = DefaultGetRMOccurrences)
     val emptyStorageContainerProvider =
       new ContainerProvider(extendedMockClientEmptyFail, clusterAlias, command, CACHE_EXPIRY_SEC)
     val caught =
@@ -154,7 +155,7 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
     val extendedMockClient = createExtendedKustoMockClient(
       hasEmptyResults = true,
       mockDmClient = mockDmClient,
-      getRMOccurances = 8)
+      getRMOccurances = DefaultGetRMOccurrences)
     /*
       Invoke and test. In this case the call succeeds but returns no storage. This will hit the empty storage block
      */
@@ -175,7 +176,7 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
       mockDmClient = mockDmClient,
       maybeExceptionThrown =
         Some(new IngestionServiceException("IOError when trying to retrieve CloudInfo")),
-      getRMOccurances = 8)
+      getRMOccurances = DefaultGetRMOccurrences)
     val containerProvider =
       new ContainerProvider(extendedMockClient, clusterAlias, command, CACHE_EXPIRY_SEC)
     the[IngestionServiceException] thrownBy containerProvider

@@ -185,6 +185,7 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
       table,
       conf2)
 
+    // scalastyle:off magic.number
     def getRowOriginal(x: Row): (
         String,
         Int,
@@ -236,6 +237,7 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
         x.getDecimal(9),
         x.getLong(10))
     }
+    // scalastyle:on magic.number
 
     val dateFormat = new SimpleDateFormat("yyyy-MM-dd")
     def compareRowsWithTimestamp(

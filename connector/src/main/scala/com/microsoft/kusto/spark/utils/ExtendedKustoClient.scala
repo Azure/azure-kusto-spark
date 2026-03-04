@@ -372,7 +372,9 @@ class ExtendedKustoClient(
     val useMaterializedViewFlag = shouldUseMaterializedViewFlag(database, targetTable, crp)
     val firstMoveRetries = writeOptions.kustoCustomDebugWriteOptions.maxRetriesOnMoveExtents
     val secondMovesRetries =
-      Math.max(10, writeOptions.kustoCustomDebugWriteOptions.maxRetriesOnMoveExtents)
+      Math.max(
+        KustoConstants.DefaultMaxRetriesOnMoveExtents,
+        writeOptions.kustoCustomDebugWriteOptions.maxRetriesOnMoveExtents)
     while (extentsProcessed < totalAmount) {
       var error: Object = null
       var res: Option[KustoResultSetTable] = None
@@ -498,7 +500,8 @@ class ExtendedKustoClient(
     Thread.sleep(currentSleepTime)
     val increasedSleepTime = Math.min(MaxSleepOnMoveExtentsMillis, currentSleepTime * 2)
     if (retry % 2 == 1) {
-      val reducedBatchSize = Math.max(Math.abs(curBatchSize / 2), 50)
+      val minBatchSize = 50
+      val reducedBatchSize = Math.max(Math.abs(curBatchSize / 2), minBatchSize)
       (reducedBatchSize, increasedSleepTime)
     } else {
       (curBatchSize, increasedSleepTime)

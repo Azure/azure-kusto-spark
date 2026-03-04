@@ -52,6 +52,7 @@ class KustoFilterTests extends AnyFlatSpec with MockFactory with Matchers {
   private val EndingStr = "EndingString"
   private val EqualToExpr = "EqualTo expression"
   private val CorrectExpr = "construct the correct expression"
+  private val TestFilterValue = 5
 
   private val schema: StructType = StructType(
     Seq(
@@ -111,7 +112,7 @@ class KustoFilterTests extends AnyFlatSpec with MockFactory with Matchers {
   }
 
   "GreaterThan expression" should "construct filter expression correctly for byte type" in {
-    val filter = KustoFilter.buildFilterExpression(schema, GreaterThan(ByteCol, 5))
+    val filter = KustoFilter.buildFilterExpression(schema, GreaterThan(ByteCol, TestFilterValue))
     filter shouldBe Some("""['byte'] > 5""")
   }
 
@@ -121,7 +122,7 @@ class KustoFilterTests extends AnyFlatSpec with MockFactory with Matchers {
   }
 
   "LessThan expression" should "construct filter expression correctly for byte type" in {
-    val filter = KustoFilter.buildFilterExpression(schema, LessThan(ByteCol, 5))
+    val filter = KustoFilter.buildFilterExpression(schema, LessThan(ByteCol, TestFilterValue))
     filter shouldBe Some("""['byte'] < 5""")
   }
 
@@ -150,7 +151,7 @@ class KustoFilterTests extends AnyFlatSpec with MockFactory with Matchers {
 
   "And expression" should "construct inner filters and than construct the and expression" in {
     val leftFilter = IsNotNull(ByteCol)
-    val rightFilter = LessThan(FloatCol, 5)
+    val rightFilter = LessThan(FloatCol, TestFilterValue)
 
     val filter = KustoFilter.buildFilterExpression(schema, And(leftFilter, rightFilter))
     filter shouldBe Some("""(isnotnull(['byte'])) and (['float'] < 5)""")
@@ -158,7 +159,7 @@ class KustoFilterTests extends AnyFlatSpec with MockFactory with Matchers {
 
   "Or expression" should "construct inner filters and than construct the or expression" in {
     val leftFilter = IsNotNull(ByteCol)
-    val rightFilter = LessThan(FloatCol, 5)
+    val rightFilter = LessThan(FloatCol, TestFilterValue)
 
     val filter = KustoFilter.buildFilterExpression(schema, Or(leftFilter, rightFilter))
     filter shouldBe Some("""(isnotnull(['byte'])) or (['float'] < 5)""")
@@ -203,7 +204,7 @@ class KustoFilterTests extends AnyFlatSpec with MockFactory with Matchers {
     val testSchema =
       StructType(Seq(StructField(ColA, StringType), StructField(ColB, IntegerType)))
     val filters: Array[Filter] =
-      Array(StringEndsWith(ColA, EndingStr), LessThanOrEqual(ColB, 5))
+      Array(StringEndsWith(ColA, EndingStr), LessThanOrEqual(ColB, TestFilterValue))
     val expr = KustoFilter.buildFiltersClause(testSchema, filters.toIndexedSeq)
 
     expr shouldBe " | where ['ColA'] endswith_cs 'EndingString' and ['ColB'] <= 5"
@@ -213,7 +214,9 @@ class KustoFilterTests extends AnyFlatSpec with MockFactory with Matchers {
     val testSchema =
       StructType(Seq(StructField(ColA, StringType), StructField(ColB, IntegerType)))
     val filters: Array[Filter] =
-      Array(StringEndsWith(ColA, EndingStr), LessThanOrEqual("ColNotInTheSchema", 5))
+      Array(
+        StringEndsWith(ColA, EndingStr),
+        LessThanOrEqual("ColNotInTheSchema", TestFilterValue))
     val expr = KustoFilter.buildFiltersClause(testSchema, filters.toIndexedSeq)
 
     expr shouldBe " | where ['ColA'] endswith_cs 'EndingString'"
@@ -225,7 +228,7 @@ class KustoFilterTests extends AnyFlatSpec with MockFactory with Matchers {
     val originalQuery = "MyTable | take 100"
     val columns = Array(ColA, ColB)
     val filters: Array[Filter] =
-      Array(StringEndsWith(ColA, EndingStr), LessThanOrEqual(ColB, 5))
+      Array(StringEndsWith(ColA, EndingStr), LessThanOrEqual(ColB, TestFilterValue))
     val query = KustoFilter.pruneAndFilter(
       KustoSchema(testSchema, Set(ColA)),
       originalQuery,

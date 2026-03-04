@@ -261,9 +261,14 @@ object ContainerProvider {
     }
 
     // Create a SAS token that's valid for 8 hours
-    val startTime = OffsetDateTime.now.minusMinutes(5)
+    val sasStartTimeOffsetMinutes = 5
+    val startTime = OffsetDateTime.now.minusMinutes(sasStartTimeOffsetMinutes)
 
-    val expiryTime = OffsetDateTime.now.plusSeconds(cacheExpirySeconds * 4) // Just to be sure
+    val cacheExpiryMultiplier = 4
+    val expiryTime =
+      OffsetDateTime.now.plusSeconds(
+        cacheExpirySeconds * cacheExpiryMultiplier
+      ) // Just to be sure
     // Assign read/write permissions to the SAS token
     val sasPermission =
       new BlobContainerSasPermission().setWritePermission(true).setReadPermission(true)

@@ -31,7 +31,8 @@ class KustoQueryUtilsTest
   "limitQuery" should "add limit" in {
     val query = "Table | where column1 = 'abc' | summarize by count()"
 
-    KustoQueryUtils.limitQuery(query, 5) should be(
-      "Table | where column1 = 'abc' | summarize by count()| take 5")
+    val limit = 5
+    KustoQueryUtils.limitQuery(query, limit) should be(
+      s"Table | where column1 = 'abc' | summarize by count()| take $limit")
   }
 }

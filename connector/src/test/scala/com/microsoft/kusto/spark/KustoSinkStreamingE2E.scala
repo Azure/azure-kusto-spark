@@ -29,8 +29,9 @@ import java.util.UUID
 
 class KustoSinkStreamingE2E extends AnyFlatSpec with BeforeAndAfterAll {
   val expectedNumberOfRows: Int = 300
-  val timeoutMs: Int = 8 * 60 * 1000 // 8 minutes
-  val sleepTimeTillTableCreate: Int = 3 * 60 * 1000 // 2 minutes
+  val timeoutMs: Int = 8 * 60 * 1000 // 8 minutes // scalastyle:ignore magic.number
+  val sleepTimeTillTableCreate: Int = 3 * 60 * 1000 // 2 minutes // scalastyle:ignore magic.number
+  val validationTimeoutSec = 10
   val spark: SparkSession = SparkSession
     .builder()
     .appName("KustoSink")
@@ -188,7 +189,7 @@ class KustoSinkStreamingE2E extends AnyFlatSpec with BeforeAndAfterAll {
       table,
       kustoTestConnectionOptions.database,
       expectedNumberOfRows,
-      10,
+      validationTimeoutSec,
       tableCleanupPrefix = prefix)
   }
 
@@ -219,7 +220,7 @@ class KustoSinkStreamingE2E extends AnyFlatSpec with BeforeAndAfterAll {
       table,
       kustoTestConnectionOptions.database,
       expectedNumberOfRows,
-      10,
+      validationTimeoutSec,
       tableCleanupPrefix = prefix)
   }
 }

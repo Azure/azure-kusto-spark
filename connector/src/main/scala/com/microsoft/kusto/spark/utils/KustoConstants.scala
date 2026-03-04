@@ -10,7 +10,9 @@ object KustoConstants {
   // Setting high value to have no timeout on Await commands
   val DefaultWaitingIntervalLongRunning: String =
     Duration.create(2, TimeUnit.DAYS).toSeconds.toString
-  val DefaultCleaningInterval: String = Duration.create(7, TimeUnit.DAYS).toSeconds.toString
+  private val DefaultCleaningIntervalDays = 7
+  val DefaultCleaningInterval: String =
+    Duration.create(DefaultCleaningIntervalDays, TimeUnit.DAYS).toSeconds.toString
   val DefaultPeriodicSamplePeriod: FiniteDuration = Duration.create(1, TimeUnit.DAYS)
   val ClientName: String = KustoDataSourceUtils.clientName
   val DefaultBufferSize: Int = 16 * 1024
@@ -28,7 +30,8 @@ object KustoConstants {
   val DefaultBatchingLimit: Int = 300
   val DefaultExtentsCountForSplitMergePerNode: Int = 400
   val DefaultMaxRetriesOnMoveExtents: Int = 10
-  val DefaultTimeoutQueueing: Int = TimeUnit.SECONDS.toMillis(40).toInt
+  private val DefaultTimeoutQueueingSeconds = 40
+  val DefaultTimeoutQueueing: Int = TimeUnit.SECONDS.toMillis(DefaultTimeoutQueueingSeconds).toInt
   val MaxIngestRetryAttempts = 2
   val MaxCommandsRetryAttempts = 4
   // val MaxStreamingBytes: Int = 4 * OneMegaByte

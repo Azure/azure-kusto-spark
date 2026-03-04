@@ -550,7 +550,8 @@ object KustoWriter {
       new URI(s"${containerAndSas.containerUrl}/$blobName${containerAndSas.sas}"))
     val currentSas = containerAndSas.sas
     val options = new BlobRequestOptions()
-    options.setConcurrentRequestCount(4) // Should be configured from outside
+    val concurrentRequestCount = 4 // Should be configured from outside
+    options.setConcurrentRequestCount(concurrentRequestCount)
     val gzip: GZIPOutputStream = new GZIPOutputStream(
       currentBlob.openOutputStream(null, options, null))
 

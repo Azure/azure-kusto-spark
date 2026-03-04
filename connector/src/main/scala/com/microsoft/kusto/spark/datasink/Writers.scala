@@ -87,7 +87,8 @@ case class EscapedWriter(out: java.io.Writer) extends Writer {
 }
 
 object EscapedWriter {
-  val escapeTable: Array[Int] = Array.fill[Int](128)(0)
+  private val AsciiTableSize = 128
+  private val escapeTable: Array[Int] = Array.fill[Int](AsciiTableSize)(0)
   escapeTable('"') = '"'
   escapeTable('\\') = '\\'
   escapeTable('\n') = 'n'

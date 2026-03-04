@@ -109,7 +109,8 @@ class KustoPruneAndFilterE2E extends AnyFlatSpec with BeforeAndAfterAll {
       query,
       conf)
 
-    df.show(20)
+    val displayRows = 20
+    df.show(displayRows)
   }
 
   "KustoConnector" should "write to a kusto table and read it back in scale mode with pruning and filtering" taggedAs KustoE2E in {
@@ -274,7 +275,8 @@ class KustoPruneAndFilterE2E extends AnyFlatSpec with BeforeAndAfterAll {
       .collect()
       .sortBy(x => x.getAs[Int](1))
 
-    val expected = Array(Row("row-20", 20), Row("row-21", 21))
+    val expected =
+      Array(Row("row-20", 20), Row("row-21", 21)) // scalastyle:ignore magic.number
     assert(dfFiltered.sameElements(expected))
 
     // Cleanup

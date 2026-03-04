@@ -165,7 +165,8 @@ class KustoBlobAccessE2E extends AnyFlatSpec with BeforeAndAfterAll {
     var rowsProcessed = 0
     val pattern = """\[row-([0-9]+),([0-9]+)]""".r
 
-    df.take(10)
+    val sampleSize = 10
+    df.take(sampleSize)
       .foreach(row => {
         rowAsString = row.toString(); rowsProcessed += 1
         KDSU.logInfo(myName, s"row: $rowAsString")

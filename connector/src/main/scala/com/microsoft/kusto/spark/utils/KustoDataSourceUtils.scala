@@ -214,10 +214,18 @@ object KustoDataSourceUtils {
 
   val DefaultMicrosoftTenant = "microsoft.com"
   val NewLine: String = sys.props("line.separator")
-  private val ReadInitialMaxWaitTime: FiniteDuration = Duration.create(4, TimeUnit.SECONDS)
-  private val ReadMaxWaitTime: FiniteDuration = Duration.create(30, TimeUnit.SECONDS)
-  var WriteInitialMaxWaitTime: FiniteDuration = Duration.create(2, TimeUnit.SECONDS)
-  var WriteMaxWaitTime: FiniteDuration = Duration.create(10, TimeUnit.SECONDS)
+  private val ReadInitialMaxWaitSeconds = 4
+  private val ReadMaxWaitSeconds = 30
+  private val WriteInitialMaxWaitSeconds = 2
+  private val WriteMaxWaitSeconds = 10
+  private val ReadInitialMaxWaitTime: FiniteDuration =
+    Duration.create(ReadInitialMaxWaitSeconds, TimeUnit.SECONDS)
+  private val ReadMaxWaitTime: FiniteDuration =
+    Duration.create(ReadMaxWaitSeconds, TimeUnit.SECONDS)
+  var WriteInitialMaxWaitTime: FiniteDuration =
+    Duration.create(WriteInitialMaxWaitSeconds, TimeUnit.SECONDS)
+  var WriteMaxWaitTime: FiniteDuration =
+    Duration.create(WriteMaxWaitSeconds, TimeUnit.SECONDS)
 
   private val input: InputStream =
     getClass.getClassLoader.getResourceAsStream("spark.kusto.properties")
