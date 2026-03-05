@@ -4,7 +4,7 @@
 package com.microsoft.kusto.spark.datasink
 
 import com.azure.storage.common.policy.{RequestRetryOptions, RetryPolicyType}
-import com.fasterxml.jackson.databind.JsonNode
+import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import com.microsoft.azure.kusto.data.ClientRequestProperties
 import com.microsoft.azure.kusto.data.auth.CloudInfo
 import com.microsoft.azure.kusto.ingest.IngestionProperties.DataFormat
@@ -43,7 +43,6 @@ import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.CollectionAccumulator
-import reactor.core.publisher.Mono
 
 import java.io._
 import java.net.URI
@@ -71,6 +70,7 @@ object KustoWriter {
     .build
   private val formatter: DateTimeFormatter =
     DateTimeFormatter.ofPattern("HH-mm-ss-SSSSSS").withZone(ZoneId.systemDefault)
+  private val objectMapper = new ObjectMapper()
 
   private[kusto] def write(
       batchId: Option[Long],
@@ -104,8 +104,14 @@ object KustoWriter {
         crp)
       .getPrimaryResults
 
+    // Re-parse the schema JSON through the connector's (potentially shaded) ObjectMapper
+    // to avoid ClassCastException when the Kusto SDK returns Jackson objects from a
+    // different classloader (e.g. Databricks runtime provides unshaded Jackson while
+    // the connector uber-jar shades it).
     val targetSchema =
-      schemaShowCommandResult.getData.asScala.map(c => c.get(0).asInstanceOf[JsonNode]).toArray
+      schemaShowCommandResult.getData.asScala
+        .map(c => objectMapper.readTree(c.get(0).toString))
+        .toArray
 
     KustoIngestionUtils.adjustSchema(
       writeOptions.writeMode,
@@ -170,7 +176,6 @@ object KustoWriter {
           className,
           "It's not recommended to set flushImmediately to true on production")
       }
-      val cloudInfo = CloudInfo.retrieveCloudInfoForCluster(kustoClient.ingestKcsb.getClusterUrl)
       val rdd = data.queryExecution.toRdd
       val partitionsResults = rdd.sparkContext.collectionAccumulator[PartitionResult]
       val parameters = KustoWriteResource(
@@ -178,8 +183,7 @@ object KustoWriter {
         coordinates = tableCoordinates,
         schema = data.schema,
         writeOptions = rebuiltOptions,
-        tmpTableName = tmpTableName,
-        cloudInfo = cloudInfo)
+        tmpTableName = tmpTableName)
       val sinkStartTime = getCreationTime(stagingTableIngestionProperties)
       if (writeOptions.isAsync) {
         val asyncWork = rdd.foreachPartitionAsync { rows =>
@@ -501,9 +505,13 @@ object KustoWriter {
       parameters.coordinates.ingestionUrl,
       parameters.coordinates.clusterAlias)
     val ingestClient = clientCache.ingestClient
-    CloudInfo.manuallyAddToCache(
-      clientCache.ingestKcsb.getClusterUrl,
-      Mono.just(parameters.cloudInfo))
+    // Pre-warm the CloudInfo cache on the executor to avoid an extra metadata
+    // fetch during authentication. We call retrieveCloudInfoForCluster (which
+    // caches internally) instead of manuallyAddToCache to avoid a direct
+    // dependency on reactor.core.publisher.Mono, which is shaded in the
+    // uber-jar and can cause NoSuchMethodError when an unshaded CloudInfo is
+    // loaded from the Databricks/Spark runtime classpath.
+    CloudInfo.retrieveCloudInfoForCluster(clientCache.ingestKcsb.getClusterUrl)
 
     val reqRetryOpts = new RequestRetryOptions(
       RetryPolicyType.FIXED,
@@ -727,7 +735,6 @@ final case class KustoWriteResource(
     coordinates: KustoCoordinates,
     schema: StructType,
     writeOptions: WriteOptions,
-    tmpTableName: String,
-    cloudInfo: CloudInfo)
+    tmpTableName: String)
 
 final case class PartitionResult(ingestionResult: IngestionResult, partitionId: Int)
