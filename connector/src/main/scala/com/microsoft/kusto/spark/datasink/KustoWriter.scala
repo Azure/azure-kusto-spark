@@ -4,7 +4,7 @@
 package com.microsoft.kusto.spark.datasink
 
 import com.azure.storage.common.policy.{RequestRetryOptions, RetryPolicyType}
-import com.fasterxml.jackson.databind.JsonNode
+import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import com.microsoft.azure.kusto.data.ClientRequestProperties
 import com.microsoft.azure.kusto.data.auth.CloudInfo
 import com.microsoft.azure.kusto.ingest.IngestionProperties.DataFormat
@@ -70,6 +70,7 @@ object KustoWriter {
     .build
   private val formatter: DateTimeFormatter =
     DateTimeFormatter.ofPattern("HH-mm-ss-SSSSSS").withZone(ZoneId.systemDefault)
+  private val objectMapper = new ObjectMapper()
 
   private[kusto] def write(
       batchId: Option[Long],
@@ -103,8 +104,14 @@ object KustoWriter {
         crp)
       .getPrimaryResults
 
+    // Re-parse the schema JSON through the connector's (potentially shaded) ObjectMapper
+    // to avoid ClassCastException when the Kusto SDK returns Jackson objects from a
+    // different classloader (e.g. Databricks runtime provides unshaded Jackson while
+    // the connector uber-jar shades it).
     val targetSchema =
-      schemaShowCommandResult.getData.asScala.map(c => c.get(0).asInstanceOf[JsonNode]).toArray
+      schemaShowCommandResult.getData.asScala
+        .map(c => objectMapper.readTree(c.get(0).toString))
+        .toArray
 
     KustoIngestionUtils.adjustSchema(
       writeOptions.writeMode,
