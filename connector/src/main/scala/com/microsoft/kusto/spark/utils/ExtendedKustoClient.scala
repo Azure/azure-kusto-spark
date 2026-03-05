@@ -70,6 +70,7 @@ class ExtendedKustoClient(
   private val retryConfigAsyncOp = buildRetryConfigForAsyncOp
 
   private val className = this.getClass.getSimpleName
+  private val objectMapper = new ObjectMapper()
 
   def initializeTablesBySchema(
       tableCoordinates: KustoCoordinates,
@@ -562,7 +563,11 @@ class ExtendedKustoClient(
         val res =
           fetchTableExtentsTags(tableCoordinates.database, tableCoordinates.table.get, crp)
         if (res.next()) {
-          val tagsArray = res.getObject(0).asInstanceOf[ArrayNode]
+          // Re-parse through connector's ObjectMapper to avoid classloader conflicts
+          // when the Kusto SDK returns unshaded Jackson objects on Databricks
+          val tagsArray = objectMapper
+            .readTree(res.getObject(0).toString)
+            .asInstanceOf[ArrayNode]
           for (i <- 0 until tagsArray.size()) {
             if (ingestIfNotExistsTagsSet.contains(tagsArray.get(i).asText())) {
               return false
