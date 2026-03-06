@@ -3,7 +3,7 @@
 
 package com.microsoft.kusto.spark.datasink
 
-import com.microsoft.kusto.spark.utils.{KeyVaultUtils, KustoDataSourceUtils}
+import com.microsoft.kusto.spark.utils.KustoDataSourceUtils
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.execution.streaming.Sink
 import org.apache.spark.sql.sources.{DataSourceRegister, StreamSinkProvider}
@@ -22,13 +22,7 @@ class KustoSinkProvider extends StreamSinkProvider with DataSourceRegister {
 
     new KustoSink(
       sinkParameters.sourceParametersResults.kustoCoordinates,
-      if (sinkParameters.sourceParametersResults.keyVaultAuth.isDefined) {
-        val paramsFromKeyVault = KeyVaultUtils.getAadAppParametersFromKeyVault(
-          sinkParameters.sourceParametersResults.keyVaultAuth.get)
-        KustoDataSourceUtils.mergeKeyVaultAndOptionsAuthentication(
-          paramsFromKeyVault,
-          Some(sinkParameters.sourceParametersResults.authenticationParameters))
-      } else sinkParameters.sourceParametersResults.authenticationParameters,
+      sinkParameters.sourceParametersResults.authenticationParameters,
       sinkParameters.writeOptions,
       sinkParameters.sourceParametersResults.clientRequestProperties)
   }

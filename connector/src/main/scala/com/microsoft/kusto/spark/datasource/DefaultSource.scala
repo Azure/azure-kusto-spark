@@ -10,7 +10,6 @@ import com.microsoft.kusto.spark.authentication.{KeyVaultAuthentication, KustoAu
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, KustoWriter}
 import com.microsoft.kusto.spark.utils.{
-  KeyVaultUtils,
   KustoQueryUtils,
   KustoConstants => KCONST,
   KustoDataSourceUtils => KDSU
@@ -53,13 +52,6 @@ class DefaultSource
       data: DataFrame): BaseRelation = {
     val sinkParameters = KDSU.parseSinkParameters(parameters, mode)
     initCommonParams(sinkParameters.sourceParametersResults)
-
-    if (keyVaultAuthentication.isDefined) {
-      val paramsFromKeyVault =
-        KeyVaultUtils.getAadAppParametersFromKeyVault(keyVaultAuthentication.get)
-      authenticationParameters = Some(
-        KDSU.mergeKeyVaultAndOptionsAuthentication(paramsFromKeyVault, authenticationParameters))
-    }
 
     KustoWriter.write(
       None,
@@ -116,19 +108,7 @@ class DefaultSource
       }
     val (kustoAuthentication, mergedStorageParameters)
         : (Option[KustoAuthentication], Option[TransientStorageParameters]) = {
-      if (keyVaultAuthentication.isDefined) {
-        // Get params from keyVault
-        authenticationParameters = Some(
-          KDSU.mergeKeyVaultAndOptionsAuthentication(
-            KeyVaultUtils.getAadAppParametersFromKeyVault(keyVaultAuthentication.get),
-            authenticationParameters))
-
-        (
-          authenticationParameters,
-          KDSU.mergeKeyVaultAndOptionsStorageParams(
-            transientStorageParams,
-            keyVaultAuthentication.get))
-      } else if (transientStorageParams.isDefined) {
+      if (transientStorageParams.isDefined) {
         // If any of the storage parameters defined a SAS we will take endpoint suffix from there
         transientStorageParams.get.storageCredentials.foreach(st => {
           st.validate()

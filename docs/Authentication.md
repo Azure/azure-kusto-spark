@@ -40,6 +40,11 @@ df.write
 ```
 ## Key Vault
 
+> **⚠️ Deprecated in version 7.0.5:** Key Vault based authentication is no longer supported. The `azure-keyvault` dependency has been removed to resolve shading and classloader conflicts on managed Spark runtimes (Databricks, Synapse, Fabric). Please migrate to [AAD Application Authentication](#aad-application-authentication), [Managed Identity](#direct-authentication-with-access-token), or [Access Token](#direct-authentication-with-access-token) authentication instead.
+
+<details>
+<summary>Legacy Key Vault documentation (for versions prior to 7.0.5)</summary>
+
 Kusto Spark Connector allows authentication using Azure Key Vault. The  Key Vault must contain the 
 mandatory read/write authentication parameters. If a parameter appears in both the Key Vault and is passed directly as an option, the direct option will take precedence.
 Although a combination of Key Vault and direct options is supported, for clarity, it is advised to 
@@ -115,6 +120,9 @@ val conf: Map[String, String] = Map(
 val query = table
 val dfResult = spark.read.kusto(cluster, database, query, conf)
  ```
+
+</details>
+
 ## Direct Authentication with Access Token
 User can also use ADAL directly to acquire an AAD access token to access Kusto. 
 The token must be valid throughout the duration of the read/write operation

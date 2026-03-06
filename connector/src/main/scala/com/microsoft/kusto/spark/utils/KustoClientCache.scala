@@ -73,19 +73,6 @@ object KustoClientCache {
               ConnectionStringBuilder.createWithAadManagedIdentity(clusterAndAuth.engineUri),
               ConnectionStringBuilder.createWithAadManagedIdentity(clusterAndAuth.ingestUri))
         }
-      case keyVaultParams: KeyVaultAuthentication =>
-        val app = KeyVaultUtils.getAadAppParametersFromKeyVault(keyVaultParams)
-        (
-          ConnectionStringBuilder.createWithAadApplicationCredentials(
-            clusterAndAuth.engineUri,
-            app.ID,
-            app.password,
-            app.authority),
-          ConnectionStringBuilder.createWithAadApplicationCredentials(
-            clusterAndAuth.ingestUri,
-            app.ID,
-            app.password,
-            app.authority))
       case userPrompt: KustoUserPromptAuthentication =>
         (
           ConnectionStringBuilder.createWithUserPrompt(
