@@ -21,6 +21,8 @@ This connector works with the following spark environments:
 
 ## Changelog
 
+**Breaking changes in version 7.0.5** - Key Vault based authentication is no longer supported. The `azure-keyvault` dependency has been removed to resolve shading and classloader conflicts on Databricks and other managed Spark runtimes. Please use direct AAD application authentication, managed identity, or access token authentication instead. See [Authentication](docs/Authentication.md) for supported methods.
+
 **Breaking changes in versions 5.2.x** - From these versions, the published packages are shaded and packaged as a self contained jar. This is to avoid issues with common OSS libraries, spark runtimes and/or application dependencies.
 
 For major changes from previous releases, please refer to [Releases](https://github.com/Azure/azure-kusto-spark/releases).
@@ -120,11 +122,9 @@ These libraries include:
 Spark Azure Data Explorer connector depends on [Azure Data Explorer Data Client Library](https://mvnrepository.com/artifact/com.microsoft.azure.kusto/kusto-data) 
 and [Azure Data Explorer Ingest Client Library](https://mvnrepository.com/artifact/com.microsoft.azure.kusto/kusto-ingest), 
 available in maven repository.
-When [Key Vault based authentication](./docs/Authentication.md) is used, there is an additional dependency 
-on [Microsoft Azure SDK For Key Vault](https://mvnrepository.com/artifact/com.microsoft.azure/azure-keyvault). 
 
-> **Note:** When working with JARs, Azure Data Explorer connector requires Azure Data Explorer Java client libraries (and azure key-vault library if used) to be installed.
-To find the right version to install, [look in the relevant release's pom](https://github.com/Azure/azure-kusto-spark/releases))
+> **Note:** Starting from version 7.0.5, Key Vault based authentication is no longer supported. The `azure-keyvault` dependency has been removed.
+
 
 ## Documentation
 

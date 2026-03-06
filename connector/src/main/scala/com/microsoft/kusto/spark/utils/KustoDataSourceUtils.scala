@@ -13,7 +13,6 @@ import com.azure.identity.{
 import com.fasterxml.jackson.core.`type`.TypeReference
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.node.ArrayNode
-import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import com.microsoft.azure.kusto.data.exceptions.{DataClientException, DataServiceException}
 import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties, KustoResultSetTable}
 import com.microsoft.kusto.spark.authentication._
@@ -60,6 +59,7 @@ import java.util.{
   UUID
 }
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 import scala.util.{Failure, Success, Try}
@@ -67,7 +67,7 @@ import scala.util.{Failure, Success, Try}
 object KustoDataSourceUtils {
 
   private final val className = this.getClass.getSimpleName
-  private final val objectMapper = new ObjectMapper().registerModule(DefaultScalaModule)
+  private final val objectMapper = new ObjectMapper()
 
   def getDedupTagsPrefix(requestId: String, batchId: String): String = s"${requestId}_$batchId"
 
@@ -112,9 +112,12 @@ object KustoDataSourceUtils {
       parameters.get(KustoSourceOptions.KUSTO_EXPORT_OPTIONS_JSON) match {
         case Some(exportOptionsJsonString) =>
           Try(
-            objectMapper.readValue(
-              exportOptionsJsonString,
-              new TypeReference[Map[String, String]] {})) match {
+            objectMapper
+              .readValue(
+                exportOptionsJsonString,
+                new TypeReference[java.util.Map[String, String]] {})
+              .asScala
+              .toMap) match {
             case Success(exportConfigMap) => exportConfigMap
             case Failure(_) =>
               val errorMessage =
@@ -956,29 +959,6 @@ object KustoDataSourceUtils {
       }
     } else {
       paramsFromKeyVault
-    }
-  }
-
-  // Try get key vault parameters - if fails use transientStorageParameters
-  private[kusto] def mergeKeyVaultAndOptionsStorageParams(
-      transientStorageParameters: Option[TransientStorageParameters],
-      keyVaultAuthentication: KeyVaultAuthentication): Option[TransientStorageParameters] = {
-
-    val keyVaultCredential = KeyVaultUtils.getStorageParamsFromKeyVault(keyVaultAuthentication)
-    try {
-      val domainSuffix =
-        if (StringUtils.isNotBlank(keyVaultCredential.domainSuffix))
-          keyVaultCredential.domainSuffix
-        else KustoDataSourceUtils.DefaultDomainPostfix
-      Some(new TransientStorageParameters(Array(keyVaultCredential), domainSuffix))
-    } catch {
-      case ex: Exception =>
-        if (transientStorageParameters.isDefined) {
-          // If storage option defined - take it
-          transientStorageParameters
-        } else {
-          throw ex
-        }
     }
   }
 
