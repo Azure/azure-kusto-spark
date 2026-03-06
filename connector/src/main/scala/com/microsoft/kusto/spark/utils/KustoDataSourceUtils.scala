@@ -13,7 +13,6 @@ import com.azure.identity.{
 import com.fasterxml.jackson.core.`type`.TypeReference
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.node.ArrayNode
-import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import com.microsoft.azure.kusto.data.exceptions.{DataClientException, DataServiceException}
 import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties, KustoResultSetTable}
 import com.microsoft.kusto.spark.authentication._
@@ -60,6 +59,7 @@ import java.util.{
   UUID
 }
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 import scala.util.{Failure, Success, Try}
@@ -67,16 +67,16 @@ import scala.util.{Failure, Success, Try}
 object KustoDataSourceUtils {
 
   private final val className = this.getClass.getSimpleName
-  private final val objectMapper = new ObjectMapper().registerModule(DefaultScalaModule)
+  private final val objectMapper = new ObjectMapper()
 
   def getDedupTagsPrefix(requestId: String, batchId: String): String = s"${requestId}_$batchId"
 
   def generateTempTableName(
-      appName: String,
-      destinationTableName: String,
-      requestId: String,
-      batchIdAsString: String,
-      userTempTableName: Option[String]): String = {
+                             appName: String,
+                             destinationTableName: String,
+                             requestId: String,
+                             batchIdAsString: String,
+                             userTempTableName: Option[String]): String = {
     if (userTempTableName.isDefined) {
       userTempTableName.get
     } else {
@@ -87,8 +87,8 @@ object KustoDataSourceUtils {
   }
 
   def getReadParameters(
-      parameters: Map[String, String],
-      sqlContext: SQLContext): KustoReadOptions = {
+                         parameters: Map[String, String],
+                         sqlContext: SQLContext): KustoReadOptions = {
     val requestedPartitions = parameters.get(KustoDebugOptions.KUSTO_NUM_PARTITIONS)
     val partitioningMode = parameters.get(KustoDebugOptions.KUSTO_READ_PARTITION_MODE)
     val numPartitions = setNumPartitions(sqlContext, requestedPartitions, partitioningMode)
@@ -112,9 +112,12 @@ object KustoDataSourceUtils {
       parameters.get(KustoSourceOptions.KUSTO_EXPORT_OPTIONS_JSON) match {
         case Some(exportOptionsJsonString) =>
           Try(
-            objectMapper.readValue(
-              exportOptionsJsonString,
-              new TypeReference[Map[String, String]] {})) match {
+            objectMapper
+              .readValue(
+                exportOptionsJsonString,
+                new TypeReference[java.util.Map[String, String]] {})
+              .asScala
+              .toMap) match {
             case Success(exportConfigMap) => exportConfigMap
             case Failure(_) =>
               val errorMessage =
@@ -137,9 +140,9 @@ object KustoDataSourceUtils {
       case Some(protocol) =>
         val normalizedProtocol = protocol.trim
         if (!KCONST.storageProtocolWasbs.equalsIgnoreCase(
-            normalizedProtocol) && !KCONST.storageProtocolAbfs.equalsIgnoreCase(
-            normalizedProtocol) && !KCONST.storageProtocolAbfss.equalsIgnoreCase(
-            normalizedProtocol)) {
+          normalizedProtocol) && !KCONST.storageProtocolAbfs.equalsIgnoreCase(
+          normalizedProtocol) && !KCONST.storageProtocolAbfss.equalsIgnoreCase(
+          normalizedProtocol)) {
           val errorMessage =
             s"Invalid value for ${KustoSourceOptions.STORAGE_PROTOCOL}: '$protocol'. " +
               s"Must be either '${KCONST.storageProtocolWasbs}', '${KCONST.storageProtocolAbfs}', or '${KCONST.storageProtocolAbfss}'."
@@ -160,9 +163,9 @@ object KustoDataSourceUtils {
   }
 
   private def setNumPartitions(
-      sqlContext: SQLContext,
-      requestedNumPartitions: Option[String],
-      partitioningMode: Option[String]): Int = {
+                                sqlContext: SQLContext,
+                                requestedNumPartitions: Option[String],
+                                partitioningMode: Option[String]): Int = {
     if (requestedNumPartitions.isDefined) requestedNumPartitions.get.toInt
     else {
       partitioningMode match {
@@ -247,10 +250,10 @@ object KustoDataSourceUtils {
   }
 
   private[kusto] def getSchema(
-      database: String,
-      query: String,
-      client: ExtendedKustoClient,
-      clientRequestProperties: Option[ClientRequestProperties]): KustoSchema = {
+                                database: String,
+                                query: String,
+                                client: ExtendedKustoClient,
+                                clientRequestProperties: Option[ClientRequestProperties]): KustoSchema = {
     KustoResponseDeserializer(
       client
         .executeEngine(
@@ -380,8 +383,8 @@ object KustoDataSourceUtils {
     }
   }
   def parseSourceParameters(
-      parameters: Map[String, String],
-      allowProxy: Boolean): SourceParameters = {
+                             parameters: Map[String, String],
+                             allowProxy: Boolean): SourceParameters = {
     // Parse KustoTableCoordinates - these are mandatory options
     val database = parameters.get(KustoSourceOptions.KUSTO_DATABASE)
     val cluster = parameters.get(KustoSourceOptions.KUSTO_CLUSTER)
@@ -424,19 +427,19 @@ object KustoDataSourceUtils {
   }
 
   final case class SinkParameters(
-      writeOptions: WriteOptions,
-      sourceParametersResults: SourceParameters)
+                                   writeOptions: WriteOptions,
+                                   sourceParametersResults: SourceParameters)
 
   final case class SourceParameters(
-      authenticationParameters: KustoAuthentication,
-      kustoCoordinates: KustoCoordinates,
-      keyVaultAuth: Option[KeyVaultAuthentication],
-      requestId: String,
-      clientRequestProperties: ClientRequestProperties)
+                                     authenticationParameters: KustoAuthentication,
+                                     kustoCoordinates: KustoCoordinates,
+                                     keyVaultAuth: Option[KeyVaultAuthentication],
+                                     requestId: String,
+                                     clientRequestProperties: ClientRequestProperties)
 
   def parseSinkParameters(
-      parameters: Map[String, String],
-      mode: SaveMode = SaveMode.Append): SinkParameters = {
+                           parameters: Map[String, String],
+                           mode: SaveMode = SaveMode.Append): SinkParameters = {
     if (mode != SaveMode.Append) {
       throw new InvalidParameterException(
         s"Kusto data source supports only 'Append' mode, '$mode' directive is invalid. Please use df.write.mode(SaveMode.Append)..")
@@ -593,21 +596,21 @@ object KustoDataSourceUtils {
         s"'maxRetriesOnMoveExtents':$maxRetriesOnMoveExtents, 'minimalExtentsCountForSplitMergePerNode':" +
         s"$minimalExtentsCountForSplitMergePerNode, " +
         s"'adjustSchema': $adjustSchema, 'autoCleanupTime': $autoCleanupTime${if (writeOptions.userTempTableName.isDefined)
-            s", userTempTableName: ${userTempTableName.get}"
-          else ""}, disableFlushImmediately: $disableFlushImmediately${if (ensureNoDupBlobs) "ensureNoDupBlobs: true"
-          else ""}")
+          s", userTempTableName: ${userTempTableName.get}"
+        else ""}, disableFlushImmediately: $disableFlushImmediately${if (ensureNoDupBlobs) "ensureNoDupBlobs: true"
+        else ""}")
     SinkParameters(writeOptions, sourceParameters)
   }
 
   def validateAndCreateWriteDebugOptions(
-      adjustSchema: SchemaAdjustmentMode.SchemaAdjustmentMode,
-      minimalExtentsCountForSplitMergePerNode: Int,
-      maxRetriesOnMoveExtents: Int,
-      disableFlushImmediately: Boolean,
-      ensureNoDupBlobs: Boolean,
-      addSourceLocationTransform: Boolean,
-      maybeSparkIngestionProperties: Option[SparkIngestionProperties])
-      : KustoCustomDebugWriteOptions = {
+                                          adjustSchema: SchemaAdjustmentMode.SchemaAdjustmentMode,
+                                          minimalExtentsCountForSplitMergePerNode: Int,
+                                          maxRetriesOnMoveExtents: Int,
+                                          disableFlushImmediately: Boolean,
+                                          ensureNoDupBlobs: Boolean,
+                                          addSourceLocationTransform: Boolean,
+                                          maybeSparkIngestionProperties: Option[SparkIngestionProperties])
+  : KustoCustomDebugWriteOptions = {
 
     val isMappingAlreadyPresent = maybeSparkIngestionProperties match {
       case Some(sparkIngestionProperties) =>
@@ -635,7 +638,7 @@ object KustoDataSourceUtils {
   }
 
   private def validateIngestionStorageParameters(
-      parameters: Map[String, String]): Option[Array[IngestionStorageParameters]] = {
+                                                  parameters: Map[String, String]): Option[Array[IngestionStorageParameters]] = {
     val maybeIngestionStorageParameters: Option[Array[IngestionStorageParameters]] =
       parameters
         .get(KustoSinkOptions.KUSTO_INGESTION_STORAGE)
@@ -645,7 +648,7 @@ object KustoDataSourceUtils {
       case Some(arrayOfIngestionStorageParameters) =>
         arrayOfIngestionStorageParameters.foreach(ingestionStorageParameter => {
           if (StringUtils.isEmpty(ingestionStorageParameter.containerName) || StringUtils.isEmpty(
-              ingestionStorageParameter.storageUrl)) {
+            ingestionStorageParameter.storageUrl)) {
             throw new IllegalArgumentException(
               "storageUrl and containerName must be set when supplying ingestion storage")
           }
@@ -656,8 +659,8 @@ object KustoDataSourceUtils {
   }
 
   private def getIngestionProperties(
-      isStreamingIngestion: Boolean,
-      mayBeIngestionPropertiesAsJson: Option[String]): Option[SparkIngestionProperties] = {
+                                      isStreamingIngestion: Boolean,
+                                      mayBeIngestionPropertiesAsJson: Option[String]): Option[SparkIngestionProperties] = {
     mayBeIngestionPropertiesAsJson match {
       case Some(ingestionPropertiesAsJson) =>
         val sip = SparkIngestionProperties.fromString(ingestionPropertiesAsJson)
@@ -684,8 +687,8 @@ object KustoDataSourceUtils {
   }
 
   private def getClientRequestProperties(
-      parameters: Map[String, String],
-      requestId: String): ClientRequestProperties = {
+                                          parameters: Map[String, String],
+                                          requestId: String): ClientRequestProperties = {
     val crpOption = parameters.get(KustoSourceOptions.KUSTO_CLIENT_REQUEST_PROPERTIES_JSON)
 
     val crp = if (crpOption.isDefined) {
@@ -699,14 +702,14 @@ object KustoDataSourceUtils {
   }
 
   private[kusto] def reportExceptionAndThrow(
-      reporter: String,
-      exception: Throwable,
-      doingWhat: String = "",
-      cluster: String = "",
-      database: String = "",
-      table: String = "",
-      requestId: String = "",
-      shouldNotThrow: Boolean = false): Unit = {
+                                              reporter: String,
+                                              exception: Throwable,
+                                              doingWhat: String = "",
+                                              cluster: String = "",
+                                              database: String = "",
+                                              table: String = "",
+                                              requestId: String = "",
+                                              shouldNotThrow: Boolean = false): Unit = {
     val whatFailed = if (doingWhat.isEmpty) "" else s"when $doingWhat"
     val clusterDesc = if (cluster.isEmpty) "" else s", cluster: '$cluster' "
     val databaseDesc = if (database.isEmpty) "" else s", database: '$database'"
@@ -717,14 +720,14 @@ object KustoDataSourceUtils {
       logError(
         reporter,
         s"caught exception $whatFailed$clusterDesc$databaseDesc$tableDesc$requestIdDesc.${NewLine}EXCEPTION: ${ExceptionUtils
-            .getStackTrace(exception)}")
+          .getStackTrace(exception)}")
       throw exception
     }
 
     logWarn(
       reporter,
       s"caught exception $whatFailed$clusterDesc$databaseDesc$tableDesc$requestIdDesc, exception ignored.${NewLine}EXCEPTION: ${ExceptionUtils
-          .getStackTrace(exception)}")
+        .getStackTrace(exception)}")
   }
 
   private[kusto] def getClusterNameFromUrlIfNeeded(cluster: String): String = {
@@ -788,13 +791,13 @@ object KustoDataSourceUtils {
    *   \- do final work with the last func.apply output
    */
   def doWhile[A](
-      func: () => A,
-      delayBeforeStart: Long,
-      delayBeforeEach: Int,
-      doWhileCondition: A => Boolean,
-      finalWork: A => Unit,
-      maxWaitTimeBetweenCallsMillis: Int,
-      maxWaitTimeAfterMinute: Int): CountDownLatch = {
+                  func: () => A,
+                  delayBeforeStart: Long,
+                  delayBeforeEach: Int,
+                  doWhileCondition: A => Boolean,
+                  finalWork: A => Unit,
+                  maxWaitTimeBetweenCallsMillis: Int,
+                  maxWaitTimeAfterMinute: Int): CountDownLatch = {
     val latch = new CountDownLatch(1)
     val t = new Timer()
     var currentWaitTime = delayBeforeEach
@@ -837,14 +840,14 @@ object KustoDataSourceUtils {
 
   // Throws on Failure or timeout
   def verifyAsyncCommandCompletion(
-      client: Client,
-      database: String,
-      commandResult: KustoResultSetTable,
-      samplePeriod: FiniteDuration = KCONST.DefaultPeriodicSamplePeriod,
-      timeOut: FiniteDuration,
-      doingWhat: String,
-      loggerName: String,
-      requestId: String): Option[KustoResultSetTable] = {
+                                    client: Client,
+                                    database: String,
+                                    commandResult: KustoResultSetTable,
+                                    samplePeriod: FiniteDuration = KCONST.DefaultPeriodicSamplePeriod,
+                                    timeOut: FiniteDuration,
+                                    doingWhat: String,
+                                    loggerName: String,
+                                    requestId: String): Option[KustoResultSetTable] = {
     commandResult.next()
     val operationId = commandResult.getString(0)
     val operationsShowCommand = CslCommandsGenerator.generateOperationsShowCommand(operationId)
@@ -909,7 +912,7 @@ object KustoDataSourceUtils {
     if (lastResponse.isEmpty || lastResponse.get.getString(stateCol) != "Completed") {
       throw new FailedOperationException(
         s"Failed to execute Kusto operation with OperationId '$operationId', State: '${lastResponse.get
-            .getString(stateCol)}'," +
+          .getString(stateCol)}'," +
           s" Status: '${lastResponse.get.getString(statusCol)}'",
         lastResponse)
     }
@@ -923,8 +926,8 @@ object KustoDataSourceUtils {
   }
 
   private[kusto] def mergeKeyVaultAndOptionsAuthentication(
-      paramsFromKeyVault: AadApplicationAuthentication,
-      authenticationParameters: Option[KustoAuthentication]): KustoAuthentication = {
+                                                            paramsFromKeyVault: AadApplicationAuthentication,
+                                                            authenticationParameters: Option[KustoAuthentication]): KustoAuthentication = {
     if (authenticationParameters.isEmpty) {
       // We have both keyVault and AAD application params, take from options first and throw if both are empty
       try {
@@ -959,34 +962,11 @@ object KustoDataSourceUtils {
     }
   }
 
-  // Try get key vault parameters - if fails use transientStorageParameters
-  private[kusto] def mergeKeyVaultAndOptionsStorageParams(
-      transientStorageParameters: Option[TransientStorageParameters],
-      keyVaultAuthentication: KeyVaultAuthentication): Option[TransientStorageParameters] = {
-
-    val keyVaultCredential = KeyVaultUtils.getStorageParamsFromKeyVault(keyVaultAuthentication)
-    try {
-      val domainSuffix =
-        if (StringUtils.isNotBlank(keyVaultCredential.domainSuffix))
-          keyVaultCredential.domainSuffix
-        else KustoDataSourceUtils.DefaultDomainPostfix
-      Some(new TransientStorageParameters(Array(keyVaultCredential), domainSuffix))
-    } catch {
-      case ex: Exception =>
-        if (transientStorageParameters.isDefined) {
-          // If storage option defined - take it
-          transientStorageParameters
-        } else {
-          throw ex
-        }
-    }
-  }
-
   private[kusto] def countRows(
-      client: Client,
-      query: String,
-      database: String,
-      crp: ClientRequestProperties): Int = {
+                                client: Client,
+                                query: String,
+                                database: String,
+                                crp: ClientRequestProperties): Int = {
     val res = client.executeQuery(database, generateCountQuery(query), crp).getPrimaryResults
     res.next()
     res.getInt(0)
@@ -994,10 +974,10 @@ object KustoDataSourceUtils {
 
   // No need to retry here - if an exception is caught - fallback to distributed mode
   private[kusto] def estimateRowsCount(
-      client: Client,
-      query: String,
-      database: String,
-      crp: ClientRequestProperties): Int = {
+                                        client: Client,
+                                        query: String,
+                                        database: String,
+                                        crp: ClientRequestProperties): Int = {
     val estimationResult: util.List[AnyRef] = Await.result(
       Future {
         val res =
