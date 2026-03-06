@@ -19,4 +19,8 @@
     <xsl:template match="pom:build" />
     <xsl:template match="pom:profiles" />
     <xsl:template match="pom:properties" />
+    <!-- Strip compile-scope dependencies: they are already shaded into the uber-jar.
+         Keeping them causes Maven to resolve unshaded copies alongside the uber-jar,
+         leading to ClassNotFoundException on Databricks (e.g. TokenCredential). -->
+    <xsl:template match="pom:dependency[pom:scope='compile']" />
 </xsl:stylesheet>
