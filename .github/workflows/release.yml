@@ -84,7 +84,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.tag || github.ref_name }}
-          name: "kusto-spark ${{ steps.get_version.outputs.SPARK_VERSION }}_${{ steps.get_version.outputs.SCALA_VERSION }}-${{ steps.get_version.outputs.VERSION }}"
+          name: ${{ steps.get_version.outputs.SPARK_VERSION }}_${{ steps.get_version.outputs.VERSION }}"
           generate_release_notes: true
           files: |
             staging/kusto-spark_${{ steps.get_version.outputs.SPARK_VERSION }}_${{ steps.get_version.outputs.SCALA_VERSION }}-${{ steps.get_version.outputs.VERSION }}.jar
