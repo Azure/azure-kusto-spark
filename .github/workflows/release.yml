@@ -28,7 +28,7 @@ on:
 
 jobs:
   release:
-    if: ${{ github.event_name == 'workflow_dispatch' || !contains(github.ref_name, '-') }}
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     environment: build
     strategy:
