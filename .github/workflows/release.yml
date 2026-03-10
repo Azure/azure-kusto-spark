@@ -20,11 +20,11 @@ on:
       upload_to_azure:
         description: 'Upload to Azure storage'
         required: false
-        default: 'false'
+        default: 'true'
       github_release:
         description: 'Create Github release'
         required: false
-        default: 'false'
+        default: 'true'
 
 jobs:
   release:
