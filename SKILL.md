@@ -471,7 +471,7 @@ Edit `CHANGELOG.md`:
 
 1. Move items from the `[Unreleased]` section into a new version section
 2. Create a new `[Unreleased]` section with empty subsections
-3. Add a new version heading: `## [{NEW_VERSION}]`
+3. Add a new version heading: `## [{NEW_VERSION}] - YYYY-MM-DD` (use today's date)
 4. Categorize changes under: `### Added`, `### Changed`, `### Fixed`, `### Removed`
 5. Source descriptions from the PR titles and PR template sections
 
@@ -489,7 +489,7 @@ The changelog entry should look like:
 ### Fixed
 - None
 
-## [{NEW_VERSION}]
+## [{NEW_VERSION}] - YYYY-MM-DD
 
 ### Changed
 - <items or "None">

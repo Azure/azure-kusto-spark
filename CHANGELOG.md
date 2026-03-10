@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Version numbers follow the `{major}.{minor}.{patch}` scheme (e.g., `7.0.5`).
 Tags are created as `v4.0_{version}` (Spark 4 / master) and `v3.0_{version}` (Spark 3 / release/spark3).
 
-## [7.0.6]
+## [7.0.6] - 2026-03-10
 
 ### Changed
 - This is a test change
@@ -17,7 +17,7 @@ Tags are created as `v4.0_{version}` (Spark 4 / master) and `v3.0_{version}` (Sp
 ### Fixed
 - None
 
-## [7.0.5]
+## [7.0.5] - 2026-03-09
 
 ### Changed
 - None
@@ -31,7 +31,7 @@ Tags are created as `v4.0_{version}` (Spark 4 / master) and `v3.0_{version}` (Sp
 - Remove minimizeJar directive (#470)
 - Fix Github release pipeline (#472)
 
-## [7.0.3]
+## [7.0.3] - 2026-01-16
 
 ### Changed
 - None
@@ -42,7 +42,7 @@ Tags are created as `v4.0_{version}` (Spark 4 / master) and `v3.0_{version}` (Sp
 ### Fixed
 - Fix version of Kusto SDK (#459)
 
-## [7.0.2]
+## [7.0.2] - 2026-01-15
 
 ### Changed
 - None
@@ -56,7 +56,7 @@ Tags are created as `v4.0_{version}` (Spark 4 / master) and `v3.0_{version}` (Sp
 - Correct the resilience and vavr lib versions (#452)
 - Reformatted code to have SAS key checks (#458)
 
-## [7.0.1]
+## [7.0.1] - 2025-11-12
 
 ### Changed
 - None
