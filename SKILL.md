@@ -220,6 +220,26 @@ After detecting the state, summarize what you found and confirm with the user be
 
 **Goal**: Implement a change on a branch forked from `master`, get it merged via PR.
 
+### Commit & PR Title Convention
+
+Follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) for PR titles and commit messages:
+
+```
+<type>: <short description>
+```
+
+| Type | Use for |
+|---|---|
+| `feat` | New features or capabilities |
+| `fix` | Bug fixes |
+| `chore` | Version bumps, dependency updates, maintenance |
+| `docs` | Documentation changes |
+| `refactor` | Code restructuring without behavior change |
+| `ci` | CI/CD pipeline changes |
+| `test` | Adding or updating tests |
+
+Examples: `feat: add storage protocol option`, `fix: resolve CloudInfo cache issue`, `chore: bump version to 7.0.6`
+
 ### Steps
 
 ```bash
@@ -227,20 +247,20 @@ After detecting the state, summarize what you found and confirm with the user be
 git checkout master
 git pull origin master
 git checkout -b <username>/<type>/<short-description>
-# Example: asaharn/feat/new-read-mode  or  asaharn/bugfix/cloud-info-fix
+# Example: asaharn/feat/new-read-mode  or  asaharn/fix/cloud-info-fix
 
 # 2. Implement the change
 # ... make code changes ...
 
-# 3. Commit and push
+# 3. Commit and push (use conventional commit message)
 git add -A
-git commit -m "<commit message>"
+git commit -m "<type>: <short description>"
 git push origin <branch-name>
 ```
 
 ### Then on GitHub
 
-1. Open a Pull Request targeting `master`
+1. Open a Pull Request targeting `master` — use conventional commit format for the PR title (e.g., `feat: add storage protocol option`)
 2. Fill in the PR template (Breaking Changes / Features / Fixes sections)
 3. Wait for CI checks (`build.yml`) to pass
 4. Get the PR reviewed and approved
