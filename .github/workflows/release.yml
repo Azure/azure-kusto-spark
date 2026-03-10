@@ -28,7 +28,6 @@ on:
 
 jobs:
   release:
-    if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     environment: build
     strategy:
@@ -85,7 +84,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CHANGELOG_FILE: "CHANGELOG.md"
-          ALLOW_TAG_PREFIX: "true"
+          TAG_PREFIX_REGEX: "v[34]\\.0_"
         with:
           args: |
             staging/kusto-spark_${{ steps.get_version.outputs.SPARK_VERSION }}_${{ steps.get_version.outputs.SCALA_VERSION }}-${{ steps.get_version.outputs.VERSION }}.jar
