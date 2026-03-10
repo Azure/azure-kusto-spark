@@ -1,3 +1,14 @@
+<!-- PR Title Format (Conventional Commits): -->
+<!-- type: short description                  -->
+<!--                                          -->
+<!-- Types: feat, fix, chore, docs, refactor, ci, test -->
+<!-- Examples:                                -->
+<!--   feat: add storage protocol option      -->
+<!--   fix: resolve CloudInfo cache issue     -->
+<!--   chore: bump version to 7.0.6           -->
+<!--   docs: update troubleshooting guide     -->
+<!--   ci: fix release pipeline               -->
+
 #### Pull Request Description
 
 _[Add a description of your pull request here]_
