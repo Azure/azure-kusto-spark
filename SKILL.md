@@ -12,12 +12,18 @@ This file is **not auto-loaded** by AI agents. You must explicitly reference it 
 
 Use the `@` prefix to include this file in your prompt:
 
+**Development Workflow:**
 ```
-@SKILL.md My PR #485 was just merged to master. Cherry-pick to Spark 3 and do the full release.
+@SKILL.md I have a branch with changes ready. Take over and get it merged to both branches.
 ```
 
 ```
-@SKILL.md I have a branch with changes ready. Take over from here and push it through the full release process.
+@SKILL.md My PR #485 was just merged to master. Cherry-pick to Spark 3.
+```
+
+**Release Workflow:**
+```
+@SKILL.md All features are merged. Do a release.
 ```
 
 ```
@@ -28,22 +34,20 @@ Use the `@` prefix to include this file in your prompt:
 @SKILL.md Just tag and release version 7.0.6 on both branches.
 ```
 
-```
-@SKILL.md Do the full release for squash merge commit abc1234.
-```
-
 ### VS Code — GitHub Copilot Chat
 
 Use `#file:SKILL.md` to reference this file, or `@workspace` to let Copilot find it:
 
+**Development Workflow:**
 ```
-#file:SKILL.md My PR was just merged to master (commit abc1234). Cherry-pick to release/spark3 and continue the release process.
-```
-
-```
-@workspace Follow the release process in SKILL.md. I have changes on branch asaharn/feat/my-feature ready to push.
+#file:SKILL.md My PR was just merged to master (commit abc1234). Cherry-pick to release/spark3.
 ```
 
+```
+@workspace Follow SKILL.md. I have changes on branch asaharn/feat/my-feature ready to push.
+```
+
+**Release Workflow:**
 ```
 #file:SKILL.md Bump version to 7.0.6 and update the changelog on both branches.
 ```
@@ -53,11 +57,11 @@ Use `#file:SKILL.md` to reference this file, or `@workspace` to let Copilot find
 Reference the file in AI Assistant chat:
 
 ```
-Look at SKILL.md in the project root and follow the release process. My PR #485 was merged to master. Cherry-pick it to release/spark3.
+Look at SKILL.md in the project root. My PR #485 was merged to master. Cherry-pick it to release/spark3.
 ```
 
 ```
-Follow the instructions in SKILL.md to bump the version and tag both branches for release.
+Follow the instructions in SKILL.md to do a release — bump version, update changelog, and tag both branches.
 ```
 
 ### GitHub.com — Copilot in PR / Issues
@@ -65,7 +69,7 @@ Follow the instructions in SKILL.md to bump the version and tag both branches fo
 When using Copilot on GitHub.com (e.g., in a PR comment or issue), reference the file path:
 
 ```
-Follow the release process described in SKILL.md at the repo root. This PR is now merged — please describe the next steps to cherry-pick to release/spark3 and complete the release.
+Follow the development workflow in SKILL.md at the repo root. This PR is now merged — describe the next steps to cherry-pick to release/spark3.
 ```
 
 > **Note**: GitHub.com Copilot cannot execute git commands directly. It will provide the commands for you to run, or guide you through the GitHub UI steps.
@@ -79,24 +83,31 @@ Follow the release process described in SKILL.md at the repo root. This PR is no
 
 ## How to Use This Skill
 
-You can invoke this skill at **any point** in the release process. You do not need to start from Phase 1. Tell the agent where you are and it will pick up from there.
+This skill has **two independent workflows** that can be invoked separately:
 
-### Example Prompts
+1. **Development Workflow** (Phases 1–2) — Repeat for each feature/fix. Gets changes onto both branches.
+2. **Release Workflow** (Phases 3–5) — Run once when ready to release. Bundles all changes since the last tag.
+
+You can invoke either workflow at any point. Tell the agent where you are and it will pick up from there.
+
+### Example Prompts — Development Workflow
 
 **"I have a branch with changes ready — take over from here"**
-> The agent will detect your current branch, verify it has commits ahead of its base, push it if needed, help create a PR, and then continue through the remaining phases (cherry-pick, version bump, changelog, tagging).
+> The agent will detect your current branch, push it if needed, help create a PR to master, and then cherry-pick to `release/spark3`.
 
 **"My PR was just merged to master. Cherry-pick it to Spark 3"**
-> Provide the merged PR number or the squash merge commit SHA. The agent will start at Phase 2 — create a branch from `release/spark3`, cherry-pick, push, and create a PR.
+> Provide the merged PR number or the squash merge commit SHA. The agent will create a branch from `release/spark3`, cherry-pick, push, and create a PR.
 
-**"Both branches are merged. Bump the version and release"**
-> The agent will start at Phase 3 — bump the POM version, update the changelog, create tags, and trigger the release pipeline.
+### Example Prompts — Release Workflow
+
+**"All features are merged. Do a release"**
+> The agent will run Phases 3–5: bump the POM version on both branches, update the changelog with all changes since the last tag, create tags, and trigger the release pipeline.
+
+**"Bump the version and update changelog for release"**
+> The agent will start at Phase 3 — bump the POM version, update the changelog, then ask for confirmation before tagging.
 
 **"Just tag and release version X.Y.Z"**
 > The agent will start at Phase 5 — verify the version in `pom.xml`, create tags on both branches, and trigger the release.
-
-**"Do the full release for this commit: abc1234"**
-> The agent will run Phases 2–5: cherry-pick the given commit to `release/spark3`, bump versions, update changelog, tag, and release.
 
 ### What the Agent May Ask You
 
@@ -104,10 +115,10 @@ If information is missing, the agent should ask for:
 
 | Missing Info | When Needed |
 |---|---|
-| Squash merge commit SHA | Starting from Phase 2 (cherry-pick) |
-| Version number (if not auto-detecting) | Starting from Phase 3+ |
-| Change description for changelog | Phase 4, if not derivable from PR |
-| Confirmation before pushing tags | Always before Phase 5 |
+| Squash merge commit SHA | Development Workflow — Phase 2 (cherry-pick) |
+| Version number (if not auto-detecting) | Release Workflow — Phase 3+ |
+| Change descriptions for changelog | Release Workflow — Phase 4, if not derivable from PRs |
+| Confirmation before pushing tags | Release Workflow — always before Phase 5 |
 
 ## Repository Context
 
@@ -199,22 +210,37 @@ echo "release/spark3 pom.xml version: $SPARK3_VERSION"
 
 Use the detected state to determine where to start:
 
+**Development Workflow (per feature/fix):**
+
 | Detected State | Start From |
 |---|---|
 | On a feature/fix branch with uncommitted changes | Commit changes, then Phase 1 (push + PR to master) |
 | On a feature/fix branch with unpushed commits | Phase 1 (push branch + create PR to master) |
 | On a feature/fix branch, already pushed, no PR | Phase 1 (create PR to master) |
 | PR merged to master, no corresponding change on release/spark3 | Phase 2 (cherry-pick to release/spark3) |
-| Changes merged to both branches, version not bumped | Phase 3 (version bump) |
+
+**Release Workflow (once per release):**
+
+| Detected State | Start From |
+|---|---|
+| All changes merged to both branches, version not bumped | Phase 3 (version bump) |
 | Version bumped on both branches, changelog not updated | Phase 4 (changelog update) |
 | Version bumped + changelog updated, tags not created | Phase 5 (tag & release) |
 | Tags already exist for the version | Done — verify release pipeline ran successfully |
 
 ### Step 4 — Confirm with User
 
-After detecting the state, summarize what you found and confirm with the user before proceeding:
+After detecting the state, summarize what you found and confirm with the user before proceeding. Clarify which workflow (development or release) you are about to execute:
 
-> "I detected that you're on branch `asaharn/feat/new-feature` with 2 unpushed commits based on `master`. No PR exists yet. I'll start from **Phase 1** — push the branch and create a PR to master, then continue through cherry-pick, version bump, changelog, and tagging. Does that sound right?"
+> "I detected that you're on branch `asaharn/feat/new-feature` with 2 unpushed commits based on `master`. No PR exists yet. I'll run the **Development Workflow** — push the branch, create a PR to master, then cherry-pick to release/spark3. Does that sound right?"
+
+> "Both branches have all changes merged since the last tag. I'll run the **Release Workflow** — bump the version, update the changelog, and create tags. What version should I use (auto-detect suggests 7.0.6)?"
+
+---
+
+# Development Workflow
+
+> **Repeat Phases 1–2 for each feature or fix.** Multiple features can be developed and cherry-picked independently before doing a release.
 
 ## Phase 1 — Feature / Fix Development (on master)
 
@@ -335,6 +361,12 @@ git pull origin release/spark3
 git --no-pager log --oneline -1
 # Should show the squash merge commit on release/spark3
 ```
+
+---
+
+# Release Workflow
+
+> **Run Phases 3–5 once when ready to release.** This bundles all changes merged since the last tag into a single version bump, changelog entry, and release.
 
 ## Phase 3 — Version Bump
 
@@ -579,16 +611,21 @@ gh run list --workflow=release.yml --limit=4
 # Should show two runs (one per tag) in progress or completed
 ```
 
-## Quick Reference — Full Release Checklist
+## Quick Reference
 
-Use this when performing a release end to end. Ask the user for any required inputs (commit SHA, version override) before starting.
+### Development Workflow (per feature/fix)
 
 | # | Phase | Key Input | Key Output |
 |---|---|---|---|
 | 1 | Feature/Fix PR → master | Code changes | Squash merge commit SHA |
 | 2 | Cherry-pick to release/spark3 | Commit SHA from Phase 1 | Merged to release/spark3 |
+
+### Release Workflow (once per release)
+
+| # | Phase | Key Input | Key Output |
+|---|---|---|---|
 | 3 | Version bump on both branches | New version (auto or manual) | Updated pom.xml on both branches |
-| 4 | Changelog update on both branches | PR descriptions | Updated CHANGELOG.md on both branches |
+| 4 | Changelog update on both branches | All PR descriptions since last tag | Updated CHANGELOG.md on both branches |
 | 5 | Tag & release | New version | Tags pushed, release pipeline triggered |
 
 ## Error Handling
