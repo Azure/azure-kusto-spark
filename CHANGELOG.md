@@ -8,24 +8,24 @@ Tags are created as `v4.0_{version}` (Spark 4 / master) and `v3.0_{version}` (Sp
 
 ## [Unreleased]
 
-### Breaking Changes
+### Changed
 - None
 
-### Features
+### Added
 - None
 
-### Fixes
+### Fixed
 - None
 
 ## [7.0.5]
 
-### Breaking Changes
+### Changed
 - None
 
-### Features
+### Added
 - Add documentation for troubleshooting (#461)
 
-### Fixes
+### Fixed
 - Fix issue with CloudInfo cache (#466)
 - Fix Hadoop and Spark config setup (#462, #463)
 - Remove minimizeJar directive (#470)
@@ -33,24 +33,24 @@ Tags are created as `v4.0_{version}` (Spark 4 / master) and `v3.0_{version}` (Sp
 
 ## [7.0.3]
 
-### Breaking Changes
+### Changed
 - None
 
-### Features
+### Added
 - None
 
-### Fixes
+### Fixed
 - Fix version of Kusto SDK (#459)
 
 ## [7.0.2]
 
-### Breaking Changes
+### Changed
 - None
 
-### Features
+### Added
 - New read option for storage protocol in distributed reads (#450)
 
-### Fixes
+### Fixed
 - Whitelist storage to avoid Fabric error (#455)
 - Fix for release pipeline for Spark 4 (#454)
 - Correct the resilience and vavr lib versions (#452)
@@ -58,12 +58,12 @@ Tags are created as `v4.0_{version}` (Spark 4 / master) and `v3.0_{version}` (Sp
 
 ## [7.0.1]
 
-### Breaking Changes
+### Changed
 - None
 
-### Features
+### Added
 - Syntax support for V11 engine for extents drop (#445)
 
-### Fixes
+### Fixed
 - Remove V3 engine check (#439)
 - Fix filter keys (#446)
