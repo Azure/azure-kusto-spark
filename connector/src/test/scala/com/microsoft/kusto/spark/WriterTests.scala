@@ -126,7 +126,7 @@ class WriterTests extends AnyFlatSpec with Matchers {
     // Before finalize, the output should be empty or incomplete (buffered)
     val _ = byteArrayOutputStream.size()
     // Finalize should flush and close everything
-    KustoWriter.finalizeBlobWrite(fileWriteResource)
+    KustoCSVWriter.finalizeBlobWrite(fileWriteResource)
 
     // After finalize, data should be flushed and streams closed
     val afterFinalize = byteArrayOutputStream.size()

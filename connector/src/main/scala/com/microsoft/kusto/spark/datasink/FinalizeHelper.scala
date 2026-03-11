@@ -184,6 +184,96 @@ object FinalizeHelper {
     }
   }
 
+  // V2 DataSource API overload: accepts partition results directly (no SparkContext/accumulator)
+  private[kusto] def finalizeIngestionFromMessages(
+      coordinates: KustoCoordinates,
+      batchIdIfExists: String,
+      tmpTableName: String,
+      partitionResults: Array[PartitionResult],
+      writeOptions: WriteOptions,
+      crp: ClientRequestProperties,
+      tableExists: Boolean,
+      authentication: KustoAuthentication,
+      kustoClient: ExtendedKustoClient,
+      sinkStartTime: Instant): Unit = {
+    if (!kustoClient.shouldIngestData(
+        coordinates,
+        writeOptions.maybeSparkIngestionProperties,
+        tableExists,
+        crp)) {
+      KDSU.logInfo(myName, s"$IngestSkippedTrace '${coordinates.table}'")
+    } else {
+      val requestId = writeOptions.requestId
+      val ingestionInfoString =
+        s"RequestId: $requestId cluster: '${coordinates.clusterAlias}', " +
+          s"database: '${coordinates.database}', table: '$tmpTableName' $batchIdIfExists"
+      KDSU.logInfo(
+        myName,
+        s"Polling on ingestion results for requestId: $requestId (V2 driver-side), " +
+          s"will move data to destination table when finished")
+
+      try {
+        partitionResults.foreach(partitionResult =>
+          pollOnResult(
+            partitionResult,
+            requestId,
+            writeOptions.timeout.toMillis,
+            ingestionInfoString,
+            !writeOptions.kustoCustomDebugWriteOptions.ensureNoDuplicatedBlobs))
+
+        if (partitionResults.nonEmpty) {
+          val pref = KDSU.getDedupTagsPrefix(writeOptions.requestId, batchIdIfExists)
+          kustoClient.executeEngine(
+            coordinates.database,
+            generateTableAlterMergePolicyCommand(
+              tmpTableName,
+              allowMerge = false,
+              allowRebuild = false),
+            "alterMergePolicyCommand",
+            crp)
+          if (writeOptions.kustoCustomDebugWriteOptions.ensureNoDuplicatedBlobs) {
+            kustoClient.retryAsyncOp(
+              coordinates.database,
+              generateExtentTagsDropByPrefixCommand(tmpTableName, pref),
+              crp,
+              writeOptions.timeout,
+              s"drops extents from temp table '$tmpTableName' ",
+              "extentsDrop",
+              writeOptions.requestId)
+          }
+          kustoClient.moveExtents(
+            coordinates.database,
+            tmpTableName,
+            coordinates.table.get,
+            crp,
+            writeOptions,
+            sinkStartTime)
+          KDSU.logInfo(
+            myName,
+            s"write to Kusto table '${coordinates.table.get}' finished successfully " +
+              s"requestId: ${writeOptions.requestId} $batchIdIfExists")
+        } else {
+          KDSU.logWarn(
+            myName,
+            s"write to Kusto table '${coordinates.table.get}' finished with no data written " +
+              s"requestId: ${writeOptions.requestId} $batchIdIfExists")
+        }
+      } catch {
+        case ex: Exception =>
+          KDSU.reportExceptionAndThrow(
+            myName,
+            ex,
+            "Trying to poll on pending ingestions",
+            coordinates.clusterUrl,
+            coordinates.database,
+            coordinates.table.getOrElse("Unspecified table name"),
+            writeOptions.requestId)
+      } finally {
+        kustoClient.cleanupIngestionByProducts(coordinates.database, tmpTableName, crp)
+      }
+    }
+  }
+
   def pollOnResult(
       partitionResult: PartitionResult,
       requestId: String,

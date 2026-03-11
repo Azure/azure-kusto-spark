@@ -10,6 +10,7 @@ import com.microsoft.kusto.spark.datasink.SchemaAdjustmentMode.{
 }
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
 import com.microsoft.kusto.spark.datasink.WriteMode.{Transactional, WriteMode}
+import com.microsoft.kusto.spark.datasink.WriteFormat.{CSV, WriteFormat}
 import com.microsoft.kusto.spark.utils.{KustoConstants, KustoCustomDebugWriteOptions}
 
 import java.util.UUID
@@ -87,6 +88,10 @@ object KustoSinkOptions extends KustoOptions {
 
   // The ingestion storage to use. This expects a serialized json of type Array[IngestionStorageParameters]
   val KUSTO_INGESTION_STORAGE: String = newOption("kustoIngestionStorageContainer")
+
+  // The serialization format used when writing data to Kusto. Determines how data is serialized
+  // before ingestion. Valid values: 'CSV' (default), 'Parquet'.
+  val KUSTO_WRITE_FORMAT: String = newOption("writeFormat")
 }
 
 object SinkTableCreationMode extends Enumeration {
@@ -102,6 +107,11 @@ object SchemaAdjustmentMode extends Enumeration {
 object WriteMode extends Enumeration {
   type WriteMode = Value
   val Transactional, Queued, KustoStreaming = Value
+}
+
+object WriteFormat extends Enumeration {
+  type WriteFormat = Value
+  val CSV, Parquet = Value
 }
 
 final case class WriteOptions(
@@ -120,6 +130,7 @@ final case class WriteOptions(
       new FiniteDuration(KustoConstants.DefaultCleaningInterval.toInt, TimeUnit.SECONDS),
     adjustSchema: SchemaAdjustmentMode = NoAdjustment,
     writeMode: WriteMode = Transactional,
+    writeFormat: WriteFormat = CSV,
     userTempTableName: Option[String] = None,
     streamIngestUncompressedMaxSize: Int = KustoConstants.DefaultMaxStreamingBytesUncompressed,
     maybeIngestionBlobStorage: Option[Array[IngestionStorageParameters]] = None,

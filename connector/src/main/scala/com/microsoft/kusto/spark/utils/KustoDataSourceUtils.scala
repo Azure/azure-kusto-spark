@@ -472,6 +472,19 @@ object KustoDataSourceUtils {
         throw new InvalidParameterException(s"No such WriteMode option: '${writeModeParam.get}'")
     }
 
+    var writeFormat: WriteFormat.WriteFormat = WriteFormat.CSV
+    var writeFormatParam: Option[String] = None
+    try {
+      writeFormatParam = parameters.get(KustoSinkOptions.KUSTO_WRITE_FORMAT)
+      writeFormat =
+        if (writeFormatParam.isEmpty) WriteFormat.CSV
+        else WriteFormat.withName(writeFormatParam.get)
+    } catch {
+      case _: NoSuchElementException =>
+        throw new InvalidParameterException(
+          s"No such WriteFormat option: '${writeFormatParam.get}'. Valid values: CSV, Parquet")
+    }
+
     val streamIngestMaxSize =
       parameters.get(KustoSinkOptions.KUSTO_STREAMING_INGEST_SIZE_IN_MB) match {
         case Some(value) => value.toInt * OneMegaByte
@@ -571,6 +584,7 @@ object KustoDataSourceUtils {
       autoCleanupTime,
       adjustSchema,
       writeMode,
+      writeFormat,
       userTempTableName,
       streamIngestMaxSize,
       maybeIngestionStorageParameters,
@@ -585,6 +599,7 @@ object KustoDataSourceUtils {
       "parseSinkParameters",
       s"Parsed write options for sink: {'table': '${sourceParameters.kustoCoordinates.table}', " +
         s"'timeout': '${writeOptions.timeout}, 'async': ${writeOptions.isAsync}, 'writeMode': ${writeOptions.writeMode}, " +
+        s"'writeFormat': ${writeOptions.writeFormat}, " +
         s"'tableCreationMode': ${writeOptions.tableCreateOptions}, 'writeLimit': ${writeOptions.writeResultLimit}, " +
         s"'batchLimit': ${writeOptions.batchLimit}" +
         s", 'timeout': ${writeOptions.timeout}, 'timezone': ${writeOptions.timeZone}, " +

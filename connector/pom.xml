@@ -208,6 +208,13 @@
                     <include>*.properties</include>
                 </includes>
             </resource>
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>false</filtering>
+                <includes>
+                    <include>META-INF/**</include>
+                </includes>
+            </resource>
         </resources>
         <testSourceDirectory>src/test/scala</testSourceDirectory>
         <sourceDirectory>src/main/scala</sourceDirectory>
@@ -365,6 +372,8 @@
                                         <exclude>com.microsoft.kusto.spark.sql.*</exclude>
                                         <exclude>com.microsoft.kusto.spark.sql.extension.*</exclude>
                                         <exclude>com.microsoft.kusto.spark.utils.*</exclude>
+                                        <exclude>com.microsoft.kusto.spark.v2.*</exclude>
+                                        <exclude>com.microsoft.kusto.spark.v2.sink.*</exclude>
                                     </excludes>
                                 </relocation>
                                 <relocation>

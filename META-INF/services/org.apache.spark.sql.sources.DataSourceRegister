@@ -1,0 +1,2 @@
+com.microsoft.kusto.spark.datasource.DefaultSource
+com.microsoft.kusto.spark.v2.sink.KustoTableProvider
