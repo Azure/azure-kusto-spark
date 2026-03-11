@@ -10,12 +10,24 @@ import com.microsoft.azure.kusto.ingest.exceptions.IngestionServiceException
 import com.microsoft.azure.kusto.ingest.resources.ContainerWithSas
 import com.microsoft.azure.kusto.ingest.result.IngestionResult
 import com.microsoft.azure.kusto.ingest.source.{BlobSourceInfo, CompressionType}
-import com.microsoft.azure.kusto.ingest.{IngestClient, IngestionProperties, ManagedStreamingIngestClient}
+import com.microsoft.azure.kusto.ingest.{
+  IngestClient,
+  IngestionProperties,
+  ManagedStreamingIngestClient
+}
 import com.microsoft.azure.storage.blob.{BlobRequestOptions, CloudBlockBlob}
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink._
-import com.microsoft.kusto.spark.utils.{ByteArrayOutputStreamWithOffset, ExtendedKustoClient, KustoClientCache, KustoQueryUtils, KustoConstants => KCONST, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.{
+  ByteArrayOutputStreamWithOffset,
+  ExtendedKustoClient,
+  KustoClientCache,
+  KustoQueryUtils,
+  OperationMetrics,
+  KustoConstants => KCONST,
+  KustoDataSourceUtils => KDSU
+}
 import io.github.resilience4j.retry.RetryConfig
 import org.apache.commons.io.IOUtils
 import org.apache.spark.sql.catalyst.InternalRow
@@ -187,6 +199,7 @@ final case class KustoCsvDataWriter(
   }
 
   private def commitBatched(): WriterCommitMessage = {
+    val commitStartNanos = System.nanoTime()
     KDSU.logInfo(
       className,
       s"Committing partition $partitionIdStr for requestId: '${writeOptions.requestId}'")
@@ -200,10 +213,21 @@ final case class KustoCsvDataWriter(
       pollIngestionResults()
     }
 
+    OperationMetrics.logMetric(
+      className,
+      "v2.csvWriter.commit",
+      (System.nanoTime() - commitStartNanos) / 1000000L,
+      Map(
+        "partition" -> partitionIdStr,
+        "blobsIngested" -> ingestionCount.toString,
+        "writeMode" -> writeOptions.writeMode.toString,
+        "requestId" -> writeOptions.requestId))
+
     KustoWriterCommitMessage(partitionId, ingestionCount)
   }
 
   private def commitStreaming(): WriterCommitMessage = {
+    val commitStartNanos = System.nanoTime()
     streamBufferedWriter.flush()
     byteArrayOutputStream.flush()
     IOUtils.close(streamBufferedWriter, byteArrayOutputStream)
@@ -216,6 +240,16 @@ final case class KustoCsvDataWriter(
         className,
         s"Total of $streamTotalSize bytes were ingested. Consider 'Queued' writeMode.")
     }
+
+    OperationMetrics.logMetric(
+      className,
+      "v2.csvWriter.commitStreaming",
+      (System.nanoTime() - commitStartNanos) / 1000000L,
+      Map(
+        "partition" -> partitionIdStr,
+        "totalBytes" -> streamTotalSize.toString,
+        "requestId" -> writeOptions.requestId))
+
     KustoWriterCommitMessage(partitionId, ingestionCount)
   }
 
@@ -248,6 +282,7 @@ final case class KustoCsvDataWriter(
       blobResource: BlobWriteResource,
       blobUUID: String,
       flushImmediately: Boolean): Unit = {
+    val ingestStartNanos = System.nanoTime()
     var props = ingestionProperties
     if (!props.getFlushImmediately && flushImmediately) {
       props = SparkIngestionProperties.cloneIngestionProperties(ingestionProperties)
@@ -283,6 +318,16 @@ final case class KustoCsvDataWriter(
       ingestionResults.append(result)
       ingestionCount += 1
     }
+
+    OperationMetrics.logMetric(
+      className,
+      "v2.csvWriter.ingestBlob",
+      (System.nanoTime() - ingestStartNanos) / 1000000L,
+      Map(
+        "partition" -> partitionIdStr,
+        "blobNumber" -> ingestionCount.toString,
+        "requestId" -> writeOptions.requestId))
+
     KDSU.logInfo(
       className,
       s"Queued blob for ingestion in partition $partitionIdStr " +
@@ -320,6 +365,7 @@ final case class KustoCsvDataWriter(
   }
 
   private def pollIngestionResults(): Unit = {
+    val pollStartNanos = System.nanoTime()
     val requestId = writeOptions.requestId
     val ingestionInfoString =
       s"RequestId: $requestId cluster: '${tableCoordinates.clusterAlias}', " +
@@ -340,6 +386,15 @@ final case class KustoCsvDataWriter(
     }
     // Release references after polling — no longer needed
     ingestionResults.clear()
+
+    OperationMetrics.logMetric(
+      className,
+      "v2.csvWriter.pollIngestion",
+      (System.nanoTime() - pollStartNanos) / 1000000L,
+      Map(
+        "partition" -> partitionIdStr,
+        "resultsPolled" -> ingestionCount.toString,
+        "requestId" -> requestId))
   }
 
   private def createBlobWriter(

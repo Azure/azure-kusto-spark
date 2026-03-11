@@ -8,7 +8,5 @@ import org.apache.spark.sql.connector.write.WriterCommitMessage
 // Only carries serializable primitives — IngestionResult is NOT serializable
 // and cannot cross the executor→driver boundary.
 // For transactional mode, ingestion polling happens on the executor in commit().
-final case class KustoWriterCommitMessage(
-    partitionId: Int,
-    ingestionCount: Int)
+final case class KustoWriterCommitMessage(partitionId: Int, ingestionCount: Int)
     extends WriterCommitMessage

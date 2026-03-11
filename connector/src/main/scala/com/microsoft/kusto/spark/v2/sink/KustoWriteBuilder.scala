@@ -9,7 +9,13 @@ import com.microsoft.kusto.spark.authentication.{KeyVaultAuthentication, KustoAu
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink._
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator.generateTableGetSchemaAsRowsCommand
-import com.microsoft.kusto.spark.utils.{ExtendedKustoClient, KeyVaultUtils, KustoClientCache, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.{
+  ExtendedKustoClient,
+  KeyVaultUtils,
+  KustoClientCache,
+  OperationMetrics,
+  KustoDataSourceUtils => KDSU
+}
 import org.apache.spark.sql.connector.write.{BatchWrite, LogicalWriteInfo, WriteBuilder}
 import org.apache.spark.sql.types.StructType
 
@@ -23,6 +29,7 @@ final case class KustoWriteBuilder(info: LogicalWriteInfo) extends WriteBuilder 
   private val objectMapper = new ObjectMapper()
 
   override def buildForBatch(): BatchWrite = {
+    val buildStartNanos = System.nanoTime()
     val parameters = info.options().asCaseSensitiveMap().asScala.toMap
     val sinkParameters = KDSU.parseSinkParameters(parameters)
     val sourceParams = sinkParameters.sourceParametersResults
@@ -60,27 +67,37 @@ final case class KustoWriteBuilder(info: LogicalWriteInfo) extends WriteBuilder 
 
     val stagingTableIngestionProperties = getSparkIngestionProperties(writeOptions)
 
-    val schemaShowCommandResult = kustoClient
-      .executeEngine(
-        tableCoordinates.database,
-        generateTableGetSchemaAsRowsCommand(tableCoordinates.table.get),
-        "schemaShow",
-        crp)
-      .getPrimaryResults
+    val schemaShowCommandResult = OperationMetrics.timed(
+      className,
+      "v2.writeBuilder.schemaShow",
+      Map("table" -> table, "requestId" -> writeOptions.requestId)) {
+      kustoClient
+        .executeEngine(
+          tableCoordinates.database,
+          generateTableGetSchemaAsRowsCommand(tableCoordinates.table.get),
+          "schemaShow",
+          crp)
+        .getPrimaryResults
+    }
 
     val targetSchema =
       schemaShowCommandResult.getData.asScala
         .map(c => objectMapper.readTree(c.get(0).toString))
         .toArray
 
-    com.microsoft.kusto.spark.utils.KustoIngestionUtils.adjustSchema(
-      writeOptions.writeMode,
-      writeOptions.adjustSchema,
-      info.schema(),
-      targetSchema,
-      stagingTableIngestionProperties,
-      writeOptions.tableCreateOptions,
-      writeOptions.kustoCustomDebugWriteOptions)
+    OperationMetrics.timed(
+      className,
+      "v2.writeBuilder.adjustSchema",
+      Map("table" -> table, "requestId" -> writeOptions.requestId)) {
+      com.microsoft.kusto.spark.utils.KustoIngestionUtils.adjustSchema(
+        writeOptions.writeMode,
+        writeOptions.adjustSchema,
+        info.schema(),
+        targetSchema,
+        stagingTableIngestionProperties,
+        writeOptions.tableCreateOptions,
+        writeOptions.kustoCustomDebugWriteOptions)
+    }
 
     val rebuiltOptions =
       writeOptions.copy(maybeSparkIngestionProperties = Some(stagingTableIngestionProperties))
@@ -98,19 +115,37 @@ final case class KustoWriteBuilder(info: LogicalWriteInfo) extends WriteBuilder 
         s"${com.microsoft.kusto.spark.utils.KustoConstants.IngestSkippedTrace} '$table'")
       KustoBatchWrite.noOp
     } else {
-      initializeStagingTable(
-        kustoClient,
-        tableCoordinates,
-        tmpTableName,
-        info.schema(),
-        targetSchema,
-        writeOptions,
-        crp,
-        tableExists,
-        stagingTableIngestionProperties)
+      OperationMetrics.timed(
+        className,
+        "v2.writeBuilder.initStagingTable",
+        Map(
+          "table" -> table,
+          "tmpTable" -> tmpTableName,
+          "requestId" -> writeOptions.requestId)) {
+        initializeStagingTable(
+          kustoClient,
+          tableCoordinates,
+          tmpTableName,
+          info.schema(),
+          targetSchema,
+          writeOptions,
+          crp,
+          tableExists,
+          stagingTableIngestionProperties)
+      }
 
       val sinkStartTime = Option(stagingTableIngestionProperties.creationTime)
         .getOrElse(Instant.now(Clock.systemUTC()))
+
+      OperationMetrics.logMetric(
+        className,
+        "v2.writeBuilder.buildForBatch",
+        (System.nanoTime() - buildStartNanos) / 1000000L,
+        Map(
+          "table" -> table,
+          "writeFormat" -> writeOptions.writeFormat.toString,
+          "writeMode" -> writeOptions.writeMode.toString,
+          "requestId" -> writeOptions.requestId))
 
       KustoBatchWrite(
         tableCoordinates = tableCoordinates,

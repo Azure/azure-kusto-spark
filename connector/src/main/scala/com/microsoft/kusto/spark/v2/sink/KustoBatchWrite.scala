@@ -11,8 +11,17 @@ import com.microsoft.kusto.spark.utils.CslCommandsGenerator.{
   generateExtentTagsDropByPrefixCommand,
   generateTableAlterMergePolicyCommand
 }
-import com.microsoft.kusto.spark.utils.{ExtendedKustoClient, KustoDataSourceUtils => KDSU}
-import org.apache.spark.sql.connector.write.{BatchWrite, DataWriterFactory, PhysicalWriteInfo, WriterCommitMessage}
+import com.microsoft.kusto.spark.utils.{
+  ExtendedKustoClient,
+  OperationMetrics,
+  KustoDataSourceUtils => KDSU
+}
+import org.apache.spark.sql.connector.write.{
+  BatchWrite,
+  DataWriterFactory,
+  PhysicalWriteInfo,
+  WriterCommitMessage
+}
 import org.apache.spark.sql.types.StructType
 
 import java.time.Instant
@@ -48,6 +57,7 @@ final case class KustoBatchWrite(
   }
 
   override def commit(messages: Array[WriterCommitMessage]): Unit = {
+    val commitStartNanos = System.nanoTime()
     val kustoMessages = messages.collect { case m: KustoWriterCommitMessage => m }
     val totalIngestions = kustoMessages.map(_.ingestionCount).sum
 
@@ -105,6 +115,17 @@ final case class KustoBatchWrite(
       // Queued mode — cleanup staging resources
       kustoClient.cleanupIngestionByProducts(tableCoordinates.database, tmpTableName, crp)
     }
+
+    OperationMetrics.logMetric(
+      className,
+      "v2.batchWrite.commit",
+      (System.nanoTime() - commitStartNanos) / 1000000L,
+      Map(
+        "table" -> tableCoordinates.table.getOrElse("unknown"),
+        "partitions" -> kustoMessages.length.toString,
+        "totalIngestions" -> totalIngestions.toString,
+        "writeMode" -> writeOptions.writeMode.toString,
+        "requestId" -> writeOptions.requestId))
   }
 
   override def abort(messages: Array[WriterCommitMessage]): Unit = {

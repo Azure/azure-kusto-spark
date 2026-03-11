@@ -12,8 +12,20 @@ import com.microsoft.azure.kusto.ingest.source.BlobSourceInfo
 import com.microsoft.azure.storage.blob.{BlobRequestOptions, CloudBlockBlob}
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
-import com.microsoft.kusto.spark.datasink.{FinalizeHelper, PartitionResult, WriteMode, WriteOptions}
-import com.microsoft.kusto.spark.utils.{ExtendedKustoClient, KustoClientCache, KustoQueryUtils, KustoConstants => KCONST, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.datasink.{
+  FinalizeHelper,
+  PartitionResult,
+  WriteMode,
+  WriteOptions
+}
+import com.microsoft.kusto.spark.utils.{
+  ExtendedKustoClient,
+  KustoClientCache,
+  KustoQueryUtils,
+  OperationMetrics,
+  KustoConstants => KCONST,
+  KustoDataSourceUtils => KDSU
+}
 import io.github.resilience4j.retry.RetryConfig
 import org.apache.hadoop.conf.Configuration
 import org.apache.parquet.hadoop.ParquetWriter
@@ -120,6 +132,7 @@ final case class KustoParquetDataWriter(
   }
 
   override def commit(): WriterCommitMessage = {
+    val commitStartNanos = System.nanoTime()
     KDSU.logInfo(
       className,
       s"Committing Parquet partition $partitionIdStr for requestId: '${writeOptions.requestId}', " +
@@ -135,6 +148,18 @@ final case class KustoParquetDataWriter(
     if (writeOptions.writeMode == WriteMode.Transactional) {
       pollIngestionResults()
     }
+
+    OperationMetrics.logMetric(
+      className,
+      "v2.parquetWriter.commit",
+      (System.nanoTime() - commitStartNanos) / 1000000L,
+      Map(
+        "partition" -> partitionIdStr,
+        "totalRows" -> rowCount.toString,
+        "filesWritten" -> (fileIndex + 1).toString,
+        "blobsIngested" -> ingestionCount.toString,
+        "writeMode" -> writeOptions.writeMode.toString,
+        "requestId" -> writeOptions.requestId))
 
     KustoWriterCommitMessage(partitionId, ingestionCount)
   }
@@ -183,6 +208,7 @@ final case class KustoParquetDataWriter(
   }
 
   private def sealAndIngestCurrentFile(): Unit = {
+    val sealStartNanos = System.nanoTime()
     val writeStartTime = System.currentTimeMillis()
     currentWriter.close()
     val writeDurationMs = System.currentTimeMillis() - writeStartTime
@@ -200,9 +226,7 @@ final case class KustoParquetDataWriter(
     val result = KDSU.retryApplyFunction(
       i => {
         Try(
-          ingestClient.ingestFromBlob(
-            new BlobSourceInfo(ingestUrl),
-            ingestionProperties)) match {
+          ingestClient.ingestFromBlob(new BlobSourceInfo(ingestUrl), ingestionProperties)) match {
           case Success(x) => x
           case Failure(e: Throwable) =>
             KDSU.reportExceptionAndThrow(
@@ -221,6 +245,17 @@ final case class KustoParquetDataWriter(
       ingestionCount += 1
     }
 
+    OperationMetrics.logMetric(
+      className,
+      "v2.parquetWriter.sealAndIngest",
+      (System.nanoTime() - sealStartNanos) / 1000000L,
+      Map(
+        "partition" -> partitionIdStr,
+        "fileIndex" -> fileIndex.toString,
+        "rows" -> rowCount.toString,
+        "writeDurationMs" -> writeDurationMs.toString,
+        "requestId" -> writeOptions.requestId))
+
     KDSU.logInfo(
       className,
       s"Queued Parquet blob for ingestion in partition $partitionIdStr " +
@@ -230,6 +265,7 @@ final case class KustoParquetDataWriter(
   }
 
   private def pollIngestionResults(): Unit = {
+    val pollStartNanos = System.nanoTime()
     val requestId = writeOptions.requestId
     val ingestionInfoString =
       s"RequestId: $requestId cluster: '${tableCoordinates.clusterAlias}', " +
@@ -249,6 +285,15 @@ final case class KustoParquetDataWriter(
         !writeOptions.kustoCustomDebugWriteOptions.ensureNoDuplicatedBlobs)
     }
     ingestionResults.clear()
+
+    OperationMetrics.logMetric(
+      className,
+      "v2.parquetWriter.pollIngestion",
+      (System.nanoTime() - pollStartNanos) / 1000000L,
+      Map(
+        "partition" -> partitionIdStr,
+        "resultsPolled" -> ingestionCount.toString,
+        "requestId" -> requestId))
   }
 
   private def closeCurrentWriterQuietly(): Unit = {
