@@ -192,13 +192,16 @@ final case class KustoParquetDataWriter(
 
     val writeConf = new Configuration()
     ParquetWriteSupport.setSchema(schema, writeConf)
-    // ParquetWriteSupport.init() asserts these Spark config keys exist in the Configuration
+    // ParquetWriteSupport.init() → SparkToParquetSchemaConverter reads these from Configuration
     writeConf.set(
       SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key,
       SQLConf.PARQUET_WRITE_LEGACY_FORMAT.defaultValueString)
     writeConf.set(
       SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key,
       SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.defaultValueString)
+    writeConf.set(
+      SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED.key,
+      SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED.defaultValueString)
 
     currentWriter = new InternalRowParquetWriterBuilder(outputFile)
       .withConf(writeConf)

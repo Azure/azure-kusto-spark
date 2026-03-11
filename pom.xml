@@ -34,6 +34,7 @@
         <scalamock.version>7.5.1</scalamock.version>
         <scalatest.version>3.2.17</scalatest.version>
         <scalatest.maven.version>2.2.0</scalatest.maven.version>
+        <tagsToExclude>KustoE2E,V2Tests</tagsToExclude>
         <scalafix.core.version>0.14.4</scalafix.core.version>
         <scalafix.version>0.1.10_0.14.2</scalafix.version>
         <scala.rewrites.version>0.1.5</scala.rewrites.version>

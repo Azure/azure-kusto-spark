@@ -1,0 +1,378 @@
+================================================================================
+SPARK 4.0 DATASOURCEV2 EXACT INTERFACE SIGNATURES - QUICK REFERENCE
+================================================================================
+
+Current Implementation: V1 API
+┌─────────────────────────┐
+│    DefaultSource        │
+├─────────────────────────┤
+│ CreatableRelationProvider
+│ RelationProvider
+│ DataSourceRegister
+└─────────────────────────┘
+
+Target Implementation: V2 API
+┌──────────────────────┐
+│ KustoTableProvider   │
+├──────────────────────┤
+│ TableProvider
+│ DataSourceRegister
+└──────────────────────┘
+         │
+         ├─→ inferSchema(CaseInsensitiveStringMap): StructType
+         ├─→ getTable(schema, partitioning, properties): Table
+         │
+         └─→ Table + SupportsRead + SupportsWrite
+            ├─→ newScanBuilder(options): ScanBuilder
+            │  └─→ build(): Scan
+            │     ├─→ toBatch(): Batch
+            │     │  └─→ createReaderFactory(): PartitionReaderFactory
+            │     └─→ readSchema(): StructType
+            │
+            └─→ newWriteBuilder(info): WriteBuilder
+               └─→ build(): Write
+                  └─→ toBatch(): BatchWrite
+                     ├─→ createBatchWriterFactory(physicalInfo): DataWriterFactory
+                     │  └─→ createWriter(partitionId, taskId): DataWriter
+                     │     ├─→ write(record): void
+                     │     ├─→ commit(): WriterCommitMessage
+                     │     └─→ abort(): void
+                     ├─→ commit(messages): void
+                     └─→ abort(messages): void
+
+================================================================================
+CORE INTERFACE SIGNATURES (Exact Copy from Spark 4.0)
+================================================================================
+
+1. TABLE PROVIDER
+─────────────────────────────────────────────────────────────────────────────
+public interface TableProvider {
+  StructType inferSchema(CaseInsensitiveStringMap options);
+  default Transform[] inferPartitioning(CaseInsensitiveStringMap options) 
+    { return new Transform[0]; }
+  Table getTable(StructType schema, Transform[] partitioning, 
+    Map<String, String> properties);
+  default boolean supportsExternalMetadata() { return false; }
+}
+
+2. TABLE
+─────────────────────────────────────────────────────────────────────────────
+public interface Table {
+  String name();
+  @Deprecated(since = "3.4.0") StructType schema();
+  default Column[] columns() 
+    { return CatalogV2Util.structTypeToV2Columns(schema()); }
+  default Transform[] partitioning() { return new Transform[0]; }
+  default Map<String, String> properties() 
+    { return Collections.emptyMap(); }
+  Set<TableCapability> capabilities();
+}
+
+3. SUPPORTS READ
+─────────────────────────────────────────────────────────────────────────────
+public interface SupportsRead extends Table {
+  ScanBuilder newScanBuilder(CaseInsensitiveStringMap options);
+}
+
+4. SUPPORTS WRITE
+─────────────────────────────────────────────────────────────────────────────
+public interface SupportsWrite extends Table {
+  WriteBuilder newWriteBuilder(LogicalWriteInfo info);
+}
+
+5. SCAN BUILDER
+─────────────────────────────────────────────────────────────────────────────
+public interface ScanBuilder {
+  Scan build();
+}
+
+6. SCAN (Logical Read)
+─────────────────────────────────────────────────────────────────────────────
+public interface Scan {
+  StructType readSchema();
+  default String description() { return this.getClass().toString(); }
+  default Batch toBatch() { throw new UnsupportedOperationException(); }
+  default MicroBatchStream toMicroBatchStream(String checkpointLocation) 
+    { throw new UnsupportedOperationException(); }
+  default ContinuousStream toContinuousStream(String checkpointLocation) 
+    { throw new UnsupportedOperationException(); }
+  default CustomMetric[] supportedCustomMetrics() { return new CustomMetric[]{}; }
+  default CustomTaskMetric[] reportDriverMetrics() 
+    { return new CustomTaskMetric[]{}; }
+}
+
+7. BATCH (Physical Read)
+─────────────────────────────────────────────────────────────────────────────
+public interface Batch {
+  String description();
+  PartitionReaderFactory createReaderFactory();
+}
+
+8. WRITE BUILDER
+─────────────────────────────────────────────────────────────────────────────
+public interface WriteBuilder {
+  default Write build() {
+    return new Write() {
+      public BatchWrite toBatch() { return buildForBatch(); }
+      public StreamingWrite toStreaming() { return buildForStreaming(); }
+    };
+  }
+  @Deprecated(since = "3.2.0")
+  default BatchWrite buildForBatch() 
+    { throw new UnsupportedOperationException(); }
+  @Deprecated(since = "3.2.0")
+  default StreamingWrite buildForStreaming() 
+    { throw new UnsupportedOperationException(); }
+}
+
+9. WRITE (Logical Write)
+─────────────────────────────────────────────────────────────────────────────
+public interface Write {
+  default String description() { return this.getClass().toString(); }
+  default BatchWrite toBatch() { throw new UnsupportedOperationException(); }
+  default StreamingWrite toStreaming() 
+    { throw new UnsupportedOperationException(); }
+  default CustomMetric[] supportedCustomMetrics() 
+    { return new CustomMetric[]{}; }
+  default CustomTaskMetric[] reportDriverMetrics() 
+    { return new CustomTaskMetric[]{}; }
+}
+
+10. BATCH WRITE (Physical Write)
+─────────────────────────────────────────────────────────────────────────────
+public interface BatchWrite {
+  DataWriterFactory createBatchWriterFactory(PhysicalWriteInfo info);
+  default boolean useCommitCoordinator() { return true; }
+  default void onDataWriterCommit(WriterCommitMessage message) {}
+  void commit(WriterCommitMessage[] messages);
+  void abort(WriterCommitMessage[] messages);
+}
+
+11. DATA WRITER FACTORY
+─────────────────────────────────────────────────────────────────────────────
+public interface DataWriterFactory extends Serializable {
+  DataWriter<InternalRow> createWriter(int partitionId, long taskId);
+}
+
+12. DATA WRITER
+─────────────────────────────────────────────────────────────────────────────
+public interface DataWriter<T> extends Closeable {
+  default void write(T metadata, T record) throws IOException { write(record); }
+  void write(T record) throws IOException;
+  default void writeAll(Iterator<T> records) throws IOException {
+    while (records.hasNext()) { write(records.next()); }
+  }
+  WriterCommitMessage commit() throws IOException;
+  void abort() throws IOException;
+  default CustomTaskMetric[] currentMetricsValues() 
+    { return new CustomTaskMetric[]{}; }
+  void close() throws IOException;
+}
+
+13. WRITER COMMIT MESSAGE
+─────────────────────────────────────────────────────────────────────────────
+public interface WriterCommitMessage extends Serializable {}
+
+14. LOGICAL WRITE INFO
+─────────────────────────────────────────────────────────────────────────────
+public interface LogicalWriteInfo {
+  CaseInsensitiveStringMap options();
+  String queryId();
+  StructType schema();
+  default Optional<StructType> rowIdSchema() 
+    { throw new UnsupportedOperationException(); }
+  default Optional<StructType> metadataSchema() 
+    { throw new UnsupportedOperationException(); }
+}
+
+15. PHYSICAL WRITE INFO
+─────────────────────────────────────────────────────────────────────────────
+public interface PhysicalWriteInfo {
+  int numPartitions();
+}
+
+16. TABLE CAPABILITY (Enum)
+─────────────────────────────────────────────────────────────────────────────
+public enum TableCapability {
+  BATCH_READ,           // Batch reads supported
+  MICRO_BATCH_READ,     // Micro-batch streaming reads
+  CONTINUOUS_READ,      // Continuous streaming reads
+  BATCH_WRITE,          // Batch writes (append)
+  STREAMING_WRITE,      // Streaming writes (append)
+  TRUNCATE,             // Truncate operation
+  OVERWRITE_BY_FILTER,  // Overwrite with filter
+  OVERWRITE_DYNAMIC,    // Dynamic partition overwrite
+  ACCEPT_ANY_SCHEMA,    // Any schema accepted
+  V1_BATCH_WRITE        // V1 InsertableRelation support
+}
+
+================================================================================
+CRITICAL IMPLEMENTATION REQUIREMENTS
+================================================================================
+
+1. SCHEMA HANDLING:
+   - inferSchema() MUST connect to Kusto and analyze data to return StructType
+   - getTable() receives schema as parameter and MUST use it
+   - Implement schema() in Table to return the same schema
+
+2. CAPABILITIES:
+   - MUST return appropriate capabilities from Table.capabilities()
+   - For Kusto Connector: return {BATCH_READ, BATCH_WRITE}
+   - Other implementations may return different combinations
+
+3. PARTITION HANDLING:
+   - Implement inferPartitioning() if table supports partitioning
+   - Return Transform[] with partition spec
+   - Default empty array [] if no partitioning
+
+4. OPTIONS HANDLING:
+   - CaseInsensitiveStringMap is case-insensitive for key lookups
+   - Can use options.get("key") or options.getOrDefault("key", "default")
+   - All keys internally stored as lowercase
+
+5. WRITE FLOW (CRITICAL):
+   Step 1: Driver calls WriteBuilder.build() → Write
+   Step 2: Driver calls Write.toBatch() → BatchWrite
+   Step 3: Driver calls BatchWrite.createBatchWriterFactory(PhysicalWriteInfo)
+   Step 4: Factory serialized and sent to all executors
+   Step 5: Each executor calls DataWriterFactory.createWriter(partitionId, taskId)
+   Step 6: Each executor writes data via DataWriter.write(record)
+   Step 7: Each executor calls DataWriter.commit() → WriterCommitMessage
+   Step 8: All messages sent back to driver
+   Step 9: Driver calls BatchWrite.commit(messages) for final coordination
+   Step 10: OR if any failure: BatchWrite.abort(messages) for cleanup
+
+6. READ FLOW (CRITICAL):
+   Step 1: Driver calls ScanBuilder.build() → Scan
+   Step 2: Driver calls Scan.toBatch() → Batch
+   Step 3: Driver calls Batch.createReaderFactory() → PartitionReaderFactory
+   Step 4: For each partition, PartitionReaderFactory creates PartitionReader
+   Step 5: Each executor reads via PartitionReader.next() and
+           PartitionReader.get() or PartitionReader.getColumnar()
+
+================================================================================
+PACKAGE LOCATIONS
+================================================================================
+
+org.apache.spark.sql.connector.catalog {
+  TableProvider.java
+  Table.java
+  SupportsRead.java
+  SupportsWrite.java
+  TableCapability.java
+  Column.java
+  ...
+}
+
+org.apache.spark.sql.connector.read {
+  ScanBuilder.java
+  Scan.java
+  Batch.java
+  PartitionReader.java
+  PartitionReaderFactory.java
+  InputPartition.java
+  ...
+}
+
+org.apache.spark.sql.connector.write {
+  WriteBuilder.java
+  Write.java
+  BatchWrite.java
+  DataWriter.java
+  DataWriterFactory.java
+  WriterCommitMessage.java
+  LogicalWriteInfo.java
+  PhysicalWriteInfo.java
+  ...
+}
+
+org.apache.spark.sql.util {
+  CaseInsensitiveStringMap.java  // Key configuration object
+}
+
+org.apache.spark.sql.types {
+  StructType.java
+  DataType.java
+  ...
+}
+
+org.apache.spark.sql.catalyst {
+  InternalRow.java  // Type for T in DataWriter<T>
+}
+
+================================================================================
+IMPORTS NEEDED
+================================================================================
+
+import org.apache.spark.sql.connector.catalog.*;
+import org.apache.spark.sql.connector.read.*;
+import org.apache.spark.sql.connector.write.*;
+import org.apache.spark.sql.types.StructType;
+import org.apache.spark.sql.util.CaseInsensitiveStringMap;
+import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.sources.DataSourceRegister;
+
+import java.io.IOException;
+import java.io.Serializable;
+import java.util.*;
+
+================================================================================
+KEY DIFFERENCES FROM V1 API
+================================================================================
+
+V1 (Current)                      V2 (Target)
+─────────────────────────────────────────────────────────────────────────────
+RelationProvider                  TableProvider
+├─ createRelation() → BaseRelation   ├─ inferSchema() → StructType
+                                     ├─ getTable() → Table
+                                     └─ Separate concerns!
+
+BaseRelation                      Table + SupportsRead/SupportsWrite
+├─ schema(): StructType             ├─ schema(): StructType
+├─ sqlContext: SQLContext           ├─ name(): String
+├─ buildScan(): RDD[Row]            ├─ capabilities(): Set<TableCapability>
+└─ Monolithic class                 └─ Clean separation of concerns
+
+RDD-based readers                 Partition-based readers
+├─ Heavy weight (RDD overhead)      ├─ Lightweight (executor-side)
+├─ Single buildScan() method        ├─ PartitionReaderFactory pattern
+└─ Limited parallelism              └─ Better parallel control
+
+KustoWriter.write() direct call   Multi-stage write pipeline
+├─ Monolithic write operation       ├─ WriteBuilder → Write → BatchWrite
+├─ Limited error handling           ├─ DataWriterFactory → DataWriter
+├─ Hard to retry/abort              ├─ Explicit commit/abort messages
+└─ Inflexible                       └─ Transaction-like guarantees
+
+No schema inference separation     Explicit schema inference
+├─ Mixed in createRelation()        ├─ Separate inferSchema() method
+└─ Hard to optimize                 └─ Can cache results
+
+================================================================================
+IMPLEMENTATION CHECKLIST
+================================================================================
+
+[ ] Create KustoTableProvider implements TableProvider, DataSourceRegister
+[ ] Create KustoTable implements Table, SupportsRead, SupportsWrite
+[ ] Create KustoScanBuilder implements ScanBuilder
+[ ] Create KustoScan implements Scan
+[ ] Create KustoBatch implements Batch
+[ ] Create KustoPartitionReaderFactory implements PartitionReaderFactory
+[ ] Create KustoPartitionReader implements PartitionReader
+[ ] Create KustoWriteBuilder implements WriteBuilder
+[ ] Create KustoWrite implements Write
+[ ] Create KustoBatchWrite implements BatchWrite
+[ ] Create KustoDataWriterFactory implements DataWriterFactory
+[ ] Create KustoDataWriter implements DataWriter
+[ ] Create KustoWriterCommitMessage implements WriterCommitMessage
+[ ] Implement push-down filters (SupportsPushDownFilters)
+[ ] Implement column pruning (SupportsPushDownRequiredColumns)
+[ ] Handle credentials/authentication in all classes
+[ ] Test read pipeline
+[ ] Test write pipeline
+[ ] Test error handling and retry logic
+[ ] Deprecate V1 classes (KustoRelation, KustoReader, etc.)
+[ ] Update documentation
+[ ] Add migration guide for users
+
+================================================================================
