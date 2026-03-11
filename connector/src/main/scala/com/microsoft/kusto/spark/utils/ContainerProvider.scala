@@ -15,6 +15,7 @@ import com.microsoft.azure.kusto.ingest.exceptions.{
 import com.microsoft.kusto.spark.datasink.IngestionStorageParameters
 import com.microsoft.kusto.spark.exceptions.{ExceptionUtils, NoStorageContainersException}
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.OperationMetrics
 import io.github.resilience4j.core.IntervalFunction
 import io.github.resilience4j.retry.{Retry, RetryConfig}
 import io.vavr.CheckedFunction0
@@ -64,35 +65,37 @@ class ContainerProvider(
 
   def getContainer(maybeIngestionStorageParams: Option[Array[IngestionStorageParameters]] = None)
       : ContainerAndSas = {
-    // Refresh if storageExpiryMinutes have passed since last refresh for this cluster as SAS should be valid for at least 120 minutes
-    val now = Instant.now(Clock.systemUTC())
-    val secondsElapsed =
-      now.getEpochSecond - lastRefresh.getEpochSecond // get the seconds between now and last refresh
-    val isCacheExpired = secondsElapsed > cacheExpirySeconds
-    maybeIngestionStorageParams match {
-      case Some(ingestionStorageParams) =>
-        val (isKeyRefreshed, containerWithSas) = refreshUserSas(
-          ingestionStorageParams,
-          isCacheExpired = isCacheExpired,
-          cacheExpirySeconds)
-        /*
-        Only if the key was refreshed, we need to reset the last refresh time.
-        Using process container results may have an issue if for some reason we run into a case
-        where the DM container and the user provided container is provided.
-         */
-        if (isKeyRefreshed) {
-          lastRefresh = Instant.now(Clock.systemUTC())
-        }
-        containerWithSas
+    OperationMetrics.timed(className, "container.getContainer", Map("cluster" -> clusterAlias)) {
+      // Refresh if storageExpiryMinutes have passed since last refresh for this cluster as SAS should be valid for at least 120 minutes
+      val now = Instant.now(Clock.systemUTC())
+      val secondsElapsed =
+        now.getEpochSecond - lastRefresh.getEpochSecond // get the seconds between now and last refresh
+      val isCacheExpired = secondsElapsed > cacheExpirySeconds
+      maybeIngestionStorageParams match {
+        case Some(ingestionStorageParams) =>
+          val (isKeyRefreshed, containerWithSas) = refreshUserSas(
+            ingestionStorageParams,
+            isCacheExpired = isCacheExpired,
+            cacheExpirySeconds)
+          /*
+          Only if the key was refreshed, we need to reset the last refresh time.
+          Using process container results may have an issue if for some reason we run into a case
+          where the DM container and the user provided container is provided.
+           */
+          if (isKeyRefreshed) {
+            lastRefresh = Instant.now(Clock.systemUTC())
+          }
+          containerWithSas
 
-      case None =>
-        if (storageUris.isEmpty ||
-          isCacheExpired /* If the cache has elapsed , refresh */ ) {
-          refresh()
-        } else {
-          roundRobinIdx = (roundRobinIdx + 1) % storageUris.size
-          storageUris(roundRobinIdx)
-        }
+        case None =>
+          if (storageUris.isEmpty ||
+            isCacheExpired /* If the cache has elapsed , refresh */ ) {
+            refresh()
+          } else {
+            roundRobinIdx = (roundRobinIdx + 1) % storageUris.size
+            storageUris(roundRobinIdx)
+          }
+      }
     }
   }
 
@@ -107,49 +110,54 @@ class ContainerProvider(
   }
 
   private def refresh(exportContainer: Boolean = false): ContainerAndSas = {
-    if (exportContainer) {
-      Try(
-        client.executeDM(
-          command,
-          None,
-          "refreshContainers",
-          Some(retryConfigExportContainers))) match {
-        case Success(res) =>
-          val storage = res.getPrimaryResults.getData.asScala.map(row => {
-            val parts = row.get(0).toString.split('?')
-            ContainerAndSas(parts(0), s"?${parts(1)}")
+    OperationMetrics.timed(
+      className,
+      "container.refresh",
+      Map("cluster" -> clusterAlias, "exportContainer" -> exportContainer.toString)) {
+      if (exportContainer) {
+        Try(
+          client.executeDM(
+            command,
+            None,
+            "refreshContainers",
+            Some(retryConfigExportContainers))) match {
+          case Success(res) =>
+            val storage = res.getPrimaryResults.getData.asScala.map(row => {
+              val parts = row.get(0).toString.split('?')
+              ContainerAndSas(parts(0), s"?${parts(1)}")
+            })
+            processContainerResults(storage)
+          case Failure(exception) =>
+            KDSU.reportExceptionAndThrow(
+              className,
+              exception,
+              "Error querying for create export containers",
+              clusterAlias,
+              shouldNotThrow = storageUris.nonEmpty)
+            storageUris(roundRobinIdx)
+        }
+      } else {
+        val retryExecute: CheckedFunction0[ContainerAndSas] = Retry.decorateCheckedSupplier(
+          Retry.of("refresh ingestion resources", retryConfigIngestionRefresh),
+          () => {
+            Try(client.ingestClient.getResourceManager.getShuffledContainers) match {
+              case Success(res) =>
+                val storage = res.asScala.map(row => {
+                  ContainerAndSas(row.getAsyncContainer.getBlobContainerUrl, s"${row.getSas}")
+                })
+                processContainerResults(storage)
+              case Failure(exception) =>
+                KDSU.reportExceptionAndThrow(
+                  className,
+                  exception,
+                  "Error querying for create tempstorage",
+                  clusterAlias,
+                  shouldNotThrow = storageUris.nonEmpty)
+                storageUris(roundRobinIdx)
+            }
           })
-          processContainerResults(storage)
-        case Failure(exception) =>
-          KDSU.reportExceptionAndThrow(
-            className,
-            exception,
-            "Error querying for create export containers",
-            clusterAlias,
-            shouldNotThrow = storageUris.nonEmpty)
-          storageUris(roundRobinIdx)
+        retryExecute.apply()
       }
-    } else {
-      val retryExecute: CheckedFunction0[ContainerAndSas] = Retry.decorateCheckedSupplier(
-        Retry.of("refresh ingestion resources", retryConfigIngestionRefresh),
-        () => {
-          Try(client.ingestClient.getResourceManager.getShuffledContainers) match {
-            case Success(res) =>
-              val storage = res.asScala.map(row => {
-                ContainerAndSas(row.getAsyncContainer.getBlobContainerUrl, s"${row.getSas}")
-              })
-              processContainerResults(storage)
-            case Failure(exception) =>
-              KDSU.reportExceptionAndThrow(
-                className,
-                exception,
-                "Error querying for create tempstorage",
-                clusterAlias,
-                shouldNotThrow = storageUris.nonEmpty)
-              storageUris(roundRobinIdx)
-          }
-        })
-      retryExecute.apply()
     }
   }
 

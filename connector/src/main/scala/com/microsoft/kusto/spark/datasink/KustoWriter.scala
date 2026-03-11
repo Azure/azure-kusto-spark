@@ -14,6 +14,7 @@ import com.microsoft.kusto.spark.utils.KustoConstants.IngestSkippedTrace
 import com.microsoft.kusto.spark.utils.{
   KustoClientCache,
   KustoIngestionUtils,
+  OperationMetrics,
   KustoConstants => KCONST,
   KustoDataSourceUtils => KDSU
 }
@@ -41,6 +42,8 @@ object KustoWriter {
       authentication: KustoAuthentication,
       writeOptions: WriteOptions,
       crp: ClientRequestProperties): Unit = {
+    val table = tableCoordinates.table.get
+    val writeStartNanos = System.nanoTime()
     val batchIdIfExists = batchId.map(b => s"${b.toString}").getOrElse("")
     val kustoClient = KustoClientCache.getClient(
       tableCoordinates.clusterUrl,
@@ -48,7 +51,6 @@ object KustoWriter {
       tableCoordinates.ingestionUrl,
       tableCoordinates.clusterAlias)
 
-    val table = tableCoordinates.table.get
     val tmpTableName: String = KDSU.generateTempTableName(
       data.sparkSession.sparkContext.appName,
       table,
@@ -57,13 +59,18 @@ object KustoWriter {
       writeOptions.userTempTableName)
 
     val stagingTableIngestionProperties = getSparkIngestionProperties(writeOptions)
-    val schemaShowCommandResult = kustoClient
-      .executeEngine(
-        tableCoordinates.database,
-        generateTableGetSchemaAsRowsCommand(tableCoordinates.table.get),
-        "schemaShow",
-        crp)
-      .getPrimaryResults
+    val schemaShowCommandResult = OperationMetrics.timed(
+      className,
+      "write.schemaShow",
+      Map("table" -> table, "requestId" -> writeOptions.requestId)) {
+      kustoClient
+        .executeEngine(
+          tableCoordinates.database,
+          generateTableGetSchemaAsRowsCommand(tableCoordinates.table.get),
+          "schemaShow",
+          crp)
+        .getPrimaryResults
+    }
 
     // Re-parse the schema JSON through the connector's (potentially shaded) ObjectMapper
     // to avoid ClassCastException when the Kusto SDK returns Jackson objects from a
@@ -74,14 +81,19 @@ object KustoWriter {
         .map(c => objectMapper.readTree(c.get(0).toString))
         .toArray
 
-    KustoIngestionUtils.adjustSchema(
-      writeOptions.writeMode,
-      writeOptions.adjustSchema,
-      data.schema,
-      targetSchema,
-      stagingTableIngestionProperties,
-      writeOptions.tableCreateOptions,
-      writeOptions.kustoCustomDebugWriteOptions)
+    OperationMetrics.timed(
+      className,
+      "write.adjustSchema",
+      Map("table" -> table, "requestId" -> writeOptions.requestId)) {
+      KustoIngestionUtils.adjustSchema(
+        writeOptions.writeMode,
+        writeOptions.adjustSchema,
+        data.schema,
+        targetSchema,
+        stagingTableIngestionProperties,
+        writeOptions.tableCreateOptions,
+        writeOptions.kustoCustomDebugWriteOptions)
+    }
 
     val rebuiltOptions =
       writeOptions.copy(maybeSparkIngestionProperties = Some(stagingTableIngestionProperties))
@@ -111,14 +123,22 @@ object KustoWriter {
               "option or create the table beforehand.")
         }
       } else {
-        kustoClient.initializeTablesBySchema(
-          tableCoordinates,
-          tmpTableName,
-          data.schema,
-          targetSchema,
-          writeOptions,
-          crp,
-          stagingTableIngestionProperties.creationTime == null)
+        OperationMetrics.timed(
+          className,
+          "write.initializeTablesBySchema",
+          Map(
+            "table" -> table,
+            "tmpTable" -> tmpTableName,
+            "requestId" -> writeOptions.requestId)) {
+          kustoClient.initializeTablesBySchema(
+            tableCoordinates,
+            tmpTableName,
+            data.schema,
+            targetSchema,
+            writeOptions,
+            crp,
+            stagingTableIngestionProperties.creationTime == null)
+        }
       }
 
       if (writeOptions.writeMode == WriteMode.Transactional) {
@@ -167,6 +187,16 @@ object KustoWriter {
             stagingTableIngestionProperties,
             kustoClient)
       }
+
+      OperationMetrics.logMetric(
+        className,
+        "write.total",
+        (System.nanoTime() - writeStartNanos) / 1000000L,
+        Map(
+          "table" -> table,
+          "writeFormat" -> writeOptions.writeFormat.toString,
+          "writeMode" -> writeOptions.writeMode.toString,
+          "requestId" -> writeOptions.requestId))
     }
   }
 
@@ -182,6 +212,7 @@ object KustoWriter {
       stagingTableIngestionProperties: SparkIngestionProperties,
       kustoClient: com.microsoft.kusto.spark.utils.ExtendedKustoClient): Unit = {
     val table = tableCoordinates.table.get
+    val csvWriteStartNanos = System.nanoTime()
     val rdd = data.queryExecution.toRdd
     val partitionsResults = rdd.sparkContext.collectionAccumulator[PartitionResult]
     val parameters = KustoWriteResource(
@@ -200,6 +231,11 @@ object KustoWriter {
       if (writeOptions.writeMode == WriteMode.Transactional) {
         asyncWork.onComplete {
           case Success(_) =>
+            OperationMetrics.logMetric(
+              className,
+              "writeCSV.asyncIngestion",
+              (System.nanoTime() - csvWriteStartNanos) / 1000000L,
+              Map("table" -> table, "requestId" -> writeOptions.requestId))
             finalizeIngestionWhenWorkersSucceeded(
               tableCoordinates,
               batchIdIfExists,
@@ -247,6 +283,16 @@ object KustoWriter {
           }
           throw exception
       }
+
+      OperationMetrics.logMetric(
+        className,
+        "writeCSV.partitionIngestion",
+        (System.nanoTime() - csvWriteStartNanos) / 1000000L,
+        Map(
+          "table" -> table,
+          "partitions" -> partitionsResults.value.size().toString,
+          "requestId" -> writeOptions.requestId))
+
       if (writeOptions.writeMode == WriteMode.Transactional) {
         finalizeIngestionWhenWorkersSucceeded(
           tableCoordinates,

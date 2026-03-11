@@ -19,6 +19,7 @@ import com.microsoft.kusto.spark.utils.KustoConstants.IngestSkippedTrace
 import com.microsoft.kusto.spark.utils.{
   ExtendedKustoClient,
   KustoClientCache,
+  OperationMetrics,
   KustoDataSourceUtils => KDSU
 }
 import org.apache.spark.SparkContext
@@ -45,6 +46,7 @@ object FinalizeHelper {
       authentication: KustoAuthentication,
       kustoClient: ExtendedKustoClient,
       sinkStartTime: Instant): Unit = {
+    val finalizeStartNanos = System.nanoTime()
     if (!kustoClient.shouldIngestData(
         coordinates,
         writeOptions.maybeSparkIngestionProperties,
@@ -180,6 +182,15 @@ object FinalizeHelper {
               coordinates.database,
               coordinates.table.getOrElse("Unspecified table name"))
         }
+        OperationMetrics.logMetric(
+          myName,
+          "finalize.ingestionComplete",
+          (System.nanoTime() - finalizeStartNanos) / 1000000L,
+          Map(
+            "table" -> coordinates.table.getOrElse("unknown"),
+            "tmpTable" -> tmpTableName,
+            "partitions" -> partitionsResults.value.size().toString,
+            "requestId" -> writeOptions.requestId))
       }
     }
   }
@@ -196,6 +207,7 @@ object FinalizeHelper {
       authentication: KustoAuthentication,
       kustoClient: ExtendedKustoClient,
       sinkStartTime: Instant): Unit = {
+    val finalizeV2StartNanos = System.nanoTime()
     if (!kustoClient.shouldIngestData(
         coordinates,
         writeOptions.maybeSparkIngestionProperties,
@@ -271,6 +283,15 @@ object FinalizeHelper {
       } finally {
         kustoClient.cleanupIngestionByProducts(coordinates.database, tmpTableName, crp)
       }
+      OperationMetrics.logMetric(
+        myName,
+        "finalize.ingestionFromMessages",
+        (System.nanoTime() - finalizeV2StartNanos) / 1000000L,
+        Map(
+          "table" -> coordinates.table.getOrElse("unknown"),
+          "tmpTable" -> tmpTableName,
+          "partitions" -> partitionResults.length.toString,
+          "requestId" -> writeOptions.requestId))
     }
   }
 
@@ -280,6 +301,7 @@ object FinalizeHelper {
       timeout: Long,
       ingestionInfoString: String,
       shouldThrowOnTagsAlreadyExists: Boolean): Unit = {
+    val pollStartNanos = System.nanoTime()
     var finalRes: Option[IngestionStatus] = None
     KDSU
       .doWhile[Option[IngestionStatus]](
@@ -320,6 +342,14 @@ object FinalizeHelper {
       .await(timeout, TimeUnit.MILLISECONDS)
     finalRes match {
       case Some(ingestResults) =>
+        OperationMetrics.logMetric(
+          myName,
+          "finalize.pollOnResult",
+          (System.nanoTime() - pollStartNanos) / 1000000L,
+          Map(
+            "partition" -> partitionResult.partitionId.toString,
+            "status" -> ingestResults.status.toString,
+            "requestId" -> requestId))
         processIngestionStatusResults(
           partitionResult.partitionId,
           ingestionInfoString,

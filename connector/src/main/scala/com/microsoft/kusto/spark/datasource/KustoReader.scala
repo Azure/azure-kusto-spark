@@ -14,6 +14,7 @@ import com.microsoft.kusto.spark.utils.{
   CslCommandsGenerator,
   ExtendedKustoClient,
   KustoAzureFsSetupCache,
+  OperationMetrics,
   KustoConstants => KCONST,
   KustoDataSourceUtils => KDSU
 }
@@ -101,21 +102,28 @@ object KustoReader {
       filtering: KustoFiltering): RDD[Row] = {
 
     KDSU.logInfo(className, s"Executing query in Single mode. requestId: ${request.requestId}")
-    val filteredQuery = KustoFilter.pruneAndFilter(
-      KustoSchema(request.schema.sparkSchema, Set()),
-      request.query,
-      filtering)
-    val kustoResult: KustoResultSetTable = kustoClient
-      .executeEngine(
-        request.kustoCoordinates.database,
-        filteredQuery,
-        "executeQuery",
-        request.clientRequestProperties.orNull,
-        isMgmtCommand = false)
-      .getPrimaryResults
+    OperationMetrics.timed(
+      className,
+      "read.singleBuildScan",
+      Map("database" -> request.kustoCoordinates.database, "requestId" -> request.requestId)) {
+      val filteredQuery = KustoFilter.pruneAndFilter(
+        KustoSchema(request.schema.sparkSchema, Set()),
+        request.query,
+        filtering)
+      val kustoResult: KustoResultSetTable = kustoClient
+        .executeEngine(
+          request.kustoCoordinates.database,
+          filteredQuery,
+          "executeQuery",
+          request.clientRequestProperties.orNull,
+          isMgmtCommand = false)
+        .getPrimaryResults
 
-    val serializer = KustoResponseDeserializer(kustoResult)
-    request.sparkSession.createDataFrame(serializer.toRows, serializer.getSchema.sparkSchema).rdd
+      val serializer = KustoResponseDeserializer(kustoResult)
+      request.sparkSession
+        .createDataFrame(serializer.toRows, serializer.getSchema.sparkSchema)
+        .rdd
+    }
   }
 
   private def determineFilterPushDown(
@@ -137,6 +145,7 @@ object KustoReader {
       storage: TransientStorageParameters,
       options: KustoReadOptions,
       filtering: KustoFiltering): RDD[Row] = {
+    val distributedStartNanos = System.nanoTime()
     var paths: Seq[String] = Seq()
     // if distributedReadModeTransientCacheEnabled is set to true, then check if path is cached and use it
     // if not export and cache the path for reuse
@@ -169,6 +178,7 @@ object KustoReader {
       paths = exportToStorage(kustoClient, request, storage, options, filter)
     }
 
+    val parquetReadStartNanos = System.nanoTime()
     val rdd =
       try {
         request.sparkSession.read.parquet(paths: _*).rdd
@@ -190,7 +200,23 @@ object KustoReader {
           }
       }
 
+    OperationMetrics.logMetric(
+      className,
+      "read.parquetLoad",
+      (System.nanoTime() - parquetReadStartNanos) / 1000000L,
+      Map("paths" -> paths.size.toString, "requestId" -> request.requestId))
+
     KDSU.logInfo(className, "Transaction data read from blob storage, paths:" + paths)
+
+    OperationMetrics.logMetric(
+      className,
+      "read.distributedBuildScan",
+      (System.nanoTime() - distributedStartNanos) / 1000000L,
+      Map(
+        "database" -> request.kustoCoordinates.database,
+        "paths" -> paths.size.toString,
+        "cacheEnabled" -> options.distributedReadModeTransientCacheEnabled.toString,
+        "requestId" -> request.requestId))
     rdd
   }
 
@@ -244,6 +270,7 @@ object KustoReader {
       className,
       s"Starting exporting data from Kusto to blob storage in Distributed mode. requestId: ${request.requestId}")
 
+    val exportStartNanos = System.nanoTime()
     val protocol = options.storageProtocol.getOrElse(KCONST.storageProtocolWasbs)
     setupBlobAccess(request, storage, protocol)
     val partitions = calculatePartitions(options.partitionOptions)
@@ -267,6 +294,16 @@ object KustoReader {
       .map(params =>
         s"$protocol://${params.blobContainer}" +
           s"@${params.storageAccountName}.blob.${storage.endpointSuffix}/$directory")
+
+    OperationMetrics.logMetric(
+      className,
+      "read.exportToStorage",
+      (System.nanoTime() - exportStartNanos) / 1000000L,
+      Map(
+        "partitions" -> partitions.length.toString,
+        "paths" -> paths.size.toString,
+        "requestId" -> request.requestId))
+
     KDSU.logInfo(
       className,
       s"Finished exporting from Kusto to ${paths.mkString(",")}" +
@@ -508,37 +545,42 @@ private[kusto] class KustoReader(client: ExtendedKustoClient) {
       directory: String,
       options: KustoReadOptions,
       filtering: KustoFiltering): Unit = {
-    val supportNewParquetWriter = new ComparableVersion(request.sparkSession.version)
-      .compareTo(new ComparableVersion(KustoReader.minimalParquetWriterVersion)) > 0
-    if (!supportNewParquetWriter) {
-      KDSU.logWarn(
-        myName,
-        "Setting useNativeParquetWriter=false. Users are advised to move to Spark versions >= 3.3.0 to leverage the performance and cost improvements of" +
-          "new encoding schemes introduced in both Kusto parquet files write and Spark parquet read")
-    }
-    val exportCommand = CslCommandsGenerator.generateExportDataCommand(
-      query = KustoFilter.pruneAndFilter(request.schema, request.query, filtering),
-      directory = directory,
-      partitionId = partition.idx,
-      storageParameters = storage,
-      partitionPredicate = partition.predicate,
-      additionalExportOptions = options.additionalExportOptions,
-      supportNewParquetWriter = supportNewParquetWriter)
+    OperationMetrics.timed(
+      myName,
+      "read.exportPartitionToBlob",
+      Map("partitionIdx" -> partition.idx.toString, "requestId" -> request.requestId)) {
+      val supportNewParquetWriter = new ComparableVersion(request.sparkSession.version)
+        .compareTo(new ComparableVersion(KustoReader.minimalParquetWriterVersion)) > 0
+      if (!supportNewParquetWriter) {
+        KDSU.logWarn(
+          myName,
+          "Setting useNativeParquetWriter=false. Users are advised to move to Spark versions >= 3.3.0 to leverage the performance and cost improvements of" +
+            "new encoding schemes introduced in both Kusto parquet files write and Spark parquet read")
+      }
+      val exportCommand = CslCommandsGenerator.generateExportDataCommand(
+        query = KustoFilter.pruneAndFilter(request.schema, request.query, filtering),
+        directory = directory,
+        partitionId = partition.idx,
+        storageParameters = storage,
+        partitionPredicate = partition.predicate,
+        additionalExportOptions = options.additionalExportOptions,
+        supportNewParquetWriter = supportNewParquetWriter)
 
-    val commandResult: KustoResultSetTable = client
-      .executeEngine(
+      val commandResult: KustoResultSetTable = client
+        .executeEngine(
+          request.kustoCoordinates.database,
+          exportCommand,
+          "exportPartitionToBlob",
+          request.clientRequestProperties.orNull)
+        .getPrimaryResults
+      KDSU.verifyAsyncCommandCompletion(
+        client.engineClient,
         request.kustoCoordinates.database,
-        exportCommand,
-        "exportPartitionToBlob",
-        request.clientRequestProperties.orNull)
-      .getPrimaryResults
-    KDSU.verifyAsyncCommandCompletion(
-      client.engineClient,
-      request.kustoCoordinates.database,
-      commandResult,
-      timeOut = request.timeout,
-      doingWhat = s"export data to  blob directory: ('$directory') preparing it for reading.",
-      loggerName = myName,
-      requestId = request.requestId)
+        commandResult,
+        timeOut = request.timeout,
+        doingWhat = s"export data to  blob directory: ('$directory') preparing it for reading.",
+        loggerName = myName,
+        requestId = request.requestId)
+    }
   }
 }

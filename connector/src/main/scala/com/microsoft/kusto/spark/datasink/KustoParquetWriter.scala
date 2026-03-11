@@ -17,6 +17,7 @@ import com.microsoft.kusto.spark.utils.{
   KustoAzureFsSetupCache,
   KustoConstants,
   KustoQueryUtils,
+  OperationMetrics,
   KustoDataSourceUtils => KDSU
 }
 import io.github.resilience4j.retry.RetryConfig
@@ -62,6 +63,7 @@ object KustoParquetWriter {
       kustoClient: ExtendedKustoClient): Unit = {
     val table = tableCoordinates.table.get
     val sparkContext = data.sparkSession.sparkContext
+    val overallStartNanos = System.nanoTime()
 
     KDSU.logInfo(
       className,
@@ -218,12 +220,19 @@ object KustoParquetWriter {
     })
 
     // Run the Spark parquet write on the main thread
+    val parquetWriteStartNanos = System.nanoTime()
     try {
       data.write.parquet(parquetDir)
     } finally {
       // Signal the background thread that writing is done
       writeCompleteLatch.countDown()
     }
+
+    OperationMetrics.logMetric(
+      className,
+      "parquetWrite.sparkWrite",
+      (System.nanoTime() - parquetWriteStartNanos) / 1000000L,
+      Map("table" -> table, "requestId" -> writeOptions.requestId))
 
     KDSU.logInfo(
       className,
@@ -274,6 +283,16 @@ object KustoParquetWriter {
         kustoClient,
         sinkStartTime)
     }
+
+    OperationMetrics.logMetric(
+      className,
+      "parquetWrite.total",
+      (System.nanoTime() - overallStartNanos) / 1000000L,
+      Map(
+        "table" -> table,
+        "blobsIngested" -> ingestedFiles.size().toString,
+        "writeMode" -> writeOptions.writeMode.toString,
+        "requestId" -> writeOptions.requestId))
   }
 
   /** Configure Hadoop to access Azure Blob Storage via WASB protocol using SAS token. */

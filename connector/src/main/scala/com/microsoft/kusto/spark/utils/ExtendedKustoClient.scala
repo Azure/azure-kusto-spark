@@ -40,6 +40,7 @@ import com.microsoft.kusto.spark.utils.KustoConstants.{
 }
 import com.microsoft.kusto.spark.utils.KustoDataSourceUtils.extractSchemaFromResultTable
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.OperationMetrics
 import io.github.resilience4j.core.IntervalFunction
 import io.github.resilience4j.retry.RetryConfig
 import org.apache.log4j.Level
@@ -197,15 +198,17 @@ class ExtendedKustoClient(
       maybeCrp: Option[ClientRequestProperties],
       activityName: String,
       retryConfig: Option[RetryConfig] = None): KustoOperationResult = {
-    KDSU.retryApplyFunction(
-      i => {
-        dmClient.executeMgmt(
-          ExtendedKustoClient.DefaultDb,
-          command,
-          newIncrementedCrp(maybeCrp, activityName, i))
-      },
-      retryConfig.getOrElse(this.retryConfig),
-      "Execute DM command with retries")
+    OperationMetrics.timed(className, "client.executeDM", Map("activity" -> activityName)) {
+      KDSU.retryApplyFunction(
+        i => {
+          dmClient.executeMgmt(
+            ExtendedKustoClient.DefaultDb,
+            command,
+            newIncrementedCrp(maybeCrp, activityName, i))
+        },
+        retryConfig.getOrElse(this.retryConfig),
+        "Execute DM command with retries")
+    }
   }
 
   def executeEngine(
@@ -216,28 +219,33 @@ class ExtendedKustoClient(
       isMgmtCommand: Boolean = true,
       retryConfig: Option[RetryConfig] = None): KustoOperationResult = {
 
-    KDSU.retryApplyFunction(
-      retryNumber => {
-        if (isMgmtCommand) {
-          KDSU.logDebug(
-            className,
-            s"Executing management command: $command, retry number: $retryNumber")
-          engineClient.executeMgmt(
-            database,
-            command,
-            newIncrementedCrp(Some(crp), activityName, retryNumber))
-        } else {
-          KDSU.logDebug(
-            className,
-            s"Executing query command: $command, retry number: $retryNumber")
-          engineClient.executeQuery(
-            database,
-            command,
-            newIncrementedCrp(Some(crp), activityName, retryNumber))
-        }
-      },
-      retryConfig.getOrElse(this.retryConfig),
-      s"Execute command with retries")
+    OperationMetrics.timed(
+      className,
+      "client.executeEngine",
+      Map("database" -> database, "activity" -> activityName)) {
+      KDSU.retryApplyFunction(
+        retryNumber => {
+          if (isMgmtCommand) {
+            KDSU.logDebug(
+              className,
+              s"Executing management command: $command, retry number: $retryNumber")
+            engineClient.executeMgmt(
+              database,
+              command,
+              newIncrementedCrp(Some(crp), activityName, retryNumber))
+          } else {
+            KDSU.logDebug(
+              className,
+              s"Executing query command: $command, retry number: $retryNumber")
+            engineClient.executeQuery(
+              database,
+              command,
+              newIncrementedCrp(Some(crp), activityName, retryNumber))
+          }
+        },
+        retryConfig.getOrElse(this.retryConfig),
+        s"Execute command with retries")
+    }
   }
 
   private def newIncrementedCrp(
@@ -293,39 +301,48 @@ class ExtendedKustoClient(
       crp: ClientRequestProperties,
       writeOptions: WriteOptions,
       sinkStartTime: Instant): Unit = {
-    val extentsCountQuery =
-      executeEngine(
-        database,
-        generateExtentsCountCommand(tmpTableName),
-        "countExtents",
-        crp).getPrimaryResults
-    extentsCountQuery.next()
-    val extentsCount = extentsCountQuery.getInt(0)
-    if (extentsCount > writeOptions.kustoCustomDebugWriteOptions.minimalExtentsCountForSplitMergePerNode) {
-      val nodeCountQuery =
-        executeEngine(database, generateNodesCountCommand(), "nodesCount", crp).getPrimaryResults
-      nodeCountQuery.next()
-      val nodeCount = nodeCountQuery.getInt(0)
-      moveExtentsWithRetries(
-        Some(
-          nodeCount * writeOptions.kustoCustomDebugWriteOptions.minimalExtentsCountForSplitMergePerNode),
-        extentsCount,
-        database,
-        tmpTableName,
-        targetTable,
-        sinkStartTime,
-        crp,
-        writeOptions)
-    } else {
-      moveExtentsWithRetries(
-        None,
-        extentsCount,
-        database,
-        tmpTableName,
-        targetTable,
-        sinkStartTime,
-        crp,
-        writeOptions)
+    OperationMetrics.timed(
+      className,
+      "client.moveExtents",
+      Map("database" -> database, "tmpTable" -> tmpTableName, "targetTable" -> targetTable)) {
+      val extentsCountQuery =
+        executeEngine(
+          database,
+          generateExtentsCountCommand(tmpTableName),
+          "countExtents",
+          crp).getPrimaryResults
+      extentsCountQuery.next()
+      val extentsCount = extentsCountQuery.getInt(0)
+      if (extentsCount > writeOptions.kustoCustomDebugWriteOptions.minimalExtentsCountForSplitMergePerNode) {
+        val nodeCountQuery =
+          executeEngine(
+            database,
+            generateNodesCountCommand(),
+            "nodesCount",
+            crp).getPrimaryResults
+        nodeCountQuery.next()
+        val nodeCount = nodeCountQuery.getInt(0)
+        moveExtentsWithRetries(
+          Some(
+            nodeCount * writeOptions.kustoCustomDebugWriteOptions.minimalExtentsCountForSplitMergePerNode),
+          extentsCount,
+          database,
+          tmpTableName,
+          targetTable,
+          sinkStartTime,
+          crp,
+          writeOptions)
+      } else {
+        moveExtentsWithRetries(
+          None,
+          extentsCount,
+          database,
+          tmpTableName,
+          targetTable,
+          sinkStartTime,
+          crp,
+          writeOptions)
+      }
     }
   }
 
