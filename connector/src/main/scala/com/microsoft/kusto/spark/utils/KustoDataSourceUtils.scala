@@ -514,6 +514,12 @@ object KustoDataSourceUtils {
       throw new InvalidParameterException(
         "GenerateDynamicCsvMapping cannot be used with Spark streaming ingestion")
     }
+
+    val partitionByColumn = parameters.get(KustoSinkOptions.KUSTO_PARTITION_BY_COLUMN)
+    if (partitionByColumn.isDefined && writeMode != WriteMode.Queued) {
+      throw new InvalidParameterException(
+        "partitionByColumn is only supported with Queued write mode")
+    }
     val maybeIngestionStorageParameters: Option[Array[IngestionStorageParameters]] =
       validateIngestionStorageParameters(parameters)
 
@@ -574,7 +580,8 @@ object KustoDataSourceUtils {
       userTempTableName,
       streamIngestMaxSize,
       maybeIngestionStorageParameters,
-      kustoCustomDebugOptions)
+      kustoCustomDebugOptions,
+      partitionByColumn)
 
     if (sourceParameters.kustoCoordinates.table.isEmpty) {
       throw new InvalidParameterException(
@@ -595,6 +602,8 @@ object KustoDataSourceUtils {
         s"'adjustSchema': $adjustSchema, 'autoCleanupTime': $autoCleanupTime${if (writeOptions.userTempTableName.isDefined)
             s", userTempTableName: ${userTempTableName.get}"
           else ""}, disableFlushImmediately: $disableFlushImmediately${if (ensureNoDupBlobs) "ensureNoDupBlobs: true"
+          else ""}${if (partitionByColumn.isDefined)
+            s", partitionByColumn: ${partitionByColumn.get}"
           else ""}")
     SinkParameters(writeOptions, sourceParameters)
   }

@@ -161,6 +161,67 @@ class KustoDataSourceUtilsTest extends AnyFlatSpec with MockFactory {
       }
     }
   }
+
+  "WriteParameters" should "throw an exception when partitionByColumn is used with KustoStreaming" in {
+    val conf: Map[String, String] = Map(
+      KUSTO_DATABASE -> "DB",
+      KUSTO_TABLE -> "Table",
+      KUSTO_CLUSTER -> "https://test-cluster.southeastasia.kusto.windows.net",
+      KustoSourceOptions.KUSTO_AAD_APP_ID -> "AppId",
+      KustoSourceOptions.KUSTO_AAD_APP_SECRET -> "AppKey",
+      KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID -> "Tenant",
+      KUSTO_TABLE_CREATE_OPTIONS -> "CreateIfNotExist",
+      KustoSinkOptions.KUSTO_WRITE_MODE -> "KustoStreaming",
+      KustoSinkOptions.KUSTO_PARTITION_BY_COLUMN -> "Tenant")
+    val exception =
+      intercept[InvalidParameterException](KustoDataSourceUtils.parseSinkParameters(conf))
+    assert(exception.getMessage == "partitionByColumn is only supported with Queued write mode")
+  }
+
+  "WriteParameters" should "throw an exception when partitionByColumn is used with Transactional mode" in {
+    val conf: Map[String, String] = Map(
+      KUSTO_DATABASE -> "DB",
+      KUSTO_TABLE -> "Table",
+      KUSTO_CLUSTER -> "https://test-cluster.southeastasia.kusto.windows.net",
+      KustoSourceOptions.KUSTO_AAD_APP_ID -> "AppId",
+      KustoSourceOptions.KUSTO_AAD_APP_SECRET -> "AppKey",
+      KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID -> "Tenant",
+      KUSTO_TABLE_CREATE_OPTIONS -> "CreateIfNotExist",
+      KustoSinkOptions.KUSTO_WRITE_MODE -> "Transactional",
+      KustoSinkOptions.KUSTO_PARTITION_BY_COLUMN -> "Tenant")
+    val exception =
+      intercept[InvalidParameterException](KustoDataSourceUtils.parseSinkParameters(conf))
+    assert(exception.getMessage == "partitionByColumn is only supported with Queued write mode")
+  }
+
+  "WriteParameters" should "parse partitionByColumn option successfully with Queued mode" in {
+    val conf: Map[String, String] = Map(
+      KUSTO_DATABASE -> "DB",
+      KUSTO_TABLE -> "Table",
+      KUSTO_CLUSTER -> "https://test-cluster.southeastasia.kusto.windows.net",
+      KustoSourceOptions.KUSTO_AAD_APP_ID -> "AppId",
+      KustoSourceOptions.KUSTO_AAD_APP_SECRET -> "AppKey",
+      KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID -> "Tenant",
+      KUSTO_TABLE_CREATE_OPTIONS -> "CreateIfNotExist",
+      KustoSinkOptions.KUSTO_WRITE_MODE -> "Queued",
+      KustoSinkOptions.KUSTO_PARTITION_BY_COLUMN -> "Tenant")
+    val result = KustoDataSourceUtils.parseSinkParameters(conf)
+    assert(result.writeOptions.partitionByColumn.contains("Tenant"))
+  }
+
+  "WriteParameters" should "have None for partitionByColumn when not specified" in {
+    val conf: Map[String, String] = Map(
+      KUSTO_DATABASE -> "DB",
+      KUSTO_TABLE -> "Table",
+      KUSTO_CLUSTER -> "https://test-cluster.southeastasia.kusto.windows.net",
+      KustoSourceOptions.KUSTO_AAD_APP_ID -> "AppId",
+      KustoSourceOptions.KUSTO_AAD_APP_SECRET -> "AppKey",
+      KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID -> "Tenant",
+      KUSTO_TABLE_CREATE_OPTIONS -> "CreateIfNotExist")
+    val result = KustoDataSourceUtils.parseSinkParameters(conf)
+    assert(result.writeOptions.partitionByColumn.isEmpty)
+  }
+
   "Parsing" should "fail for invalid ingestion storage strings" in {
     val ingestionStorage =
       s"""[{"storageUrl":"https://ateststorage.blob.core.windows.net/container1","containerName":"container1","userMsi":"msi1"},

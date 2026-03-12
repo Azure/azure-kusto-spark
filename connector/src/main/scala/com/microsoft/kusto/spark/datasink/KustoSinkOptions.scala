@@ -87,6 +87,11 @@ object KustoSinkOptions extends KustoOptions {
 
   // The ingestion storage to use. This expects a serialized json of type Array[IngestionStorageParameters]
   val KUSTO_INGESTION_STORAGE: String = newOption("kustoIngestionStorageContainer")
+
+  // When set, data is repartitioned by this column before ingestion so that each
+  // resulting blob file contains rows for exactly one partition key value.
+  // Not supported with KustoStreaming writeMode.
+  val KUSTO_PARTITION_BY_COLUMN: String = newOption("partitionByColumn")
 }
 
 object SinkTableCreationMode extends Enumeration {
@@ -123,4 +128,5 @@ final case class WriteOptions(
     userTempTableName: Option[String] = None,
     streamIngestUncompressedMaxSize: Int = KustoConstants.DefaultMaxStreamingBytesUncompressed,
     maybeIngestionBlobStorage: Option[Array[IngestionStorageParameters]] = None,
-    kustoCustomDebugWriteOptions: KustoCustomDebugWriteOptions)
+    kustoCustomDebugWriteOptions: KustoCustomDebugWriteOptions,
+    partitionByColumn: Option[String] = None)
