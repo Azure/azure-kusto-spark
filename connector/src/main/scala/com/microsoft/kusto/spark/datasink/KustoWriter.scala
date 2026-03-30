@@ -11,7 +11,7 @@ import com.microsoft.azure.kusto.ingest.IngestionProperties.DataFormat
 import com.microsoft.azure.kusto.ingest.exceptions.IngestionServiceException
 import com.microsoft.azure.kusto.ingest.resources.ContainerWithSas
 import com.microsoft.azure.kusto.ingest.result.IngestionResult
-import com.microsoft.azure.kusto.ingest.source.{BlobSourceInfo, CompressionType, StreamSourceInfo}
+import com.microsoft.azure.kusto.ingest.source.{BlobSourceInfo, StreamSourceInfo}
 import com.microsoft.azure.kusto.ingest.{
   IngestClient,
   IngestionProperties,
@@ -615,7 +615,7 @@ object KustoWriter {
            */
           Try(
             ingestClient.ingestFromBlob(
-              new BlobSourceInfo(blobUri + sas, CompressionType.gz, UUID.randomUUID()),
+              new BlobSourceInfo(blobUri + sas, size, UUID.randomUUID()),
               props)) match {
             case Success(x) =>
               <!-- The statuses of the ingestion operations are now set in the ingestion result -->

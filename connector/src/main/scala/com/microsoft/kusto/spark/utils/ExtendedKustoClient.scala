@@ -6,7 +6,7 @@ package com.microsoft.kusto.spark.utils
 import com.fasterxml.jackson.databind.node.ArrayNode
 import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import com.microsoft.azure.kusto.data._
-import com.microsoft.azure.kusto.data.StringUtils
+import org.apache.commons.lang3.StringUtils
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.exceptions.KustoDataExceptionBase
 import com.microsoft.azure.kusto.ingest.resources.ResourceWithSas

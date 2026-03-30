@@ -5,10 +5,11 @@ package com.microsoft.kusto.spark.utils
 
 import java.net.URI
 import java.util.concurrent.ConcurrentHashMap
-import java.util.{Collections, function}
+import java.util.function
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.kusto.spark.authentication._
 import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
+import org.apache.commons.lang3.tuple.Pair
 import org.apache.http.client.utils.URIBuilder
 import org.apache.spark.SPARK_VERSION
 
@@ -129,7 +130,7 @@ object KustoClientCache {
       null,
       false,
       null,
-      Collections.singletonMap("spark.version", SPARK_VERSION))
+      Pair.of("spark.version", SPARK_VERSION))
     ingestKcsb.setConnectorDetails(
       KCONST.ClientName,
       KustoDataSourceUtils.Version,
@@ -137,7 +138,7 @@ object KustoClientCache {
       null,
       false,
       null,
-      Collections.singletonMap("spark.version", SPARK_VERSION))
+      Pair.of("spark.version", SPARK_VERSION))
 
     new ExtendedKustoClient(engineKcsb, ingestKcsb, clusterAndAuth.clusterAlias)
   }

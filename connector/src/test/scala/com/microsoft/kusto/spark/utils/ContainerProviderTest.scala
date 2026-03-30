@@ -85,7 +85,7 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
       .thenAnswer(_ =>
         s"https://sacc$index.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0")
     Mockito.when(mockResultsOne.getSas).thenAnswer(_ => "?sv=2018-03-28&sr=c&sp=rw")
-    Mockito.when(mockResultsOne.getAsyncContainer).thenAnswer(_ => blobResultsOne)
+    Mockito.when(mockResultsOne.getContainer).thenAnswer(_ => blobResultsOne)
     mockResultsOne
   }
   // happy path

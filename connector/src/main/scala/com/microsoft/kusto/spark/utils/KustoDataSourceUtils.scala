@@ -3,7 +3,7 @@
 
 package com.microsoft.kusto.spark.utils
 
-import com.microsoft.azure.kusto.data.StringUtils
+import org.apache.commons.lang3.StringUtils
 import com.azure.core.credential.TokenRequestContext
 import com.azure.identity.{
   AzureCliCredentialBuilder,

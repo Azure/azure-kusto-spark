@@ -4,7 +4,7 @@
 package com.microsoft.kusto.spark
 
 import com.microsoft.azure.kusto.data.ClientFactory
-import com.microsoft.azure.kusto.data.StringUtils
+import org.apache.commons.lang3.StringUtils
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.kusto.spark.KustoTestUtils.getSystemTestOptions
 import com.microsoft.kusto.spark.common.KustoDebugOptions

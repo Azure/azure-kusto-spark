@@ -3,7 +3,7 @@
 
 package com.microsoft.kusto.spark.datasink
 
-import com.microsoft.azure.kusto.data.StringUtils
+import org.apache.commons.lang3.StringUtils
 
 import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility
 import com.fasterxml.jackson.annotation.PropertyAccessor

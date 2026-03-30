@@ -7,7 +7,7 @@ import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility
 import com.fasterxml.jackson.annotation.PropertyAccessor
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
-import com.microsoft.azure.kusto.data.StringUtils
+import org.apache.commons.lang3.StringUtils
 import com.microsoft.kusto.spark.utils.KustoDataSourceUtils
 
 import java.security.InvalidParameterException

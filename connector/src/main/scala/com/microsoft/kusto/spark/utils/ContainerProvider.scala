@@ -6,7 +6,7 @@ package com.microsoft.kusto.spark.utils
 import com.azure.identity.{DefaultAzureCredentialBuilder, ManagedIdentityCredentialBuilder}
 import com.azure.storage.blob.BlobServiceClientBuilder
 import com.azure.storage.blob.sas.{BlobContainerSasPermission, BlobServiceSasSignatureValues}
-import com.microsoft.azure.kusto.data.StringUtils
+import org.apache.commons.lang3.StringUtils
 import com.microsoft.azure.kusto.data.exceptions.{DataServiceException, KustoDataExceptionBase}
 import com.microsoft.azure.kusto.ingest.exceptions.{
   IngestionClientException,
@@ -136,7 +136,7 @@ class ContainerProvider(
           Try(client.ingestClient.getResourceManager.getShuffledContainers) match {
             case Success(res) =>
               val storage = res.asScala.map(row => {
-                ContainerAndSas(row.getAsyncContainer.getBlobContainerUrl, s"${row.getSas}")
+                ContainerAndSas(row.getContainer.getBlobContainerUrl, s"${row.getSas}")
               })
               processContainerResults(storage)
             case Failure(exception) =>

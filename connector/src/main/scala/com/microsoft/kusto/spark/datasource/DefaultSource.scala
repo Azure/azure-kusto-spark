@@ -15,7 +15,7 @@ import com.microsoft.kusto.spark.utils.{
   KustoConstants => KCONST,
   KustoDataSourceUtils => KDSU
 }
-import com.microsoft.azure.kusto.data.StringUtils
+import org.apache.commons.lang3.StringUtils
 import com.microsoft.kusto.spark.utils.KustoDataSourceUtils.SourceParameters
 import org.apache.spark.sql.sources.{
   BaseRelation,

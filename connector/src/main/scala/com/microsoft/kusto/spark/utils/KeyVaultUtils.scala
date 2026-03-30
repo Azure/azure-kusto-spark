@@ -3,7 +3,7 @@
 
 package com.microsoft.kusto.spark.utils
 
-import com.microsoft.azure.kusto.data.StringUtils
+import org.apache.commons.lang3.StringUtils
 import com.azure.security.keyvault.secrets.SecretClient
 import com.azure.security.keyvault.secrets.models.KeyVaultSecret
 import com.microsoft.kusto.spark.authentication.{
