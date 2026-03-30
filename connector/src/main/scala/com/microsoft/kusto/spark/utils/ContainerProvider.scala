@@ -136,7 +136,7 @@ class ContainerProvider(
           Try(client.ingestClient.getResourceManager.getShuffledContainers) match {
             case Success(res) =>
               val storage = res.asScala.map(row => {
-                ContainerAndSas(row.getContainer.getBlobContainerUrl, s"${row.getSas}")
+                ContainerAndSas(row.getEndpointWithoutSas, s"${row.getSas}")
               })
               processContainerResults(storage)
             case Failure(exception) =>

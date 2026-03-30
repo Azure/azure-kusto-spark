@@ -3,7 +3,6 @@
 
 package com.microsoft.kusto.spark.utils
 
-import com.azure.storage.blob.BlobContainerAsyncClient
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.azure.kusto.data.Client
 import com.microsoft.azure.kusto.ingest.exceptions.IngestionServiceException
@@ -78,14 +77,11 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
   private def getMockContainerWithSas(index: Int): ContainerWithSas = {
     val mockResultsOne: ContainerWithSas =
       Mockito.mock[ContainerWithSas](classOf[ContainerWithSas])
-    val blobResultsOne: BlobContainerAsyncClient =
-      Mockito.mock[BlobContainerAsyncClient](classOf[BlobContainerAsyncClient])
     Mockito
-      .when(blobResultsOne.getBlobContainerUrl)
+      .when(mockResultsOne.getEndpointWithoutSas)
       .thenAnswer(_ =>
         s"https://sacc$index.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0")
     Mockito.when(mockResultsOne.getSas).thenAnswer(_ => "?sv=2018-03-28&sr=c&sp=rw")
-    Mockito.when(mockResultsOne.getContainer).thenAnswer(_ => blobResultsOne)
     mockResultsOne
   }
   // happy path
