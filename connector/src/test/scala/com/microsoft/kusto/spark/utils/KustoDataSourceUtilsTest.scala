@@ -269,37 +269,28 @@ class KustoDataSourceUtilsTest extends AnyFlatSpec with MockFactory {
 
   "Sovereign cloud endpoints" should "be registered as trusted" in {
     import com.microsoft.azure.kusto.data.auth.endpoints.KustoTrustedEndpoints
+    import scala.collection.JavaConverters._
 
-    val sovereignEndpoints = Seq(
-      // Bleu (France)
-      "https://mycluster.kusto.sovcloud-api.fr",
-      "https://mycluster.kustomfa.sovcloud-api.fr",
-      "https://adx.applicationinsights.azure.fr",
-      "https://adx.loganalytics.azure.fr",
-      "https://adx.monitor.azure.fr",
-      // Delos (Germany)
-      "https://mycluster.kusto.sovcloud-api.de",
-      "https://mycluster.kustomfa.sovcloud-api.de",
-      "https://adx.applicationinsights.azure.de",
-      "https://adx.loganalytics.azure.de",
-      "https://adx.monitor.azure.de",
-      // Gov SG (Singapore)
-      "https://mycluster.kusto.sovcloud-api.sg",
-      "https://mycluster.kustomfa.sovcloud-api.sg",
-      "https://adx.applicationinsights.azure.sg",
-      "https://adx.loganalytics.azure.sg",
-      "https://adx.monitor.azure.sg")
+    KustoTrustedEndpointsRegistrar.ensureRegistered()
 
-    // Trigger class initialization to register the trusted hosts
-    KustoDataSourceUtils.getClass
+    // Map each sovereign cloud to its login endpoint and a sample hostname per rule.
+    // Derived from SovereignCloudRules so that adding a new rule automatically extends coverage.
+    val loginEndpointBySuffix = Map(
+      "fr" -> "https://login.sovcloud-identity.fr",
+      "de" -> "https://login.sovcloud-identity.de",
+      "sg" -> "https://login.sovcloud-identity.sg")
 
-    // validateTrustedEndpoint(uri, loginEndpoint) should not throw for these endpoints.
-    // Using a dummy login endpoint since addTrustedHosts registers as additional matchers
-    // that are checked regardless of login endpoint.
-    sovereignEndpoints.foreach { endpoint =>
-      KustoTrustedEndpoints.validateTrustedEndpoint(
-        endpoint,
-        "https://login.sovcloud-identity.fr")
+    KustoTrustedEndpointsRegistrar.SovereignCloudRules.asScala.foreach { rule =>
+      val suffix = rule.suffix
+      // Derive the cloud code (fr/de/sg) from the rule suffix
+      val cloudCode = loginEndpointBySuffix.keys.find(cc => suffix.endsWith(s".$cc"))
+      cloudCode.foreach { cc =>
+        val loginEndpoint = loginEndpointBySuffix(cc)
+        val hostname =
+          if (rule.exact) s"https://$suffix"
+          else s"https://mycluster$suffix"
+        KustoTrustedEndpoints.validateTrustedEndpoint(hostname, loginEndpoint)
+      }
     }
   }
 }

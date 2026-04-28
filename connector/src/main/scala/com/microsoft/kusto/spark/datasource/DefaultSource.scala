@@ -12,6 +12,7 @@ import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, KustoWriter}
 import com.microsoft.kusto.spark.utils.{
   KeyVaultUtils,
   KustoQueryUtils,
+  KustoTrustedEndpointsRegistrar,
   KustoConstants => KCONST,
   KustoDataSourceUtils => KDSU
 }
@@ -51,6 +52,7 @@ class DefaultSource
       mode: SaveMode,
       parameters: Map[String, String],
       data: DataFrame): BaseRelation = {
+    KustoTrustedEndpointsRegistrar.ensureRegistered()
     val sinkParameters = KDSU.parseSinkParameters(parameters, mode)
     initCommonParams(sinkParameters.sourceParametersResults)
 
@@ -100,6 +102,7 @@ class DefaultSource
   override def createRelation(
       sqlContext: SQLContext,
       parameters: Map[String, String]): BaseRelation = {
+    KustoTrustedEndpointsRegistrar.ensureRegistered()
     val readOptions = KDSU.getReadParameters(parameters, sqlContext)
     if (authenticationParameters.isEmpty) {
       // Parse parameters if haven't got parsed before

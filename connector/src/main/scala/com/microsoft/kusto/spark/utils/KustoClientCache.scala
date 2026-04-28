@@ -21,6 +21,7 @@ object KustoClientCache {
       authentication: KustoAuthentication,
       ingestionUrl: Option[String],
       clusterAlias: String): ExtendedKustoClient = {
+    KustoTrustedEndpointsRegistrar.ensureRegistered()
     val clusterAndAuth = ClusterAndAuth(clusterUrl, authentication, ingestionUrl, clusterAlias)
     clientCache.computeIfAbsent(clusterAndAuth, adderSupplier)
   }
