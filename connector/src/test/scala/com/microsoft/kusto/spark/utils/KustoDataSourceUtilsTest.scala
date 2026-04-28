@@ -283,7 +283,7 @@ class KustoDataSourceUtilsTest extends AnyFlatSpec with MockFactory {
     KustoTrustedEndpointsRegistrar.SovereignCloudRules.asScala.foreach { rule =>
       val suffix = rule.suffix
       // Derive the cloud code (fr/de/sg) from the rule suffix
-      val cloudCode = loginEndpointBySuffix.keys.find(cc => suffix.endsWith(cc))
+      val cloudCode = loginEndpointBySuffix.keys.find(cc => suffix.endsWith(s".$cc"))
       cloudCode.foreach { cc =>
         val loginEndpoint = loginEndpointBySuffix(cc)
         val hostname =

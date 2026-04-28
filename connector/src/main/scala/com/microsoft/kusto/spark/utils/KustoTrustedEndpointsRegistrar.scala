@@ -15,7 +15,8 @@ private[kusto] object KustoTrustedEndpointsRegistrar {
 
   // Sovereign cloud rules for Bleu (France), Delos (Germany), and Gov SG (Singapore).
   // These are not included in WellKnownKustoEndpoints.json bundled with SDK v5.1.1.
-  val SovereignCloudRules: java.util.List[MatchRule] = java.util.Arrays.asList(
+  val SovereignCloudRules: java.util.List[MatchRule] = java.util.Collections.unmodifiableList(
+    java.util.Arrays.asList(
     // Bleu (France)
     new MatchRule(".kusto.sovcloud-api.fr", false),
     new MatchRule(".kustomfa.sovcloud-api.fr", false),
@@ -33,7 +34,7 @@ private[kusto] object KustoTrustedEndpointsRegistrar {
     new MatchRule(".kustomfa.sovcloud-api.sg", false),
     new MatchRule("adx.applicationinsights.azure.sg", true),
     new MatchRule("adx.loganalytics.azure.sg", true),
-    new MatchRule("adx.monitor.azure.sg", true))
+    new MatchRule("adx.monitor.azure.sg", true)))
 
   def ensureRegistered(): Unit = {
     if (registered.compareAndSet(false, true)) {
