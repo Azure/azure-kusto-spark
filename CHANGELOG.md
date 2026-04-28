@@ -17,6 +17,17 @@ Tags are created as `v4.0_{version}` (Spark 4 / master) and `v3.0_{version}` (Sp
 ### Fixed
 - None
 
+## [5.3.4] - 2026-04-22
+
+### Changed
+- None
+
+### Added
+- Added trusted domain support for sovereign clouds (Bleu/France, Delos/Germany, Gov SG/Singapore) (#480)
+
+### Fixed
+- None
+
 ## [7.0.5] - 2026-03-09
 
 ### Changed

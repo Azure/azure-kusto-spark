@@ -81,6 +81,7 @@ jobs:
           cp connector/.flattened-pom.xml staging/kusto-spark_${{steps.get_version.outputs.SPARK_VERSION}}_${{steps.get_version.outputs.SCALA_VERSION}}-$version.pom
       - name: Github Release
         uses: docker://antonyurchenko/git-release:v6
+        continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CHANGELOG_FILE: "CHANGELOG.md"
