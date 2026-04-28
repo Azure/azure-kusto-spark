@@ -54,6 +54,7 @@ class ExtendedKustoClient(
     val engineKcsb: ConnectionStringBuilder,
     val ingestKcsb: ConnectionStringBuilder,
     val clusterAlias: String) {
+  KustoTrustedEndpointsRegistrar.ensureRegistered()
   lazy val engineClient: Client = ClientFactory.createClient(engineKcsb)
 
   // Reading process does not require ingest client to start working

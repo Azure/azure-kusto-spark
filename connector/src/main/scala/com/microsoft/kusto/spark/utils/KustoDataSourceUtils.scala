@@ -14,7 +14,6 @@ import com.fasterxml.jackson.core.`type`.TypeReference
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.node.ArrayNode
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
-import com.microsoft.azure.kusto.data.auth.endpoints.{KustoTrustedEndpoints, MatchRule}
 import com.microsoft.azure.kusto.data.exceptions.{DataClientException, DataServiceException}
 import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties, KustoResultSetTable}
 import com.microsoft.kusto.spark.authentication._
@@ -69,30 +68,6 @@ object KustoDataSourceUtils {
 
   private final val className = this.getClass.getSimpleName
   private final val objectMapper = new ObjectMapper().registerModule(DefaultScalaModule)
-
-  // Register sovereign cloud endpoints (Bleu, Delos, Gov SG) as trusted.
-  // These are not included in the WellKnownKustoEndpoints.json bundled with SDK v5.1.1.
-  KustoTrustedEndpoints.addTrustedHosts(
-    java.util.Arrays.asList(
-      // Bleu (France)
-      new MatchRule(".kusto.sovcloud-api.fr", false),
-      new MatchRule(".kustomfa.sovcloud-api.fr", false),
-      new MatchRule("adx.applicationinsights.azure.fr", true),
-      new MatchRule("adx.loganalytics.azure.fr", true),
-      new MatchRule("adx.monitor.azure.fr", true),
-      // Delos (Germany)
-      new MatchRule(".kusto.sovcloud-api.de", false),
-      new MatchRule(".kustomfa.sovcloud-api.de", false),
-      new MatchRule("adx.applicationinsights.azure.de", true),
-      new MatchRule("adx.loganalytics.azure.de", true),
-      new MatchRule("adx.monitor.azure.de", true),
-      // Gov SG (Singapore)
-      new MatchRule(".kusto.sovcloud-api.sg", false),
-      new MatchRule(".kustomfa.sovcloud-api.sg", false),
-      new MatchRule("adx.applicationinsights.azure.sg", true),
-      new MatchRule("adx.loganalytics.azure.sg", true),
-      new MatchRule("adx.monitor.azure.sg", true)),
-    false)
 
   def getDedupTagsPrefix(requestId: String, batchId: String): String = s"${requestId}_$batchId"
 
@@ -407,6 +382,7 @@ object KustoDataSourceUtils {
   def parseSourceParameters(
       parameters: Map[String, String],
       allowProxy: Boolean): SourceParameters = {
+    KustoTrustedEndpointsRegistrar.ensureRegistered()
     // Parse KustoTableCoordinates - these are mandatory options
     val database = parameters.get(KustoSourceOptions.KUSTO_DATABASE)
     val cluster = parameters.get(KustoSourceOptions.KUSTO_CLUSTER)
