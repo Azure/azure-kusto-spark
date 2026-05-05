@@ -10,7 +10,7 @@ permissions:
 on:
   push:
     tags:
-      - "v(2.4|3.0|4.0)_[0-9]+.[0-9]+.[0-9]+"
+      - 'v[34].0_[0-9]*.[0-9]*.[0-9]*'
   workflow_dispatch:
     inputs:
       tag:
@@ -20,11 +20,11 @@ on:
       upload_to_azure:
         description: 'Upload to Azure storage'
         required: false
-        default: false
+        default: 'false'
       github_release:
         description: 'Create Github release'
         required: false
-        default: false
+        default: 'false'
 
 jobs:
   release:
@@ -67,9 +67,9 @@ jobs:
       - name: Get versions
         id: get_version
         run: |
-          echo ::set-output name=VERSION::$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
-          echo ::set-output name=SCALA_VERSION::$(mvn help:evaluate -Dexpression=scala.version.major -q -DforceStdout)
-          echo ::set-output name=SPARK_VERSION::$(mvn help:evaluate -Dexpression=spark.version.major -q -DforceStdout)
+          echo "VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)" >> $GITHUB_OUTPUT
+          echo "SCALA_VERSION=$(mvn help:evaluate -Dexpression=scala.version.major -q -DforceStdout)" >> $GITHUB_OUTPUT
+          echo "SPARK_VERSION=$(mvn help:evaluate -Dexpression=spark.version.major -q -DforceStdout)" >> $GITHUB_OUTPUT
       - name: Move artifacts to staging
         run: |
           version=${{ steps.get_version.outputs.VERSION }}
@@ -83,11 +83,13 @@ jobs:
         uses: docker://antonyurchenko/git-release:v6
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CHANGELOG_FILE: "CHANGELOG.md"
+          TAG_PREFIX_REGEX: "v[34]\\.0_"
         with:
           args: |
-            staging/kusto-spark_${{ steps.get_version.outputs.SPARK_VERSION }}_${{ steps.get_version.outputs.SCALA_VERSION }}-${{ steps.get_version.outputs.VERSION }}-jar-with-dependencies.jar
+            staging/kusto-spark_${{ steps.get_version.outputs.SPARK_VERSION }}_${{ steps.get_version.outputs.SCALA_VERSION }}-${{ steps.get_version.outputs.VERSION }}.jar
             staging/kusto-spark_${{ steps.get_version.outputs.SPARK_VERSION }}_${{ steps.get_version.outputs.SCALA_VERSION }}-${{ steps.get_version.outputs.VERSION }}-sources.jar
-        continue-on-error: true
+            staging/kusto-spark_${{ steps.get_version.outputs.SPARK_VERSION }}_${{ steps.get_version.outputs.SCALA_VERSION }}-${{ steps.get_version.outputs.VERSION }}.pom
         if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.github_release == 'true') }}
       - name: Azure login for azuresdkpartnerdrops SA
         uses: azure/login@v2
