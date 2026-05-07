@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Version numbers follow the `{major}.{minor}.{patch}` scheme (e.g., `7.0.5`).
 Tags are created as `v4.0_{version}` (Spark 4 / master) and `v3.0_{version}` (Spark 3 / release/spark3).
 
+## [Unreleased]
+
+### Changed
+- None
+
+### Added
+- None
+
+### Fixed
+- None
+
 ## [7.0.6] - 2026-05-07
 
 ### Changed
