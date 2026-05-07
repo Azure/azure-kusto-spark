@@ -11,6 +11,10 @@
         <version>${revision}</version>
     </parent>
 
+    <properties>
+        <scalafmt.config.path>${project.basedir}/../.scalafmt.conf</scalafmt.config.path>
+    </properties>
+
     <dependencies>
         <!-- Compile Scope -->
         <dependency>

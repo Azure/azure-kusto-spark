@@ -53,6 +53,7 @@
         <xml.maven.plugin.version>1.1.0</xml.maven.plugin.version>
         <java.source.version>1.8</java.source.version>
         <java.target.version>1.8</java.target.version>
+        <scalafmt.config.path>${project.basedir}/.scalafmt.conf</scalafmt.config.path>
     </properties>
     <inceptionYear>2018</inceptionYear>
     <scm>
@@ -115,7 +116,7 @@
                         <scala>
                             <scalafmt>
                                 <version>3.5.9</version>
-                                <file>.scalafmt.conf</file>
+                                <file>${scalafmt.config.path}</file>
                             </scalafmt>
                         </scala>
                     </configuration>
