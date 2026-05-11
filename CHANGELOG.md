@@ -17,6 +17,18 @@ Tags are created as `v4.0_{version}` (Spark 4 / master) and `v3.0_{version}` (Sp
 ### Fixed
 - None
 
+## [7.0.6] - 2026-05-07
+
+### Changed
+- Bump kusto-data and kusto-ingest SDK from 7.0.5 to 7.0.8
+
+### Added
+- None
+
+### Fixed
+- Fix HTTP client timeout being 30s longer than expected (via SDK 7.0.6 fix)
+- Fix `servertimeout` option being overridden when reusing ClientRequestProperties (via SDK 7.0.6 fix)
+
 ## [7.0.5] - 2026-03-09
 
 ### Changed

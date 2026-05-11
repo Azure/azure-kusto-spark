@@ -12,6 +12,7 @@
     </parent>
     <properties>
         <maven.deploy.skip>false</maven.deploy.skip>
+        <scalafmt.config.path>${project.basedir}/../.scalafmt.conf</scalafmt.config.path>
     </properties>
     <dependencies>
         <dependency>
