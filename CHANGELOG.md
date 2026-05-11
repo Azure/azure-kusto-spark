@@ -9,13 +9,14 @@ Tags are created as `v4.0_{version}` (Spark 4 / master) and `v3.0_{version}` (Sp
 ## [Unreleased]
 
 ### Changed
-- None
+- Bump kusto-data and kusto-ingest SDK from 7.0.5 to 8.0.1
+- Bump azure-sdk-bom from 1.3.2 to 1.3.6
 
 ### Added
 - None
 
 ### Fixed
-- None
+- Fix HTTP client timeout being 30s longer than expected (via SDK 8.0.1 fix)
 
 ## [7.0.5] - 2026-03-09
 
