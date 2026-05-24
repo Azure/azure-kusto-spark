@@ -11,7 +11,7 @@ import com.microsoft.kusto.spark.datasink.{
   WriteMode
 }
 import com.microsoft.azure.kusto.ingest.{ColumnMapping, TransformationMethod}
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{FloatType, IntegerType, StringType, StructField, StructType}
 import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import com.fasterxml.jackson.databind.node.{JsonNodeFactory, ObjectNode}
 import com.microsoft.kusto.spark.exceptions.SchemaMatchException
@@ -175,5 +175,28 @@ class KustoIngestionUtilsTest extends AnyFlatSpec with Matchers {
 
     mappings(1).getColumnName shouldBe KustoConstants.SourceLocationColumnName
     mappings(1).getColumnType shouldBe cslString
+  }
+
+  fnUnderTest should "normalize legacy 'float' CslType to 'real' in CSV mapping" in {
+    val floatCol = "floatColumn"
+    val sourceSchema = StructType(Seq(StructField(floatCol, FloatType)))
+    // Target schema has the column with legacy "float" CslType
+    val targetSchema = Array(createJsonNode(floatCol, "float"))
+    val ingestionProperties = new SparkIngestionProperties()
+
+    val mappings = KustoIngestionUtils
+      .setCsvMapping(
+        WriteMode.Queued,
+        sourceSchema,
+        targetSchema,
+        ingestionProperties,
+        includeSourceLocationTransform = false,
+        SinkTableCreationMode.FailIfNotExist)
+      .toArray
+
+    mappings.length shouldBe 1
+    mappings(0).getColumnName shouldBe floatCol
+    // "float" should be normalized to "real"
+    mappings(0).getColumnType shouldBe "real"
   }
 }

@@ -122,7 +122,11 @@ object KustoIngestionUtils {
       .map(c =>
         (
           c.get(KustoConstants.Schema.NAME).asText(),
-          c.get(KustoConstants.Schema.CSLTYPE).asText()))
+          // Normalize legacy type aliases: "float" is not a valid Kusto column type, map it to "real"
+          {
+            val cslType = c.get(KustoConstants.Schema.CSLTYPE).asText()
+            if (cslType.equalsIgnoreCase("float")) "real" else cslType
+          }))
       .toMap
   }
 

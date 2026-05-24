@@ -355,6 +355,38 @@ class WriterTests extends AnyFlatSpec with Matchers {
     val res1 = byteArrayOutputStream.toString
     res1 shouldEqual "\"VGVzdCBzdHJpbmcgZm9yIHNwYXJrIGJpbmFyeQ==\"" + lineSep + "\"QSBzZWNvbmQgdGVzdCBzdHJpbmcgZm9yIHNwYXJrIGJpbmFyeQ==\"" + lineSep + lineSep
   }
+
+  "getColumnsSchema" should "normalize legacy 'float' CslType to 'real' in table schema" in {
+    val element1 = objectMapper.createObjectNode
+    element1.put(KustoConstants.Schema.CSLTYPE, "float")
+    element1.put(KustoConstants.Schema.NAME, "FloatColumn")
+    element1.put(KustoConstants.Schema.TYPE, "System.Single")
+
+    val element2 = objectMapper.createObjectNode
+    element2.put(KustoConstants.Schema.NAME, "RealColumn")
+    element2.put(KustoConstants.Schema.CSLTYPE, "real")
+    element2.put(KustoConstants.Schema.TYPE, "System.Double")
+
+    val resultTable = objectMapper.createArrayNode()
+    resultTable.add(element1)
+    resultTable.add(element2)
+
+    val parsedSchema = KDSU.extractSchemaFromResultTable(resultTable)
+    // "float" should be normalized to "real"
+    parsedSchema shouldEqual "['FloatColumn']:real,['RealColumn']:real"
+  }
+
+  "getSparkTypeToKustoTypeMap" should "map FloatType to 'real' Kusto type" in {
+    import com.microsoft.kusto.spark.utils.DataTypeMapping
+    DataTypeMapping.getSparkTypeToKustoTypeMap(FloatType) shouldEqual "real"
+    DataTypeMapping.getSparkTypeToKustoTypeMap(DoubleType) shouldEqual "real"
+  }
+
+  "KustoTypeToSparkTypeMap" should "map 'float' Kusto type to DoubleType" in {
+    import com.microsoft.kusto.spark.utils.DataTypeMapping
+    DataTypeMapping.KustoTypeToSparkTypeMap.get("float") shouldEqual Some(DoubleType)
+    DataTypeMapping.KustoTypeToSparkTypeMap.get("real") shouldEqual Some(DoubleType)
+  }
 }
 
 object WriterTests {
