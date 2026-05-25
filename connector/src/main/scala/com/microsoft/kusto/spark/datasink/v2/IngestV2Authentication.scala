@@ -16,12 +16,12 @@ import reactor.core.publisher.Mono
 import java.time.OffsetDateTime
 
 /**
- * Self-contained authentication module for the ingest-v2 SDK path. Converts
- * KustoAuthentication instances directly to azure-identity TokenCredential
- * objects required by the kusto-ingest-v2 SDK.
+ * Self-contained authentication module for the ingest-v2 SDK path. Converts KustoAuthentication
+ * instances directly to azure-identity TokenCredential objects required by the kusto-ingest-v2
+ * SDK.
  *
- * This is intentionally a standalone implementation (not a bridge) so that the
- * old v1 authentication flow can be removed independently in the future.
+ * This is intentionally a standalone implementation (not a bridge) so that the old v1
+ * authentication flow can be removed independently in the future.
  */
 object IngestV2Authentication {
 
@@ -68,8 +68,8 @@ object IngestV2Authentication {
 }
 
 /**
- * TokenCredential that returns a static access token. Used when the user
- * provides a pre-obtained token.
+ * TokenCredential that returns a static access token. Used when the user provides a pre-obtained
+ * token.
  */
 private[v2] class StaticTokenCredential(token: String) extends TokenCredential {
   override def getToken(request: TokenRequestContext): Mono[AccessToken] = {
@@ -82,11 +82,10 @@ private[v2] class StaticTokenCredential(token: String) extends TokenCredential {
 }
 
 /**
- * TokenCredential that delegates to a user-provided callback (Callable[String])
- * for token acquisition.
+ * TokenCredential that delegates to a user-provided callback (Callable[String]) for token
+ * acquisition.
  */
-private[v2] class CallbackTokenCredential(
-    callback: java.util.concurrent.Callable[String])
+private[v2] class CallbackTokenCredential(callback: java.util.concurrent.Callable[String])
     extends TokenCredential {
   override def getToken(request: TokenRequestContext): Mono[AccessToken] = {
     Mono.fromCallable(() => getTokenSync(request))

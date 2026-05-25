@@ -18,15 +18,14 @@ import java.util.UUID
 import scala.jdk.CollectionConverters._
 
 /**
- * Self-contained Parquet writer for the kusto-ingest-v2 SDK. Uses Spark's
- * native vectorized Parquet writer to write DataFrames directly to Azure Blob
- * Storage, then submits the Parquet files for ingestion via the ingest-v2 SDK.
+ * Self-contained Parquet writer for the kusto-ingest-v2 SDK. Uses Spark's native vectorized
+ * Parquet writer to write DataFrames directly to Azure Blob Storage, then submits the Parquet
+ * files for ingestion via the ingest-v2 SDK.
  *
- * This eliminates all custom CSV serialization and leverages Spark's built-in
- * columnar encoding, compression, and type handling.
+ * This eliminates all custom CSV serialization and leverages Spark's built-in columnar encoding,
+ * compression, and type handling.
  *
- * Flow:
- *   DataFrame → Spark Parquet Writer → Azure Blob → BlobSource → ingest-v2 SDK
+ * Flow: DataFrame → Spark Parquet Writer → Azure Blob → BlobSource → ingest-v2 SDK
  */
 object IngestV2ParquetWriter {
   private val logger = LoggerFactory.getLogger(getClass)
@@ -35,14 +34,22 @@ object IngestV2ParquetWriter {
   /**
    * Write a DataFrame as Parquet to blob storage, then ingest via kusto-ingest-v2.
    *
-   * @param data            The DataFrame to write
-   * @param database        Target Kusto database
-   * @param table           Target Kusto table
-   * @param queuedClient    kusto-ingest-v2 QueuedIngestClient
-   * @param containerProvider Provides blob container URL + SAS
-   * @param writeOptions    Write configuration
-   * @param batchIdForTracing Batch identifier for tracing
-   * @return List of IngestionOperations for status tracking
+   * @param data
+   *   The DataFrame to write
+   * @param database
+   *   Target Kusto database
+   * @param table
+   *   Target Kusto table
+   * @param queuedClient
+   *   kusto-ingest-v2 QueuedIngestClient
+   * @param containerProvider
+   *   Provides blob container URL + SAS
+   * @param writeOptions
+   *   Write configuration
+   * @param batchIdForTracing
+   *   Batch identifier for tracing
+   * @return
+   *   List of IngestionOperations for status tracking
    */
   def ingestDataFrame(
       data: DataFrame,
@@ -68,7 +75,12 @@ object IngestV2ParquetWriter {
     val blobBasePath = s"${containerAndSas.containerUrl}/$outputDir"
 
     // Configure Hadoop FS with SAS token for this container
-    configureHadoopFs(sparkSession, storageAccount, containerName, containerAndSas.sas, endpointSuffix)
+    configureHadoopFs(
+      sparkSession,
+      storageAccount,
+      containerName,
+      containerAndSas.sas,
+      endpointSuffix)
 
     // Build the wasbs:// path for Spark to write to
     val wasbs = s"wasbs://$containerName@$storageAccount.$endpointSuffix/$outputDir"
@@ -90,7 +102,8 @@ object IngestV2ParquetWriter {
     val outputPath = new org.apache.hadoop.fs.Path(wasbs)
     val parquetFiles = fs
       .listStatus(outputPath)
-      .filter(f => f.getPath.getName.endsWith(".parquet") || f.getPath.getName.endsWith(".snappy.parquet"))
+      .filter(f =>
+        f.getPath.getName.endsWith(".parquet") || f.getPath.getName.endsWith(".snappy.parquet"))
       .map(f => s"$blobBasePath/${f.getPath.getName}?${containerAndSas.sas}")
 
     logger.info(
@@ -104,7 +117,8 @@ object IngestV2ParquetWriter {
     }
 
     // Build ingestion properties (no mapping needed for Parquet — schema embedded)
-    val propsBuilder = IngestRequestPropertiesBuilder.create()
+    val propsBuilder = IngestRequestPropertiesBuilder
+      .create()
       .withEnableTracking(true)
 
     writeOptions.maybeSparkIngestionProperties.foreach { sparkProps =>
@@ -151,8 +165,8 @@ object IngestV2ParquetWriter {
   }
 
   /**
-   * Configure Hadoop filesystem with SAS token for blob access.
-   * Uses WASBS protocol with SAS-based authentication.
+   * Configure Hadoop filesystem with SAS token for blob access. Uses WASBS protocol with
+   * SAS-based authentication.
    */
   private def configureHadoopFs(
       sparkSession: SparkSession,
@@ -165,9 +179,7 @@ object IngestV2ParquetWriter {
 
     // Set the filesystem implementation for wasbs://
     hadoopConf.set("fs.azure", "org.apache.hadoop.fs.azure.NativeAzureFileSystem")
-    hadoopConf.set(
-      "fs.wasbs.impl",
-      "org.apache.hadoop.fs.azure.NativeAzureFileSystem$Secure")
+    hadoopConf.set("fs.wasbs.impl", "org.apache.hadoop.fs.azure.NativeAzureFileSystem$Secure")
 
     // Set SAS token for this specific container
     val sasKey = s"fs.azure.sas.$containerName.$storageAccount.$endpointSuffix"

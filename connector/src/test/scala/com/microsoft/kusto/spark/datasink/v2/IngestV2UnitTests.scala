@@ -11,9 +11,8 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
 /**
- * Unit tests for the kusto-ingest-v2 integration. Tests configuration parsing,
- * routing decisions, and authentication mapping without requiring a live Kusto
- * cluster.
+ * Unit tests for the kusto-ingest-v2 integration. Tests configuration parsing, routing decisions,
+ * and authentication mapping without requiring a live Kusto cluster.
  */
 class IngestV2UnitTests extends AnyFlatSpec with Matchers {
 
@@ -29,9 +28,8 @@ class IngestV2UnitTests extends AnyFlatSpec with Matchers {
   // =====================================================================
 
   "useIngestV2 config" should "default to false when not specified" in {
-    val defaultOptions = WriteOptions(
-      kustoCustomDebugWriteOptions =
-        new com.microsoft.kusto.spark.utils.KustoCustomDebugWriteOptions())
+    val defaultOptions = WriteOptions(kustoCustomDebugWriteOptions =
+      new com.microsoft.kusto.spark.utils.KustoCustomDebugWriteOptions())
     defaultOptions.useIngestV2 shouldBe false
   }
 
@@ -44,9 +42,8 @@ class IngestV2UnitTests extends AnyFlatSpec with Matchers {
   }
 
   "ingestionFormat config" should "default to CSV" in {
-    val defaultOptions = WriteOptions(
-      kustoCustomDebugWriteOptions =
-        new com.microsoft.kusto.spark.utils.KustoCustomDebugWriteOptions())
+    val defaultOptions = WriteOptions(kustoCustomDebugWriteOptions =
+      new com.microsoft.kusto.spark.utils.KustoCustomDebugWriteOptions())
     defaultOptions.ingestionFormat shouldBe IngestionFormat.CSV
   }
 
@@ -71,10 +68,7 @@ class IngestV2UnitTests extends AnyFlatSpec with Matchers {
   "IngestV2Authentication" should "create TokenCredential from AadApplicationAuthentication" in {
     import com.microsoft.kusto.spark.authentication.AadApplicationAuthentication
 
-    val auth = AadApplicationAuthentication(
-      "test-app-id",
-      "test-app-key",
-      "test-tenant-id")
+    val auth = AadApplicationAuthentication("test-app-id", "test-app-key", "test-tenant-id")
 
     val credential = IngestV2Authentication.createTokenCredential(auth)
     credential should not be null
