@@ -12,15 +12,8 @@ import com.microsoft.azure.kusto.ingest.v2.common.models.mapping.IngestionMappin
 import com.microsoft.azure.kusto.ingest.v2.common.models.mapping.IngestionMapping.IngestionMappingType
 import com.microsoft.azure.kusto.ingest.v2.models.{Format, IngestRequestProperties}
 import com.microsoft.azure.kusto.ingest.v2.source.StreamSource
-import com.microsoft.kusto.spark.datasink.{
-  CountingWriter,
-  RowCSVWriterUtils,
-  WriteOptions
-}
-import com.microsoft.kusto.spark.utils.{
-  ByteArrayOutputStreamWithOffset,
-  KustoConstants => KCONST
-}
+import com.microsoft.kusto.spark.datasink.{CountingWriter, RowCSVWriterUtils, WriteOptions}
+import com.microsoft.kusto.spark.utils.{ByteArrayOutputStreamWithOffset, KustoConstants => KCONST}
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types.StructType
@@ -33,9 +26,9 @@ import scala.collection.mutable.ListBuffer
 /**
  * Self-contained streaming writer using the kusto-ingest-v2 SDK. Uses
  * ManagedStreamingIngestClient which automatically handles:
- * - Streaming ingestion for data ≤ 10MB (direct HTTP body to engine)
- * - Automatic fallback to queued ingestion for larger data
- * - Per-table backoff state machine
+ *   - Streaming ingestion for data ≤ 10MB (direct HTTP body to engine)
+ *   - Automatic fallback to queued ingestion for larger data
+ *   - Per-table backoff state machine
  *
  * This class has NO dependency on ExtendedKustoClient or KustoClientCache.
  */
@@ -43,11 +36,11 @@ object IngestV2StreamingWriter {
   private val logger = LoggerFactory.getLogger(getClass)
 
   /**
-   * Ingest rows from a single partition using the kusto-ingest-v2 SDK managed
-   * streaming path. Rows are serialized to CSV in memory chunks and sent via
-   * the ManagedStreamingIngestClient.
+   * Ingest rows from a single partition using the kusto-ingest-v2 SDK managed streaming path.
+   * Rows are serialized to CSV in memory chunks and sent via the ManagedStreamingIngestClient.
    *
-   * @return The list of IngestionOperations for status tracking
+   * @return
+   *   The list of IngestionOperations for status tracking
    */
   def ingestPartition(
       rows: Iterator[InternalRow],
@@ -84,13 +77,7 @@ object IngestV2StreamingWriter {
           partitionId,
           batchIdForTracing)
 
-        val op = streamData(
-          managedStreamingClient,
-          database,
-          table,
-          data,
-          size,
-          writeOptions)
+        val op = streamData(managedStreamingClient, database, table, data, size, writeOptions)
         operations += op
 
         // Reset for next chunk
@@ -114,13 +101,7 @@ object IngestV2StreamingWriter {
         partitionId,
         batchIdForTracing)
 
-      val op = streamData(
-        managedStreamingClient,
-        database,
-        table,
-        data,
-        size,
-        writeOptions)
+      val op = streamData(managedStreamingClient, database, table, data, size, writeOptions)
       operations += op
     }
 
@@ -163,8 +144,7 @@ object IngestV2StreamingWriter {
         builder.withSkipBatching(true)
       }
       Option(sparkProps.csvMappingNameReference).filter(_.nonEmpty).foreach { ref =>
-        builder.withIngestionMapping(
-          new IngestionMapping(ref, IngestionMappingType.CSV))
+        builder.withIngestionMapping(new IngestionMapping(ref, IngestionMappingType.CSV))
       }
     }
 

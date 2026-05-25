@@ -19,12 +19,11 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.immutable
 
 /**
- * End-to-end tests for the kusto-ingest-v2 SDK integration. These tests mirror
- * KustoSinkBatchE2E but use the `useIngestV2 = true` configuration to exercise
- * the v2 write path.
+ * End-to-end tests for the kusto-ingest-v2 SDK integration. These tests mirror KustoSinkBatchE2E
+ * but use the `useIngestV2 = true` configuration to exercise the v2 write path.
  *
- * Run with: mvn test -pl connector -Dtest=KustoSinkIngestV2E2E -DKustoE2E
- * Requires environment variables: kustoCluster, kustoDatabase, storageAccountUrl
+ * Run with: mvn test -pl connector -Dtest=KustoSinkIngestV2E2E -DKustoE2E Requires environment
+ * variables: kustoCluster, kustoDatabase, storageAccountUrl
  */
 class KustoSinkIngestV2E2E extends AnyFlatSpec with BeforeAndAfterAll {
   private val className = this.getClass.getSimpleName

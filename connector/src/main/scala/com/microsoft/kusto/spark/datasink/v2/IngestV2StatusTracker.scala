@@ -10,9 +10,8 @@ import org.slf4j.LoggerFactory
 import java.time.Duration
 
 /**
- * Self-contained status tracker for kusto-ingest-v2 SDK ingestion operations.
- * Uses the SDK's built-in REST-based status tracking (no Azure Storage Queue
- * polling).
+ * Self-contained status tracker for kusto-ingest-v2 SDK ingestion operations. Uses the SDK's
+ * built-in REST-based status tracking (no Azure Storage Queue polling).
  *
  * This replaces v1's queue-based polling approach.
  */
@@ -21,10 +20,11 @@ object IngestV2StatusTracker {
   private val DefaultPollingInterval: Duration = Duration.ofSeconds(10)
 
   /**
-   * Polls all operations until completion or timeout. Uses the kusto-ingest-v2
-   * SDK's built-in `pollForCompletion` method which uses REST API.
+   * Polls all operations until completion or timeout. Uses the kusto-ingest-v2 SDK's built-in
+   * `pollForCompletion` method which uses REST API.
    *
-   * @return true if all operations completed successfully, false if any failed
+   * @return
+   *   true if all operations completed successfully, false if any failed
    */
   def waitForCompletion(
       operations: List[IngestionOperation],
@@ -59,10 +59,7 @@ object IngestV2StatusTracker {
         failed == 0 && inProgress == 0
       } catch {
         case e: Exception =>
-          logger.error(
-            "Failed to poll operation {}: {}",
-            op.getOperationId,
-            e.getMessage)
+          logger.error("Failed to poll operation {}: {}", op.getOperationId, e.getMessage)
           false
       }
     }

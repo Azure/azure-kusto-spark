@@ -566,7 +566,7 @@ object KustoDataSourceUtils {
       .trim
       .toLowerCase match {
       case "parquet" => IngestionFormat.Parquet
-      case _         => IngestionFormat.CSV
+      case _ => IngestionFormat.CSV
     }
 
     val writeOptions = WriteOptions(

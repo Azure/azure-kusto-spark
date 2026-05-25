@@ -13,11 +13,7 @@ import com.microsoft.azure.kusto.ingest.v2.common.models.mapping.IngestionMappin
 import com.microsoft.azure.kusto.ingest.v2.models.{Format, IngestRequestProperties}
 import com.microsoft.azure.kusto.ingest.v2.source.{BlobSource, CompressionType}
 import com.microsoft.azure.storage.blob.{BlobRequestOptions, CloudBlockBlob}
-import com.microsoft.kusto.spark.datasink.{
-  CountingWriter,
-  RowCSVWriterUtils,
-  WriteOptions
-}
+import com.microsoft.kusto.spark.datasink.{CountingWriter, RowCSVWriterUtils, WriteOptions}
 import com.microsoft.kusto.spark.utils.{
   ContainerAndSas,
   KustoConstants => KCONST,
@@ -40,9 +36,9 @@ import scala.jdk.CollectionConverters._
 
 /**
  * Self-contained queued writer using the kusto-ingest-v2 SDK. Handles:
- * - CSV serialization of Spark rows (via shared RowCSVWriterUtils)
- * - GZip-compressed blob upload (duplicate of v1's createBlobWriter logic)
- * - Multi-blob batch ingestion via kusto-ingest-v2 SDK QueuedIngestClient
+ *   - CSV serialization of Spark rows (via shared RowCSVWriterUtils)
+ *   - GZip-compressed blob upload (duplicate of v1's createBlobWriter logic)
+ *   - Multi-blob batch ingestion via kusto-ingest-v2 SDK QueuedIngestClient
  *
  * This class has NO dependency on ExtendedKustoClient or KustoClientCache.
  */
@@ -54,11 +50,11 @@ object IngestV2QueuedWriter {
     DateTimeFormatter.ofPattern("HH-mm-ss-SSSSSS").withZone(ZoneId.systemDefault)
 
   /**
-   * Ingest rows from a single partition using the kusto-ingest-v2 SDK queued
-   * path. Serializes rows to CSV, uploads to blob, batches blobs, then calls
-   * kusto-ingest-v2 SDK for ingestion.
+   * Ingest rows from a single partition using the kusto-ingest-v2 SDK queued path. Serializes
+   * rows to CSV, uploads to blob, batches blobs, then calls kusto-ingest-v2 SDK for ingestion.
    *
-   * @return The list of IngestionOperations for status tracking
+   * @return
+   *   The list of IngestionOperations for status tracking
    */
   def ingestPartition(
       rows: Iterator[InternalRow],
@@ -81,21 +77,15 @@ object IngestV2QueuedWriter {
 
     var blobNumber = 0
     var curBlobUUID = UUID.randomUUID().toString
-    var blobWriter = createBlobWriter(
-      containerProvider,
-      blobNamePrefix,
-      partitionIdStr,
-      blobNumber,
-      curBlobUUID)
+    var blobWriter =
+      createBlobWriter(containerProvider, blobNamePrefix, partitionIdStr, blobNumber, curBlobUUID)
 
     for (row <- rows) {
       RowCSVWriterUtils.writeRowAsCSV(row, schema, timeZone, blobWriter.csvWriter)
 
       if (blobWriter.csvWriter.getCounter >= maxBlobSize) {
         finalizeBlobWrite(blobWriter)
-        completedBlobs += BlobSourceWithInfo(
-          blobWriter.blobUrl,
-          blobWriter.csvWriter.getCounter)
+        completedBlobs += BlobSourceWithInfo(blobWriter.blobUrl, blobWriter.csvWriter.getCounter)
 
         logger.info(
           "Sealed blob {} in partition {} (size: {} bytes)",
@@ -105,12 +95,7 @@ object IngestV2QueuedWriter {
 
         // If we've accumulated MaxBlobsPerBatch, flush the batch
         if (completedBlobs.size >= MaxBlobsPerBatch) {
-          val op = ingestBatch(
-            queuedClient,
-            database,
-            table,
-            completedBlobs.toList,
-            writeOptions)
+          val op = ingestBatch(queuedClient, database, table, completedBlobs.toList, writeOptions)
           operations += op
           completedBlobs.clear()
         }
@@ -129,19 +114,12 @@ object IngestV2QueuedWriter {
     // Finalize the last blob
     finalizeBlobWrite(blobWriter)
     if (blobWriter.csvWriter.getCounter > 0) {
-      completedBlobs += BlobSourceWithInfo(
-        blobWriter.blobUrl,
-        blobWriter.csvWriter.getCounter)
+      completedBlobs += BlobSourceWithInfo(blobWriter.blobUrl, blobWriter.csvWriter.getCounter)
     }
 
     // Ingest remaining blobs
     if (completedBlobs.nonEmpty) {
-      val op = ingestBatch(
-        queuedClient,
-        database,
-        table,
-        completedBlobs.toList,
-        writeOptions)
+      val op = ingestBatch(queuedClient, database, table, completedBlobs.toList, writeOptions)
       operations += op
     }
 
@@ -191,8 +169,7 @@ object IngestV2QueuedWriter {
         builder.withSkipBatching(true)
       }
       Option(sparkProps.csvMappingNameReference).filter(_.nonEmpty).foreach { ref =>
-        builder.withIngestionMapping(
-          new IngestionMapping(ref, IngestionMappingType.CSV))
+        builder.withIngestionMapping(new IngestionMapping(ref, IngestionMappingType.CSV))
       }
     }
 
@@ -208,7 +185,8 @@ object IngestV2QueuedWriter {
 
     val now = Instant.now()
     val blobName =
-      s"${KustoQueryUtils.simplifyName(blobNamePrefix)}_${blobUUID}_${partitionId}_${blobNumber}_${formatter.format(now)}_spark.csv.gz"
+      s"${KustoQueryUtils.simplifyName(blobNamePrefix)}_${blobUUID}_${partitionId}_${blobNumber}_${formatter
+          .format(now)}_spark.csv.gz"
 
     val containerAndSas = containerProvider()
     val blobUrl = s"${containerAndSas.containerUrl}/$blobName${containerAndSas.sas}"

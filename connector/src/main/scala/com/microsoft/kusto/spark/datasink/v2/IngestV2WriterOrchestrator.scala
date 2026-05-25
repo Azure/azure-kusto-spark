@@ -23,25 +23,25 @@ import java.time.{Clock, Instant}
 import scala.jdk.CollectionConverters._
 
 /**
- * Top-level orchestrator for the kusto-ingest-v2 SDK write path. This is the
- * single entry point called from KustoWriter when useIngestV2 = true.
+ * Top-level orchestrator for the kusto-ingest-v2 SDK write path. This is the single entry point
+ * called from KustoWriter when useIngestV2 = true.
  *
  * Responsibilities:
- * - Creates its own IngestV2ClientProvider (self-contained lifecycle)
- * - Decides queued vs streaming based on WriteMode
- * - Handles transactional finalization (poll → move extents → cleanup)
- * - Has NO shared state with the v1 write path
+ *   - Creates its own IngestV2ClientProvider (self-contained lifecycle)
+ *   - Decides queued vs streaming based on WriteMode
+ *   - Handles transactional finalization (poll → move extents → cleanup)
+ *   - Has NO shared state with the v1 write path
  *
- * Note: Still uses ExtendedKustoClient for management commands (table creation,
- * schema validation, move extents) since those are not ingestion operations.
+ * Note: Still uses ExtendedKustoClient for management commands (table creation, schema
+ * validation, move extents) since those are not ingestion operations.
  */
 object IngestV2WriterOrchestrator {
   private val logger = LoggerFactory.getLogger(getClass)
   private val ConnectorVersion = KCONST.ClientName
 
   /**
-   * Main entry point: write a DataFrame to Kusto using the kusto-ingest-v2 SDK.
-   * Called from KustoWriter.write() when useIngestV2 = true.
+   * Main entry point: write a DataFrame to Kusto using the kusto-ingest-v2 SDK. Called from
+   * KustoWriter.write() when useIngestV2 = true.
    */
   def write(
       data: DataFrame,
@@ -90,7 +90,7 @@ object IngestV2WriterOrchestrator {
 
     try {
       if (writeOptions.ingestionFormat == IngestionFormat.Parquet &&
-          writeOptions.writeMode != WriteMode.KustoStreaming) {
+        writeOptions.writeMode != WriteMode.KustoStreaming) {
         // Parquet mode: use Spark's native Parquet writer → blob → ingest-v2
         logger.info("Using Parquet ingestion format (Spark native writer)")
         val operations = IngestV2ParquetWriter.ingestDataFrame(
