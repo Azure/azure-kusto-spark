@@ -10,6 +10,7 @@ import com.microsoft.kusto.spark.datasink.SchemaAdjustmentMode.{
 }
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
 import com.microsoft.kusto.spark.datasink.WriteMode.{Transactional, WriteMode}
+import com.microsoft.kusto.spark.datasink.IngestionFormat.IngestionFormat
 import com.microsoft.kusto.spark.utils.{KustoConstants, KustoCustomDebugWriteOptions}
 
 import java.util.UUID
@@ -87,6 +88,16 @@ object KustoSinkOptions extends KustoOptions {
 
   // The ingestion storage to use. This expects a serialized json of type Array[IngestionStorageParameters]
   val KUSTO_INGESTION_STORAGE: String = newOption("kustoIngestionStorageContainer")
+
+  // If set to 'true', enables the use of the kusto-ingest-v2 SDK for ingestion.
+  // This uses REST-based queued ingestion (no Azure Storage Queue), multi-blob batch,
+  // and REST-based status tracking. Default: 'false'. Experimental/Preview feature.
+  val KUSTO_USE_INGEST_V2: String = newOption("useIngestV2")
+
+  // The ingestion format to use when useIngestV2 is enabled.
+  // Supported values: "csv" (default), "parquet".
+  // "parquet" uses Spark's native Parquet writer for vectorized, columnar ingestion.
+  val KUSTO_INGESTION_FORMAT: String = newOption("ingestionFormat")
 }
 
 object SinkTableCreationMode extends Enumeration {
@@ -102,6 +113,11 @@ object SchemaAdjustmentMode extends Enumeration {
 object WriteMode extends Enumeration {
   type WriteMode = Value
   val Transactional, Queued, KustoStreaming = Value
+}
+
+object IngestionFormat extends Enumeration {
+  type IngestionFormat = Value
+  val CSV, Parquet = Value
 }
 
 final case class WriteOptions(
@@ -123,4 +139,6 @@ final case class WriteOptions(
     userTempTableName: Option[String] = None,
     streamIngestUncompressedMaxSize: Int = KustoConstants.DefaultMaxStreamingBytesUncompressed,
     maybeIngestionBlobStorage: Option[Array[IngestionStorageParameters]] = None,
-    kustoCustomDebugWriteOptions: KustoCustomDebugWriteOptions)
+    kustoCustomDebugWriteOptions: KustoCustomDebugWriteOptions,
+    useIngestV2: Boolean = false,
+    ingestionFormat: IngestionFormat = IngestionFormat.CSV)

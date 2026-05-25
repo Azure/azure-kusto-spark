@@ -79,6 +79,27 @@ object KustoWriter {
       authentication: KustoAuthentication,
       writeOptions: WriteOptions,
       crp: ClientRequestProperties): Unit = {
+
+    // Route to kusto-ingest-v2 SDK path when enabled via configuration
+    if (writeOptions.useIngestV2) {
+      val table = tableCoordinates.table.get
+      val batchIdIfExists = batchId.map(b => s"${b.toString}").getOrElse("")
+      val tmpTableName: String = KDSU.generateTempTableName(
+        data.sparkSession.sparkContext.appName,
+        table,
+        writeOptions.requestId,
+        batchIdIfExists,
+        writeOptions.userTempTableName)
+      v2.IngestV2WriterOrchestrator.write(
+        data,
+        tableCoordinates,
+        authentication,
+        writeOptions,
+        tmpTableName,
+        crp)
+      return
+    }
+
     val batchIdIfExists = batchId.map(b => s"${b.toString}").getOrElse("")
     val kustoClient = KustoClientCache.getClient(
       tableCoordinates.clusterUrl,
