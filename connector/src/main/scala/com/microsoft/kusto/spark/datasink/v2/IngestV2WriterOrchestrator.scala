@@ -17,7 +17,6 @@ import com.microsoft.kusto.spark.utils.{
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.util.CollectionAccumulator
-import org.slf4j.LoggerFactory
 
 import java.time.{Clock, Instant}
 import scala.jdk.CollectionConverters._
@@ -36,7 +35,7 @@ import scala.jdk.CollectionConverters._
  * validation, move extents) since those are not ingestion operations.
  */
 object IngestV2WriterOrchestrator {
-  private val logger = LoggerFactory.getLogger(getClass)
+  private val myName = this.getClass.getSimpleName
   private val ConnectorVersion = KCONST.ClientName
 
   /**
@@ -56,12 +55,9 @@ object IngestV2WriterOrchestrator {
     val dmUrl = tableCoordinates.ingestionUrl.getOrElse(
       s"https://ingest-${tableCoordinates.clusterUrl.stripPrefix("https://")}")
 
-    logger.info(
-      "Starting kusto-ingest-v2 write to {}.{} (mode: {}, DM URL: {})",
-      database,
-      table,
-      writeOptions.writeMode.toString,
-      dmUrl)
+    KDSU.logInfo(myName,
+      s"Starting ingest-v2 write to $database.$table (mode: ${writeOptions.writeMode}, format: ${writeOptions.ingestionFormat})")
+    KDSU.logDebug(myName, s"DM URL: $dmUrl, requestId: ${writeOptions.requestId}")
 
     // Create self-contained ingest-v2 client provider
     val clientProvider = new IngestV2ClientProvider(dmUrl, authentication, ConnectorVersion)
@@ -92,7 +88,7 @@ object IngestV2WriterOrchestrator {
       if (writeOptions.ingestionFormat == IngestionFormat.Parquet &&
         writeOptions.writeMode != WriteMode.KustoStreaming) {
         // Parquet mode: use Spark's native Parquet writer → blob → ingest-v2
-        logger.info("Using Parquet ingestion format (Spark native writer)")
+        KDSU.logInfo(myName, s"Using Parquet ingestion format for $database.$ingestionTable")
         val operations = IngestV2ParquetWriter.ingestDataFrame(
           data,
           database,
@@ -115,6 +111,7 @@ object IngestV2WriterOrchestrator {
         }
       } else if (writeOptions.writeMode == WriteMode.KustoStreaming) {
         // Streaming mode via kusto-ingest-v2 ManagedStreamingIngestClient
+        KDSU.logInfo(myName, s"Using streaming ingestion for $database.$ingestionTable")
         val allOperations = new CollectionAccumulator[List[IngestionOperation]]
         rdd.sparkContext.register(allOperations, "ingestV2StreamingOps")
 
@@ -146,6 +143,7 @@ object IngestV2WriterOrchestrator {
         }
       } else {
         // Queued mode via kusto-ingest-v2 QueuedIngestClient (default)
+        KDSU.logInfo(myName, s"Using queued CSV ingestion for $database.$ingestionTable")
         val allOperations = new CollectionAccumulator[List[IngestionOperation]]
         rdd.sparkContext.register(allOperations, "ingestV2QueuedOps")
 
@@ -178,15 +176,16 @@ object IngestV2WriterOrchestrator {
         }
       }
 
-      logger.info("kusto-ingest-v2 write completed successfully for {}.{}", database, table)
+      KDSU.logInfo(myName, s"Ingest-v2 write completed successfully for $database.$table")
     } catch {
       case e: Exception =>
+        KDSU.logError(myName, s"Ingest-v2 write failed for $database.$table: ${e.getMessage}")
         if (writeOptions.writeMode == WriteMode.Transactional) {
           try {
             kustoClient.cleanupIngestionByProducts(database, tmpTableName, crp)
           } catch {
             case cleanup: Exception =>
-              logger.warn("Failed to cleanup after failure: {}", cleanup.getMessage)
+              KDSU.logWarn(myName, s"Failed to cleanup after failure: ${cleanup.getMessage}")
           }
         }
         throw e

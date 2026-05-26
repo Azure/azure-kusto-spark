@@ -5,7 +5,7 @@ package com.microsoft.kusto.spark.datasink.v2
 
 import com.microsoft.azure.kusto.ingest.v2.client.{IngestionOperation, QueuedIngestClient}
 import com.microsoft.azure.kusto.ingest.v2.models.{Status, StatusResponse}
-import org.slf4j.LoggerFactory
+import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 
 import java.time.Duration
 
@@ -16,7 +16,7 @@ import java.time.Duration
  * This replaces v1's queue-based polling approach.
  */
 object IngestV2StatusTracker {
-  private val logger = LoggerFactory.getLogger(getClass)
+  private val myName = this.getClass.getSimpleName
   private val DefaultPollingInterval: Duration = Duration.ofSeconds(10)
 
   /**
@@ -33,10 +33,8 @@ object IngestV2StatusTracker {
 
     if (operations.isEmpty) return true
 
-    logger.info(
-      "Waiting for {} ingestion operations to complete (timeout: {})",
-      operations.size.toString,
-      timeout.toString)
+    KDSU.logInfo(myName,
+      s"Waiting for ${operations.size} ingestion operations to complete (timeout: $timeout)")
 
     val results = operations.map { op =>
       try {
@@ -49,29 +47,23 @@ object IngestV2StatusTracker {
         val failed = Option(status.getFailed).map(_.longValue()).getOrElse(0L)
         val inProgress = Option(status.getInProgress).map(_.longValue()).getOrElse(0L)
 
-        logger.info(
-          "Operation {} completed: succeeded={}, failed={}, inProgress={}",
-          op.getOperationId,
-          succeeded.toString,
-          failed.toString,
-          inProgress.toString)
+        KDSU.logDebug(myName,
+          s"Operation ${op.getOperationId}: succeeded=$succeeded, failed=$failed, inProgress=$inProgress")
 
         failed == 0 && inProgress == 0
       } catch {
         case e: Exception =>
-          logger.error("Failed to poll operation {}: {}", op.getOperationId, e.getMessage)
+          KDSU.logError(myName, s"Failed to poll operation ${op.getOperationId}: ${e.getMessage}")
           false
       }
     }
 
     val allSucceeded = results.forall(identity)
     if (allSucceeded) {
-      logger.info("All {} operations completed successfully", operations.size.toString)
+      KDSU.logInfo(myName, s"All ${operations.size} operations completed successfully")
     } else {
-      logger.error(
-        "Some operations failed: {}/{} succeeded",
-        results.count(identity).toString,
-        results.size.toString)
+      KDSU.logError(myName,
+        s"Some operations failed: ${results.count(identity)}/${results.size} succeeded")
     }
     allSucceeded
   }

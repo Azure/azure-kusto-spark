@@ -13,11 +13,14 @@ import com.microsoft.azure.kusto.ingest.v2.common.models.mapping.IngestionMappin
 import com.microsoft.azure.kusto.ingest.v2.models.{Format, IngestRequestProperties}
 import com.microsoft.azure.kusto.ingest.v2.source.StreamSource
 import com.microsoft.kusto.spark.datasink.{CountingWriter, RowCSVWriterUtils, WriteOptions}
-import com.microsoft.kusto.spark.utils.{ByteArrayOutputStreamWithOffset, KustoConstants => KCONST}
+import com.microsoft.kusto.spark.utils.{
+  ByteArrayOutputStreamWithOffset,
+  KustoConstants => KCONST,
+  KustoDataSourceUtils => KDSU
+}
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types.StructType
-import org.slf4j.LoggerFactory
 
 import java.io.{BufferedWriter, ByteArrayInputStream, OutputStreamWriter}
 import java.util.{TimeZone, UUID}
@@ -33,7 +36,7 @@ import scala.collection.mutable.ListBuffer
  * This class has NO dependency on ExtendedKustoClient or KustoClientCache.
  */
 object IngestV2StreamingWriter {
-  private val logger = LoggerFactory.getLogger(getClass)
+  private val myName = this.getClass.getSimpleName
 
   /**
    * Ingest rows from a single partition using the kusto-ingest-v2 SDK managed streaming path.
@@ -56,6 +59,8 @@ object IngestV2StreamingWriter {
     val maxStreamingSize = writeOptions.streamIngestUncompressedMaxSize
     val operations = ListBuffer[IngestionOperation]()
 
+    KDSU.logInfo(myName, s"Starting partition $partitionId for $database.$table (streaming)")
+
     var byteArrayOutputStream = new ByteArrayOutputStreamWithOffset()
     var streamWriter = new OutputStreamWriter(byteArrayOutputStream)
     var writer = new BufferedWriter(streamWriter)
@@ -71,11 +76,7 @@ object IngestV2StreamingWriter {
         val data = byteArrayOutputStream.toByteArray
         val size = byteArrayOutputStream.size()
 
-        logger.info(
-          "Streaming {} bytes from partition {} batch {} via kusto-ingest-v2 SDK",
-          size.toString,
-          partitionId,
-          batchIdForTracing)
+        KDSU.logDebug(myName, s"Partition $partitionId: streaming $size bytes")
 
         val op = streamData(managedStreamingClient, database, table, data, size, writeOptions)
         operations += op
@@ -95,20 +96,14 @@ object IngestV2StreamingWriter {
       val data = byteArrayOutputStream.toByteArray
       val size = byteArrayOutputStream.size()
 
-      logger.info(
-        "Streaming final {} bytes from partition {} batch {} via kusto-ingest-v2 SDK",
-        size.toString,
-        partitionId,
-        batchIdForTracing)
+      KDSU.logDebug(myName, s"Partition $partitionId: streaming final $size bytes")
 
       val op = streamData(managedStreamingClient, database, table, data, size, writeOptions)
       operations += op
     }
 
-    logger.info(
-      "Finished streaming partition {} with {} chunks",
-      partitionId,
-      operations.size.toString)
+    KDSU.logInfo(myName,
+      s"Partition $partitionId: completed streaming with ${operations.size} chunks")
 
     operations.toList
   }
