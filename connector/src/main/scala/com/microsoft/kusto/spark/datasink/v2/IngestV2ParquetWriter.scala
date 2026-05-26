@@ -128,7 +128,8 @@ object IngestV2ParquetWriter {
     }
 
     blobSources.grouped(MaxBlobsPerBatch).foreach { batch =>
-      KDSU.logInfo(myName,
+      KDSU.logInfo(
+        myName,
         s"Submitting batch of ${batch.length} Parquet files for ingestion to $database.$table")
 
       val response = queuedClient
@@ -144,7 +145,8 @@ object IngestV2ParquetWriter {
       operations += operation
     }
 
-    KDSU.logInfo(myName,
+    KDSU.logInfo(
+      myName,
       s"Submitted ${operations.size} ingestion operations for ${parquetFiles.length} Parquet files (requestId: $requestId)")
 
     operations.toList

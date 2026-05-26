@@ -89,7 +89,8 @@ object IngestV2QueuedWriter {
         finalizeBlobWrite(blobWriter)
         completedBlobs += BlobSourceWithInfo(blobWriter.blobUrl, blobWriter.csvWriter.getCounter)
 
-        KDSU.logDebug(myName,
+        KDSU.logDebug(
+          myName,
           s"Partition $partitionIdStr: sealed blob $blobNumber (size: ${blobWriter.csvWriter.getCounter} bytes)")
 
         // If we've accumulated MaxBlobsPerBatch, flush the batch
@@ -122,7 +123,8 @@ object IngestV2QueuedWriter {
       operations += op
     }
 
-    KDSU.logInfo(myName,
+    KDSU.logInfo(
+      myName,
       s"Partition $partitionIdStr: completed with ${blobNumber + 1} blobs in ${operations.size} batches")
 
     operations.toList

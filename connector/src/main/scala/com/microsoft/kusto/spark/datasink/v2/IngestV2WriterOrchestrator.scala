@@ -55,7 +55,8 @@ object IngestV2WriterOrchestrator {
     val dmUrl = tableCoordinates.ingestionUrl.getOrElse(
       s"https://ingest-${tableCoordinates.clusterUrl.stripPrefix("https://")}")
 
-    KDSU.logInfo(myName,
+    KDSU.logInfo(
+      myName,
       s"Starting ingest-v2 write to $database.$table (mode: ${writeOptions.writeMode}, format: ${writeOptions.ingestionFormat})")
     KDSU.logDebug(myName, s"DM URL: $dmUrl, requestId: ${writeOptions.requestId}")
 

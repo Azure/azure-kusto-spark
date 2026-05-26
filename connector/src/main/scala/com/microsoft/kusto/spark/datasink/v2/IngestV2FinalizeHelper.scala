@@ -62,7 +62,8 @@ object IngestV2FinalizeHelper {
     val database = coordinates.database
     val destinationTable = coordinates.table.get
 
-    KDSU.logInfo(myName,
+    KDSU.logInfo(
+      myName,
       s"Finalizing transactional ingestion: polling ${operations.size} operations (timeout: $timeout)")
 
     // Step 1: Wait for all ingestion operations to complete
@@ -95,7 +96,8 @@ object IngestV2FinalizeHelper {
     // Step 3: Cleanup temp table
     kustoClient.cleanupIngestionByProducts(database, tmpTableName, crp)
 
-    KDSU.logInfo(myName,
+    KDSU.logInfo(
+      myName,
       s"Transactional ingestion finalized successfully for $database.$destinationTable")
   }
 }

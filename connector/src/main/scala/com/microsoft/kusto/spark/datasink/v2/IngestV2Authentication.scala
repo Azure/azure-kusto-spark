@@ -27,7 +27,9 @@ object IngestV2Authentication {
   private val myName = this.getClass.getSimpleName
 
   def createTokenCredential(authentication: KustoAuthentication): TokenCredential = {
-    KDSU.logInfo(myName, s"Creating TokenCredential from auth type: ${authentication.getClass.getSimpleName}")
+    KDSU.logInfo(
+      myName,
+      s"Creating TokenCredential from auth type: ${authentication.getClass.getSimpleName}")
 
     authentication match {
       case app: AadApplicationAuthentication =>
@@ -64,7 +66,9 @@ object IngestV2Authentication {
           .build()
 
       case _ =>
-        KDSU.logError(myName, s"Unsupported auth type for ingest-v2: ${authentication.getClass.getSimpleName}")
+        KDSU.logError(
+          myName,
+          s"Unsupported auth type for ingest-v2: ${authentication.getClass.getSimpleName}")
         throw new UnsupportedOperationException(
           s"Authentication type ${authentication.getClass.getSimpleName} is not supported with ingest-v2 SDK")
     }
