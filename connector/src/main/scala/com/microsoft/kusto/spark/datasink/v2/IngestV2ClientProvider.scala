@@ -13,7 +13,7 @@ import com.microsoft.azure.kusto.ingest.v2.client.{
   QueuedIngestClient
 }
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
-import org.slf4j.LoggerFactory
+import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 
 /**
  * Self-contained client provider for the kusto-ingest-v2 SDK. Builds and caches ingest-v2 SDK
@@ -26,12 +26,12 @@ class IngestV2ClientProvider(
     authentication: KustoAuthentication,
     connectorVersion: String) {
 
-  private val logger = LoggerFactory.getLogger(classOf[IngestV2ClientProvider])
+  private val myName = this.getClass.getSimpleName
   private val tokenCredential: TokenCredential =
     IngestV2Authentication.createTokenCredential(authentication)
 
   lazy val queuedClient: QueuedIngestClient = {
-    logger.info("Creating kusto-ingest-v2 QueuedIngestClient for DM URL: {}", dmUrl)
+    KDSU.logInfo(myName, s"Creating QueuedIngestClient for DM: $dmUrl")
     QueuedIngestClientBuilder
       .create(dmUrl)
       .withAuthentication(tokenCredential)
@@ -40,7 +40,7 @@ class IngestV2ClientProvider(
   }
 
   lazy val managedStreamingClient: ManagedStreamingIngestClient = {
-    logger.info("Creating kusto-ingest-v2 ManagedStreamingIngestClient for DM URL: {}", dmUrl)
+    KDSU.logInfo(myName, s"Creating ManagedStreamingIngestClient for DM: $dmUrl")
     ManagedStreamingIngestClientBuilder
       .create(dmUrl)
       .withAuthentication(tokenCredential)
@@ -49,6 +49,7 @@ class IngestV2ClientProvider(
   }
 
   def close(): Unit = {
+    KDSU.logDebug(myName, "Closing ingest-v2 clients")
     try { queuedClient.close() }
     catch { case _: Exception => }
     try { managedStreamingClient.close() }

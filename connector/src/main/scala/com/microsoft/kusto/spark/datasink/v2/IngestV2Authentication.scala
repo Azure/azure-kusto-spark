@@ -10,7 +10,7 @@ import com.azure.identity.{
   ManagedIdentityCredentialBuilder
 }
 import com.microsoft.kusto.spark.authentication._
-import com.microsoft.kusto.spark.utils.KeyVaultUtils
+import com.microsoft.kusto.spark.utils.{KeyVaultUtils, KustoDataSourceUtils => KDSU}
 import reactor.core.publisher.Mono
 
 import java.time.OffsetDateTime
@@ -24,8 +24,11 @@ import java.time.OffsetDateTime
  * authentication flow can be removed independently in the future.
  */
 object IngestV2Authentication {
+  private val myName = this.getClass.getSimpleName
 
   def createTokenCredential(authentication: KustoAuthentication): TokenCredential = {
+    KDSU.logInfo(myName, s"Creating TokenCredential from auth type: ${authentication.getClass.getSimpleName}")
+
     authentication match {
       case app: AadApplicationAuthentication =>
         new ClientSecretCredentialBuilder()
@@ -61,6 +64,7 @@ object IngestV2Authentication {
           .build()
 
       case _ =>
+        KDSU.logError(myName, s"Unsupported auth type for ingest-v2: ${authentication.getClass.getSimpleName}")
         throw new UnsupportedOperationException(
           s"Authentication type ${authentication.getClass.getSimpleName} is not supported with ingest-v2 SDK")
     }

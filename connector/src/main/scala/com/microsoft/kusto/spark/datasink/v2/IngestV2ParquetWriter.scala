@@ -9,9 +9,7 @@ import com.microsoft.azure.kusto.ingest.v2.models.Format
 import com.microsoft.azure.kusto.ingest.v2.source.{BlobSource, CompressionType}
 import com.microsoft.kusto.spark.datasink.WriteOptions
 import com.microsoft.kusto.spark.utils.{ContainerAndSas, KustoDataSourceUtils => KDSU}
-import org.apache.hadoop.conf.Configuration
 import org.apache.spark.sql.{DataFrame, SparkSession}
-import org.slf4j.LoggerFactory
 
 import java.net.URI
 import java.util.UUID
@@ -28,7 +26,7 @@ import scala.jdk.CollectionConverters._
  * Flow: DataFrame → Spark Parquet Writer → Azure Blob → BlobSource → ingest-v2 SDK
  */
 object IngestV2ParquetWriter {
-  private val logger = LoggerFactory.getLogger(getClass)
+  private val myName = this.getClass.getSimpleName
   private val MaxBlobsPerBatch: Int = 70
 
   /**
@@ -85,10 +83,7 @@ object IngestV2ParquetWriter {
     // Build the wasbs:// path for Spark to write to
     val wasbs = s"wasbs://$containerName@$storageAccount.$endpointSuffix/$outputDir"
 
-    logger.info(
-      "Writing DataFrame as Parquet to blob storage: {} (requestId: {})",
-      wasbs,
-      requestId)
+    KDSU.logInfo(myName, s"Writing DataFrame as Parquet to blob storage (requestId: $requestId)")
 
     // Use Spark's native Parquet writer — fully vectorized, columnar, compressed
     data.write
@@ -106,13 +101,10 @@ object IngestV2ParquetWriter {
         f.getPath.getName.endsWith(".parquet") || f.getPath.getName.endsWith(".snappy.parquet"))
       .map(f => s"$blobBasePath/${f.getPath.getName}?${containerAndSas.sas}")
 
-    logger.info(
-      "Wrote {} Parquet files for ingestion (requestId: {})",
-      parquetFiles.length.toString,
-      requestId)
+    KDSU.logInfo(myName, s"Wrote ${parquetFiles.length} Parquet files (requestId: $requestId)")
 
     if (parquetFiles.isEmpty) {
-      logger.warn("No Parquet files generated — DataFrame may be empty")
+      KDSU.logWarn(myName, "No Parquet files generated — DataFrame may be empty")
       return List.empty
     }
 
@@ -136,11 +128,8 @@ object IngestV2ParquetWriter {
     }
 
     blobSources.grouped(MaxBlobsPerBatch).foreach { batch =>
-      logger.info(
-        "Submitting batch of {} Parquet files for ingestion to {}.{}",
-        batch.length.toString,
-        database,
-        table)
+      KDSU.logInfo(myName,
+        s"Submitting batch of ${batch.length} Parquet files for ingestion to $database.$table")
 
       val response = queuedClient
         .ingestAsyncJava(database, table, batch.toList.asJava, props)
@@ -155,11 +144,8 @@ object IngestV2ParquetWriter {
       operations += operation
     }
 
-    logger.info(
-      "Submitted {} ingestion operations for {} Parquet files (requestId: {})",
-      operations.size.toString,
-      parquetFiles.length.toString,
-      requestId)
+    KDSU.logInfo(myName,
+      s"Submitted ${operations.size} ingestion operations for ${parquetFiles.length} Parquet files (requestId: $requestId)")
 
     operations.toList
   }

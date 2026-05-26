@@ -17,12 +17,12 @@ import com.microsoft.kusto.spark.datasink.{CountingWriter, RowCSVWriterUtils, Wr
 import com.microsoft.kusto.spark.utils.{
   ContainerAndSas,
   KustoConstants => KCONST,
+  KustoDataSourceUtils => KDSU,
   KustoQueryUtils
 }
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types.StructType
-import org.slf4j.LoggerFactory
 
 import java.io.{BufferedWriter, OutputStreamWriter}
 import java.net.URI
@@ -43,7 +43,7 @@ import scala.jdk.CollectionConverters._
  * This class has NO dependency on ExtendedKustoClient or KustoClientCache.
  */
 object IngestV2QueuedWriter {
-  private val logger = LoggerFactory.getLogger(getClass)
+  private val myName = this.getClass.getSimpleName
   private val GzipBufferSize: Int = 1000 * KCONST.DefaultBufferSize
   private val MaxBlobsPerBatch: Int = 70
   private val formatter: DateTimeFormatter =
@@ -72,6 +72,8 @@ object IngestV2QueuedWriter {
     val maxBlobSize = writeOptions.batchLimit * KCONST.OneMegaByte
     val blobNamePrefix = s"${database}_${table}_${batchIdForTracing}"
 
+    KDSU.logInfo(myName, s"Starting partition $partitionIdStr for $database.$table")
+
     val completedBlobs = ListBuffer[BlobSourceWithInfo]()
     val operations = ListBuffer[IngestionOperation]()
 
@@ -87,11 +89,8 @@ object IngestV2QueuedWriter {
         finalizeBlobWrite(blobWriter)
         completedBlobs += BlobSourceWithInfo(blobWriter.blobUrl, blobWriter.csvWriter.getCounter)
 
-        logger.info(
-          "Sealed blob {} in partition {} (size: {} bytes)",
-          blobNumber.toString,
-          partitionIdStr,
-          blobWriter.csvWriter.getCounter.toString)
+        KDSU.logDebug(myName,
+          s"Partition $partitionIdStr: sealed blob $blobNumber (size: ${blobWriter.csvWriter.getCounter} bytes)")
 
         // If we've accumulated MaxBlobsPerBatch, flush the batch
         if (completedBlobs.size >= MaxBlobsPerBatch) {
@@ -123,11 +122,8 @@ object IngestV2QueuedWriter {
       operations += op
     }
 
-    logger.info(
-      "Finished ingesting partition {} with {} blobs in {} batches",
-      partitionIdStr,
-      (blobNumber + 1).toString,
-      operations.size.toString)
+    KDSU.logInfo(myName,
+      s"Partition $partitionIdStr: completed with ${blobNumber + 1} blobs in ${operations.size} batches")
 
     operations.toList
   }
@@ -145,17 +141,14 @@ object IngestV2QueuedWriter {
 
     val props = buildIngestRequestProperties(writeOptions)
 
-    logger.info(
-      "Ingesting batch of {} blobs to {}.{} via kusto-ingest-v2 SDK",
-      blobSources.size().toString,
-      database,
-      table)
+    KDSU.logInfo(myName, s"Ingesting batch of ${blobSources.size()} blobs to $database.$table")
 
     val response: ExtendedIngestResponse = queuedClient
       .ingestAsyncJava(database, table, blobSources, props)
       .join()
 
     val operationId = response.getIngestResponse.getIngestionOperationId
+    KDSU.logDebug(myName, s"Batch ingestion operationId: $operationId")
     new IngestionOperation(operationId, database, table, response.getIngestionType)
   }
 

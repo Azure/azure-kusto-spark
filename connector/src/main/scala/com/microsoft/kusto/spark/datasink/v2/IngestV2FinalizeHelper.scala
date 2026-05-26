@@ -8,7 +8,6 @@ import com.microsoft.azure.kusto.ingest.v2.client.{IngestionOperation, QueuedIng
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.WriteOptions
 import com.microsoft.kusto.spark.utils.{ExtendedKustoClient, KustoDataSourceUtils => KDSU}
-import org.slf4j.LoggerFactory
 
 import java.time.{Duration, Instant}
 
@@ -26,7 +25,7 @@ import java.time.{Duration, Instant}
  * those are engine operations not related to ingestion.
  */
 object IngestV2FinalizeHelper {
-  private val logger = LoggerFactory.getLogger(getClass)
+  private val myName = this.getClass.getSimpleName
 
   /**
    * Finalizes transactional ingestion: waits for all operations to complete, then moves extents
@@ -63,10 +62,8 @@ object IngestV2FinalizeHelper {
     val database = coordinates.database
     val destinationTable = coordinates.table.get
 
-    logger.info(
-      "Finalizing transactional ingestion: polling {} operations (timeout: {})",
-      operations.size.toString,
-      timeout.toString)
+    KDSU.logInfo(myName,
+      s"Finalizing transactional ingestion: polling ${operations.size} operations (timeout: $timeout)")
 
     // Step 1: Wait for all ingestion operations to complete
     val allSucceeded = IngestV2StatusTracker.waitForCompletion(operations, queuedClient, timeout)
@@ -77,7 +74,7 @@ object IngestV2FinalizeHelper {
         kustoClient.cleanupIngestionByProducts(database, tmpTableName, crp)
       } catch {
         case e: Exception =>
-          logger.warn("Failed to cleanup temp table after failure: {}", e.getMessage)
+          KDSU.logWarn(myName, s"Failed to cleanup temp table after failure: ${e.getMessage}")
       }
       throw new RuntimeException(
         s"Transactional ingestion failed: some operations did not complete successfully. " +
@@ -85,10 +82,7 @@ object IngestV2FinalizeHelper {
     }
 
     // Step 2: Move extents from temp table to destination table
-    logger.info(
-      "All operations succeeded. Moving extents from '{}' to '{}'",
-      tmpTableName,
-      destinationTable)
+    KDSU.logInfo(myName, s"Moving extents from '$tmpTableName' to '$destinationTable'")
 
     kustoClient.moveExtents(
       database,
@@ -99,12 +93,9 @@ object IngestV2FinalizeHelper {
       sinkStartTime)
 
     // Step 3: Cleanup temp table
-    logger.info("Cleaning up temp table '{}'", tmpTableName)
     kustoClient.cleanupIngestionByProducts(database, tmpTableName, crp)
 
-    logger.info(
-      "Transactional ingestion finalized successfully for {}.{}",
-      database,
-      destinationTable)
+    KDSU.logInfo(myName,
+      s"Transactional ingestion finalized successfully for $database.$destinationTable")
   }
 }
