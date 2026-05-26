@@ -102,7 +102,8 @@ object IngestV2StreamingWriter {
       operations += op
     }
 
-    KDSU.logInfo(myName,
+    KDSU.logInfo(
+      myName,
       s"Partition $partitionId: completed streaming with ${operations.size} chunks")
 
     operations.toList

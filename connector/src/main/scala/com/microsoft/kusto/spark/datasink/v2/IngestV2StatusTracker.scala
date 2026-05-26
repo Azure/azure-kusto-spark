@@ -33,7 +33,8 @@ object IngestV2StatusTracker {
 
     if (operations.isEmpty) return true
 
-    KDSU.logInfo(myName,
+    KDSU.logInfo(
+      myName,
       s"Waiting for ${operations.size} ingestion operations to complete (timeout: $timeout)")
 
     val results = operations.map { op =>
@@ -47,7 +48,8 @@ object IngestV2StatusTracker {
         val failed = Option(status.getFailed).map(_.longValue()).getOrElse(0L)
         val inProgress = Option(status.getInProgress).map(_.longValue()).getOrElse(0L)
 
-        KDSU.logDebug(myName,
+        KDSU.logDebug(
+          myName,
           s"Operation ${op.getOperationId}: succeeded=$succeeded, failed=$failed, inProgress=$inProgress")
 
         failed == 0 && inProgress == 0
@@ -62,7 +64,8 @@ object IngestV2StatusTracker {
     if (allSucceeded) {
       KDSU.logInfo(myName, s"All ${operations.size} operations completed successfully")
     } else {
-      KDSU.logError(myName,
+      KDSU.logError(
+        myName,
         s"Some operations failed: ${results.count(identity)}/${results.size} succeeded")
     }
     allSucceeded
