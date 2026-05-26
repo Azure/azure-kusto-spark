@@ -87,7 +87,7 @@ class KustoSinkIngestV2E2E extends AnyFlatSpec with BeforeAndAfterAll {
       kustoTestConnectionOptions.database,
       expectedNumberOfRows,
       timeoutMs,
-      cleanupAllTables = true,
+      cleanupAllTables = false,
       tableCleanupPrefix = prefix)
   }
 
@@ -129,7 +129,7 @@ class KustoSinkIngestV2E2E extends AnyFlatSpec with BeforeAndAfterAll {
       kustoTestConnectionOptions.database,
       expectedNumberOfRows,
       timeoutMs,
-      cleanupAllTables = true,
+      cleanupAllTables = false,
       tableCleanupPrefix = prefix)
   }
 
@@ -171,7 +171,7 @@ class KustoSinkIngestV2E2E extends AnyFlatSpec with BeforeAndAfterAll {
       kustoTestConnectionOptions.database,
       expectedNumberOfRows,
       timeoutMs,
-      cleanupAllTables = true,
+      cleanupAllTables = false,
       tableCleanupPrefix = prefix)
   }
 
@@ -214,7 +214,7 @@ class KustoSinkIngestV2E2E extends AnyFlatSpec with BeforeAndAfterAll {
       kustoTestConnectionOptions.database,
       expectedNumberOfRows,
       timeoutMs,
-      cleanupAllTables = true,
+      cleanupAllTables = false,
       tableCleanupPrefix = prefix)
   }
 
@@ -257,7 +257,7 @@ class KustoSinkIngestV2E2E extends AnyFlatSpec with BeforeAndAfterAll {
       kustoTestConnectionOptions.database,
       expectedNumberOfRows,
       timeoutMs,
-      cleanupAllTables = true,
+      cleanupAllTables = false,
       tableCleanupPrefix = prefix)
   }
 
@@ -302,7 +302,7 @@ class KustoSinkIngestV2E2E extends AnyFlatSpec with BeforeAndAfterAll {
       kustoTestConnectionOptions.database,
       expectedNumberOfRows,
       timeoutMs,
-      cleanupAllTables = true,
+      cleanupAllTables = false,
       tableCleanupPrefix = prefix)
   }
 
