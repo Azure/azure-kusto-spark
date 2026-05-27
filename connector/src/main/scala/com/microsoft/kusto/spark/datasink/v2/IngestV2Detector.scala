@@ -11,9 +11,9 @@ import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
  * Detector for V2 ingestion support using config API.
  *
  * HONORS THE CONFIG API CONTRACT:
- * - Query /v1/rest/ingestion/configuration
- * - If preferredIngestionMethod == "REST" → V2 supported
- * - If preferredIngestionMethod == "Legacy" or 404 → V1 fallback
+ *   - Query /v1/rest/ingestion/configuration
+ *   - If preferredIngestionMethod == "REST" → V2 supported
+ *   - If preferredIngestionMethod == "Legacy" or 404 → V1 fallback
  *
  * This enables zero-configuration auto-detection without requiring useIngestV2 flag.
  */
@@ -24,10 +24,10 @@ object IngestV2Detector {
    * Check if V2 ingestion (REST-based) is supported by querying config API.
    *
    * Decision logic (THE CONTRACT):
-   * - Query config API at /v1/rest/ingestion/configuration
-   * - Parse preferredIngestionMethod field
-   * - Return true ONLY if preferredIngestionMethod == "REST"
-   * - Return false for "Legacy", 404, errors, or missing config
+   *   - Query config API at /v1/rest/ingestion/configuration
+   *   - Parse preferredIngestionMethod field
+   *   - Return true ONLY if preferredIngestionMethod == "REST"
+   *   - Return false for "Legacy", 404, errors, or missing config
    *
    * @param coordinates
    *   Kusto cluster coordinates (ingestionUrl extracted from here)
@@ -64,9 +64,7 @@ object IngestV2Detector {
         false
 
       case None =>
-        KDSU.logInfo(
-          myName,
-          s"Config API unavailable for $dmUrl → V1 ingestion (auto-fallback)")
+        KDSU.logInfo(myName, s"Config API unavailable for $dmUrl → V1 ingestion (auto-fallback)")
         false
     }
 

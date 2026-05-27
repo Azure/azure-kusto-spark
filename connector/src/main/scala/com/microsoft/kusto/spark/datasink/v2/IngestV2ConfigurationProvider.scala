@@ -18,9 +18,9 @@ import scala.util.{Failure, Success, Try}
  * Queries and caches DM configuration for ingest-v2.
  *
  * CRITICAL: Honors the config API contract:
- * - Query /v1/rest/ingestion/configuration
- * - If preferredIngestionMethod == "REST" → use V2
- * - If preferredIngestionMethod == "Legacy" or missing or 404 → use V1
+ *   - Query /v1/rest/ingestion/configuration
+ *   - If preferredIngestionMethod == "REST" → use V2
+ *   - If preferredIngestionMethod == "Legacy" or missing or 404 → use V1
  *
  * This is the authoritative source of truth for V1 vs V2 decision.
  */
@@ -36,8 +36,8 @@ object IngestV2ConfigurationProvider {
    * Query ingestion configuration from DM, with caching.
    *
    * Returns:
-   * - Some(config) if config API succeeds
-   * - None if config API returns 404, network error, or auth failure
+   *   - Some(config) if config API succeeds
+   *   - None if config API returns 404, network error, or auth failure
    *
    * Result is cached for session lifetime.
    */
@@ -64,8 +64,8 @@ object IngestV2ConfigurationProvider {
   /**
    * Query /v1/rest/ingestion/configuration endpoint.
    *
-   * Uses V2 SDK's ConfigurationClient to query the config API.
-   * Logs the response at INFO level for debugging (critical for rollout).
+   * Uses V2 SDK's ConfigurationClient to query the config API. Logs the response at INFO level
+   * for debugging (critical for rollout).
    */
   private def queryConfigurationAPI(
       dmUrl: String,
@@ -94,8 +94,10 @@ object IngestV2ConfigurationProvider {
 
       // Query config endpoint - this is a Kotlin suspend function
       // We need to call it from Java/Scala by treating it as a CompletableFuture
-      val future = configClient.getConfigurationDetails(null)
-        .asInstanceOf[CompletableFuture[com.microsoft.azure.kusto.ingest.v2.models.ConfigurationResponse]]
+      val future = configClient
+        .getConfigurationDetails(null)
+        .asInstanceOf[CompletableFuture[
+          com.microsoft.azure.kusto.ingest.v2.models.ConfigurationResponse]]
 
       // Wait for result with timeout
       val response = future.get(30, java.util.concurrent.TimeUnit.SECONDS)
@@ -119,9 +121,7 @@ object IngestV2ConfigurationProvider {
 
       case Failure(exception) =>
         // Config API failed (404, network error, auth failure)
-        KDSU.logDebug(
-          myName,
-          s"Config API not available for $dmUrl: ${exception.getMessage}")
+        KDSU.logDebug(myName, s"Config API not available for $dmUrl: ${exception.getMessage}")
         KDSU.logInfo(myName, s"Fallback to V1 ingestion for $dmUrl")
         None
     }
@@ -130,17 +130,13 @@ object IngestV2ConfigurationProvider {
   /**
    * Log config response at INFO level.
    *
-   * CRITICAL: Required for debugging rollout issues.
-   * Config may vary across environments, feature flags, etc.
+   * CRITICAL: Required for debugging rollout issues. Config may vary across environments, feature
+   * flags, etc.
    */
   private def logConfigResponse(dmUrl: String, config: IngestionConfig): Unit = {
     KDSU.logInfo(myName, s"Config API response for $dmUrl:")
-    KDSU.logInfo(
-      myName,
-      s"  preferredIngestionMethod: ${config.preferredIngestionMethod}")
-    KDSU.logInfo(
-      myName,
-      s"  preferredUploadMethod: ${config.preferredUploadMethod}")
+    KDSU.logInfo(myName, s"  preferredIngestionMethod: ${config.preferredIngestionMethod}")
+    KDSU.logInfo(myName, s"  preferredUploadMethod: ${config.preferredUploadMethod}")
     KDSU.logInfo(myName, s"  maxBlobsPerBatch: ${config.maxBlobsPerBatch}")
     KDSU.logInfo(myName, s"  maxDataSizeBytes: ${config.maxDataSizeBytes}")
     KDSU.logInfo(myName, s"  blobPaths: ${config.blobPaths.size} containers")

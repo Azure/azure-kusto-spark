@@ -81,10 +81,10 @@ object IngestV2QueuedWriter {
       dmConfig: Option[IngestionConfig] = None): List[IngestionOperation] = {
 
     val partitionId = TaskContext.getPartitionId()
-    
+
     // Use config's maxBlobsPerBatch if available, otherwise use default
     val maxBlobsPerBatch = dmConfig.map(_.maxBlobsPerBatch).getOrElse(DefaultMaxBlobsPerBatch)
-    
+
     KDSU.logDebug(
       myName,
       s"Using maxBlobsPerBatch=$maxBlobsPerBatch ${dmConfig.map(_ => "(from config)").getOrElse("(default)")}")

@@ -83,9 +83,7 @@ object KustoWriter {
     // Auto-detect V2 support via config API (honors preferredIngestionMethod contract)
     // Manual override: if useIngestV2 explicitly set, honor it
     val shouldUseV2 = if (writeOptions.useIngestV2) {
-      KDSU.logInfo(
-        className,
-        "Using V2 ingestion path (manual override: useIngestV2=true)")
+      KDSU.logInfo(className, "Using V2 ingestion path (manual override: useIngestV2=true)")
       true
     } else {
       // Auto-detection via config API

@@ -9,9 +9,9 @@ import com.microsoft.azure.kusto.ingest.v2.models.ConfigurationResponse
  * Parsed ingestion configuration from DM config API.
  *
  * Contains settings that control ingestion behavior:
- * - preferredIngestionMethod: "REST" (V2) or "Legacy" (V1)
- * - preferredUploadMethod: "Blob" or "Lake" (OneLake)
- * - Batch limits and storage paths
+ *   - preferredIngestionMethod: "REST" (V2) or "Legacy" (V1)
+ *   - preferredUploadMethod: "Blob" or "Lake" (OneLake)
+ *   - Batch limits and storage paths
  */
 case class IngestionConfig(
     preferredIngestionMethod: String, // "REST" or "Legacy"
@@ -27,16 +27,15 @@ object IngestionConfig {
    * Parse ConfigurationResponse from V2 SDK into IngestionConfig.
    *
    * Extracts ingestion settings according to the config API contract:
-   * - preferredIngestionMethod: THE decision field for V1 vs V2
-   * - Container and batch settings
+   *   - preferredIngestionMethod: THE decision field for V1 vs V2
+   *   - Container and batch settings
    *
    * Returns None if ConfigurationResponse is null or cannot be parsed.
    *
-   * Note: Uses reflection to access Kotlin data class properties since
-   * the V2 SDK is written in Kotlin.
+   * Note: Uses reflection to access Kotlin data class properties since the V2 SDK is written in
+   * Kotlin.
    */
-  def fromConfigurationResponse(
-      response: ConfigurationResponse): Option[IngestionConfig] = {
+  def fromConfigurationResponse(response: ConfigurationResponse): Option[IngestionConfig] = {
     if (response == null) {
       return None
     }
@@ -83,8 +82,7 @@ object IngestionConfig {
           maxBlobsPerBatch = maxBlobsPerBatch,
           maxDataSizeBytes = maxDataSizeBytes,
           blobPaths = blobPaths,
-          oneLakePaths = oneLakePaths
-        ))
+          oneLakePaths = oneLakePaths))
 
     } catch {
       case e: Exception =>
