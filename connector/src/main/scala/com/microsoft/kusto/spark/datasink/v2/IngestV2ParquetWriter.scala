@@ -7,8 +7,13 @@ import com.microsoft.azure.kusto.ingest.v2.client.{IngestionOperation, QueuedIng
 import com.microsoft.azure.kusto.ingest.v2.common.models.IngestRequestPropertiesBuilder
 import com.microsoft.azure.kusto.ingest.v2.models.Format
 import com.microsoft.azure.kusto.ingest.v2.source.{BlobSource, CompressionType}
-import com.microsoft.kusto.spark.datasink.WriteOptions
-import com.microsoft.kusto.spark.utils.{ContainerAndSas, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.authentication.KustoAuthentication
+import com.microsoft.kusto.spark.datasink.{IngestionStorageParameters, WriteOptions}
+import com.microsoft.kusto.spark.utils.{
+  ContainerAndSas,
+  KustoClientCache,
+  KustoDataSourceUtils => KDSU
+}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 
 import java.net.URI
@@ -40,8 +45,16 @@ object IngestV2ParquetWriter {
    *   Target Kusto table
    * @param queuedClient
    *   kusto-ingest-v2 QueuedIngestClient
-   * @param containerProvider
-   *   Provides blob container URL + SAS
+   * @param clusterUrl
+   *   Kusto cluster URL
+   * @param authentication
+   *   Authentication configuration
+   * @param ingestionUrl
+   *   Optional DM ingestion URL
+   * @param clusterAlias
+   *   Optional cluster alias
+   * @param maybeIngestionBlobStorage
+   *   Optional blob storage container
    * @param writeOptions
    *   Write configuration
    * @param batchIdForTracing
@@ -54,15 +67,21 @@ object IngestV2ParquetWriter {
       database: String,
       table: String,
       queuedClient: QueuedIngestClient,
-      containerProvider: () => ContainerAndSas,
+      clusterUrl: String,
+      authentication: KustoAuthentication,
+      ingestionUrl: Option[String],
+      clusterAlias: String,
+      maybeIngestionBlobStorage: Option[Array[IngestionStorageParameters]],
       writeOptions: WriteOptions,
       batchIdForTracing: String): List[IngestionOperation] = {
 
     val sparkSession = data.sparkSession
     val requestId = writeOptions.requestId
 
-    // Get a container with SAS for writing Parquet files
-    val containerAndSas = containerProvider()
+    // Get cached client and container on driver (this method runs on driver, not executor)
+    val kustoClient =
+      KustoClientCache.getClient(clusterUrl, authentication, ingestionUrl, clusterAlias)
+    val containerAndSas = kustoClient.getTempBlobForIngestion(maybeIngestionBlobStorage)
     val containerUri = new URI(containerAndSas.containerUrl)
     val storageAccount = containerUri.getHost.split("\\.")(0)
     val containerName = containerUri.getPath.stripPrefix("/")
