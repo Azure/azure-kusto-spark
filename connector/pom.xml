@@ -77,6 +77,21 @@
             </exclusions>
         </dependency>
         <dependency>
+            <groupId>com.microsoft.azure.kusto</groupId>
+            <artifactId>kusto-ingest-v2</artifactId>
+            <version>${kusto.ingestv2.sdk.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-simple</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-api</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
             <groupId>com.azure</groupId>
             <artifactId>azure-storage-blob</artifactId>
         </dependency>
@@ -383,6 +398,7 @@
                                         <exclude>com.microsoft.azure.kusto.ingest.result.*</exclude>
                                         <exclude>com.microsoft.azure.kusto.ingest.source.*</exclude>
                                         <exclude>com.microsoft.azure.kusto.ingest.utils.*</exclude>
+                                        <exclude>com.microsoft.azure.kusto.ingest.v2.**</exclude>
                                     </excludes>
                                 </relocation>
                                 <relocation>
@@ -533,6 +549,18 @@
                                     <shadedPattern>${kusto.shade.prefix}.org.intellij</shadedPattern>
                                 </relocation>
                                 <!-- IO -->
+                                <relocation>
+                                    <pattern>io.ktor</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.io.ktor</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>kotlinx</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.kotlinx</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>kotlin</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.kotlin</shadedPattern>
+                                </relocation>
                                 <relocation>
                                     <pattern>io.vavr</pattern>
                                     <shadedPattern>${kusto.shade.prefix}.io.vavr</shadedPattern>

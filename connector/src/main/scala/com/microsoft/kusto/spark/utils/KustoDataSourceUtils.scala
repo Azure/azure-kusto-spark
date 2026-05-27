@@ -558,6 +558,17 @@ object KustoDataSourceUtils {
       addSourceLocationTransform,
       maybeSparkIngestionProperties)
 
+    val useIngestV2 =
+      parameters.getOrElse(KustoSinkOptions.KUSTO_USE_INGEST_V2, "false").trim.toBoolean
+
+    val ingestionFormat = parameters
+      .getOrElse(KustoSinkOptions.KUSTO_INGESTION_FORMAT, "csv")
+      .trim
+      .toLowerCase match {
+      case "parquet" => IngestionFormat.Parquet
+      case _ => IngestionFormat.CSV
+    }
+
     val writeOptions = WriteOptions(
       pollingOnDriver,
       tableCreation,
@@ -574,7 +585,9 @@ object KustoDataSourceUtils {
       userTempTableName,
       streamIngestMaxSize,
       maybeIngestionStorageParameters,
-      kustoCustomDebugOptions)
+      kustoCustomDebugOptions,
+      useIngestV2,
+      ingestionFormat)
 
     if (sourceParameters.kustoCoordinates.table.isEmpty) {
       throw new InvalidParameterException(
