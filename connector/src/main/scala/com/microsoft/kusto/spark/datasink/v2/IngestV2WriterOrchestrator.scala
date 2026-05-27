@@ -94,7 +94,7 @@ object IngestV2WriterOrchestrator {
     val dmUrlForExecutors = dmUrl
     val authForExecutors = authentication
     val connectorVersionForExecutors = ConnectorVersion
-    
+
     // Serialize config for executors (batch limits, storage paths)
     val dmConfigForExecutors = dmConfig
 
@@ -223,7 +223,8 @@ object IngestV2WriterOrchestrator {
               maybeStorageForContainer,
               writeOptions,
               batchIdForTracing,
-              dmConfigForExecutors) // Pass config to writer for batch limits
+              dmConfigForExecutors
+            ) // Pass config to writer for batch limits
             allOperations.add(ops)
           }
         }
