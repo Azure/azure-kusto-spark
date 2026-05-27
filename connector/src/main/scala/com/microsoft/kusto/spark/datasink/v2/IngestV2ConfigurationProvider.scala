@@ -9,7 +9,9 @@ import com.microsoft.azure.kusto.ingest.v2.common.models.ClientDetails
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 
-import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.{CompletableFuture, ConcurrentHashMap}
+import scala.concurrent.duration._
+import scala.concurrent.{Await, ExecutionContext}
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -76,26 +78,27 @@ object IngestV2ConfigurationProvider {
       val tokenCredential =
         IngestV2Authentication.createTokenCredential(authentication)
 
-      // Extract Fabric Private Link details (if present)
-      val (s2sProvider, fabricContext) =
-        extractFabricPrivateLinkDetails(authentication)
-
-      // Create ConfigurationClient
+      // Create ConfigurationClient (no Fabric Private Link for now - use defaults)
       val configClient = new ConfigurationClient(
         dmUrl,
         tokenCredential,
         false, // skipSecurityChecks
         new ClientDetails(
           "Kusto.Spark.Connector",
-          KDSU.getConnectorVersion,
+          KDSU.clientName,
           "" // appName
         ),
-        s2sProvider,
-        fabricContext
+        null, // s2sTokenProvider - not used for now
+        null // s2sFabricPrivateLinkAccessContext - not used for now
       )
 
-      // Query config endpoint
-      val response = configClient.getConfigurationDetails()
+      // Query config endpoint - this is a Kotlin suspend function
+      // We need to call it from Java/Scala by treating it as a CompletableFuture
+      val future = configClient.getConfigurationDetails(null)
+        .asInstanceOf[CompletableFuture[com.microsoft.azure.kusto.ingest.v2.models.ConfigurationResponse]]
+
+      // Wait for result with timeout
+      val response = future.get(30, java.util.concurrent.TimeUnit.SECONDS)
 
       // Parse response
       IngestionConfig.fromConfigurationResponse(response)
@@ -142,23 +145,6 @@ object IngestV2ConfigurationProvider {
     KDSU.logInfo(myName, s"  maxDataSizeBytes: ${config.maxDataSizeBytes}")
     KDSU.logInfo(myName, s"  blobPaths: ${config.blobPaths.size} containers")
     KDSU.logInfo(myName, s"  oneLakePaths: ${config.oneLakePaths.size} paths")
-  }
-
-  /**
-   * Extract Fabric Private Link details from authentication config.
-   *
-   * Returns (s2sTokenProvider, fabricContext) for ConfigurationClient.
-   * Returns (null, null) if not Fabric scenario.
-   */
-  private def extractFabricPrivateLinkDetails(
-      authentication: KustoAuthentication): (
-      com.microsoft.azure.kusto.ingest.v2.common.models.S2STokenProvider,
-      String) = {
-
-    // Check if Fabric authentication is present
-    // This would be set in Fabric environments with Private Link
-    // For now, return null (will be implemented when Fabric auth is added)
-    (null, null)
   }
 
   /**
