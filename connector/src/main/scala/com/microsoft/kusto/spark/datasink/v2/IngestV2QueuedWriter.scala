@@ -52,7 +52,7 @@ import scala.jdk.CollectionConverters._
 object IngestV2QueuedWriter {
   private val myName = this.getClass.getSimpleName
   private val GzipBufferSize: Int = 1000 * KCONST.DefaultBufferSize
-  private val MaxBlobsPerBatch: Int = 70
+  private val DefaultMaxBlobsPerBatch: Int = 70 // Default if no config available
   private val formatter: DateTimeFormatter =
     DateTimeFormatter.ofPattern("HH-mm-ss-SSSSSS").withZone(ZoneId.systemDefault)
 
@@ -60,6 +60,8 @@ object IngestV2QueuedWriter {
    * Ingest rows from a single partition using the kusto-ingest-v2 SDK queued path. Serializes
    * rows to CSV, uploads to blob, batches blobs, then calls kusto-ingest-v2 SDK for ingestion.
    *
+   * @param dmConfig
+   *   Optional config from DM config API (for batch limits, storage paths)
    * @return
    *   The list of IngestionOperations for status tracking
    */
@@ -75,9 +77,17 @@ object IngestV2QueuedWriter {
       clusterAlias: String,
       maybeIngestionBlobStorage: Option[Array[IngestionStorageParameters]],
       writeOptions: WriteOptions,
-      batchIdForTracing: String): List[IngestionOperation] = {
+      batchIdForTracing: String,
+      dmConfig: Option[IngestionConfig] = None): List[IngestionOperation] = {
 
     val partitionId = TaskContext.getPartitionId()
+    
+    // Use config's maxBlobsPerBatch if available, otherwise use default
+    val maxBlobsPerBatch = dmConfig.map(_.maxBlobsPerBatch).getOrElse(DefaultMaxBlobsPerBatch)
+    
+    KDSU.logDebug(
+      myName,
+      s"Using maxBlobsPerBatch=$maxBlobsPerBatch ${dmConfig.map(_ => "(from config)").getOrElse("(default)")}")
     val partitionIdStr = partitionId.toString
     val timeZone = TimeZone.getTimeZone(writeOptions.timeZone).toZoneId
     val maxBlobSize = writeOptions.batchLimit * KCONST.OneMegaByte
@@ -112,8 +122,8 @@ object IngestV2QueuedWriter {
           myName,
           s"Partition $partitionIdStr: sealed blob $blobNumber (size: ${blobWriter.csvWriter.getCounter} bytes)")
 
-        // If we've accumulated MaxBlobsPerBatch, flush the batch
-        if (completedBlobs.size >= MaxBlobsPerBatch) {
+        // If we've accumulated maxBlobsPerBatch, flush the batch
+        if (completedBlobs.size >= maxBlobsPerBatch) {
           val op = ingestBatch(queuedClient, database, table, completedBlobs.toList, writeOptions)
           operations += op
           completedBlobs.clear()
@@ -148,7 +158,7 @@ object IngestV2QueuedWriter {
 
     KDSU.logInfo(
       myName,
-      s"Partition $partitionIdStr: completed with ${blobNumber + 1} blobs in ${operations.size} batches")
+      s"Partition $partitionIdStr: completed with ${blobNumber + 1} blobs in ${operations.size} batches (maxBlobsPerBatch=$maxBlobsPerBatch)")
 
     operations.toList
   }
