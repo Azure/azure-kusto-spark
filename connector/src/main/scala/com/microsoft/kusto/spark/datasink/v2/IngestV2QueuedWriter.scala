@@ -13,9 +13,16 @@ import com.microsoft.azure.kusto.ingest.v2.common.models.mapping.IngestionMappin
 import com.microsoft.azure.kusto.ingest.v2.models.{Format, IngestRequestProperties}
 import com.microsoft.azure.kusto.ingest.v2.source.{BlobSource, CompressionType}
 import com.microsoft.azure.storage.blob.{BlobRequestOptions, CloudBlockBlob}
-import com.microsoft.kusto.spark.datasink.{CountingWriter, RowCSVWriterUtils, WriteOptions}
+import com.microsoft.kusto.spark.authentication.KustoAuthentication
+import com.microsoft.kusto.spark.datasink.{
+  CountingWriter,
+  IngestionStorageParameters,
+  RowCSVWriterUtils,
+  WriteOptions
+}
 import com.microsoft.kusto.spark.utils.{
   ContainerAndSas,
+  KustoClientCache,
   KustoConstants => KCONST,
   KustoDataSourceUtils => KDSU,
   KustoQueryUtils
@@ -62,7 +69,11 @@ object IngestV2QueuedWriter {
       database: String,
       table: String,
       queuedClient: QueuedIngestClient,
-      containerProvider: () => ContainerAndSas,
+      clusterUrl: String,
+      authentication: KustoAuthentication,
+      ingestionUrl: Option[String],
+      clusterAlias: String,
+      maybeIngestionBlobStorage: Option[Array[IngestionStorageParameters]],
       writeOptions: WriteOptions,
       batchIdForTracing: String): List[IngestionOperation] = {
 
@@ -79,8 +90,16 @@ object IngestV2QueuedWriter {
 
     var blobNumber = 0
     var curBlobUUID = UUID.randomUUID().toString
-    var blobWriter =
-      createBlobWriter(containerProvider, blobNamePrefix, partitionIdStr, blobNumber, curBlobUUID)
+    var blobWriter = createBlobWriter(
+      clusterUrl,
+      authentication,
+      ingestionUrl,
+      clusterAlias,
+      maybeIngestionBlobStorage,
+      blobNamePrefix,
+      partitionIdStr,
+      blobNumber,
+      curBlobUUID)
 
     for (row <- rows) {
       RowCSVWriterUtils.writeRowAsCSV(row, schema, timeZone, blobWriter.csvWriter)
@@ -103,7 +122,11 @@ object IngestV2QueuedWriter {
         blobNumber += 1
         curBlobUUID = UUID.randomUUID().toString
         blobWriter = createBlobWriter(
-          containerProvider,
+          clusterUrl,
+          authentication,
+          ingestionUrl,
+          clusterAlias,
+          maybeIngestionBlobStorage,
           blobNamePrefix,
           partitionIdStr,
           blobNumber,
@@ -172,7 +195,11 @@ object IngestV2QueuedWriter {
   }
 
   private def createBlobWriter(
-      containerProvider: () => ContainerAndSas,
+      clusterUrl: String,
+      authentication: KustoAuthentication,
+      ingestionUrl: Option[String],
+      clusterAlias: String,
+      maybeIngestionBlobStorage: Option[Array[IngestionStorageParameters]],
       blobNamePrefix: String,
       partitionId: String,
       blobNumber: Int,
@@ -183,7 +210,10 @@ object IngestV2QueuedWriter {
       s"${KustoQueryUtils.simplifyName(blobNamePrefix)}_${blobUUID}_${partitionId}_${blobNumber}_${formatter
           .format(now)}_spark.csv.gz"
 
-    val containerAndSas = containerProvider()
+    // Get cached client and container on executor (avoids serialization)
+    val kustoClient =
+      KustoClientCache.getClient(clusterUrl, authentication, ingestionUrl, clusterAlias)
+    val containerAndSas = kustoClient.getTempBlobForIngestion(maybeIngestionBlobStorage)
     val blobUrl = s"${containerAndSas.containerUrl}/$blobName${containerAndSas.sas}"
 
     val currentBlob = new CloudBlockBlob(new URI(blobUrl))
