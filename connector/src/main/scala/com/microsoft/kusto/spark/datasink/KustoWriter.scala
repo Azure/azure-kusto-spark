@@ -80,29 +80,42 @@ object KustoWriter {
       writeOptions: WriteOptions,
       crp: ClientRequestProperties): Unit = {
 
-    // Smart factory with auto-detection based on config API
-    // This honors the config API contract: query preferredIngestionMethod → V2 or V1
-    val ingestClient = SmartIngestClientFactory.createClient(
-      tableCoordinates,
-      authentication,
-      writeOptions)
+    // Auto-detect V2 support via config API (honors preferredIngestionMethod contract)
+    // Manual override: if useIngestV2 explicitly set, honor it
+    val shouldUseV2 = if (writeOptions.useIngestV2) {
+      KDSU.logInfo(
+        className,
+        "Using V2 ingestion path (manual override: useIngestV2=true)")
+      true
+    } else {
+      // Auto-detection via config API
+      v2.IngestV2Detector.isV2Supported(tableCoordinates, authentication)
+    }
 
-    // Unified write interface (works with both V1 and V2)
-    ingestClient.write(batchId, data, tableCoordinates, authentication, writeOptions, crp)
-  }
+    // Route to kusto-ingest-v2 SDK path when V2 is supported
+    if (shouldUseV2) {
+      val table = tableCoordinates.table.get
+      val batchIdIfExists = batchId.map(b => s"${b.toString}").getOrElse("")
+      val tmpTableName: String = KDSU.generateTempTableName(
+        data.sparkSession.sparkContext.appName,
+        table,
+        writeOptions.requestId,
+        batchIdIfExists,
+        writeOptions.userTempTableName)
+      v2.IngestV2WriterOrchestrator.write(
+        data,
+        tableCoordinates,
+        authentication,
+        writeOptions,
+        tmpTableName,
+        crp)
+      return
+    }
 
-  /**
-   * V1 ingestion path (queue-based). Used by IngestV1ClientWrapper.
-   *
-   * This is the legacy ingestion logic that was previously inline in write().
-   */
-  private[datasink] def writeV1(
-      batchId: Option[Long],
-      data: DataFrame,
-      tableCoordinates: KustoCoordinates,
-      authentication: KustoAuthentication,
-      writeOptions: WriteOptions,
-      crp: ClientRequestProperties): Unit = {
+    // ==========================================
+    // V1 INGESTION PATH (queue-based)
+    // ALL CODE BELOW IS UNCHANGED - enables clean V1 deletion later
+    // ==========================================
 
     val batchIdIfExists = batchId.map(b => s"${b.toString}").getOrElse("")
     val kustoClient = KustoClientCache.getClient(
