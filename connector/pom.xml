@@ -197,6 +197,20 @@
             <version>3.19.0</version>
             <scope>test</scope>
         </dependency>
+        <!--
+            commons-io is used at runtime by KustoWriter (IOUtils.close). It was previously
+            assumed to be provided transitively by Hadoop/Spark, but the <artifactSet> below
+            excludes org.apache.hadoop:* and org.apache.spark:*, so the class is never bundled
+            into the shaded uber jar. The relocation rule (further below) then rewrites the
+            bytecode reference to a shaded prefix that does not exist at runtime, causing
+            NoClassDefFoundError: kusto_connector_shaded/org/apache/commons/io/IOUtils when
+            KustoStreaming writes are executed (see issue #479).
+        -->
+        <dependency>
+            <groupId>commons-io</groupId>
+            <artifactId>commons-io</artifactId>
+            <version>2.20.0</version>
+        </dependency>
     </dependencies>
     <!-- Build properties -->
     <build>
@@ -520,9 +534,21 @@
                                     <pattern>org.apache.http</pattern>
                                     <shadedPattern>${kusto.shade.prefix}.org.apache.http</shadedPattern>
                                 </relocation>
+                                <!--
+                                    NOTE: this pattern intentionally matches the full
+                                    "org.apache.commons" prefix (including the trailing 's').
+                                    Prior to issue #479 the pattern was the typo'd
+                                    "org.apache.common" (singular). Maven Shade Plugin's
+                                    SimpleRelocator matches by String.startsWith on the
+                                    package path, so the typo accidentally rewrote
+                                    org/apache/commons/io/IOUtils bytecode references in
+                                    KustoWriter to a shaded prefix - but because commons-io
+                                    was not a declared dependency, the class was never
+                                    bundled, producing NoClassDefFoundError at runtime.
+                                -->
                                 <relocation>
-                                    <pattern>org.apache.common</pattern>
-                                    <shadedPattern>${kusto.shade.prefix}.org.apache.common</shadedPattern>
+                                    <pattern>org.apache.commons</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.org.apache.commons</shadedPattern>
                                 </relocation>
                                 <relocation>
                                     <pattern>org.checkerframework</pattern>
