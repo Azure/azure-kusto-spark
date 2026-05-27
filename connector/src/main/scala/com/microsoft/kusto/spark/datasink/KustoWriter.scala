@@ -80,25 +80,29 @@ object KustoWriter {
       writeOptions: WriteOptions,
       crp: ClientRequestProperties): Unit = {
 
-    // Route to kusto-ingest-v2 SDK path when enabled via configuration
-    if (writeOptions.useIngestV2) {
-      val table = tableCoordinates.table.get
-      val batchIdIfExists = batchId.map(b => s"${b.toString}").getOrElse("")
-      val tmpTableName: String = KDSU.generateTempTableName(
-        data.sparkSession.sparkContext.appName,
-        table,
-        writeOptions.requestId,
-        batchIdIfExists,
-        writeOptions.userTempTableName)
-      v2.IngestV2WriterOrchestrator.write(
-        data,
-        tableCoordinates,
-        authentication,
-        writeOptions,
-        tmpTableName,
-        crp)
-      return
-    }
+    // Smart factory with auto-detection based on config API
+    // This honors the config API contract: query preferredIngestionMethod → V2 or V1
+    val ingestClient = SmartIngestClientFactory.createClient(
+      tableCoordinates,
+      authentication,
+      writeOptions)
+
+    // Unified write interface (works with both V1 and V2)
+    ingestClient.write(batchId, data, tableCoordinates, authentication, writeOptions, crp)
+  }
+
+  /**
+   * V1 ingestion path (queue-based). Used by IngestV1ClientWrapper.
+   *
+   * This is the legacy ingestion logic that was previously inline in write().
+   */
+  private[datasink] def writeV1(
+      batchId: Option[Long],
+      data: DataFrame,
+      tableCoordinates: KustoCoordinates,
+      authentication: KustoAuthentication,
+      writeOptions: WriteOptions,
+      crp: ClientRequestProperties): Unit = {
 
     val batchIdIfExists = batchId.map(b => s"${b.toString}").getOrElse("")
     val kustoClient = KustoClientCache.getClient(
