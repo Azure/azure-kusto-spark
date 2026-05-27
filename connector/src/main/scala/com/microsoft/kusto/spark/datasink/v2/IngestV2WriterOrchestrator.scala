@@ -41,6 +41,8 @@ object IngestV2WriterOrchestrator {
   /**
    * Main entry point: write a DataFrame to Kusto using the kusto-ingest-v2 SDK. Called from
    * KustoWriter.write() when useIngestV2 = true.
+   *
+   * NOW WITH CONFIG API: Queries config API to validate V2 support and fetch DM capabilities.
    */
   def write(
       data: DataFrame,
@@ -60,10 +62,41 @@ object IngestV2WriterOrchestrator {
       s"Starting ingest-v2 write to $database.$table (mode: ${writeOptions.writeMode}, format: ${writeOptions.ingestionFormat})")
     KDSU.logDebug(myName, s"DM URL: $dmUrl, requestId: ${writeOptions.requestId}")
 
+    // PHASE 2: Query config API and validate V2 support
+    val dmConfig = IngestV2ConfigurationProvider.getConfiguration(dmUrl, authentication)
+
+    // Honor the config API contract: preferredIngestionMethod must be "REST"
+    dmConfig match {
+      case Some(config) if config.preferredIngestionMethod == "REST" =>
+        KDSU.logInfo(
+          myName,
+          s"Config API: preferredIngestionMethod=REST → proceeding with V2 ingestion")
+
+      case Some(config) =>
+        val method = config.preferredIngestionMethod
+        val errorMsg =
+          s"Config API returned preferredIngestionMethod=$method (expected REST). " +
+            s"DM endpoint $dmUrl does not support V2 REST ingestion. " +
+            s"Please use V1 ingestion path or contact Kusto team to enable V2 on this cluster."
+        KDSU.logError(myName, errorMsg)
+        throw new RuntimeException(errorMsg)
+
+      case None =>
+        val errorMsg =
+          s"Config API not available for DM endpoint $dmUrl (404 or error). " +
+            s"Cannot validate V2 support. Please verify DM endpoint is correct and supports ingest-v2, " +
+            s"or use V1 ingestion path (set useIngestV2=false)."
+        KDSU.logError(myName, errorMsg)
+        throw new RuntimeException(errorMsg)
+    }
+
     // Serialize configuration for executors (avoid serializing non-serializable SDK clients)
     val dmUrlForExecutors = dmUrl
     val authForExecutors = authentication
     val connectorVersionForExecutors = ConnectorVersion
+    
+    // Serialize config for executors (batch limits, storage paths)
+    val dmConfigForExecutors = dmConfig
 
     // We still need the engine client for management commands (container
     // discovery, table operations, move extents). This is shared with v1
@@ -189,7 +222,8 @@ object IngestV2WriterOrchestrator {
               clusterAliasForContainer,
               maybeStorageForContainer,
               writeOptions,
-              batchIdForTracing)
+              batchIdForTracing,
+              dmConfigForExecutors) // Pass config to writer for batch limits
             allOperations.add(ops)
           }
         }
