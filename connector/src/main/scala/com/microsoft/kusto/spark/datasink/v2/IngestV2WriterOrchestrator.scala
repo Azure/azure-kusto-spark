@@ -60,8 +60,10 @@ object IngestV2WriterOrchestrator {
       s"Starting ingest-v2 write to $database.$table (mode: ${writeOptions.writeMode}, format: ${writeOptions.ingestionFormat})")
     KDSU.logDebug(myName, s"DM URL: $dmUrl, requestId: ${writeOptions.requestId}")
 
-    // Create self-contained ingest-v2 client provider
-    val clientProvider = new IngestV2ClientProvider(dmUrl, authentication, ConnectorVersion)
+    // Serialize configuration for executors (avoid serializing non-serializable SDK clients)
+    val dmUrlForExecutors = dmUrl
+    val authForExecutors = authentication
+    val connectorVersionForExecutors = ConnectorVersion
 
     // We still need the engine client for management commands (container
     // discovery, table operations, move extents). This is shared with v1
@@ -72,8 +74,12 @@ object IngestV2WriterOrchestrator {
       tableCoordinates.ingestionUrl,
       tableCoordinates.clusterAlias)
 
-    val containerProvider: () => ContainerAndSas = () =>
-      kustoClient.getTempBlobForIngestion(writeOptions.maybeIngestionBlobStorage)
+    // Serialize config for executors (container access pattern - no lambda needed)
+    val clusterUrlForContainer = tableCoordinates.clusterUrl
+    val authForContainer = authentication
+    val ingestUrlForContainer = tableCoordinates.ingestionUrl
+    val clusterAliasForContainer = tableCoordinates.clusterAlias
+    val maybeStorageForContainer = writeOptions.maybeIngestionBlobStorage
 
     val rdd = data.queryExecution.toRdd
     val schema = data.schema
@@ -85,6 +91,9 @@ object IngestV2WriterOrchestrator {
 
     val batchIdForTracing = writeOptions.requestId
 
+    // Get cached client provider on driver for transactional finalization
+    val clientProvider = IngestV2ClientCache.getClient(dmUrl, authentication, ConnectorVersion)
+
     try {
       if (writeOptions.ingestionFormat == IngestionFormat.Parquet &&
         writeOptions.writeMode != WriteMode.KustoStreaming) {
@@ -95,7 +104,11 @@ object IngestV2WriterOrchestrator {
           database,
           ingestionTable,
           clientProvider.queuedClient,
-          containerProvider,
+          clusterUrlForContainer,
+          authForContainer,
+          ingestUrlForContainer,
+          clusterAliasForContainer,
+          maybeStorageForContainer,
           writeOptions,
           batchIdForTracing)
 
@@ -118,12 +131,19 @@ object IngestV2WriterOrchestrator {
 
         rdd.foreachPartition { rows: Iterator[InternalRow] =>
           if (rows.nonEmpty) {
+            // Get cached client on executor (avoids serialization)
+            val executorClientProvider =
+              IngestV2ClientCache.getClient(
+                dmUrlForExecutors,
+                authForExecutors,
+                connectorVersionForExecutors)
+
             val ops = IngestV2StreamingWriter.ingestPartition(
               rows,
               schema,
               database,
               ingestionTable,
-              clientProvider.managedStreamingClient,
+              executorClientProvider.managedStreamingClient,
               writeOptions,
               batchIdForTracing)
             allOperations.add(ops)
@@ -150,13 +170,24 @@ object IngestV2WriterOrchestrator {
 
         rdd.foreachPartition { rows: Iterator[InternalRow] =>
           if (rows.nonEmpty) {
+            // Get cached client on executor (avoids serialization)
+            val executorClientProvider =
+              IngestV2ClientCache.getClient(
+                dmUrlForExecutors,
+                authForExecutors,
+                connectorVersionForExecutors)
+
             val ops = IngestV2QueuedWriter.ingestPartition(
               rows,
               schema,
               database,
               ingestionTable,
-              clientProvider.queuedClient,
-              containerProvider,
+              executorClientProvider.queuedClient,
+              clusterUrlForContainer,
+              authForContainer,
+              ingestUrlForContainer,
+              clusterAliasForContainer,
+              maybeStorageForContainer,
               writeOptions,
               batchIdForTracing)
             allOperations.add(ops)
