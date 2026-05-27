@@ -526,8 +526,8 @@
                                     <shadedPattern>${kusto.shade.prefix}.org.apache.http</shadedPattern>
                                 </relocation>
                                 <relocation>
-                                    <pattern>org.apache.common</pattern>
-                                    <shadedPattern>${kusto.shade.prefix}.org.apache.common</shadedPattern>
+                                    <pattern>org.apache.commons</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.org.apache.commons</shadedPattern>
                                 </relocation>
                                 <relocation>
                                     <pattern>org.checkerframework</pattern>
