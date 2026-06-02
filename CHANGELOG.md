@@ -17,6 +17,18 @@ Tags are created as `v4.0_{version}` (Spark 4 / master) and `v3.0_{version}` (Sp
 ### Fixed
 - None
 
+## [5.3.5] - 2026-06-02
+
+### Changed
+- None
+
+### Added
+- None
+
+### Fixed
+- Added `commons-io:2.8.0` as explicit compile-scope dependency to fix `NoClassDefFoundError: kusto_connector_shaded/org/apache/commons/io/IOUtils` on Fabric platform
+- Corrected shading pattern from `org.apache.common` to `org.apache.commons`
+
 ## [5.3.4] - 2026-04-22
 
 ### Changed
