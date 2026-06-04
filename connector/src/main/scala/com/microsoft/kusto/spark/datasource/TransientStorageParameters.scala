@@ -23,9 +23,9 @@ class TransientStorageParameters(
   }
 
   /**
-   * Validate cross-credential invariants. Currently: refuse mixing OneLake credentials
-   * with non-OneLake (Blob SAS/Key) credentials in the same array — read-back protocol
-   * coercion can only honor one storage flavor per export.
+   * Validate cross-credential invariants. Currently: refuse mixing OneLake credentials with
+   * non-OneLake (Blob SAS/Key) credentials in the same array — read-back protocol coercion can
+   * only honor one storage flavor per export.
    */
   def validate(): Unit = {
     if (storageCredentials != null && storageCredentials.length > 0) {
@@ -255,7 +255,8 @@ final case class TransientStorageCredentials() {
           s"Unsupported scheme '$other' for OneLake URL (expected 'https' or 'abfss'): $url")
     }
 
-    if (!TransientStorageParameters.OneLakeHostSuffixes.exists(suffix => endpoint.toLowerCase.endsWith(suffix))) {
+    if (!TransientStorageParameters.OneLakeHostSuffixes.exists(suffix =>
+        endpoint.toLowerCase.endsWith(suffix))) {
       throw new InvalidParameterException(
         s"OneLake URL host '$endpoint' is not a recognized Fabric OneLake host")
     }
@@ -349,9 +350,9 @@ object TransientStorageCredentials {
 
   /**
    * Detect whether the given storage URL targets a Fabric OneLake location. Recognizes the
-   * following host suffixes (matched with endsWith on lowercased host) for both https://
-   * and abfss:// schemes:
-   *   - *.dfs.fabric.microsoft.com    (e.g. onelake.dfs.fabric.microsoft.com)
+   * following host suffixes (matched with endsWith on lowercased host) for both https:// and
+   * abfss:// schemes:
+   *   - *.dfs.fabric.microsoft.com (e.g. onelake.dfs.fabric.microsoft.com)
    *   - *.blob.fabric.microsoft.com
    *   - *.onelake.fabric.microsoft.com
    */

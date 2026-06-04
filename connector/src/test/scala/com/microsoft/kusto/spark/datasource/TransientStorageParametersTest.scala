@@ -4,7 +4,11 @@
 package com.microsoft.kusto.spark.datasource
 
 import org.scalatest.flatspec.AnyFlatSpec
-import org.scalatest.matchers.should.Matchers.{convertToAnyShouldWrapper, convertToStringShouldWrapper, include}
+import org.scalatest.matchers.should.Matchers.{
+  convertToAnyShouldWrapper,
+  convertToStringShouldWrapper,
+  include
+}
 
 class TransientStorageParametersTest extends AnyFlatSpec {
 
