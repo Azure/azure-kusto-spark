@@ -200,7 +200,14 @@ object KustoReader {
       directory: String,
       endpointSuffix: String,
       storageProtocol: String = KCONST.storageProtocolWasbs): Boolean = {
-    if (params.authMethod == AuthMethod.Impersonation) {
+    if (params.isOneLake) {
+      // OneLake: probe via Hadoop FileSystem over abfss using ambient AAD (Fabric Spark).
+      val base = params.oneLakeAbfssBase
+      val hadoopConf = spark.sparkContext.hadoopConfiguration
+      val fs = FileSystem.get(new URI(base), hadoopConf)
+      val path = new Path(s"$base/$directory")
+      fs.exists(path)
+    } else if (params.authMethod == AuthMethod.Impersonation) {
       val url =
         s"$storageProtocol://${params.blobContainer}@${params.storageAccountName}.blob.$endpointSuffix"
       val hadoopConf = spark.sparkContext.hadoopConfiguration
@@ -244,7 +251,12 @@ object KustoReader {
       className,
       s"Starting exporting data from Kusto to blob storage in Distributed mode. requestId: ${request.requestId}")
 
-    val protocol = options.storageProtocol.getOrElse(KCONST.storageProtocolWasbs)
+    // OneLake transient storage always reads back over abfss; force the protocol when any
+    // credential is a OneLake URL so the rest of the read path uses the correct scheme.
+    val anyOneLake = storage.storageCredentials.exists(_.isOneLake)
+    val protocol =
+      if (anyOneLake) KCONST.storageProtocolAbfss
+      else options.storageProtocol.getOrElse(KCONST.storageProtocolWasbs)
     setupBlobAccess(request, storage, protocol)
     val partitions = calculatePartitions(options.partitionOptions)
     val reader = new KustoReader(kustoClient)
@@ -265,8 +277,12 @@ object KustoReader {
       .filter(params =>
         dirExist(request.sparkSession, params, directory, storage.endpointSuffix, protocol))
       .map(params =>
-        s"$protocol://${params.blobContainer}" +
-          s"@${params.storageAccountName}.blob.${storage.endpointSuffix}/$directory")
+        if (params.isOneLake) {
+          s"${params.oneLakeAbfssBase}/$directory"
+        } else {
+          s"$protocol://${params.blobContainer}" +
+            s"@${params.storageAccountName}.blob.${storage.endpointSuffix}/$directory"
+        })
     KDSU.logInfo(
       className,
       s"Finished exporting from Kusto to ${paths.mkString(",")}" +
@@ -335,6 +351,8 @@ object KustoReader {
         case AuthMethod.Sas =>
           handleSasAuth(storage, storageParameters, config, sparkConf, now, useAbfs)
         case _ =>
+        // Impersonation (including OneLake) relies on ambient AAD configured by the
+        // Spark runtime (e.g. Fabric notebooks). Nothing to install here.
       }
     }
   }
@@ -456,13 +474,25 @@ object KustoReader {
       sparkConf: RuntimeConfig): Unit = {
     val endpointKey = "fs.azure.abfs.valid.endpoints"
     val currentEndpoints = config.get(endpointKey, "")
-    val storageDomain = storageParameters.endpointSuffix
-    if (!currentEndpoints.contains(storageDomain)) {
-      val updatedEndpoints = if (currentEndpoints.isEmpty) {
-        storageDomain
-      } else {
-        s"$currentEndpoints,$storageDomain"
-      }
+    val existingSet = currentEndpoints
+      .split(',')
+      .iterator
+      .map(_.trim)
+      .filter(_.nonEmpty)
+      .toSet
+    // Default storage domain (e.g. core.windows.net) plus any per-credential OneLake hosts
+    // (e.g. onelake.dfs.fabric.microsoft.com) that the Fabric/MWC abfss client must accept.
+    val oneLakeEndpoints = storageParameters.storageCredentials
+      .filter(_.isOneLake)
+      .map(_.oneLakeEndpoint)
+      .filter(_ != null)
+      .distinct
+      .toSeq
+    val candidates = Seq(storageParameters.endpointSuffix) ++ oneLakeEndpoints
+    val toAdd = candidates.filter(d => d != null && d.nonEmpty && !existingSet.contains(d.trim))
+    if (toAdd.nonEmpty) {
+      val updatedEndpoints =
+        (Seq(currentEndpoints).filter(_.nonEmpty) ++ toAdd).mkString(",")
       setHadoopConf(config, sparkConf, endpointKey, updatedEndpoints)
       KDSU.logInfo(
         className,

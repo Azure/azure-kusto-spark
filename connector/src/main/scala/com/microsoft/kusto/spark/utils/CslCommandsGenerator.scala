@@ -174,21 +174,26 @@ private[kusto] object CslCommandsGenerator {
       additionalExportOptions: Map[String, String] = Map.empty[String, String],
       supportNewParquetWriter: Boolean = true): String = {
     val getFullUrlFromParams = (storage: TransientStorageCredentials) => {
-      val secretString =
-        storage.authMethod match {
-          case AuthMethod.Key => s""";" h@"${storage.storageAccountKey}""""
-          case AuthMethod.Sas =>
-            if (storage.sasKey(0) == '?') {
-              s"""" h@"${storage.sasKey}""""
-            } else {
-              s"""?" h@"${storage.sasKey}""""
-            }
-          case AuthMethod.Impersonation =>
-            s"""${TransientStorageParameters.ImpersonationString}""""
-        }
-      val blobUri =
-        s"https://${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}"
-      s"$blobUri/${storage.blobContainer}$secretString"
+      if (storage.isOneLake) {
+        // OneLake URL accepted by Kusto .export as-is, with ;impersonate (engine uses caller AAD).
+        s"""${storage.oneLakeUrl}${TransientStorageParameters.ImpersonationString}""""
+      } else {
+        val secretString =
+          storage.authMethod match {
+            case AuthMethod.Key => s""";" h@"${storage.storageAccountKey}""""
+            case AuthMethod.Sas =>
+              if (storage.sasKey(0) == '?') {
+                s"""" h@"${storage.sasKey}""""
+              } else {
+                s"""?" h@"${storage.sasKey}""""
+              }
+            case AuthMethod.Impersonation =>
+              s"""${TransientStorageParameters.ImpersonationString}""""
+          }
+        val blobUri =
+          s"https://${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}"
+        s"$blobUri/${storage.blobContainer}$secretString"
+      }
     }
     // if we pass in compress as 'none' explicitly then do not compress, else compress
     val compress =
