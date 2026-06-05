@@ -32,6 +32,11 @@
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-lang3</artifactId>
             <version>${commons.lang3.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>commons-io</groupId>
+            <artifactId>commons-io</artifactId>
+            <version>2.8.0</version>
         </dependency>        
         <dependency>
             <groupId>com.microsoft.azure.kusto</groupId>
@@ -494,8 +499,8 @@
                                     <shadedPattern>${kusto.shade.prefix}.org.apache.http</shadedPattern>
                                 </relocation>
                                 <relocation>
-                                    <pattern>org.apache.common</pattern>
-                                    <shadedPattern>${kusto.shade.prefix}.org.apache.common</shadedPattern>
+                                    <pattern>org.apache.commons</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.org.apache.commons</shadedPattern>
                                 </relocation>
                                 <!-- IO -->
                                 <relocation>
