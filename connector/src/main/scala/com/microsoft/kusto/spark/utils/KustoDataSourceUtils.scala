@@ -643,12 +643,12 @@ object KustoDataSourceUtils {
   }
 
   /**
-   * Parse ingestion storage parameters from KUSTO_INGESTION_STORAGE option.
-   * Accepts two JSON formats (backward-compatible):
-   *   1. Legacy array: [{"storageUrl":"...", "containerName":"...", ...}]
-   *      → Returns (Some(array), None) — existing blob write path via ContainerProvider
-   *   2. Unified: {"storageCredentials": [{"oneLakeUrl":"..."} | {"sasUrl":"..."}]}
-   *      → Returns (None, Some(TransientStorageParameters)) — unified write path
+   * Parse ingestion storage parameters from KUSTO_INGESTION_STORAGE option. Accepts two JSON
+   * formats (backward-compatible):
+   *   1. Legacy array: [{"storageUrl":"...", "containerName":"...", ...}] → Returns (Some(array),
+   *      None) — existing blob write path via ContainerProvider 2. Unified:
+   *      {"storageCredentials": [{"oneLakeUrl":"..."} | {"sasUrl":"..."}]} → Returns (None,
+   *      Some(TransientStorageParameters)) — unified write path
    *
    * The unified format supports both OneLake URLs and blob/ADLS2 URLs with ;impersonate or SAS.
    */
@@ -668,8 +668,8 @@ object KustoDataSourceUtils {
           // Legacy IngestionStorageParameters array format — keep existing behavior
           val arrayParams = IngestionStorageParameters.fromString(trimmed)
           arrayParams.foreach(ingestionStorageParameter => {
-            if (StringUtils.isEmpty(ingestionStorageParameter.containerName) || StringUtils.isEmpty(
-                ingestionStorageParameter.storageUrl)) {
+            if (StringUtils.isEmpty(ingestionStorageParameter.containerName) || StringUtils
+                .isEmpty(ingestionStorageParameter.storageUrl)) {
               throw new IllegalArgumentException(
                 "storageUrl and containerName must be set when supplying ingestion storage")
             }

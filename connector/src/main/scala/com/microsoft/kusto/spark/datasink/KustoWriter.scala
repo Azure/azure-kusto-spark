@@ -618,8 +618,10 @@ object KustoWriter {
         .format(now)}_spark.csv.gz"
 
     // Pick the first OneLake credential (round-robin could be added later)
-    val cred = oneLakeStorage.storageCredentials.find(_.isOneLake).getOrElse(
-      throw new InvalidParameterException("No OneLake credential found in write storage"))
+    val cred = oneLakeStorage.storageCredentials
+      .find(_.isOneLake)
+      .getOrElse(
+        throw new InvalidParameterException("No OneLake credential found in write storage"))
 
     // Write via abfss using Hadoop FileSystem (ambient AAD from Fabric Spark runtime)
     val abfssBase = cred.oneLakeAbfssBase
@@ -866,7 +868,13 @@ object KustoWriter {
     val maxBlobSize = parameters.writeOptions.batchLimit * KCONST.OneMegaByte
     var curBlobUUID = UUID.randomUUID().toString
     val initialWriter: OneLakeWriteResource =
-      createOneLakeWriter(parameters, oneLakeStorage, hadoopConf, partitionIdString, 0, curBlobUUID)
+      createOneLakeWriter(
+        parameters,
+        oneLakeStorage,
+        hadoopConf,
+        partitionIdString,
+        0,
+        curBlobUUID)
     val timeZone = TimeZone.getTimeZone(parameters.writeOptions.timeZone).toZoneId
 
     val lastWriter = rows.zipWithIndex.foldLeft[OneLakeWriteResource](initialWriter) {
@@ -933,16 +941,14 @@ object KustoWriter {
     if (toAdd.nonEmpty) {
       val updated = (Seq(current).filter(_.nonEmpty) ++ toAdd).mkString(",")
       hadoopConf.set(endpointKey, updated)
-      KDSU.logInfo(
-        className,
-        s"Added OneLake endpoints to $endpointKey: ${toAdd.mkString(",")}")
+      KDSU.logInfo(className, s"Added OneLake endpoints to $endpointKey: ${toAdd.mkString(",")}")
     }
   }
 
   /**
-   * Blob/ADLS2 variant using TransientStorageCredentials (storageCredentials JSON format).
-   * Writes gzipped CSV to blob via CloudBlockBlob using the SAS URL from the credentials,
-   * then queues ingestion. Supports both SAS and ;impersonate auth.
+   * Blob/ADLS2 variant using TransientStorageCredentials (storageCredentials JSON format). Writes
+   * gzipped CSV to blob via CloudBlockBlob using the SAS URL from the credentials, then queues
+   * ingestion. Supports both SAS and ;impersonate auth.
    */
   @throws[IOException]
   private[kusto] def ingestRowsTransientBlob(
@@ -964,9 +970,9 @@ object KustoWriter {
       val now = Instant.now()
       val tmpTableName = parameters.tmpTableName
       val tableCoordinates = parameters.coordinates
-      val blobName = s"${KustoQueryUtils.simplifyName(
-          tableCoordinates.database)}_${tmpTableName}_${blobUUID}_${partitionIdString}_${blobNumber}_${formatter
-          .format(now)}_spark.csv.gz"
+      val blobName =
+        s"${KustoQueryUtils.simplifyName(tableCoordinates.database)}_${tmpTableName}_${blobUUID}_${partitionIdString}_${blobNumber}_${formatter
+            .format(now)}_spark.csv.gz"
 
       // Construct blob URL with auth suffix
       val (containerUrl, sas) = cred.authMethod match {
@@ -1099,8 +1105,10 @@ final case class BlobWriteResource(
     csvWriter: CountingWriter,
     blob: CloudBlockBlob,
     sas: String) {
+
   /** Blob URI for ingestion submission */
   def blobUri: String = blob.getStorageUri.getPrimaryUri.toString
+
   /** Full URI including auth suffix (SAS or ;impersonate) */
   def ingestUri: String = s"$blobUri$sas"
 }
@@ -1111,6 +1119,7 @@ final case class OneLakeWriteResource(
     csvWriter: CountingWriter,
     outputStream: OutputStream,
     httpsUrl: String) {
+
   /** Full URI for ingestion submission — OneLake URL with ;impersonate */
   def ingestUri: String = s"$httpsUrl;impersonate"
 }
