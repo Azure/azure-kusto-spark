@@ -21,6 +21,11 @@ import com.microsoft.azure.storage.blob.{BlobRequestOptions, CloudBlockBlob}
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.FinalizeHelper.finalizeIngestionWhenWorkersSucceeded
+import com.microsoft.kusto.spark.datasource.{
+  AuthMethod,
+  TransientStorageCredentials,
+  TransientStorageParameters
+}
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator.generateTableGetSchemaAsRowsCommand
 import com.microsoft.kusto.spark.utils.KustoConstants.{
   IngestSkippedTrace,
@@ -38,6 +43,8 @@ import com.microsoft.kusto.spark.utils.{
 }
 import io.github.resilience4j.retry.RetryConfig
 import org.apache.commons.io.IOUtils
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.InternalRow
@@ -178,6 +185,14 @@ object KustoWriter {
       }
       val rdd = data.queryExecution.toRdd
       val partitionsResults = rdd.sparkContext.collectionAccumulator[PartitionResult]
+
+      // For OneLake writes, ensure the endpoint is in the ABFS valid endpoints allowlist
+      // on the driver side (propagated to executors via Spark's hadoop config distribution)
+      rebuiltOptions.maybeTransientWriteStorage.foreach { transientStorage =>
+        val hadoopConf = data.sparkSession.sparkContext.hadoopConfiguration
+        ensureOneLakeEndpointAllowlisted(hadoopConf, transientStorage)
+      }
+
       val parameters = KustoWriteResource(
         authentication = authentication,
         coordinates = tableCoordinates,
@@ -316,14 +331,39 @@ object KustoWriter {
         IngestionProperties.IngestionReportLevel.FAILURES_AND_SUCCESSES)
     }
     ingestionProperties.setDataFormat(DataFormat.CSV.name)
-    /* A try block may be redundant here. An exception thrown has to be propagated depending on the exception */
-    ingestRows(
-      rows,
-      parameters,
-      ingestClient,
-      ingestionProperties,
-      partitionsResults,
-      batchIdForTracing)
+
+    parameters.writeOptions.maybeTransientWriteStorage match {
+      case Some(transientStorage) if transientStorage.storageCredentials.exists(_.isOneLake) =>
+        // OneLake write path — uses Hadoop FileSystem (abfss) + ingestFromBlob with ;impersonate
+        ingestRowsOneLake(
+          rows,
+          parameters,
+          ingestClient,
+          ingestionProperties,
+          partitionsResults,
+          batchIdForTracing,
+          transientStorage)
+      case Some(transientStorage) =>
+        // Blob/ADLS2 with storageCredentials format — uses existing blob path with
+        // credentials extracted from TransientStorageCredentials (SAS or ;impersonate)
+        ingestRowsTransientBlob(
+          rows,
+          parameters,
+          ingestClient,
+          ingestionProperties,
+          partitionsResults,
+          batchIdForTracing,
+          transientStorage)
+      case None =>
+        // Legacy path — uses DM-provided or IngestionStorageParameters containers
+        ingestRows(
+          rows,
+          parameters,
+          ingestClient,
+          ingestionProperties,
+          partitionsResults,
+          batchIdForTracing)
+    }
     KDSU.logInfo(
       className,
       s"Ingesting from blob(s) partition: ${TaskContext.getPartitionId()} requestId: " +
@@ -563,6 +603,40 @@ object KustoWriter {
     BlobWriteResource(buffer, gzip, csvWriter, currentBlob, currentSas)
   }
 
+  private def createOneLakeWriter(
+      kustoParameters: KustoWriteResource,
+      oneLakeStorage: TransientStorageParameters,
+      hadoopConf: Configuration,
+      partitionId: String,
+      blobNumber: Int,
+      blobUUID: String): OneLakeWriteResource = {
+    val now = Instant.now()
+    val tmpTableName = kustoParameters.tmpTableName
+    val tableCoordinates = kustoParameters.coordinates
+    val blobName = s"${KustoQueryUtils.simplifyName(
+        tableCoordinates.database)}_${tmpTableName}_${blobUUID}_${partitionId}_${blobNumber}_${formatter
+        .format(now)}_spark.csv.gz"
+
+    // Pick the first OneLake credential (round-robin could be added later)
+    val cred = oneLakeStorage.storageCredentials.find(_.isOneLake).getOrElse(
+      throw new InvalidParameterException("No OneLake credential found in write storage"))
+
+    // Write via abfss using Hadoop FileSystem (ambient AAD from Fabric Spark runtime)
+    val abfssBase = cred.oneLakeAbfssBase
+    val filePath = new Path(s"$abfssBase/$blobName")
+    val fs = FileSystem.get(filePath.toUri, hadoopConf)
+    val outputStream = fs.create(filePath, true)
+
+    val gzip: GZIPOutputStream = new GZIPOutputStream(outputStream)
+    val writer = new OutputStreamWriter(gzip, StandardCharsets.UTF_8)
+    val buffer: BufferedWriter = new BufferedWriter(writer, GzipBufferSize)
+    val csvWriter = CountingWriter(buffer)
+
+    // Construct the https URL for ingestion (Kusto .ingest reads via https + ;impersonate)
+    val httpsUrl = s"${cred.oneLakeUrl}/$blobName"
+    OneLakeWriteResource(buffer, gzip, csvWriter, outputStream, httpsUrl)
+  }
+
   @throws[IOException]
   private[kusto] def ingestRows(
       rows: Iterator[InternalRow],
@@ -713,6 +787,304 @@ object KustoWriter {
     }
   }
 
+  /**
+   * OneLake variant of ingestRows. Writes gzipped CSV to OneLake via Hadoop FileSystem (abfss),
+   * then queues ingestion using the https URL with ;impersonate.
+   */
+  @throws[IOException]
+  private[kusto] def ingestRowsOneLake(
+      rows: Iterator[InternalRow],
+      parameters: KustoWriteResource,
+      ingestClient: IngestClient,
+      ingestionProperties: IngestionProperties,
+      partitionsResults: CollectionAccumulator[PartitionResult],
+      batchIdForTracing: String,
+      oneLakeStorage: TransientStorageParameters): Unit = {
+    val partitionId = TaskContext.getPartitionId()
+    val partitionIdString = partitionId.toString
+
+    // Get Hadoop configuration — on the executor, new Configuration() picks up
+    // configs distributed by Spark (core-site.xml, ABFS settings, etc.)
+    val hadoopConf = new Configuration()
+
+    // Ensure OneLake endpoint is in the ABFS valid endpoints allowlist
+    ensureOneLakeEndpointAllowlisted(hadoopConf, oneLakeStorage)
+
+    def ingestOneLake(
+        resource: OneLakeWriteResource,
+        flushImmediately: Boolean = false,
+        blobUUID: String): Unit = {
+      var props = ingestionProperties
+      if (parameters.writeOptions.kustoCustomDebugWriteOptions.ensureNoDuplicatedBlobs || (!props.getFlushImmediately && flushImmediately)) {
+        props = SparkIngestionProperties.cloneIngestionProperties(ingestionProperties)
+      }
+
+      if (parameters.writeOptions.kustoCustomDebugWriteOptions.ensureNoDuplicatedBlobs) {
+        val pref = KDSU.getDedupTagsPrefix(parameters.writeOptions.requestId, batchIdForTracing)
+        val tag = pref + blobUUID
+        val ingestIfNotExist = new util.ArrayList[String]
+        ingestIfNotExist.addAll(props.getIngestIfNotExists)
+        val ingestBy: util.List[String] = new util.ArrayList[String]
+        ingestBy.addAll(props.getIngestByTags)
+        ingestBy.add(tag)
+        ingestIfNotExist.add(tag)
+        props.setIngestByTags(ingestBy)
+        props.setIngestIfNotExists(ingestIfNotExist)
+      }
+
+      if (!props.getFlushImmediately && flushImmediately) {
+        props.setFlushImmediately(true)
+      }
+
+      val partitionsResult = KDSU.retryApplyFunction(
+        i => {
+          Try(
+            ingestClient.ingestFromBlob(
+              new BlobSourceInfo(resource.ingestUri, CompressionType.gz, UUID.randomUUID()),
+              props)) match {
+            case Success(x) => x
+            case Failure(e: Throwable) =>
+              KDSU.reportExceptionAndThrow(
+                className,
+                e,
+                s"Queueing OneLake blob for ingestion, retry number '$i', in partition " +
+                  s"$partitionIdString for requestId: '${parameters.writeOptions.requestId}")
+              null
+          }
+        },
+        this.retryConfig,
+        "Ingest from OneLake into Kusto")
+      if (parameters.writeOptions.writeMode == WriteMode.Transactional) {
+        partitionsResults.add(PartitionResult(partitionsResult, partitionId))
+      }
+      KDSU.logInfo(
+        className,
+        s"Queued OneLake blob for ingestion in partition $partitionIdString " +
+          s"for requestId: '${parameters.writeOptions.requestId}")
+    }
+
+    val maxBlobSize = parameters.writeOptions.batchLimit * KCONST.OneMegaByte
+    var curBlobUUID = UUID.randomUUID().toString
+    val initialWriter: OneLakeWriteResource =
+      createOneLakeWriter(parameters, oneLakeStorage, hadoopConf, partitionIdString, 0, curBlobUUID)
+    val timeZone = TimeZone.getTimeZone(parameters.writeOptions.timeZone).toZoneId
+
+    val lastWriter = rows.zipWithIndex.foldLeft[OneLakeWriteResource](initialWriter) {
+      case (writer, row) =>
+        RowCSVWriterUtils.writeRowAsCSV(row._1, parameters.schema, timeZone, writer.csvWriter)
+
+        val count = writer.csvWriter.getCounter
+        if (count < maxBlobSize) {
+          writer
+        } else {
+          KDSU.logInfo(
+            className,
+            s"Sealing OneLake blob in partition $partitionIdString for requestId: '${parameters.writeOptions.requestId}', " +
+              s"blob number ${row._2}, with size $count")
+          finalizeOneLakeWrite(writer)
+          ingestOneLake(
+            writer,
+            flushImmediately =
+              !parameters.writeOptions.kustoCustomDebugWriteOptions.disableFlushImmediately,
+            curBlobUUID)
+          curBlobUUID = UUID.randomUUID().toString
+          createOneLakeWriter(
+            parameters,
+            oneLakeStorage,
+            hadoopConf,
+            partitionIdString,
+            row._2,
+            curBlobUUID)
+        }
+    }
+
+    KDSU.logInfo(
+      className,
+      s"Finished serializing rows to OneLake in partition $partitionIdString for " +
+        s"requestId: '${parameters.writeOptions.requestId}' ")
+    finalizeOneLakeWrite(lastWriter)
+    if (lastWriter.csvWriter.getCounter > 0) {
+      ingestOneLake(lastWriter, flushImmediately = false, curBlobUUID)
+    }
+  }
+
+  private def finalizeOneLakeWrite(resource: OneLakeWriteResource): Unit = {
+    resource.writer.flush()
+    resource.gzip.flush()
+    resource.writer.close()
+    resource.gzip.close()
+  }
+
+  /**
+   * Ensure OneLake endpoints are in the Hadoop ABFS valid endpoints allowlist on the executor.
+   */
+  private def ensureOneLakeEndpointAllowlisted(
+      hadoopConf: Configuration,
+      oneLakeStorage: TransientStorageParameters): Unit = {
+    val endpointKey = "fs.azure.abfs.valid.endpoints"
+    val current = Option(hadoopConf.get(endpointKey)).getOrElse("")
+    val existingSet = current.split(',').map(_.trim).filter(_.nonEmpty).toSet
+    val oneLakeEndpoints = oneLakeStorage.storageCredentials
+      .filter(c => c != null && c.isOneLake)
+      .map(_.oneLakeEndpoint)
+      .filter(_ != null)
+      .distinct
+    val toAdd = oneLakeEndpoints.filter(ep => !existingSet.contains(ep))
+    if (toAdd.nonEmpty) {
+      val updated = (Seq(current).filter(_.nonEmpty) ++ toAdd).mkString(",")
+      hadoopConf.set(endpointKey, updated)
+      KDSU.logInfo(
+        className,
+        s"Added OneLake endpoints to $endpointKey: ${toAdd.mkString(",")}")
+    }
+  }
+
+  /**
+   * Blob/ADLS2 variant using TransientStorageCredentials (storageCredentials JSON format).
+   * Writes gzipped CSV to blob via CloudBlockBlob using the SAS URL from the credentials,
+   * then queues ingestion. Supports both SAS and ;impersonate auth.
+   */
+  @throws[IOException]
+  private[kusto] def ingestRowsTransientBlob(
+      rows: Iterator[InternalRow],
+      parameters: KustoWriteResource,
+      ingestClient: IngestClient,
+      ingestionProperties: IngestionProperties,
+      partitionsResults: CollectionAccumulator[PartitionResult],
+      batchIdForTracing: String,
+      transientStorage: TransientStorageParameters): Unit = {
+    val partitionId = TaskContext.getPartitionId()
+    val partitionIdString = partitionId.toString
+
+    // Pick a credential (round-robin for multiple)
+    val credIdx = partitionId % transientStorage.storageCredentials.length
+    val cred = transientStorage.storageCredentials(credIdx)
+
+    def createTransientBlobWriter(blobNumber: Int, blobUUID: String): BlobWriteResource = {
+      val now = Instant.now()
+      val tmpTableName = parameters.tmpTableName
+      val tableCoordinates = parameters.coordinates
+      val blobName = s"${KustoQueryUtils.simplifyName(
+          tableCoordinates.database)}_${tmpTableName}_${blobUUID}_${partitionIdString}_${blobNumber}_${formatter
+          .format(now)}_spark.csv.gz"
+
+      // Construct blob URL with auth suffix
+      val (containerUrl, sas) = cred.authMethod match {
+        case AuthMethod.Sas =>
+          val baseUrl = cred.sasUrl.split("\\?")(0)
+          val sasKey = if (cred.sasKey.startsWith("?")) cred.sasKey else s"?${cred.sasKey}"
+          (baseUrl, sasKey)
+        case AuthMethod.Impersonation =>
+          val baseUrl = cred.sasUrl.stripSuffix(TransientStorageParameters.ImpersonationString)
+          (baseUrl, TransientStorageParameters.ImpersonationString)
+        case AuthMethod.Key =>
+          val url =
+            s"https://${cred.storageAccountName}.blob.${transientStorage.endpointSuffix}/${cred.blobContainer}"
+          (url, "") // Key auth handled differently
+      }
+
+      val currentBlob = new CloudBlockBlob(new URI(s"$containerUrl/$blobName$sas"))
+      val options = new BlobRequestOptions()
+      options.setConcurrentRequestCount(4)
+      val gzip: GZIPOutputStream = new GZIPOutputStream(
+        currentBlob.openOutputStream(null, options, null))
+      val writer = new OutputStreamWriter(gzip, StandardCharsets.UTF_8)
+      val buffer: BufferedWriter = new BufferedWriter(writer, GzipBufferSize)
+      val csvWriter = CountingWriter(buffer)
+      BlobWriteResource(buffer, gzip, csvWriter, currentBlob, sas)
+    }
+
+    def ingest(
+        blobResource: BlobWriteResource,
+        flushImmediately: Boolean = false,
+        blobUUID: String): Unit = {
+      var props = ingestionProperties
+      val ingestUrl = blobResource.ingestUri
+      if (parameters.writeOptions.kustoCustomDebugWriteOptions.ensureNoDuplicatedBlobs || (!props.getFlushImmediately && flushImmediately)) {
+        props = SparkIngestionProperties.cloneIngestionProperties(ingestionProperties)
+      }
+
+      if (parameters.writeOptions.kustoCustomDebugWriteOptions.ensureNoDuplicatedBlobs) {
+        val pref = KDSU.getDedupTagsPrefix(parameters.writeOptions.requestId, batchIdForTracing)
+        val tag = pref + blobUUID
+        val ingestIfNotExist = new util.ArrayList[String]
+        ingestIfNotExist.addAll(props.getIngestIfNotExists)
+        val ingestBy: util.List[String] = new util.ArrayList[String]
+        ingestBy.addAll(props.getIngestByTags)
+        ingestBy.add(tag)
+        ingestIfNotExist.add(tag)
+        props.setIngestByTags(ingestBy)
+        props.setIngestIfNotExists(ingestIfNotExist)
+      }
+
+      if (!props.getFlushImmediately && flushImmediately) {
+        props.setFlushImmediately(true)
+      }
+
+      val partitionsResult = KDSU.retryApplyFunction(
+        i => {
+          Try(
+            ingestClient.ingestFromBlob(
+              new BlobSourceInfo(ingestUrl, CompressionType.gz, UUID.randomUUID()),
+              props)) match {
+            case Success(x) => x
+            case Failure(e: Throwable) =>
+              KDSU.reportExceptionAndThrow(
+                className,
+                e,
+                s"Queueing transient blob for ingestion, retry number '$i', in partition " +
+                  s"$partitionIdString for requestId: '${parameters.writeOptions.requestId}")
+              null
+          }
+        },
+        this.retryConfig,
+        "Ingest transient blob into Kusto")
+      if (parameters.writeOptions.writeMode == WriteMode.Transactional) {
+        partitionsResults.add(PartitionResult(partitionsResult, partitionId))
+      }
+      KDSU.logInfo(
+        className,
+        s"Queued transient blob for ingestion in partition $partitionIdString " +
+          s"for requestId: '${parameters.writeOptions.requestId}")
+    }
+
+    val maxBlobSize = parameters.writeOptions.batchLimit * KCONST.OneMegaByte
+    var curBlobUUID = UUID.randomUUID().toString
+    val initialWriter = createTransientBlobWriter(0, curBlobUUID)
+    val timeZone = TimeZone.getTimeZone(parameters.writeOptions.timeZone).toZoneId
+
+    val lastWriter = rows.zipWithIndex.foldLeft[BlobWriteResource](initialWriter) {
+      case (writer, row) =>
+        RowCSVWriterUtils.writeRowAsCSV(row._1, parameters.schema, timeZone, writer.csvWriter)
+        val count = writer.csvWriter.getCounter
+        if (count < maxBlobSize) {
+          writer
+        } else {
+          KDSU.logInfo(
+            className,
+            s"Sealing transient blob in partition $partitionIdString for requestId: " +
+              s"'${parameters.writeOptions.requestId}', blob number ${row._2}, with size $count")
+          finalizeBlobWrite(writer)
+          ingest(
+            writer,
+            flushImmediately =
+              !parameters.writeOptions.kustoCustomDebugWriteOptions.disableFlushImmediately,
+            curBlobUUID)
+          curBlobUUID = UUID.randomUUID().toString
+          createTransientBlobWriter(row._2, curBlobUUID)
+        }
+    }
+
+    KDSU.logInfo(
+      className,
+      s"Finished serializing rows to transient blob in partition $partitionIdString for " +
+        s"requestId: '${parameters.writeOptions.requestId}' ")
+    finalizeBlobWrite(lastWriter)
+    if (lastWriter.csvWriter.getCounter > 0) {
+      ingest(lastWriter, flushImmediately = false, curBlobUUID)
+    }
+  }
+
   def finalizeBlobWrite(blobWriteResource: BlobWriteResource): Unit = {
     blobWriteResource.writer.flush()
     blobWriteResource.gzip.flush()
@@ -726,7 +1098,22 @@ final case class BlobWriteResource(
     gzip: GZIPOutputStream,
     csvWriter: CountingWriter,
     blob: CloudBlockBlob,
-    sas: String)
+    sas: String) {
+  /** Blob URI for ingestion submission */
+  def blobUri: String = blob.getStorageUri.getPrimaryUri.toString
+  /** Full URI including auth suffix (SAS or ;impersonate) */
+  def ingestUri: String = s"$blobUri$sas"
+}
+
+final case class OneLakeWriteResource(
+    writer: BufferedWriter,
+    gzip: GZIPOutputStream,
+    csvWriter: CountingWriter,
+    outputStream: OutputStream,
+    httpsUrl: String) {
+  /** Full URI for ingestion submission — OneLake URL with ;impersonate */
+  def ingestUri: String = s"$httpsUrl;impersonate"
+}
 final case class KustoWriteResource(
     authentication: KustoAuthentication,
     coordinates: KustoCoordinates,
