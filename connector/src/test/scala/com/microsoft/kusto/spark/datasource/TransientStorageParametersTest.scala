@@ -93,7 +93,7 @@ class TransientStorageParametersTest extends AnyFlatSpec {
 
   it should "round-trip OneLake credentials via JSON" in {
     val transientStorage =
-      "{\"storageCredentials\": [{\"sasUrl\": " +
+      "{\"storageCredentials\": [{\"oneLakeUrl\": " +
         "\"https://onelake.dfs.fabric.microsoft.com/myws/mylake.Lakehouse/Files/exports\"}]," +
         "\"endpointSuffix\": \"fabric.microsoft.com\"}"
     val params = TransientStorageParameters.fromString(transientStorage)
@@ -113,17 +113,28 @@ class TransientStorageParametersTest extends AnyFlatSpec {
     TransientStorageCredentials.isOneLakeUrl(
       "https://ateststorage.blob.core.windows.net/kusto?sv=2020") shouldEqual false
     TransientStorageCredentials.isOneLakeUrl(
-      "https://ateststorage.dfs.core.windows.net/kusto") shouldEqual false
+      "https://ateststorage.blob.core.windows.net/kusto;impersonate") shouldEqual false
     TransientStorageCredentials.isOneLakeUrl(null) shouldEqual false
     TransientStorageCredentials.isOneLakeUrl("") shouldEqual false
   }
 
-  it should "not classify lookalike hosts with extra labels after the suffix" in {
-    // Loose substring matching used to misclassify these; tightened to endsWith.
+  it should "recognize OneLake on custom/sovereign domains regardless of TLD" in {
+    // Cloud-agnostic: any host carrying a OneLake service label is OneLake, regardless of domain.
     TransientStorageCredentials.isOneLakeUrl(
-      "https://foo.blob.fabric.microsoft.test.com/ws/lh.Lakehouse/Files") shouldEqual false
+      "https://onelake-int-edog.dfs.pbidedicated.windows-int.net/ws/lh.Lakehouse/Files/exports") shouldEqual true
     TransientStorageCredentials.isOneLakeUrl(
-      "https://onelake.dfs.fabric.microsoft.com.evil.example/ws/lh") shouldEqual false
+      "abfss://ws@onelake.dfs.fabric.microsoft.us/lh.Lakehouse/Files/exports") shouldEqual true
+    TransientStorageCredentials.isOneLakeUrl(
+      "https://onelake.blob.fabric.microsoft.com/ws/lh.Lakehouse/Files/exports") shouldEqual true
+  }
+
+  it should "parse OneLake credentials on a custom (edog) domain" in {
+    val cred = new TransientStorageCredentials(
+      "https://onelake-int-edog.dfs.pbidedicated.windows-int.net/myws/mylake.Lakehouse/Files/exports")
+    cred.isOneLake shouldEqual true
+    cred.oneLakeEndpoint shouldEqual "onelake-int-edog.dfs.pbidedicated.windows-int.net"
+    cred.oneLakeWorkspace shouldEqual "myws"
+    cred.oneLakeArtifactPath shouldEqual "mylake.Lakehouse/Files/exports"
   }
 
   it should "parse OneLake JSON when only oneLakeUrl is supplied" in {
@@ -137,10 +148,67 @@ class TransientStorageParametersTest extends AnyFlatSpec {
     cred.oneLakeArtifactPath shouldEqual "mylake.Lakehouse/Files/exports"
   }
 
+  "Explicit transientStorage type" should "classify by 'type' even when the URL is in sasUrl" in {
+    val transientStorage =
+      "{\"storageCredentials\": [{\"type\": \"onelake\", \"sasUrl\": " +
+        "\"https://onelake.dfs.fabric.microsoft.com/myws/mylake.Lakehouse/Files/exports\"}]}"
+    val cred = TransientStorageParameters.fromString(transientStorage).storageCredentials.head
+    cred.isOneLake shouldEqual true
+    cred.oneLakeWorkspace shouldEqual "myws"
+  }
+
+  it should "accept 'type' case-insensitively and trimmed" in {
+    val transientStorage =
+      "{\"storageCredentials\": [{\"type\": \"  OneLake  \", \"oneLakeUrl\": " +
+        "\"https://onelake.dfs.fabric.microsoft.com/myws/mylake.Lakehouse/Files/exports\"}]}"
+    val cred = TransientStorageParameters.fromString(transientStorage).storageCredentials.head
+    cred.isOneLake shouldEqual true
+  }
+
+  it should "not classify a OneLake-looking URL in sasUrl as OneLake without type/oneLakeUrl" in {
+    // No explicit type and no oneLakeUrl => blob; the OneLake-looking sasUrl is not auto-detected.
+    val transientStorage =
+      "{\"storageCredentials\": [{\"sasUrl\": " +
+        "\"https://onelake.dfs.fabric.microsoft.com/myws/mylake.Lakehouse/Files/exports\"}]}"
+    val cred = TransientStorageParameters.fromString(transientStorage).storageCredentials.head
+    cred.isOneLake shouldEqual false
+  }
+
+  it should "reject type 'blob' combined with a oneLakeUrl" in {
+    val transientStorage =
+      "{\"storageCredentials\": [{\"type\": \"blob\", \"oneLakeUrl\": " +
+        "\"https://onelake.dfs.fabric.microsoft.com/myws/mylake.Lakehouse/Files/exports\"}]}"
+    val thrown = intercept[java.security.InvalidParameterException] {
+      TransientStorageParameters.fromString(transientStorage)
+    }
+    thrown.getMessage should include("type 'blob' cannot specify a oneLakeUrl")
+  }
+
+  it should "reject an unknown transientStorage type" in {
+    val transientStorage =
+      "{\"storageCredentials\": [{\"type\": \"lakehouse\", \"oneLakeUrl\": " +
+        "\"https://onelake.dfs.fabric.microsoft.com/myws/mylake.Lakehouse/Files/exports\"}]}"
+    val thrown = intercept[java.security.InvalidParameterException] {
+      TransientStorageParameters.fromString(transientStorage)
+    }
+    thrown.getMessage should include("Unknown transientStorage type")
+  }
+
+  it should "default to blob for existing configs with neither type nor oneLakeUrl (backward compat)" in {
+    val transientStorage =
+      "{\"storageCredentials\": [{\"storageAccountName\": \"acct\", \"blobContainer\": \"c\"," +
+        "\"sasUrl\": \"https://acct.blob.core.windows.net/c\", \"sasKey\": \"?sig=x\"}]," +
+        "\"endpointSuffix\": \"core.windows.net\"}"
+    val cred = TransientStorageParameters.fromString(transientStorage).storageCredentials.head
+    cred.isOneLake shouldEqual false
+    cred.storageAccountName shouldEqual "acct"
+    cred.blobContainer shouldEqual "c"
+  }
+
   "TransientStorageParameters mixing" should "reject OneLake + Blob credentials together" in {
     val transientStorage =
       "{\"storageCredentials\": [" +
-        "{\"sasUrl\": \"https://onelake.dfs.fabric.microsoft.com/myws/mylake.Lakehouse/Files/exports\"}," +
+        "{\"oneLakeUrl\": \"https://onelake.dfs.fabric.microsoft.com/myws/mylake.Lakehouse/Files/exports\"}," +
         "{\"sasUrl\": \"https://ateststorage.blob.core.windows.net/kusto;impersonate\"}" +
         "]}"
     val thrown = intercept[java.security.InvalidParameterException] {
@@ -244,5 +312,101 @@ class TransientStorageParametersTest extends AnyFlatSpec {
       cred.parseOneLake(cred.oneLakeUrl)
     }
     thrown.getMessage should include("query")
+  }
+
+  it should "reject encoded path traversal" in {
+    val thrown = intercept[java.security.InvalidParameterException] {
+      val cred = new TransientStorageCredentials()
+      cred.oneLakeUrl =
+        "https://onelake.dfs.fabric.microsoft.com/myws/mylake.Lakehouse/Files/%2e%2e/secret"
+      cred.parseOneLake(cred.oneLakeUrl)
+    }
+    thrown.getMessage should include("..")
+  }
+
+  it should "treat a custom blob SAS/impersonate host containing 'onelake' as blob, not OneLake" in {
+    TransientStorageCredentials.isOneLakeUrl(
+      "https://myonelake.blob.contoso.net/container;impersonate") shouldEqual false
+    TransientStorageCredentials.isOneLakeUrl(
+      "https://myonelake.blob.contoso.net/container?sv=2020&sig=x") shouldEqual false
+  }
+
+  it should "reject encoded traversal in the workspace segment" in {
+    val thrown = intercept[java.security.InvalidParameterException] {
+      val cred = new TransientStorageCredentials()
+      cred.oneLakeUrl = "https://onelake.dfs.fabric.microsoft.com/%2e%2e/mylake.Lakehouse/Files/x"
+      cred.parseOneLake(cred.oneLakeUrl)
+    }
+    thrown.getMessage should include("..")
+  }
+
+  it should "reject abfss OneLake host without a OneLake service label" in {
+    // abfss also requires a OneLake label (defense-in-depth); arbitrary/localhost hosts are not OneLake.
+    TransientStorageCredentials.isOneLakeUrl(
+      "abfss://ws@evil.corp.net/lh.Lakehouse/Files/x") shouldEqual false
+    TransientStorageCredentials.isOneLakeUrl(
+      "abfss://ws@localhost/lh.Lakehouse/Files/x") shouldEqual false
+    val thrown = intercept[java.security.InvalidParameterException] {
+      val cred = new TransientStorageCredentials()
+      cred.oneLakeUrl = "abfss://ws@evil.corp.net/lh.Lakehouse/Files/x"
+      cred.parseOneLake(cred.oneLakeUrl)
+    }
+    thrown.getMessage should include("not a recognized Fabric OneLake URL")
+  }
+
+  it should "recognize a .blob.fabric OneLake host even with ;impersonate" in {
+    TransientStorageCredentials.isOneLakeUrl(
+      "https://onelake.blob.fabric.microsoft.com/ws/lh.Lakehouse/Files/exports;impersonate") shouldEqual true
+  }
+
+  it should "not treat an unrelated host containing the substring 'onelake' as OneLake" in {
+    TransientStorageCredentials.isOneLakeUrl(
+      "https://notonelake.example.com/ws/lh.Lakehouse/Files/x") shouldEqual false
+  }
+
+  it should "reject a fragment" in {
+    val thrown = intercept[java.security.InvalidParameterException] {
+      val cred = new TransientStorageCredentials()
+      cred.oneLakeUrl =
+        "https://onelake.dfs.fabric.microsoft.com/myws/mylake.Lakehouse/Files/x#frag"
+      cred.parseOneLake(cred.oneLakeUrl)
+    }
+    thrown.getMessage should include("fragment")
+  }
+
+  it should "reject userInfo on an https OneLake URL" in {
+    val thrown = intercept[java.security.InvalidParameterException] {
+      val cred = new TransientStorageCredentials()
+      cred.oneLakeUrl =
+        "https://user@onelake.dfs.fabric.microsoft.com/myws/mylake.Lakehouse/Files/x"
+      cred.parseOneLake(cred.oneLakeUrl)
+    }
+    thrown.getMessage should include("userInfo")
+  }
+
+  it should "reject empty path segments (double slash)" in {
+    val thrown = intercept[java.security.InvalidParameterException] {
+      val cred = new TransientStorageCredentials()
+      cred.oneLakeUrl = "https://onelake.dfs.fabric.microsoft.com/myws/mylake.Lakehouse/Files//x"
+      cred.parseOneLake(cred.oneLakeUrl)
+    }
+    thrown.getMessage should include("empty segments")
+  }
+
+  it should "classify a blob account+key JSON credential as blob (backward compat)" in {
+    val transientStorage =
+      "{\"storageCredentials\": [{\"storageAccountName\": \"acct\", \"storageAccountKey\": \"key\"," +
+        "\"blobContainer\": \"c\"}], \"endpointSuffix\": \"core.windows.net\"}"
+    val cred = TransientStorageParameters.fromString(transientStorage).storageCredentials.head
+    cred.isOneLake shouldEqual false
+    cred.storageAccountName shouldEqual "acct"
+  }
+
+  it should "treat a whitespace-only type as absent (blob)" in {
+    val transientStorage =
+      "{\"storageCredentials\": [{\"type\": \"   \", \"storageAccountName\": \"acct\"," +
+        "\"storageAccountKey\": \"key\", \"blobContainer\": \"c\"}]}"
+    val cred = TransientStorageParameters.fromString(transientStorage).storageCredentials.head
+    cred.isOneLake shouldEqual false
   }
 }

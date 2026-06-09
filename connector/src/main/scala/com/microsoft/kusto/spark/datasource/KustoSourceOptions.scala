@@ -20,12 +20,15 @@ object KustoSourceOptions extends KustoOptions {
   //   - account+key:     { "storageAccountName": "...", "storageAccountKey": "...", "blobContainer": "..." }
   //   - blob impersonate:{ "sasUrl": "https://<account>.blob.<suffix>/<container>;impersonate" }
   //   - OneLake (Fabric Lakehouse), with caller AAD impersonation (no SAS required):
-  //       { "sasUrl": "https://onelake.dfs.fabric.microsoft.com/<workspace>/<lakehouse>.Lakehouse/Files/<dir>" }
-  //       or { "sasUrl": "abfss://<workspace>@onelake.dfs.fabric.microsoft.com/<lakehouse>.Lakehouse/Files/<dir>" }
+  //       { "oneLakeUrl": "https://onelake.dfs.fabric.microsoft.com/<workspace>/<lakehouse>.Lakehouse/Files/<dir>" }
+  //       or { "oneLakeUrl": "abfss://<workspace>@onelake.dfs.fabric.microsoft.com/<lakehouse>.Lakehouse/Files/<dir>" }
   //     For OneLake the connector forces storageProtocol=abfss and uses ambient AAD configured by Spark
   //     (Fabric notebooks). The caller must have at least Workspace Contributor / item-level Write on the
   //     target Lakehouse Files path. Useful with DEP / OAP environments where Kusto-managed export blobs
   //     are unreachable from executors.
+  //   The kind of each entry is chosen explicitly: set "type": "onelake" | "blob", or omit "type" and let
+  //   the populated field decide (oneLakeUrl => OneLake, otherwise blob). The URL is only validated, never
+  //   used to guess the kind.
   val KUSTO_TRANSIENT_STORAGE: String = newOption("transientStorage")
 
   // Blob domain endpoint suffix - default: core.windows.net - needed for non-public clouds
