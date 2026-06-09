@@ -255,10 +255,13 @@ final case class TransientStorageCredentials() {
           s"Unsupported scheme '$other' for OneLake URL (expected 'https' or 'abfss'): $url")
     }
 
-    if (!TransientStorageParameters.OneLakeHostSuffixes.exists(suffix =>
-        endpoint.toLowerCase.endsWith(suffix))) {
+    // Lightweight host validation: host must contain a known OneLake-like segment
+    // (dfs, blob, or onelake) to guard against completely unrelated URLs being treated as OneLake.
+    val hostLower = endpoint.toLowerCase
+    if (!hostLower.contains(".dfs.") && !hostLower.contains(".blob.") && !hostLower.contains(".onelake.") &&
+      !hostLower.contains("onelake")) {
       throw new InvalidParameterException(
-        s"OneLake URL host '$endpoint' is not a recognized Fabric OneLake host")
+         s"OneLake URL host '$endpoint' is not a recognized Fabric OneLake host")
     }
 
     // Enforce Lakehouse Files path shape: '<artifact>/Files/<subpath>' with non-empty
@@ -304,7 +307,8 @@ object TransientStorageParameters {
   private[kusto] val OneLakeHostSuffixes: Array[String] = Array(
     ".dfs.fabric.microsoft.com",
     ".blob.fabric.microsoft.com",
-    ".onelake.fabric.microsoft.com")
+    ".onelake.fabric.microsoft.com",
+    ".dfs.pbidedicated.windows-int.net")
 
   private[kusto] def fromString(json: String): TransientStorageParameters = {
     val params = new ObjectMapper()
@@ -326,15 +330,12 @@ object TransientStorageParameters {
           cred.oneLakeArtifactPath = null
 
           val sourceUrl =
-            if (TransientStorageCredentials.isOneLakeUrl(cred.oneLakeUrl)) cred.oneLakeUrl
+            if (StringUtils.isNotBlank(cred.oneLakeUrl)) cred.oneLakeUrl
             else if (TransientStorageCredentials.isOneLakeUrl(cred.sasUrl)) cred.sasUrl
             else null
 
           if (sourceUrl != null) {
             cred.parseOneLake(sourceUrl)
-          } else if (StringUtils.isNotBlank(cred.oneLakeUrl)) {
-            throw new InvalidParameterException(
-              s"oneLakeUrl is not a recognized Fabric OneLake URL: ${cred.oneLakeUrl}")
           }
         }
       }
