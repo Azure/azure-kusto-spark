@@ -258,10 +258,11 @@ final case class TransientStorageCredentials() {
     // Lightweight host validation: host must contain a known OneLake-like segment
     // (dfs, blob, or onelake) to guard against completely unrelated URLs being treated as OneLake.
     val hostLower = endpoint.toLowerCase
-    if (!hostLower.contains(".dfs.") && !hostLower.contains(".blob.") && !hostLower.contains(".onelake.") &&
+    if (!hostLower.contains(".dfs.") && !hostLower.contains(".blob.") && !hostLower.contains(
+        ".onelake.") &&
       !hostLower.contains("onelake")) {
       throw new InvalidParameterException(
-         s"OneLake URL host '$endpoint' is not a recognized Fabric OneLake host")
+        s"OneLake URL host '$endpoint' is not a recognized Fabric OneLake host")
     }
 
     // Enforce Lakehouse Files path shape: '<artifact>/Files/<subpath>' with non-empty
