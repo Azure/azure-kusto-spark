@@ -514,15 +514,8 @@ object KustoDataSourceUtils {
       throw new InvalidParameterException(
         "GenerateDynamicCsvMapping cannot be used with Spark streaming ingestion")
     }
-    val (maybeIngestionStorageParameters, maybeTransientWriteStorage) =
+    val maybeIngestionStorageParameters: Option[Array[IngestionStorageParameters]] =
       validateIngestionStorageParameters(parameters)
-
-    // Reject transient write storage with KustoStreaming mode (streaming goes directly to engine)
-    if (maybeTransientWriteStorage.isDefined && writeMode == WriteMode.KustoStreaming) {
-      throw new InvalidParameterException(
-        "Transient write storage (storageCredentials format) cannot be used with KustoStreaming " +
-          "write mode. Use Transactional or Queued mode instead.")
-    }
 
     val timeout = new FiniteDuration(
       parameters
@@ -581,7 +574,6 @@ object KustoDataSourceUtils {
       userTempTableName,
       streamIngestMaxSize,
       maybeIngestionStorageParameters,
-      maybeTransientWriteStorage,
       kustoCustomDebugOptions)
 
     if (sourceParameters.kustoCoordinates.table.isEmpty) {
@@ -642,41 +634,25 @@ object KustoDataSourceUtils {
       addSourceLocationTransform = addSourceLocationTransform)
   }
 
-  /**
-   * Parse ingestion storage parameters from KUSTO_INGESTION_STORAGE option. Accepts two JSON
-   * formats (backward-compatible):
-   *   1. Legacy array: [{"storageUrl":"...", "containerName":"...", ...}] → Returns (Some(array),
-   *      None) — existing blob write path via ContainerProvider 2. Unified:
-   *      {"storageCredentials": [{"oneLakeUrl":"..."} | {"sasUrl":"..."}]} → Returns (None,
-   *      Some(TransientStorageParameters)) — unified write path
-   *
-   * The unified format supports both OneLake URLs and blob/ADLS2 URLs with ;impersonate or SAS.
-   */
-  private def validateIngestionStorageParameters(parameters: Map[String, String])
-      : (Option[Array[IngestionStorageParameters]], Option[TransientStorageParameters]) = {
-    parameters.get(KustoSinkOptions.KUSTO_INGESTION_STORAGE) match {
-      case None =>
-        logDebug("parseSinkParameters", "Using DM provided storage for ingestion")
-        (None, None)
-      case Some(json) =>
-        val trimmed = json.trim
-        if (trimmed.startsWith("{") && trimmed.contains("storageCredentials")) {
-          // Unified TransientStorageParameters format (OneLake or blob/ADLS2)
-          val transientParams = TransientStorageParameters.fromString(trimmed)
-          (None, Some(transientParams))
-        } else {
-          // Legacy IngestionStorageParameters array format — keep existing behavior
-          val arrayParams = IngestionStorageParameters.fromString(trimmed)
-          arrayParams.foreach(ingestionStorageParameter => {
-            if (StringUtils.isEmpty(ingestionStorageParameter.containerName) || StringUtils
-                .isEmpty(ingestionStorageParameter.storageUrl)) {
-              throw new IllegalArgumentException(
-                "storageUrl and containerName must be set when supplying ingestion storage")
-            }
-          })
-          (Some(arrayParams), None)
-        }
+  private def validateIngestionStorageParameters(
+      parameters: Map[String, String]): Option[Array[IngestionStorageParameters]] = {
+    val maybeIngestionStorageParameters: Option[Array[IngestionStorageParameters]] =
+      parameters
+        .get(KustoSinkOptions.KUSTO_INGESTION_STORAGE)
+        .map(is => IngestionStorageParameters.fromString(is))
+
+    maybeIngestionStorageParameters match {
+      case Some(arrayOfIngestionStorageParameters) =>
+        arrayOfIngestionStorageParameters.foreach(ingestionStorageParameter => {
+          if (StringUtils.isEmpty(ingestionStorageParameter.containerName) || StringUtils.isEmpty(
+              ingestionStorageParameter.storageUrl)) {
+            throw new IllegalArgumentException(
+              "storageUrl and containerName must be set when supplying ingestion storage")
+          }
+        })
+      case None => logDebug("parseSinkParameters", "Using DM provided storage for ingestion")
     }
+    maybeIngestionStorageParameters
   }
 
   private def getIngestionProperties(
