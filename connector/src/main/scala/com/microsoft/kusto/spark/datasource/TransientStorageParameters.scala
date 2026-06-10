@@ -94,11 +94,7 @@ final case class TransientStorageCredentials() {
   def this(sas: String) = {
     this()
     sasUrl = sas
-    if (TransientStorageCredentials.isOneLakeUrl(sas)) {
-      parseOneLake(sas)
-    } else {
-      parseSas(sas)
-    }
+    parseSas(sas)
   }
 
   @JsonIgnore
@@ -150,12 +146,10 @@ final case class TransientStorageCredentials() {
         throw new InvalidParameterException(
           s"OneLake credential cannot also specify blob storage fields: ${conflictingFields.mkString(", ")}")
       }
-      // `sasUrl` may legitimately be the OneLake URL (input alias); only reject if it
-      // points at a non-OneLake account.
-      if (StringUtils.isNotBlank(sasUrl) &&
-        !TransientStorageCredentials.isOneLakeUrl(sasUrl)) {
+      // sasUrl is for blob/ADLS2 only — reject if set on a OneLake credential.
+      if (StringUtils.isNotBlank(sasUrl)) {
         throw new InvalidParameterException(
-          "OneLake credential's sasUrl, if provided, must itself be a OneLake URL")
+          "OneLake credential must not specify a sasUrl (use oneLakeUrl instead)")
       }
     } else if (StringUtils.isNotBlank(oneLakeUrl)) {
       // oneLakeUrl was set but parsing failed to produce derived fields.
@@ -346,13 +340,10 @@ object TransientStorageParameters {
           cred.oneLakeEndpoint = null
           cred.oneLakeArtifactPath = null
 
-          val sourceUrl =
-            if (StringUtils.isNotBlank(cred.oneLakeUrl)) cred.oneLakeUrl
-            else if (TransientStorageCredentials.isOneLakeUrl(cred.sasUrl)) cred.sasUrl
-            else null
-
-          if (sourceUrl != null) {
-            cred.parseOneLake(sourceUrl)
+          // OneLake is only triggered by the explicit oneLakeUrl field.
+          // sasUrl remains exclusively for blob/ADLS2 storage.
+          if (StringUtils.isNotBlank(cred.oneLakeUrl)) {
+            cred.parseOneLake(cred.oneLakeUrl)
           }
         }
       }

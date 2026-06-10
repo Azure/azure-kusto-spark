@@ -20,8 +20,14 @@ object KustoSourceOptions extends KustoOptions {
   //   - account+key:     { "storageAccountName": "...", "storageAccountKey": "...", "blobContainer": "..." }
   //   - blob impersonate:{ "sasUrl": "https://<account>.blob.<suffix>/<container>;impersonate" }
   //   - OneLake (Fabric Lakehouse), with caller AAD impersonation (no SAS required):
-  //       { "oneLakeUrl": "https://onelake.dfs.fabric.microsoft.com/<workspace>/<lakehouse>.Lakehouse/Files/<dir>" }
-  //       or { "oneLakeUrl": "abfss://<workspace>@onelake.dfs.fabric.microsoft.com/<lakehouse>.Lakehouse/Files/<dir>" }
+  //       {
+  //         "storageCredentials": [
+  //           { "oneLakeUrl": "https://onelake.dfs.fabric.microsoft.com/<workspace>/<lakehouse>.Lakehouse/Files/<subpath>" }
+  //         ]
+  //       }
+  //     The oneLakeUrl value accepts two forms:
+  //       - https:  https://onelake.dfs.fabric.microsoft.com/<workspace>/<lakehouse>.Lakehouse/Files/<subpath>
+  //       - abfss:  abfss://<workspace>@onelake.dfs.fabric.microsoft.com/<lakehouse>.Lakehouse/Files/<subpath>
   //     For OneLake the connector forces storageProtocol=abfss and uses ambient AAD configured by Spark
   //     (Fabric notebooks). The caller must have at least Workspace Contributor / item-level Write on the
   //     target Lakehouse Files path. Useful with DEP / OAP environments where Kusto-managed export blobs
