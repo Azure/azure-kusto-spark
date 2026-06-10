@@ -329,7 +329,9 @@ object TransientStorageParameters {
       .registerModule(new JavaTimeModule())
       .setVisibility(PropertyAccessor.FIELD, Visibility.ANY)
       .setVisibility(PropertyAccessor.FIELD, Visibility.ANY)
-      .configure(com.fasterxml.jackson.databind.MapperFeature.ACCEPT_CASE_INSENSITIVE_PROPERTIES, true)
+      .configure(
+        com.fasterxml.jackson.databind.MapperFeature.ACCEPT_CASE_INSENSITIVE_PROPERTIES,
+        true)
       .readValue(json, classOf[TransientStorageParameters])
 
     // Always re-derive OneLake fields from the user-supplied URL so attacker-controlled
