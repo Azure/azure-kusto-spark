@@ -29,13 +29,17 @@ class TransientStorageParameters(
    */
   def validate(): Unit = {
     if (storageCredentials != null && storageCredentials.length > 0) {
+      if (storageCredentials.exists(_ == null)) {
+        throw new InvalidParameterException(
+          "transientStorage.storageCredentials must not contain null entries")
+      }
       // NB: do not call per-credential validate() here. parseOneLake() invokes per-cred
       // validate() for OneLake credentials, and historically blob credentials supplied
       // via fromString are not re-validated (they may legitimately have only sasUrl set
       // when ;impersonate auth is used). This wrapper only enforces cross-credential
       // invariants.
-      val anyOneLake = storageCredentials.exists(c => c != null && c.isOneLake)
-      val anyNonOneLake = storageCredentials.exists(c => c != null && !c.isOneLake)
+      val anyOneLake = storageCredentials.exists(c => c.isOneLake)
+      val anyNonOneLake = storageCredentials.exists(c => !c.isOneLake)
       if (anyOneLake && anyNonOneLake) {
         throw new InvalidParameterException(
           "transientStorage cannot mix OneLake and non-OneLake credentials. " +
@@ -210,6 +214,7 @@ final case class TransientStorageCredentials() {
     val scheme = Option(parsed.getScheme).map(_.toLowerCase).getOrElse("")
     val host = parsed.getHost
     val rawPath = Option(parsed.getRawPath).getOrElse("")
+    val decodedPath = Option(parsed.getPath).getOrElse("")
     val port = parsed.getPort
 
     if (parsed.getRawQuery != null) {
@@ -222,15 +227,16 @@ final case class TransientStorageCredentials() {
     if (port != -1) {
       throw new InvalidParameterException(s"OneLake URL must not include an explicit port: $url")
     }
-    if (rawPath.contains("/../") || rawPath.contains("/./") ||
-      rawPath.endsWith("/..") || rawPath.endsWith("/.")) {
+    if (decodedPath.contains("/../") || decodedPath.contains("/./") ||
+      decodedPath.endsWith("/..") || decodedPath.endsWith("/.") ||
+      decodedPath == ".." || decodedPath == ".") {
       throw new InvalidParameterException(s"OneLake URL path must not contain '..' or '.': $url")
     }
 
     val (endpoint, workspace, artifactPath) = scheme match {
       case "abfss" | "abfs" =>
         val ws = parsed.getUserInfo
-        if (StringUtils.isBlank(ws) || StringUtils.isBlank(host) || rawPath.length <= 1) {
+        if (StringUtils.isBlank(ws) || ws.contains(":") || StringUtils.isBlank(host) || rawPath.length <= 1) {
           throw new InvalidParameterException(
             s"OneLake abfss URL must be 'abfss://<workspace>@<endpoint>/<artifact>/Files/...': $url")
         }
@@ -316,12 +322,14 @@ object TransientStorageParameters {
   val ImpersonationString = ";impersonate"
 
   // Known OneLake host suffixes. Matched with endsWith on the lowercased host so we
-  // don't false-positive on e.g. "foo.blob.fabric.microsoft.test.com". Cloud-agnostic
-  // for sovereign clouds: we accept any TLD by listing the leaf labels separately.
+  // don't false-positive on e.g. "foo.blob.fabric.microsoft.test.com".
   private[kusto] val OneLakeHostSuffixes: Array[String] = Array(
     ".dfs.fabric.microsoft.com",
+    ".dfs.fabric.microsoft.us",
     ".blob.fabric.microsoft.com",
+    ".blob.fabric.microsoft.us",
     ".onelake.fabric.microsoft.com",
+    ".onelake.fabric.microsoft.us",
     ".dfs.pbidedicated.windows-int.net")
 
   private[kusto] def fromString(json: String): TransientStorageParameters = {
