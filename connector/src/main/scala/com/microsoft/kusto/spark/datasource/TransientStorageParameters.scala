@@ -230,7 +230,8 @@ final case class TransientStorageCredentials() {
     val (endpoint, workspace, artifactPath) = scheme match {
       case "abfss" | "abfs" =>
         val ws = parsed.getUserInfo
-        if (StringUtils.isBlank(ws) || ws.contains(":") || StringUtils.isBlank(host) || rawPath.length <= 1) {
+        if (StringUtils.isBlank(ws) || ws.contains(":") || StringUtils.isBlank(
+            host) || rawPath.length <= 1) {
           throw new InvalidParameterException(
             s"OneLake abfss URL must be 'abfss://<workspace>@<endpoint>/<artifact>/Files/...': $url")
         }
