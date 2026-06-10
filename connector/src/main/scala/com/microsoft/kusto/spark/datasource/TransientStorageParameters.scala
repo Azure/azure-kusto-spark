@@ -4,7 +4,7 @@
 package com.microsoft.kusto.spark.datasource
 
 import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility
-import com.fasterxml.jackson.annotation.{JsonIgnore, JsonProperty, PropertyAccessor}
+import com.fasterxml.jackson.annotation.{JsonIgnore, PropertyAccessor}
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
 import com.microsoft.azure.kusto.data.StringUtils
@@ -83,24 +83,6 @@ final case class TransientStorageCredentials() {
   @JsonIgnore var oneLakeEndpoint: String = _
   @JsonIgnore var oneLakeArtifactPath: String = _
 
-  // Explicit storage kind selector (JSON key "type"): "onelake" or "blob". When set it is
-  // authoritative; otherwise the kind is inferred from the populated field (oneLakeUrl => OneLake).
-  // The URL is then only validated, never used to classify.
-  @JsonProperty("type") var storageType: String = _
-
-  @JsonIgnore
-  private def normalizedType: String = if (storageType == null) "" else storageType.trim
-
-  @JsonIgnore
-  def declaredOneLake: Boolean =
-    if (normalizedType.nonEmpty) normalizedType.equalsIgnoreCase("onelake")
-    else StringUtils.isNotBlank(oneLakeUrl)
-
-  @JsonIgnore
-  def hasUnknownType: Boolean =
-    normalizedType.nonEmpty && !normalizedType.equalsIgnoreCase("onelake") &&
-      !normalizedType.equalsIgnoreCase("blob")
-
   def this(storageAccountName: String, storageAccountKey: String, blobContainer: String) = {
     this()
     this.blobContainer = blobContainer
@@ -176,9 +158,9 @@ final case class TransientStorageCredentials() {
           "OneLake credential's sasUrl, if provided, must itself be a OneLake URL")
       }
     } else if (StringUtils.isNotBlank(oneLakeUrl)) {
-      // oneLakeUrl was set but parsing failed to produce derived fields — reject loudly.
-      throw new InvalidParameterException(
-        s"oneLakeUrl is not a recognized Fabric OneLake URL: $oneLakeUrl")
+      // oneLakeUrl was set but parsing failed to produce derived fields.
+      // Attempt parsing now rather than rejecting — supports any valid OneLake-like host.
+      parseOneLake(oneLakeUrl)
     } else
       authMethod match {
         case AuthMethod.Sas =>
@@ -273,14 +255,20 @@ final case class TransientStorageCredentials() {
           s"Unsupported scheme '$other' for OneLake URL (expected 'https' or 'abfss'): $url")
     }
 
-    // Trust the user-supplied OneLake host. Only require a OneLake service label, reject Azure Storage hosts, and
-    // reject IP literals / localhost / single-label hosts.
+    // Lightweight host validation: host must contain a known OneLake-like segment
+    // (dfs, blob, or onelake) to guard against completely unrelated URLs being treated as OneLake.
+    // Also reject IP-literal, localhost, and single-label hosts for security.
     val hostLower = endpoint.toLowerCase
-    if (!TransientStorageParameters.isOneLakeHost(endpoint, scheme) ||
-      hostLower == "localhost" || !hostLower.contains(".") ||
-      TransientStorageParameters.isIpLiteral(hostLower)) {
+    if (!hostLower.contains(".dfs.") && !hostLower.contains(".blob.") && !hostLower.contains(
+        ".onelake.") &&
+      !hostLower.contains("onelake")) {
       throw new InvalidParameterException(
-        s"oneLakeUrl is not a recognized Fabric OneLake URL: $url")
+        s"OneLake URL host '$endpoint' is not a recognized Fabric OneLake host")
+    }
+    if (hostLower == "localhost" || !hostLower.contains(".") ||
+      hostLower.startsWith("[") || hostLower.matches("""\d{1,3}(\.\d{1,3}){3}""")) {
+      throw new InvalidParameterException(
+        s"OneLake URL host must not be localhost, an IP literal, or a single-label host: $url")
     }
 
     // Enforce Lakehouse Files path shape: '<artifact>/Files/<subpath>' with non-empty
@@ -291,6 +279,7 @@ final case class TransientStorageCredentials() {
       throw new InvalidParameterException(
         s"OneLake artifact path must not contain empty segments: $url")
     }
+    // URL-decoded traversal check on workspace and all artifact segments
     if ((workspace +: artifactSegments).exists { seg =>
         val decoded = java.net.URLDecoder.decode(seg, "UTF-8")
         decoded == "." || decoded == ".." || decoded.contains("/") || decoded.contains("\\")
@@ -326,36 +315,27 @@ final case class TransientStorageCredentials() {
 object TransientStorageParameters {
   val ImpersonationString = ";impersonate"
 
-  // Cloud-agnostic OneLake host detection that trusts any cloud/domain (like the blob path trusts
-  // any *.blob.<domain>): a supported scheme on a host carrying a Fabric OneLake service label
-  // (.dfs. / .onelake. / .blob.fabric.). These are product-level labels, stable across sovereign
-  // clouds; no cloud-specific domains are hardcoded. Matched on label boundaries (leading dot) so
-  // unrelated hosts like "notonelake.example.com" are not treated as OneLake.
-  private[kusto] def isOneLakeHost(host: String, scheme: String): Boolean = {
-    if (StringUtils.isBlank(host)) return false
-    val h = host.toLowerCase
-    val supportedScheme = scheme.toLowerCase match {
-      case "https" | "abfss" | "abfs" => true
-      case _ => false
-    }
-    supportedScheme &&
-    (h.contains(".dfs.") || h.contains(".onelake.") || h.contains(".blob.fabric."))
-  }
-
-  private[kusto] def isIpLiteral(host: String): Boolean =
-    host.startsWith("[") || host.matches("""\d{1,3}(\.\d{1,3}){3}""")
+  // Known OneLake host suffixes. Matched with endsWith on the lowercased host so we
+  // don't false-positive on e.g. "foo.blob.fabric.microsoft.test.com". Cloud-agnostic
+  // for sovereign clouds: we accept any TLD by listing the leaf labels separately.
+  private[kusto] val OneLakeHostSuffixes: Array[String] = Array(
+    ".dfs.fabric.microsoft.com",
+    ".blob.fabric.microsoft.com",
+    ".onelake.fabric.microsoft.com",
+    ".dfs.pbidedicated.windows-int.net")
 
   private[kusto] def fromString(json: String): TransientStorageParameters = {
     val params = new ObjectMapper()
       .registerModule(new JavaTimeModule())
       .setVisibility(PropertyAccessor.FIELD, Visibility.ANY)
       .setVisibility(PropertyAccessor.FIELD, Visibility.ANY)
+      .configure(com.fasterxml.jackson.databind.MapperFeature.ACCEPT_CASE_INSENSITIVE_PROPERTIES, true)
       .readValue(json, classOf[TransientStorageParameters])
 
-    // Classify each credential explicitly (by `type` or the populated field), never by sniffing
-    // the URL. For OneLake, re-derive the fields from the user-supplied URL so attacker-controlled
-    // JSON cannot pre-populate `oneLakeWorkspace`/`oneLakeEndpoint`/`oneLakeArtifactPath` to a
-    // different target than the URL. The derived fields are also @JsonIgnore for defense in depth.
+    // Always re-derive OneLake fields from the user-supplied URL so attacker-controlled
+    // JSON cannot pre-populate `oneLakeWorkspace`/`oneLakeEndpoint`/`oneLakeArtifactPath`
+    // to a different target than `oneLakeUrl`. The derived fields are also @JsonIgnore on
+    // the credential class for defense in depth.
     if (params.storageCredentials != null) {
       params.storageCredentials.foreach { cred =>
         if (cred != null) {
@@ -364,21 +344,13 @@ object TransientStorageParameters {
           cred.oneLakeEndpoint = null
           cred.oneLakeArtifactPath = null
 
-          if (cred.declaredOneLake) {
-            val sourceUrl =
-              if (StringUtils.isNotBlank(cred.oneLakeUrl)) cred.oneLakeUrl
-              else cred.sasUrl
-            if (StringUtils.isBlank(sourceUrl)) {
-              throw new InvalidParameterException(
-                "OneLake transientStorage requires a 'oneLakeUrl' (or 'sasUrl') value")
-            }
+          val sourceUrl =
+            if (StringUtils.isNotBlank(cred.oneLakeUrl)) cred.oneLakeUrl
+            else if (TransientStorageCredentials.isOneLakeUrl(cred.sasUrl)) cred.sasUrl
+            else null
+
+          if (sourceUrl != null) {
             cred.parseOneLake(sourceUrl)
-          } else if (cred.hasUnknownType) {
-            throw new InvalidParameterException(
-              s"Unknown transientStorage type '${cred.storageType}' (expected 'onelake' or 'blob')")
-          } else if (StringUtils.isNotBlank(cred.oneLakeUrl)) {
-            throw new InvalidParameterException(
-              "transientStorage type 'blob' cannot specify a oneLakeUrl")
           }
         }
       }
@@ -393,11 +365,12 @@ object TransientStorageCredentials {
     raw"https:\/\/([^.]+)(\.[^.]+)?\.blob\.([^\/]+)\/([^?]+)(;impersonate|[\?].+)".r
 
   /**
-   * Detect whether the given storage URL targets a Fabric OneLake location. Trusts any
-   * cloud/domain (like the blob path trusts any *.blob.<domain>): https/abfss scheme on a host
-   * carrying a Fabric OneLake service label (.dfs. / .onelake. / .blob.fabric.). Real Azure blob
-   * hosts (*.blob.core.*) lack that label and so remain blob. This is detection only;
-   * parseOneLake performs the authoritative validation.
+   * Detect whether the given storage URL targets a Fabric OneLake location. Recognizes the
+   * following host suffixes (matched with endsWith on lowercased host) for both https:// and
+   * abfss:// schemes:
+   *   - *.dfs.fabric.microsoft.com (e.g. onelake.dfs.fabric.microsoft.com)
+   *   - *.blob.fabric.microsoft.com
+   *   - *.onelake.fabric.microsoft.com
    */
   def isOneLakeUrl(url: String): Boolean = {
     if (url == null || url.isEmpty) return false
@@ -407,8 +380,10 @@ object TransientStorageCredentials {
     try {
       val uri = new URI(base)
       val scheme = Option(uri.getScheme).map(_.toLowerCase).getOrElse("")
-      val host = Option(uri.getHost).getOrElse("")
-      TransientStorageParameters.isOneLakeHost(host, scheme)
+      val host = Option(uri.getHost).map(_.toLowerCase).getOrElse("")
+      val supportedScheme = scheme == "https" || scheme == "abfss" || scheme == "abfs"
+      val supportedHost = TransientStorageParameters.OneLakeHostSuffixes.exists(host.endsWith)
+      supportedScheme && supportedHost
     } catch {
       case _: Throwable => false
     }
