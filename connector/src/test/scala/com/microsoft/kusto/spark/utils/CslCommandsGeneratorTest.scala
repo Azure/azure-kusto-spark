@@ -88,8 +88,9 @@ class CslCommandsGeneratorTest extends AnyFlatSpec {
   "TestGenerateExportDataCommand" should "emit OneLake URL with ;impersonate for OneLake credentials" in {
     val oneLakeUrl =
       "https://onelake.dfs.fabric.microsoft.com/myws/mylake.Lakehouse/Files/exports"
-    val cred = new TransientStorageCredentials(oneLakeUrl)
-    val params = new TransientStorageParameters(Array(cred))
+    val json =
+      s"""{"storageCredentials": [{"oneLakeUrl": "$oneLakeUrl"}]}"""
+    val params = TransientStorageParameters.fromString(json)
 
     val commandResult = CslCommandsGenerator.generateExportDataCommand(
       "Storms | take 100",
@@ -111,8 +112,9 @@ class CslCommandsGeneratorTest extends AnyFlatSpec {
       "abfss://myws@onelake.dfs.fabric.microsoft.com/mylake.Lakehouse/Files/exports"
     val canonicalHttpsUrl =
       "https://onelake.dfs.fabric.microsoft.com/myws/mylake.Lakehouse/Files/exports"
-    val cred = new TransientStorageCredentials(abfssUrl)
-    val params = new TransientStorageParameters(Array(cred))
+    val json =
+      s"""{"storageCredentials": [{"oneLakeUrl": "$abfssUrl"}]}"""
+    val params = TransientStorageParameters.fromString(json)
 
     val commandResult = CslCommandsGenerator.generateExportDataCommand(
       "Storms | take 100",
