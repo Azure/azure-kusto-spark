@@ -256,16 +256,8 @@ final case class TransientStorageCredentials() {
           s"Unsupported scheme '$other' for OneLake URL (expected 'https' or 'abfss'): $url")
     }
 
-    // Lightweight host validation: host must contain a known OneLake-like segment
-    // (dfs, blob, or onelake) to guard against completely unrelated URLs being treated as OneLake.
-    // Also reject IP-literal, localhost, and single-label hosts for security.
+    // Reject IP-literal, localhost, and single-label hosts for security.
     val hostLower = endpoint.toLowerCase
-    if (!hostLower.contains(".dfs.") && !hostLower.contains(".blob.") && !hostLower.contains(
-        ".onelake.") &&
-      !hostLower.contains("onelake")) {
-      throw new InvalidParameterException(
-        s"OneLake URL host '$endpoint' is not a recognized Fabric OneLake host")
-    }
     if (hostLower == "localhost" || !hostLower.contains(".") ||
       hostLower.startsWith("[") || hostLower.matches("""\d{1,3}(\.\d{1,3}){3}""")) {
       throw new InvalidParameterException(
@@ -342,18 +334,6 @@ object TransientStorageParameters {
           // sasUrl remains exclusively for blob/ADLS2 storage.
           if (StringUtils.isNotBlank(cred.oneLakeUrl)) {
             cred.parseOneLake(cred.oneLakeUrl)
-          } else if (StringUtils.isNotBlank(cred.sasUrl) &&
-            !cred.sasUrl.toLowerCase.contains(".blob.")) {
-            // Early detection: sasUrl host doesn't contain '.blob.' which is required for
-            // Azure Blob/ADLS2 storage URLs. This catches OneLake URLs or other malformed
-            // URLs before they propagate to Spark/Hadoop where they would produce confusing
-            // errors like "Blob Endpoint Url Cannot be used to initialize filesystem for
-            // HNS Account".
-            throw new InvalidParameterException(
-              s"sasUrl doesn't match the expected Azure Blob Storage format " +
-                s"(host must contain '.blob.'). " +
-                s"If this is a OneLake/Fabric URL, use the 'oneLakeUrl' field instead. " +
-                s"Received: ${cred.sasUrl}")
           }
         }
       }
@@ -366,28 +346,6 @@ object TransientStorageParameters {
 object TransientStorageCredentials {
   val SasPattern: Regex =
     raw"https:\/\/([^.]+)(\.[^.]+)?\.blob\.([^\/]+)\/([^?]+)(;impersonate|[\?].+)".r
-
-  /**
-   * Detect whether the given storage URL targets a Fabric OneLake location. Detection is purely
-   * host-based — scheme is not a factor since abfss/https are used by both blob/ADLS2 and
-   * OneLake. Uses the same host checks as parseOneLake validation.
-   */
-  def isOneLakeUrl(url: String): Boolean = {
-    if (url == null || url.isEmpty) return false
-    val trimmed = url.stripSuffix(TransientStorageParameters.ImpersonationString)
-    val q = trimmed.indexOf('?')
-    val base = if (q >= 0) trimmed.substring(0, q) else trimmed
-    try {
-      val uri = new URI(base)
-      val host = Option(uri.getHost).map(_.toLowerCase).getOrElse("")
-      if (host.isEmpty) return false
-      // Same conditions as parseOneLake host validation
-      host.contains(".dfs.") || host.contains(".onelake.") ||
-      host.contains("onelake")
-    } catch {
-      case _: Throwable => false
-    }
-  }
 }
 
 object AuthMethod extends Enumeration {
