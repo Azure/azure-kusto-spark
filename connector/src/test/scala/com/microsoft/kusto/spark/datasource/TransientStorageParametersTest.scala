@@ -155,13 +155,16 @@ class TransientStorageParametersTest extends AnyFlatSpec {
     cred.oneLakeArtifactPath shouldEqual "mylake.Lakehouse/Files/exports"
   }
 
-  it should "not classify a OneLake-looking URL in sasUrl as OneLake without oneLakeUrl" in {
-    // No explicit oneLakeUrl => blob; the OneLake-looking sasUrl is not auto-detected.
+  it should "reject a OneLake-looking URL placed in sasUrl with a helpful message" in {
+    // User accidentally placed a OneLake URL in sasUrl — should fail early with guidance.
     val transientStorage =
       "{\"storageCredentials\": [{\"sasUrl\": " +
         "\"https://onelake.dfs.fabric.microsoft.com/myws/mylake.Lakehouse/Files/exports\"}]}"
-    val cred = TransientStorageParameters.fromString(transientStorage).storageCredentials.head
-    cred.isOneLake shouldEqual false
+    val thrown = intercept[java.security.InvalidParameterException] {
+      TransientStorageParameters.fromString(transientStorage)
+    }
+    thrown.getMessage should include("oneLakeUrl")
+    thrown.getMessage should include("sasUrl")
   }
 
   it should "default to blob for existing configs with neither type nor oneLakeUrl (backward compat)" in {
@@ -297,11 +300,12 @@ class TransientStorageParametersTest extends AnyFlatSpec {
     thrown.getMessage should include("..")
   }
 
-  it should "treat a custom blob SAS/impersonate host containing 'onelake' as blob, not OneLake" in {
+  it should "detect a host containing 'onelake' substring as OneLake" in {
+    // Any host containing 'onelake' is classified as OneLake (same broad check as parseOneLake)
     TransientStorageCredentials.isOneLakeUrl(
-      "https://myonelake.blob.contoso.net/container;impersonate") shouldEqual false
+      "https://myonelake.blob.contoso.net/container;impersonate") shouldEqual true
     TransientStorageCredentials.isOneLakeUrl(
-      "https://myonelake.blob.contoso.net/container?sv=2020&sig=x") shouldEqual false
+      "https://myonelake.blob.contoso.net/container?sv=2020&sig=x") shouldEqual true
   }
 
   it should "reject encoded traversal in the workspace segment" in {
@@ -332,9 +336,9 @@ class TransientStorageParametersTest extends AnyFlatSpec {
       "https://onelake.blob.fabric.microsoft.com/ws/lh.Lakehouse/Files/exports;impersonate") shouldEqual true
   }
 
-  it should "not treat an unrelated host containing the substring 'onelake' as OneLake" in {
+  it should "detect a host containing the substring 'onelake' as OneLake" in {
     TransientStorageCredentials.isOneLakeUrl(
-      "https://notonelake.example.com/ws/lh.Lakehouse/Files/x") shouldEqual false
+      "https://notonelake.example.com/ws/lh.Lakehouse/Files/x") shouldEqual true
   }
 
   it should "reject a fragment" in {
