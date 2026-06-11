@@ -343,14 +343,15 @@ object TransientStorageParameters {
           if (StringUtils.isNotBlank(cred.oneLakeUrl)) {
             cred.parseOneLake(cred.oneLakeUrl)
           } else if (StringUtils.isNotBlank(cred.sasUrl) &&
-            !TransientStorageCredentials.SasPattern.matches(cred.sasUrl)) {
-            // Early detection: sasUrl doesn't match the expected blob/ADLS2 storage pattern.
-            // This catches OneLake URLs or any malformed URL before it propagates to
-            // Spark/Hadoop where it would produce a confusing error like
-            // "Blob Endpoint Url Cannot be used to initialize filesystem for HNS Account".
+            !cred.sasUrl.toLowerCase.contains(".blob.")) {
+            // Early detection: sasUrl host doesn't contain '.blob.' which is required for
+            // Azure Blob/ADLS2 storage URLs. This catches OneLake URLs or other malformed
+            // URLs before they propagate to Spark/Hadoop where they would produce confusing
+            // errors like "Blob Endpoint Url Cannot be used to initialize filesystem for
+            // HNS Account".
             throw new InvalidParameterException(
-              s"sasUrl doesn't match the expected Azure Blob/ADLS2 Storage format " +
-                s"(https://<account>.blob.<suffix>/<container>?<SAS> or " +
+              s"sasUrl doesn't match the expected Azure Blob Storage format " +
+                s"(host must contain '.blob.'). " +
                 s"If this is a OneLake/Fabric URL, use the 'oneLakeUrl' field instead. " +
                 s"Received: ${cred.sasUrl}")
           }
@@ -363,10 +364,6 @@ object TransientStorageParameters {
 }
 
 object TransientStorageCredentials {
-  // Matches Azure Blob/ADLS2 storage URLs in any of these forms:
-  //   https://<account>[.zone].blob.<suffix>/<container>?<SAS>|;impersonate
-  //   abfss://<container>@<account>[.zone].blob.<suffix>/<path>?<SAS>|;impersonate
-  //   abfss://<container>@<account>[.zone].dfs.<suffix>/<path>?<SAS>|;impersonate
   val SasPattern: Regex =
     raw"https:\/\/([^.]+)(\.[^.]+)?\.blob\.([^\/]+)\/([^?]+)(;impersonate|[\?].+)".r
 
