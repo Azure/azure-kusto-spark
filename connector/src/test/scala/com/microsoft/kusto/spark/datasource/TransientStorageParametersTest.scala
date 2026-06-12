@@ -208,22 +208,23 @@ class TransientStorageParametersTest extends AnyFlatSpec {
     cred.oneLakeArtifactPath shouldEqual "reallh.Lakehouse/Files/exports"
   }
 
-  "OneLake path validation" should "reject artifact paths without /Files/ segment" in {
-    val thrown = intercept[java.security.InvalidParameterException] {
-      TransientStorageParameters.fromString(
-        "{\"storageCredentials\": [{\"oneLakeUrl\": " +
-          "\"https://onelake.dfs.fabric.microsoft.com/myws/mylake.Lakehouse/Tables/secret\"}]}")
-    }
-    thrown.getMessage should include("Files")
-  }
-
-  it should "reject artifact paths with too few segments" in {
+  "OneLake path validation" should "reject artifact paths with too few segments" in {
     val thrown = intercept[java.security.InvalidParameterException] {
       TransientStorageParameters.fromString(
         "{\"storageCredentials\": [{\"oneLakeUrl\": " +
           "\"https://onelake.dfs.fabric.microsoft.com/myws/mylake.Lakehouse\"}]}")
     }
     thrown.getMessage should include("artifact")
+  }
+
+  it should "allow non-Files subfolders like Ingestions" in {
+    val url =
+      "https://msit-westcentralus-api.onelake.fabric.microsoft.com/615b69b6-0f61-46f0-b42c-8acdf9fd82e1/a9a1c710-951c-4f90-bd36-e84948307119/Ingestions/20260612-lakedata"
+    val json =
+      s"""{"storageCredentials": [{"oneLakeUrl": "$url"}]}"""
+    val cred = TransientStorageParameters.fromString(json).storageCredentials.head
+    cred.isOneLake shouldEqual true
+    cred.oneLakeArtifactPath shouldEqual "a9a1c710-951c-4f90-bd36-e84948307119/Ingestions/20260612-lakedata"
   }
 
   it should "reject path traversal" in {
