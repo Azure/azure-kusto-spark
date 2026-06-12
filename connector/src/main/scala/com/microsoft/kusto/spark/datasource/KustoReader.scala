@@ -219,7 +219,7 @@ object KustoReader {
       val endpoint = s"https://${params.storageAccountName}.blob.$endpointSuffix"
       val container = params.authMethod match {
         case AuthMethod.Sas =>
-          val sas = if (params.sasKey(0) == '?') params.sasKey else s"?${params.sasKey}"
+          val sas = if (params.sasKey.startsWith("?")) params.sasKey else s"?${params.sasKey}"
           new BlobContainerClientBuilder()
             .endpoint(endpoint)
             .containerName(params.blobContainer)

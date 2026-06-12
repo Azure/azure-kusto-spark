@@ -182,7 +182,7 @@ private[kusto] object CslCommandsGenerator {
           storage.authMethod match {
             case AuthMethod.Key => s""";" h@"${storage.storageAccountKey}""""
             case AuthMethod.Sas =>
-              if (storage.sasKey(0) == '?') {
+              if (storage.sasKey.startsWith("?")) {
                 s"""" h@"${storage.sasKey}""""
               } else {
                 s"""?" h@"${storage.sasKey}""""

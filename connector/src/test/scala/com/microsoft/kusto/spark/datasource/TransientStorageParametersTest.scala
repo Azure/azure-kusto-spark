@@ -318,4 +318,23 @@ class TransientStorageParametersTest extends AnyFlatSpec {
     cred.isOneLake shouldEqual false
     cred.storageAccountName shouldEqual "acct"
   }
+
+  it should "reject a SAS credential with a null sasUrl without NPE" in {
+    val cred = new TransientStorageCredentials()
+    cred.sasKey = "?sig=x" // authMethod => Sas, sasUrl left null
+    val thrown = intercept[java.security.InvalidParameterException] {
+      cred.validate()
+    }
+    thrown.getMessage should include("sasUrl is null or empty")
+  }
+
+  it should "reject a SAS credential with an empty sasKey without index crash" in {
+    val cred = new TransientStorageCredentials()
+    cred.sasUrl = "https://acct.blob.core.windows.net/c"
+    cred.sasKey = "" // empty => authMethod Sas, must be rejected before sasKey(0) is used
+    val thrown = intercept[java.security.InvalidParameterException] {
+      cred.validate()
+    }
+    thrown.getMessage should include("sasKey is null or empty")
+  }
 }

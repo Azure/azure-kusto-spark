@@ -162,7 +162,10 @@ final case class TransientStorageCredentials() {
     } else
       authMethod match {
         case AuthMethod.Sas =>
-          if (sasUrl.isEmpty) throw new InvalidParameterException("sasUrl is null or empty")
+          if (StringUtils.isBlank(sasUrl))
+            throw new InvalidParameterException("sasUrl is null or empty")
+          if (StringUtils.isBlank(sasKey))
+            throw new InvalidParameterException("sasKey is null or empty")
         case AuthMethod.Key =>
           if (StringUtils.isBlank(storageAccountName)) {
             throw new InvalidParameterException("storageAccount name is null or empty")

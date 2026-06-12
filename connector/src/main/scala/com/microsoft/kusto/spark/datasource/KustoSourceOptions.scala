@@ -32,9 +32,8 @@ object KustoSourceOptions extends KustoOptions {
   //     (Fabric notebooks). The caller must have at least Workspace Contributor / item-level Write on the
   //     target Lakehouse Files path. Useful with DEP / OAP environments where Kusto-managed export blobs
   //     are unreachable from executors.
-  //   The kind of each entry is chosen explicitly: set "type": "onelake" | "blob", or omit "type" and let
-  //   the populated field decide (oneLakeUrl => OneLake, otherwise blob). The URL is only validated, never
-  //   used to guess the kind.
+  //   The storage kind is determined solely by which field is populated: an entry with `oneLakeUrl`
+  //   is treated as OneLake, otherwise it is treated as Azure blob/ADLS2.
   val KUSTO_TRANSIENT_STORAGE: String = newOption("transientStorage")
 
   // Blob domain endpoint suffix - default: core.windows.net - needed for non-public clouds
