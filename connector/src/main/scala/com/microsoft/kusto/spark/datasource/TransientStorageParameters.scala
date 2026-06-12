@@ -236,7 +236,7 @@ final case class TransientStorageCredentials() {
         if (StringUtils.isBlank(ws) || ws.contains(":") || StringUtils.isBlank(
             host) || rawPath.length <= 1) {
           throw new InvalidParameterException(
-            s"OneLake abfss URL must be 'abfss://<workspace>@<endpoint>/<artifact>/Files/...': $url")
+            s"OneLake abfss URL must be 'abfss://<workspace>@<endpoint>/<artifact>/<subpath>/...': $url")
         }
         (host, ws, rawPath.stripPrefix("/").stripSuffix("/"))
       case "https" =>
@@ -246,7 +246,7 @@ final case class TransientStorageCredentials() {
         }
         if (StringUtils.isBlank(host) || rawPath.length <= 1) {
           throw new InvalidParameterException(
-            s"OneLake https URL must be 'https://<endpoint>/<workspace>/<artifact>/Files/...': $url")
+            s"OneLake https URL must be 'https://<endpoint>/<workspace>/<artifact>/<subpath>/...': $url")
         }
         val parts = rawPath.stripPrefix("/").stripSuffix("/").split("/", 2)
         if (parts.length < 2 || parts(0).isEmpty || parts(1).isEmpty) {
@@ -267,9 +267,7 @@ final case class TransientStorageCredentials() {
         s"OneLake URL host must not be localhost, an IP literal, or a single-label host: $url")
     }
 
-    // Enforce Lakehouse Files path shape: '<artifact>/Files/<subpath>' with non-empty
-    // segments and no consecutive slashes. This blocks accidental targeting of Tables/
-    // (which would clash with Delta semantics) and catches typos early.
+    // Ensure non-empty path segments (no consecutive slashes) and basic traversal protection.
     val artifactSegments = artifactPath.split("/", -1)
     if (artifactSegments.exists(_.isEmpty)) {
       throw new InvalidParameterException(
@@ -282,9 +280,11 @@ final case class TransientStorageCredentials() {
       }) {
       throw new InvalidParameterException(s"OneLake URL path must not contain '..' or '.': $url")
     }
-    if (artifactSegments.length < 3 || !artifactSegments(1).equalsIgnoreCase("Files")) {
+    // Require at least two path segments (artifact + subpath) to avoid targeting the
+    // artifact root directly without a subfolder.
+    if (artifactSegments.length < 2) {
       throw new InvalidParameterException(
-        s"OneLake artifact path must be '<lakehouse>(.Lakehouse)?/Files/<subpath>': $url")
+        s"OneLake artifact path must include at least '<artifact>/<subpath>': $url")
     }
 
     this.oneLakeEndpoint = endpoint
