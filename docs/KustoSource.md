@@ -184,6 +184,47 @@ transientStorage = "{\"storageCredentials\": [{\"storageAccountName\": \"atestst
   option("transientStorage", transientStorage). \
 ```
 
+##### OneLake Transient Storage (Fabric)
+
+For Fabric environments, you can use **OneLake** as transient storage instead of Azure Blob/ADLS2. Kusto exports data using `;impersonate` (writes as the calling user) and Spark reads back over `abfss://` using ambient AAD.
+
+**Requirements:**
+- Workspace Contributor access to the OneLake lakehouse
+- Kusto cluster must be able to reach the OneLake endpoint
+- Spark runtime must have AAD configured for ABFSS (automatic in Fabric notebooks)
+
+**JSON format** — use the `oneLakeUrl` field (not `sasUrl`):
+
+```python
+import json
+
+transient_storage = json.dumps({
+    "storageCredentials": [
+        {"oneLakeUrl": "https://onelake.dfs.fabric.microsoft.com/<workspace-id>/<lakehouse-id>/Files/kusto-transient"}
+    ]
+})
+
+df = spark.read \
+    .format("com.microsoft.kusto.spark.datasource") \
+    .option("kustoCluster", "https://mycluster.kusto.fabric.microsoft.com") \
+    .option("kustoDatabase", "mydb") \
+    .option("kustoQuery", "MyTable | take 1000") \
+    .option("accessToken", token) \
+    .option("readMode", "ForceDistributedMode") \
+    .option("transientStorage", transient_storage) \
+    .load()
+```
+
+**Supported URL formats:**
+
+```
+# HTTPS form:
+https://<endpoint>/<workspace>/<lakehouse>/Files/<subpath>
+
+# ABFSS form:
+abfss://<workspace>@<endpoint>/<lakehouse>/Files/<subpath>
+```
+
 ### Examples
  
  **Using simplified syntax**
