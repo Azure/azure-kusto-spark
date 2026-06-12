@@ -17,6 +17,25 @@ Tags are created as `v4.0_{version}` (Spark 4 / master) and `v3.0_{version}` (Sp
 ### Fixed
 - None
 
+## [7.1.0] - 2026-06-12
+
+### Changed
+- Jackson ObjectMapper in `TransientStorageParameters.fromString` now accepts case-insensitive property names
+
+### Added
+- OneLake transient storage support for distributed reads (PR #491)
+  - New `oneLakeUrl` field in `storageCredentials` JSON for Fabric OneLake URLs
+  - Kusto exports via `.export to oneLakeUrl;impersonate`; Spark reads back over abfss with ambient AAD
+  - Automatic `fs.azure.abfs.valid.endpoints` allowlisting for OneLake hosts
+  - Supports both `https://` and `abfss://` URL formats (canonicalized internally)
+- Cloud-agnostic OneLake host validation — supports internal/sovereign environments (e.g., `dfs.pbidedicated.windows-int.net`)
+- Security: reject IP-literal, localhost, and single-label hosts for OneLake URLs
+- Security: URL-decoded path traversal checks on workspace and artifact segments
+
+### Fixed
+- OneLake host validation no longer rejects valid internal/sovereign OneLake domains
+- `validate()` now attempts `parseOneLake` as fallback instead of rejecting when derived fields are unpopulated
+
 ## [7.0.7] - 2026-05-28
 
 ### Changed
