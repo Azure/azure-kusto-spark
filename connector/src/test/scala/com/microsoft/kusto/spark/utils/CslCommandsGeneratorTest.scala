@@ -84,4 +84,49 @@ class CslCommandsGeneratorTest extends AnyFlatSpec {
       assert(commandResult == expectedResult)
     }
   }
+
+  "TestGenerateExportDataCommand" should "emit OneLake URL with ;impersonate for OneLake credentials" in {
+    val oneLakeUrl =
+      "https://onelake.dfs.fabric.microsoft.com/myws/mylake.Lakehouse/Files/exports"
+    val json =
+      s"""{"storageCredentials": [{"oneLakeUrl": "$oneLakeUrl"}]}"""
+    val params = TransientStorageParameters.fromString(json)
+
+    val commandResult = CslCommandsGenerator.generateExportDataCommand(
+      "Storms | take 100",
+      "storms/data/",
+      1,
+      params,
+      Option.empty[String],
+      additionalExportOptions = Map.empty[String, String])
+
+    val expectedResult = ".export async compressed to parquet " +
+      s"""("$oneLakeUrl;impersonate") """ +
+      "with ( namePrefix=\"storms/data/part1\", compressionType=\"snappy\",) " +
+      "<| Storms | take 100"
+    assert(commandResult == expectedResult)
+  }
+
+  it should "canonicalize OneLake abfss URL to https in the .export command" in {
+    val abfssUrl =
+      "abfss://myws@onelake.dfs.fabric.microsoft.com/mylake.Lakehouse/Files/exports"
+    val canonicalHttpsUrl =
+      "https://onelake.dfs.fabric.microsoft.com/myws/mylake.Lakehouse/Files/exports"
+    val json =
+      s"""{"storageCredentials": [{"oneLakeUrl": "$abfssUrl"}]}"""
+    val params = TransientStorageParameters.fromString(json)
+
+    val commandResult = CslCommandsGenerator.generateExportDataCommand(
+      "Storms | take 100",
+      "storms/data/",
+      1,
+      params,
+      Option.empty[String],
+      additionalExportOptions = Map.empty[String, String])
+
+    // Kusto .export accepts the https form of the OneLake URL; the abfss input is
+    // canonicalized at parse time so the emitted CSL is always uniform.
+    assert(commandResult.contains(s"$canonicalHttpsUrl;impersonate"))
+    assert(!commandResult.contains("abfss://"))
+  }
 }
