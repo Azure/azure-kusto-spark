@@ -17,6 +17,11 @@ Tags are created as `v4.0_{version}` (Spark 4 / master) and `v3.0_{version}` (Sp
 ### Fixed
 - None
 
+## [7.1.1] - 2026-06-15
+
+### Fixed
+- Removed `/Files/` subfolder restriction from OneLake path validation — allows any subfolder (e.g., `/Ingestions/`)
+
 ## [7.1.0] - 2026-06-12
 
 ### Changed
