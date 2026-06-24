@@ -76,18 +76,16 @@ object IngestV2WriterOrchestrator {
         val method = config.preferredIngestionMethod
         val errorMsg =
           s"Config API returned preferredIngestionMethod=$method (expected REST). " +
-            s"DM endpoint $dmUrl does not support V2 REST ingestion. " +
-            s"Please use V1 ingestion path or contact Kusto team to enable V2 on this cluster."
-        KDSU.logError(myName, errorMsg)
-        throw new RuntimeException(errorMsg)
+            s"DM endpoint $dmUrl does not support V2 REST ingestion."
+        KDSU.logWarn(myName, errorMsg)
+        throw new IngestV2FallbackException(errorMsg)
 
       case None =>
         val errorMsg =
           s"Config API not available for DM endpoint $dmUrl (404 or error). " +
-            s"Cannot validate V2 support. Please verify DM endpoint is correct and supports ingest-v2, " +
-            s"or use V1 ingestion path (set useIngestV2=false)."
-        KDSU.logError(myName, errorMsg)
-        throw new RuntimeException(errorMsg)
+            s"Cannot validate V2 support."
+        KDSU.logWarn(myName, errorMsg)
+        throw new IngestV2FallbackException(errorMsg)
     }
 
     // Serialize configuration for executors (avoid serializing non-serializable SDK clients)

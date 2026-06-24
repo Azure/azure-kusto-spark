@@ -80,13 +80,16 @@ object KustoWriter {
       writeOptions: WriteOptions,
       crp: ClientRequestProperties): Unit = {
 
-    // Auto-detect V2 support via config API (honors preferredIngestionMethod contract)
-    // Manual override: if useIngestV2 explicitly set, honor it
-    val shouldUseV2 = if (writeOptions.useIngestV2) {
+    // Routing: legacyIngest bypasses V2 entirely; useIngestV2 forces V2;
+    // otherwise auto-detect via config API (falls back to V1 on error/404).
+    val shouldUseV2 = if (writeOptions.legacyIngest) {
+      KDSU.logInfo(className, "Using V1 ingestion path (legacyIngest=true, V2 bypassed)")
+      false
+    } else if (writeOptions.useIngestV2) {
       KDSU.logInfo(className, "Using V2 ingestion path (manual override: useIngestV2=true)")
       true
     } else {
-      // Auto-detection via config API
+      // Auto-detection via config API; returns false on error/404 (V1 fallback)
       v2.IngestV2Detector.isV2Supported(tableCoordinates, authentication)
     }
 
@@ -100,14 +103,22 @@ object KustoWriter {
         writeOptions.requestId,
         batchIdIfExists,
         writeOptions.userTempTableName)
-      v2.IngestV2WriterOrchestrator.write(
-        data,
-        tableCoordinates,
-        authentication,
-        writeOptions,
-        tmpTableName,
-        crp)
-      return
+      try {
+        v2.IngestV2WriterOrchestrator.write(
+          data,
+          tableCoordinates,
+          authentication,
+          writeOptions,
+          tmpTableName,
+          crp)
+        return
+      } catch {
+        case e: v2.IngestV2FallbackException =>
+          KDSU.logWarn(
+            className,
+            s"*** V2 INGESTION FALLBACK *** Config API failed or returned non-REST: ${e.getMessage}. " +
+              s"Falling back to legacy V1 queue-based ingestion for requestId=${writeOptions.requestId}")
+      }
     }
 
     // ==========================================

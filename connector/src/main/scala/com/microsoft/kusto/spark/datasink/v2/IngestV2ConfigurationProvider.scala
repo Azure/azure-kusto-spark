@@ -46,17 +46,17 @@ object IngestV2ConfigurationProvider {
       authentication: KustoAuthentication): Option[IngestionConfig] = {
 
     // Check cache first
-    if (configCache.containsKey(dmUrl)) {
-      val cached = configCache.get(dmUrl)
-      KDSU.logDebug(myName, s"Using cached config for $dmUrl: ${cached.isDefined}")
-      return cached
-    }
+//    if (configCache.containsKey(dmUrl)) {
+//      val cached = configCache.get(dmUrl)
+//      KDSU.logDebug(myName, s"Using cached config for $dmUrl: ${cached.isDefined}")
+//      return cached
+//    }
 
     // Query config API
     val configOpt = queryConfigurationAPI(dmUrl, authentication)
 
     // Cache result (both Some and None)
-    configCache.put(dmUrl, configOpt)
+//    configCache.put(dmUrl, configOpt)
 
     configOpt
   }
