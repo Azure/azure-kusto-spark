@@ -561,6 +561,9 @@ object KustoDataSourceUtils {
     val useIngestV2 =
       parameters.getOrElse(KustoSinkOptions.KUSTO_USE_INGEST_V2, "false").trim.toBoolean
 
+    val legacyIngest =
+      parameters.getOrElse(KustoSinkOptions.KUSTO_LEGACY_INGEST, "false").trim.toBoolean
+
     val ingestionFormat = parameters
       .getOrElse(KustoSinkOptions.KUSTO_INGESTION_FORMAT, "csv")
       .trim
@@ -587,6 +590,7 @@ object KustoDataSourceUtils {
       maybeIngestionStorageParameters,
       kustoCustomDebugOptions,
       useIngestV2,
+      legacyIngest,
       ingestionFormat)
 
     if (sourceParameters.kustoCoordinates.table.isEmpty) {

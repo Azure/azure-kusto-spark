@@ -94,6 +94,10 @@ object KustoSinkOptions extends KustoOptions {
   // and REST-based status tracking. Default: 'false'. Experimental/Preview feature.
   val KUSTO_USE_INGEST_V2: String = newOption("useIngestV2")
 
+  // If set to 'true', bypasses V2 auto-detection entirely and always uses the legacy
+  // V1 (queue-based) ingestion path. Takes precedence over useIngestV2 and config API.
+  val KUSTO_LEGACY_INGEST: String = newOption("legacyIngest")
+
   // The ingestion format to use when useIngestV2 is enabled.
   // Supported values: "csv" (default), "parquet".
   // "parquet" uses Spark's native Parquet writer for vectorized, columnar ingestion.
@@ -141,4 +145,5 @@ final case class WriteOptions(
     maybeIngestionBlobStorage: Option[Array[IngestionStorageParameters]] = None,
     kustoCustomDebugWriteOptions: KustoCustomDebugWriteOptions,
     useIngestV2: Boolean = false,
+    legacyIngest: Boolean = false,
     ingestionFormat: IngestionFormat = IngestionFormat.CSV)
