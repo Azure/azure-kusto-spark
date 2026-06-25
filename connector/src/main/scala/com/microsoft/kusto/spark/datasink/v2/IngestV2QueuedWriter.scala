@@ -13,16 +13,12 @@ import com.microsoft.azure.kusto.ingest.v2.common.models.mapping.IngestionMappin
 import com.microsoft.azure.kusto.ingest.v2.models.{Format, IngestRequestProperties}
 import com.microsoft.azure.kusto.ingest.v2.source.{BlobSource, CompressionType}
 import com.microsoft.azure.storage.blob.{BlobRequestOptions, CloudBlockBlob}
-import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.datasink.{
   CountingWriter,
-  IngestionStorageParameters,
   RowCSVWriterUtils,
   WriteOptions
 }
 import com.microsoft.kusto.spark.utils.{
-  ContainerAndSas,
-  KustoClientCache,
   KustoConstants => KCONST,
   KustoDataSourceUtils => KDSU,
   KustoQueryUtils
@@ -71,14 +67,9 @@ object IngestV2QueuedWriter {
       database: String,
       table: String,
       queuedClient: QueuedIngestClient,
-      clusterUrl: String,
-      authentication: KustoAuthentication,
-      ingestionUrl: Option[String],
-      clusterAlias: String,
-      maybeIngestionBlobStorage: Option[Array[IngestionStorageParameters]],
+      dmConfig: Option[IngestionConfig],
       writeOptions: WriteOptions,
-      batchIdForTracing: String,
-      dmConfig: Option[IngestionConfig] = None): List[IngestionOperation] = {
+      batchIdForTracing: String): List[IngestionOperation] = {
 
     val partitionId = TaskContext.getPartitionId()
 
@@ -93,6 +84,9 @@ object IngestV2QueuedWriter {
     val maxBlobSize = writeOptions.batchLimit * KCONST.OneMegaByte
     val blobNamePrefix = s"${database}_${table}_${batchIdForTracing}"
 
+    // Get container path from config API
+    val containerPath = getContainerFromConfig(dmConfig)
+
     KDSU.logInfo(myName, s"Starting partition $partitionIdStr for $database.$table")
 
     val completedBlobs = ListBuffer[BlobSourceWithInfo]()
@@ -100,12 +94,8 @@ object IngestV2QueuedWriter {
 
     var blobNumber = 0
     var curBlobUUID = UUID.randomUUID().toString
-    var blobWriter = createBlobWriter(
-      clusterUrl,
-      authentication,
-      ingestionUrl,
-      clusterAlias,
-      maybeIngestionBlobStorage,
+    var blobWriter = createBlobWriterFromConfig(
+      containerPath,
       blobNamePrefix,
       partitionIdStr,
       blobNumber,
@@ -131,12 +121,8 @@ object IngestV2QueuedWriter {
 
         blobNumber += 1
         curBlobUUID = UUID.randomUUID().toString
-        blobWriter = createBlobWriter(
-          clusterUrl,
-          authentication,
-          ingestionUrl,
-          clusterAlias,
-          maybeIngestionBlobStorage,
+        blobWriter = createBlobWriterFromConfig(
+          containerPath,
           blobNamePrefix,
           partitionIdStr,
           blobNumber,
@@ -204,12 +190,27 @@ object IngestV2QueuedWriter {
     builder.build()
   }
 
-  private def createBlobWriter(
-      clusterUrl: String,
-      authentication: KustoAuthentication,
-      ingestionUrl: Option[String],
-      clusterAlias: String,
-      maybeIngestionBlobStorage: Option[Array[IngestionStorageParameters]],
+  /**
+   * Get container path from config API. Uses blobPaths for Storage, oneLakePaths for Lake.
+   */
+  private def getContainerFromConfig(dmConfig: Option[IngestionConfig]): String = {
+    dmConfig match {
+      case Some(config) if config.preferredUploadMethod == "Lake" && config.oneLakePaths.nonEmpty =>
+        val paths = config.oneLakePaths
+        val idx = TaskContext.getPartitionId() % paths.size
+        paths(math.abs(idx))
+      case Some(config) if config.blobPaths.nonEmpty =>
+        val paths = config.blobPaths
+        val idx = TaskContext.getPartitionId() % paths.size
+        paths(math.abs(idx))
+      case _ =>
+        throw new RuntimeException(
+          "No storage containers available from config API. Cannot write CSV blobs.")
+    }
+  }
+
+  private def createBlobWriterFromConfig(
+      containerPath: String,
       blobNamePrefix: String,
       partitionId: String,
       blobNumber: Int,
@@ -220,11 +221,14 @@ object IngestV2QueuedWriter {
       s"${KustoQueryUtils.simplifyName(blobNamePrefix)}_${blobUUID}_${partitionId}_${blobNumber}_${formatter
           .format(now)}_spark.csv.gz"
 
-    // Get cached client and container on executor (avoids serialization)
-    val kustoClient =
-      KustoClientCache.getClient(clusterUrl, authentication, ingestionUrl, clusterAlias)
-    val containerAndSas = kustoClient.getTempBlobForIngestion(maybeIngestionBlobStorage)
-    val blobUrl = s"${containerAndSas.containerUrl}/$blobName${containerAndSas.sas}"
+    // Parse container URL from config API: https://<account>.blob.<suffix>/<container>?<sas>
+    val (baseUrl, sasToken) = splitUrlAndSas(containerPath)
+    val blobUrl = if (sasToken.nonEmpty) {
+      s"$baseUrl/$blobName?$sasToken"
+    } else {
+      // OneLake path (no SAS needed)
+      s"$baseUrl/$blobName"
+    }
 
     val currentBlob = new CloudBlockBlob(new URI(blobUrl))
     val options = new BlobRequestOptions()
@@ -235,6 +239,12 @@ object IngestV2QueuedWriter {
     val csvWriter = CountingWriter(buffer)
 
     V2BlobWriteResource(buffer, gzip, csvWriter, blobUrl)
+  }
+
+  private def splitUrlAndSas(url: String): (String, String) = {
+    val idx = url.indexOf('?')
+    if (idx < 0) (url, "")
+    else (url.substring(0, idx), url.substring(idx + 1))
   }
 
   private def finalizeBlobWrite(resource: V2BlobWriteResource): Unit = {

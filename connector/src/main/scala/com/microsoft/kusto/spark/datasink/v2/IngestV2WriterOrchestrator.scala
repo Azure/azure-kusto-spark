@@ -9,7 +9,6 @@ import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasink.{IngestionFormat, WriteMode, WriteOptions}
 import com.microsoft.kusto.spark.utils.{
-  ContainerAndSas,
   KustoClientCache,
   KustoConstants => KCONST,
   KustoDataSourceUtils => KDSU
@@ -96,21 +95,13 @@ object IngestV2WriterOrchestrator {
     // Serialize config for executors (batch limits, storage paths)
     val dmConfigForExecutors = dmConfig
 
-    // We still need the engine client for management commands (container
-    // discovery, table operations, move extents). This is shared with v1
-    // but it's only for engine/DM management, not ingestion.
+    // We still need the engine client for management commands (table operations,
+    // move extents) in transactional mode. Not used for container discovery.
     val kustoClient = KustoClientCache.getClient(
       tableCoordinates.clusterUrl,
       authentication,
       tableCoordinates.ingestionUrl,
       tableCoordinates.clusterAlias)
-
-    // Serialize config for executors (container access pattern - no lambda needed)
-    val clusterUrlForContainer = tableCoordinates.clusterUrl
-    val authForContainer = authentication
-    val ingestUrlForContainer = tableCoordinates.ingestionUrl
-    val clusterAliasForContainer = tableCoordinates.clusterAlias
-    val maybeStorageForContainer = writeOptions.maybeIngestionBlobStorage
 
     val rdd = data.queryExecution.toRdd
     val schema = data.schema
@@ -135,11 +126,7 @@ object IngestV2WriterOrchestrator {
           database,
           ingestionTable,
           clientProvider.queuedClient,
-          clusterUrlForContainer,
-          authForContainer,
-          ingestUrlForContainer,
-          clusterAliasForContainer,
-          maybeStorageForContainer,
+          dmConfig.get,
           writeOptions,
           batchIdForTracing)
 
@@ -214,15 +201,10 @@ object IngestV2WriterOrchestrator {
               database,
               ingestionTable,
               executorClientProvider.queuedClient,
-              clusterUrlForContainer,
-              authForContainer,
-              ingestUrlForContainer,
-              clusterAliasForContainer,
-              maybeStorageForContainer,
+              dmConfigForExecutors,
               writeOptions,
-              batchIdForTracing,
-              dmConfigForExecutors
-            ) // Pass config to writer for batch limits
+              batchIdForTracing
+            )
             allOperations.add(ops)
           }
         }
