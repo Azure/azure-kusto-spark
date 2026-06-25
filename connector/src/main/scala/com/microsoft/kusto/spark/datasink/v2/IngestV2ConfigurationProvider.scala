@@ -93,14 +93,32 @@ object IngestV2ConfigurationProvider {
       )
 
       // Query config endpoint - this is a Kotlin suspend function
-      // We need to call it from Java/Scala by treating it as a CompletableFuture
-      val future = configClient
-        .getConfigurationDetails(null)
-        .asInstanceOf[CompletableFuture[
-          com.microsoft.azure.kusto.ingest.v2.models.ConfigurationResponse]]
+      // Use kotlinx.coroutines.future to bridge suspend → CompletableFuture
+      val future = kotlinx.coroutines.future.FutureKt.future(
+        kotlinx.coroutines.GlobalScope.INSTANCE,
+        kotlin.coroutines.EmptyCoroutineContext.INSTANCE,
+        kotlinx.coroutines.CoroutineStart.DEFAULT,
+        new kotlin.jvm.functions.Function2[
+          kotlinx.coroutines.CoroutineScope,
+          kotlin.coroutines.Continuation[
+            _ >: com.microsoft.azure.kusto.ingest.v2.models.ConfigurationResponse],
+          AnyRef] {
+          override def invoke(
+              scope: kotlinx.coroutines.CoroutineScope,
+              cont: kotlin.coroutines.Continuation[
+                _ >: com.microsoft.azure.kusto.ingest.v2.models.ConfigurationResponse]
+          ): AnyRef = {
+            configClient.getConfigurationDetails(
+              cont.asInstanceOf[kotlin.coroutines.Continuation[
+                _ >: com.microsoft.azure.kusto.ingest.v2.models.ConfigurationResponse]])
+          }
+        }
+      )
 
       // Wait for result with timeout
       val response = future.get(30, java.util.concurrent.TimeUnit.SECONDS)
+
+      KDSU.logWarn(myName, s"Config API raw response for $dmUrl: $response")
 
       // Parse response
       IngestionConfig.fromConfigurationResponse(response)
@@ -121,7 +139,13 @@ object IngestV2ConfigurationProvider {
 
       case Failure(exception) =>
         // Config API failed (404, network error, auth failure)
-        KDSU.logDebug(myName, s"Config API not available for $dmUrl: ${exception.getMessage}")
+        KDSU.logWarn(
+          myName,
+          s"Config API not available for $dmUrl: ${exception.getClass.getSimpleName}: ${exception.getMessage}")
+        // Log full stack trace for debugging
+        val sw = new java.io.StringWriter()
+        exception.printStackTrace(new java.io.PrintWriter(sw))
+        KDSU.logWarn(myName, s"Config API failure stack trace:\n${sw.toString}")
         KDSU.logInfo(myName, s"Fallback to V1 ingestion for $dmUrl")
         None
     }
