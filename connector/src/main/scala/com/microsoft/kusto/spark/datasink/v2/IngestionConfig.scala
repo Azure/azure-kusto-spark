@@ -5,6 +5,8 @@ package com.microsoft.kusto.spark.datasink.v2
 
 import com.microsoft.azure.kusto.ingest.v2.models.ConfigurationResponse
 
+import scala.jdk.CollectionConverters._
+
 /**
  * Parsed ingestion configuration from DM config API.
  *
@@ -41,52 +43,52 @@ object IngestionConfig {
     }
 
     try {
-      // Access Kotlin data class properties via getters
-      val ingestionSettings = Option(response.getIngestionSettings)
-      val containerSettings = Option(response.getContainerSettings)
+      // Access Kotlin data class properties directly (not via reflection)
+      val ingestionSettings = response.getIngestionSettings
+      val containerSettings = response.getContainerSettings
 
-      // Extract preferredIngestionMethod using reflection (Kotlin property)
+      // Extract fields directly from Kotlin data classes
       val preferredIngestionMethod =
-        ingestionSettings
-          .flatMap(s =>
-            Option(s.getClass.getMethod("getPreferredIngestionMethod").invoke(s))
-              .map(_.toString))
-          .getOrElse("Legacy") // Default to Legacy if missing
+        if (ingestionSettings != null)
+          Option(ingestionSettings.getPreferredIngestionMethod).map(_.toString).getOrElse("Legacy")
+        else "Legacy"
 
-      // Extract preferredUploadMethod using reflection
       val preferredUploadMethod =
-        containerSettings
-          .flatMap(s =>
-            Option(s.getClass.getMethod("getPreferredUploadMethod").invoke(s))
-              .map(_.toString))
-          .getOrElse("Blob") // Default to Blob if missing
+        if (containerSettings != null)
+          Option(containerSettings.getPreferredUploadMethod).map(_.toString).getOrElse("Blob")
+        else "Blob"
 
-      // Extract maxBlobsPerBatch using reflection
-      val maxBlobsPerBatch =
-        ingestionSettings
-          .flatMap(s =>
-            Option(s.getClass.getMethod("getMaxBlobsPerBatch").invoke(s))
-              .map(_.asInstanceOf[Int]))
-          .getOrElse(70) // Default from V2 SDK
+      val maxBlobsPerBatch: Int =
+        if (ingestionSettings != null) ingestionSettings.getMaxBlobsPerBatch.asInstanceOf[Int]
+        else 70
 
-      // For now, use defaults for fields we can't easily access
-      // These will be enhanced once we understand the exact Kotlin API
-      val maxDataSizeBytes = 4294967296L // 4GB default
-      val blobPaths = Seq.empty[String] // Will be populated from actual API
-      val oneLakePaths = Seq.empty[String]
+      val maxDataSize: Long =
+        if (ingestionSettings != null) ingestionSettings.getMaxDataSize.asInstanceOf[Long]
+        else 4294967296L
+
+      // Extract container paths
+      val blobPaths =
+        if (containerSettings != null && containerSettings.getContainers != null)
+          containerSettings.getContainers.asScala.map(_.getPath).toSeq
+        else Seq.empty[String]
+
+      val oneLakePaths =
+        if (containerSettings != null && containerSettings.getLakeFolders != null)
+          containerSettings.getLakeFolders.asScala.map(_.getPath).toSeq
+        else Seq.empty[String]
 
       Some(
         IngestionConfig(
           preferredIngestionMethod = preferredIngestionMethod,
           preferredUploadMethod = preferredUploadMethod,
           maxBlobsPerBatch = maxBlobsPerBatch,
-          maxDataSizeBytes = maxDataSizeBytes,
+          maxDataSizeBytes = maxDataSize,
           blobPaths = blobPaths,
           oneLakePaths = oneLakePaths))
 
     } catch {
       case e: Exception =>
-        // Failed to parse config response
+        // Log the parse error for debugging
         None
     }
   }
