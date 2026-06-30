@@ -80,17 +80,14 @@ object KustoWriter {
       writeOptions: WriteOptions,
       crp: ClientRequestProperties): Unit = {
 
-    // Routing: legacyIngest bypasses V2 entirely; useIngestV2 forces V2;
-    // otherwise auto-detect via config API (falls back to V1 on error/404).
+    // Routing: legacyIngest bypasses V2 entirely (escape hatch);
+    // otherwise V2 is the default path (auto-detect via config API with V1 fallback on error).
     val shouldUseV2 = if (writeOptions.legacyIngest) {
       KDSU.logInfo(className, "Using V1 ingestion path (legacyIngest=true, V2 bypassed)")
       false
-    } else if (writeOptions.useIngestV2) {
-      KDSU.logInfo(className, "Using V2 ingestion path (manual override: useIngestV2=true)")
-      true
     } else {
-      // Auto-detection via config API; returns false on error/404 (V1 fallback)
-      v2.IngestV2Detector.isV2Supported(tableCoordinates, authentication)
+      // V2 is the default — auto-detection via config API; falls back to V1 on error/404
+      true
     }
 
     // Route to kusto-ingest-v2 SDK path when V2 is supported

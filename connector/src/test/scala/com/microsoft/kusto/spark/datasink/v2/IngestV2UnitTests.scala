@@ -27,18 +27,18 @@ class IngestV2UnitTests extends AnyFlatSpec with Matchers {
   // Config Parsing Tests
   // =====================================================================
 
-  "useIngestV2 config" should "default to false when not specified" in {
+  "legacyIngest config" should "default to false (V2 is default)" in {
     val defaultOptions = WriteOptions(kustoCustomDebugWriteOptions =
       new com.microsoft.kusto.spark.utils.KustoCustomDebugWriteOptions())
-    defaultOptions.useIngestV2 shouldBe false
+    defaultOptions.legacyIngest shouldBe false
   }
 
-  "useIngestV2 config" should "be true when set to 'true'" in {
+  "legacyIngest config" should "be true when set to force V1" in {
     val defaultOptions = WriteOptions(
       kustoCustomDebugWriteOptions =
         new com.microsoft.kusto.spark.utils.KustoCustomDebugWriteOptions(),
-      useIngestV2 = true)
-    defaultOptions.useIngestV2 shouldBe true
+      legacyIngest = true)
+    defaultOptions.legacyIngest shouldBe true
   }
 
   "ingestionFormat config" should "default to CSV" in {
@@ -98,7 +98,6 @@ class IngestV2UnitTests extends AnyFlatSpec with Matchers {
     val options = WriteOptions(
       kustoCustomDebugWriteOptions =
         new com.microsoft.kusto.spark.utils.KustoCustomDebugWriteOptions(),
-      useIngestV2 = true,
       ingestionFormat = IngestionFormat.Parquet,
       writeMode = WriteMode.Queued)
 
@@ -110,7 +109,6 @@ class IngestV2UnitTests extends AnyFlatSpec with Matchers {
     val options = WriteOptions(
       kustoCustomDebugWriteOptions =
         new com.microsoft.kusto.spark.utils.KustoCustomDebugWriteOptions(),
-      useIngestV2 = true,
       ingestionFormat = IngestionFormat.Parquet,
       writeMode = WriteMode.KustoStreaming)
 
@@ -123,7 +121,6 @@ class IngestV2UnitTests extends AnyFlatSpec with Matchers {
     val options = WriteOptions(
       kustoCustomDebugWriteOptions =
         new com.microsoft.kusto.spark.utils.KustoCustomDebugWriteOptions(),
-      useIngestV2 = true,
       ingestionFormat = IngestionFormat.CSV,
       writeMode = WriteMode.Queued)
 

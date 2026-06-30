@@ -30,8 +30,8 @@ import scala.collection.immutable
  *   - If preferredIngestionMethod == "REST" → Use V2 SDK (auto-detected)
  *   - If preferredIngestionMethod == "Legacy" or 404 → Use V1 SDK (auto-fallback)
  *
- * Key difference from KustoSinkIngestV2E2E: Tests do NOT set useIngestV2 flag, relying on
- * auto-detection based on config API response.
+ * Key difference from KustoSinkIngestV2E2E: Tests rely on V2 being the default path,
+ * with auto-fallback to V1 based on config API response.
  *
  * Run with: mvn test -pl connector -Dtest=KustoSinkAutoDetectionE2E -DKustoE2E
  *
@@ -74,7 +74,7 @@ class KustoSinkAutoDetectionE2E extends AnyFlatSpec with BeforeAndAfterAll {
   }
 
   // =====================================================================
-  // P0: V2 Auto-Detection (No useIngestV2 flag)
+  // P0: V2 Auto-Detection (V2 is default)
   // =====================================================================
 
   "Auto-Detection on V2 Cluster (Queued CSV)" should "automatically detect and use V2 SDK based on config API" taggedAs KustoE2E in {
@@ -86,7 +86,7 @@ class KustoSinkAutoDetectionE2E extends AnyFlatSpec with BeforeAndAfterAll {
       (1 to expectedNumberOfRows).map(v => (newRow(), v))
     val df = rows.toDF("name", "value")
 
-    KDSU.logInfo(className, s"Test: Auto-detection on V2 cluster (NO useIngestV2 flag)")
+    KDSU.logInfo(className, s"Test: Auto-detection on V2 cluster (V2 is default)")
 
     df.write
       .format("com.microsoft.kusto.spark.datasource")
@@ -98,7 +98,7 @@ class KustoSinkAutoDetectionE2E extends AnyFlatSpec with BeforeAndAfterAll {
         KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS,
         SinkTableCreationMode.CreateIfNotExist.toString)
       .option(KustoSinkOptions.KUSTO_WRITE_MODE, WriteMode.Queued.toString)
-      // NO useIngestV2 option! Should auto-detect V2 via config API
+      // Should auto-detect V2 via config API
       .mode(SaveMode.Append)
       .save()
 
@@ -131,7 +131,7 @@ class KustoSinkAutoDetectionE2E extends AnyFlatSpec with BeforeAndAfterAll {
       (1 to expectedNumberOfRows).map(v => (newRow(), v))
     val df = rows.toDF("name", "value")
 
-    KDSU.logInfo(className, s"Test: Auto-detection with transactional mode (NO useIngestV2 flag)")
+    KDSU.logInfo(className, s"Test: Auto-detection with transactional mode (V2 is default)")
 
     df.write
       .format("com.microsoft.kusto.spark.datasource")
@@ -144,7 +144,7 @@ class KustoSinkAutoDetectionE2E extends AnyFlatSpec with BeforeAndAfterAll {
         SinkTableCreationMode.CreateIfNotExist.toString)
       .option(KustoSinkOptions.KUSTO_WRITE_MODE, WriteMode.Transactional.toString)
       .option(KustoSinkOptions.KUSTO_INGESTION_FORMAT, "parquet")
-      // NO useIngestV2 option! Should auto-detect
+      // Should auto-detect
       .mode(SaveMode.Append)
       .save()
 
@@ -166,7 +166,7 @@ class KustoSinkAutoDetectionE2E extends AnyFlatSpec with BeforeAndAfterAll {
   }
 
   // =====================================================================
-  // P0: V1 Auto-Fallback (No useIngestV2 flag, V1 cluster)
+  // P0: V1 Auto-Fallback (V1 cluster)
   // =====================================================================
 
   "Auto-Fallback on V1 Cluster" should "automatically fallback to V1 SDK when config API returns Legacy" taggedAs KustoE2E ignore {
@@ -180,7 +180,7 @@ class KustoSinkAutoDetectionE2E extends AnyFlatSpec with BeforeAndAfterAll {
       (1 to expectedNumberOfRows).map(v => (newRow(), v))
     val df = rows.toDF("name", "value")
 
-    KDSU.logInfo(className, s"Test: Auto-fallback on V1 cluster (NO useIngestV2 flag)")
+    KDSU.logInfo(className, s"Test: Auto-fallback on V1 cluster (V2 is default)")
 
     df.write
       .format("com.microsoft.kusto.spark.datasource")
@@ -191,7 +191,7 @@ class KustoSinkAutoDetectionE2E extends AnyFlatSpec with BeforeAndAfterAll {
       .option(
         KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS,
         SinkTableCreationMode.CreateIfNotExist.toString)
-      // NO useIngestV2 option! Should auto-fallback to V1
+      // Should auto-fallback to V1
       .mode(SaveMode.Append)
       .save()
 
@@ -215,54 +215,6 @@ class KustoSinkAutoDetectionE2E extends AnyFlatSpec with BeforeAndAfterAll {
       tableCleanupPrefix = prefix)
 
     KDSU.logInfo(className, "✅ Auto-fallback test passed - V1 was used")
-  }
-
-  // =====================================================================
-  // P0: Manual Override (useIngestV2=true should still work)
-  // =====================================================================
-
-  "Manual Override with useIngestV2=true" should "bypass auto-detection and use V2 directly" taggedAs KustoE2E in {
-    import spark.implicits._
-    val expectedNumberOfRows = 50
-    val prefix = "ManualOverride_V2"
-    val table = KustoQueryUtils.simplifyName(s"${prefix}_${UUID.randomUUID()}")
-    val rows: immutable.IndexedSeq[(String, Int)] =
-      (1 to expectedNumberOfRows).map(v => (newRow(), v))
-    val df = rows.toDF("name", "value")
-
-    KDSU.logInfo(className, s"Test: Manual override with useIngestV2=true")
-
-    df.write
-      .format("com.microsoft.kusto.spark.datasource")
-      .option(KustoSinkOptions.KUSTO_CLUSTER, kustoTestConnectionOptions.cluster)
-      .option(KustoSinkOptions.KUSTO_DATABASE, kustoTestConnectionOptions.database)
-      .option(KustoSinkOptions.KUSTO_TABLE, table)
-      .option(KustoSinkOptions.KUSTO_ACCESS_TOKEN, kustoTestConnectionOptions.accessToken)
-      .option(
-        KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS,
-        SinkTableCreationMode.CreateIfNotExist.toString)
-      .option(KustoSinkOptions.KUSTO_USE_INGEST_V2, "true") // Manual override
-      .mode(SaveMode.Append)
-      .save()
-
-    // Check logs for manual override message:
-    // "Using V2 ingestion path (manual override: useIngestV2=true)"
-
-    val engineKcsb = ConnectionStringBuilder.createWithAadAccessTokenAuthentication(
-      kustoTestConnectionOptions.cluster,
-      kustoTestConnectionOptions.accessToken)
-    val kustoAdminClient = ClientFactory.createClient(engineKcsb)
-
-    KustoTestUtils.validateResultsAndCleanup(
-      kustoAdminClient,
-      table,
-      kustoTestConnectionOptions.database,
-      expectedNumberOfRows,
-      timeoutMs,
-      cleanupAllTables = false,
-      tableCleanupPrefix = prefix)
-
-    KDSU.logInfo(className, "✅ Manual override test passed - backwards compatibility OK")
   }
 
   // =====================================================================
@@ -388,7 +340,7 @@ class KustoSinkAutoDetectionE2E extends AnyFlatSpec with BeforeAndAfterAll {
         SinkTableCreationMode.CreateIfNotExist.toString)
       // TODO: Add KUSTO_INGESTION_STORAGE option with customer storage JSON
       // .option(KustoSinkOptions.KUSTO_INGESTION_STORAGE, customerStorageJson)
-      // NO useIngestV2 option! Should auto-detect and use customer storage
+      // Should auto-detect and use customer storage
       .mode(SaveMode.Append)
       .save()
 
@@ -429,7 +381,7 @@ class KustoSinkAutoDetectionE2E extends AnyFlatSpec with BeforeAndAfterAll {
       .load()
       .selectExpr("value as id", "'streaming-auto-detect' as name")
 
-    // Write stream without useIngestV2 flag - should auto-detect
+    // Write stream - V2 is default, should auto-detect
     val query = streamDF.writeStream
       .format("com.microsoft.kusto.spark.datasink.KustoSinkProvider")
       .option(KustoSinkOptions.KUSTO_CLUSTER, kustoTestConnectionOptions.cluster)
@@ -439,7 +391,7 @@ class KustoSinkAutoDetectionE2E extends AnyFlatSpec with BeforeAndAfterAll {
       .option(
         KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS,
         SinkTableCreationMode.CreateIfNotExist.toString)
-      // NO useIngestV2 option! Should auto-detect
+      // Should auto-detect
       .trigger(Trigger.ProcessingTime("10 seconds"))
       .start()
 
@@ -501,7 +453,7 @@ class KustoSinkAutoDetectionE2E extends AnyFlatSpec with BeforeAndAfterAll {
       .option(
         KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS,
         SinkTableCreationMode.CreateIfNotExist.toString)
-      // NO useIngestV2 option! Config API failure should fallback to V1
+      // Config API failure should fallback to V1
       .mode(SaveMode.Append)
       .save()
 

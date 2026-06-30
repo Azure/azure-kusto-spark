@@ -558,11 +558,23 @@ object KustoDataSourceUtils {
       addSourceLocationTransform,
       maybeSparkIngestionProperties)
 
-    val useIngestV2 =
-      parameters.getOrElse(KustoSinkOptions.KUSTO_USE_INGEST_V2, "false").trim.toBoolean
-
     val legacyIngest =
       parameters.getOrElse(KustoSinkOptions.KUSTO_LEGACY_INGEST, "false").trim.toBoolean
+
+    val storageTokenProviderClasspath =
+      parameters.getOrElse(KustoSinkOptions.KUSTO_STORAGE_TOKEN_PROVIDER_CLASSPATH, "")
+    val storageTokenProvider: Option[StorageTokenProvider] =
+      if (storageTokenProviderClasspath.nonEmpty) {
+        val classLoader = Thread.currentThread().getContextClassLoader
+        val provider = classLoader
+          .loadClass(storageTokenProviderClasspath)
+          .getConstructor(parameters.getClass)
+          .newInstance(parameters)
+          .asInstanceOf[StorageTokenProvider]
+        Some(provider)
+      } else {
+        None
+      }
 
     val ingestionFormat = parameters
       .getOrElse(KustoSinkOptions.KUSTO_INGESTION_FORMAT, "csv")
@@ -589,9 +601,9 @@ object KustoDataSourceUtils {
       streamIngestMaxSize,
       maybeIngestionStorageParameters,
       kustoCustomDebugOptions,
-      useIngestV2,
       legacyIngest,
-      ingestionFormat)
+      ingestionFormat,
+      storageTokenProvider)
 
     if (sourceParameters.kustoCoordinates.table.isEmpty) {
       throw new InvalidParameterException(
