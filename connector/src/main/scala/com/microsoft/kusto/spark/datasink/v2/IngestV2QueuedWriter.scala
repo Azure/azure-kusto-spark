@@ -13,9 +13,13 @@ import com.microsoft.azure.kusto.ingest.v2.common.models.mapping.IngestionMappin
 import com.microsoft.azure.kusto.ingest.v2.models.{Format, IngestRequestProperties}
 import com.microsoft.azure.kusto.ingest.v2.source.{BlobSource, CompressionType}
 import com.microsoft.azure.storage.blob.{BlobRequestOptions, CloudBlockBlob}
+import com.azure.core.credential.{AccessToken, TokenCredential, TokenRequestContext}
+import com.azure.storage.blob.{BlobClientBuilder}
+import com.azure.storage.blob.models.BlobHttpHeaders
 import com.microsoft.kusto.spark.datasink.{
   CountingWriter,
   RowCSVWriterUtils,
+  StorageTokenProvider,
   WriteOptions
 }
 import com.microsoft.kusto.spark.utils.{
@@ -26,12 +30,13 @@ import com.microsoft.kusto.spark.utils.{
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types.StructType
+import reactor.core.publisher.Mono
 
-import java.io.{BufferedWriter, OutputStreamWriter}
+import java.io.{BufferedWriter, ByteArrayInputStream, ByteArrayOutputStream, OutputStreamWriter}
 import java.net.URI
 import java.nio.charset.StandardCharsets
+import java.time.{Instant, OffsetDateTime, ZoneId}
 import java.time.format.DateTimeFormatter
-import java.time.{Instant, ZoneId}
 import java.util.zip.GZIPOutputStream
 import java.util.{TimeZone, UUID}
 import scala.collection.mutable.ListBuffer
@@ -85,9 +90,9 @@ object IngestV2QueuedWriter {
     val blobNamePrefix = s"${database}_${table}_${batchIdForTracing}"
 
     // Get container path from config API
-    val containerPath = getContainerFromConfig(dmConfig)
+    val (containerPath, isOneLake) = getContainerFromConfig(dmConfig)
 
-    KDSU.logInfo(myName, s"Starting partition $partitionIdStr for $database.$table")
+    KDSU.logInfo(myName, s"Starting partition $partitionIdStr for $database.$table (storage: ${if (isOneLake) "OneLake" else "Blob"})")
 
     val completedBlobs = ListBuffer[BlobSourceWithInfo]()
     val operations = ListBuffer[IngestionOperation]()
@@ -96,6 +101,8 @@ object IngestV2QueuedWriter {
     var curBlobUUID = UUID.randomUUID().toString
     var blobWriter = createBlobWriterFromConfig(
       containerPath,
+      isOneLake,
+      writeOptions.storageTokenProvider,
       blobNamePrefix,
       partitionIdStr,
       blobNumber,
@@ -123,6 +130,8 @@ object IngestV2QueuedWriter {
         curBlobUUID = UUID.randomUUID().toString
         blobWriter = createBlobWriterFromConfig(
           containerPath,
+          isOneLake,
+          writeOptions.storageTokenProvider,
           blobNamePrefix,
           partitionIdStr,
           blobNumber,
@@ -192,17 +201,18 @@ object IngestV2QueuedWriter {
 
   /**
    * Get container path from config API. Uses blobPaths for Storage, oneLakePaths for Lake.
+   * Returns (path, isOneLake) tuple.
    */
-  private def getContainerFromConfig(dmConfig: Option[IngestionConfig]): String = {
+  private def getContainerFromConfig(dmConfig: Option[IngestionConfig]): (String, Boolean) = {
     dmConfig match {
       case Some(config) if config.preferredUploadMethod == "Lake" && config.oneLakePaths.nonEmpty =>
         val paths = config.oneLakePaths
         val idx = TaskContext.getPartitionId() % paths.size
-        paths(math.abs(idx))
+        (paths(math.abs(idx)), true)
       case Some(config) if config.blobPaths.nonEmpty =>
         val paths = config.blobPaths
         val idx = TaskContext.getPartitionId() % paths.size
-        paths(math.abs(idx))
+        (paths(math.abs(idx)), false)
       case _ =>
         throw new RuntimeException(
           "No storage containers available from config API. Cannot write CSV blobs.")
@@ -211,6 +221,8 @@ object IngestV2QueuedWriter {
 
   private def createBlobWriterFromConfig(
       containerPath: String,
+      isOneLake: Boolean,
+      storageTokenProvider: Option[StorageTokenProvider],
       blobNamePrefix: String,
       partitionId: String,
       blobNumber: Int,
@@ -221,15 +233,52 @@ object IngestV2QueuedWriter {
       s"${KustoQueryUtils.simplifyName(blobNamePrefix)}_${blobUUID}_${partitionId}_${blobNumber}_${formatter
           .format(now)}_spark.csv.gz"
 
-    // Parse container URL from config API: https://<account>.blob.<suffix>/<container>?<sas>
+    // Parse container URL from config API
     val (baseUrl, sasToken) = splitUrlAndSas(containerPath)
     val blobUrl = if (sasToken.nonEmpty) {
       s"$baseUrl/$blobName?$sasToken"
     } else {
-      // OneLake path (no SAS needed)
       s"$baseUrl/$blobName"
     }
 
+    if (isOneLake && sasToken.isEmpty) {
+      // OneLake path: use Bearer token auth via new Azure Storage SDK
+      createOneLakeBlobWriter(baseUrl, blobName, blobUrl, storageTokenProvider)
+    } else {
+      // Blob Storage path with SAS: use legacy CloudBlockBlob
+      createSasBlobWriter(blobUrl)
+    }
+  }
+
+  /**
+   * Create a blob writer for OneLake using Bearer token auth (new Azure Storage SDK).
+   * Buffers data in memory and uploads on finalize.
+   */
+  private def createOneLakeBlobWriter(
+      containerBaseUrl: String,
+      blobName: String,
+      blobUrl: String,
+      storageTokenProvider: Option[StorageTokenProvider]): V2BlobWriteResource = {
+
+    val tokenProvider = storageTokenProvider.getOrElse(
+      throw new RuntimeException(
+        "OneLake upload requires a storageTokenProvider but none was provided. " +
+          "Set the storageTokenProvider in WriteOptions for OneLake ingestion."))
+
+    val outputStream = new ByteArrayOutputStream()
+    val gzip = new GZIPOutputStream(outputStream)
+    val writer = new OutputStreamWriter(gzip, StandardCharsets.UTF_8)
+    val buffer = new BufferedWriter(writer, GzipBufferSize)
+    val csvWriter = CountingWriter(buffer)
+
+    V2BlobWriteResource(buffer, gzip, csvWriter, blobUrl,
+      oneLakeUploadContext = Some(OneLakeUploadContext(containerBaseUrl, blobName, outputStream, tokenProvider)))
+  }
+
+  /**
+   * Create a blob writer for Azure Blob Storage using SAS token (legacy CloudBlockBlob).
+   */
+  private def createSasBlobWriter(blobUrl: String): V2BlobWriteResource = {
     val currentBlob = new CloudBlockBlob(new URI(blobUrl))
     val options = new BlobRequestOptions()
     options.setConcurrentRequestCount(4)
@@ -238,7 +287,7 @@ object IngestV2QueuedWriter {
     val buffer = new BufferedWriter(writer, GzipBufferSize)
     val csvWriter = CountingWriter(buffer)
 
-    V2BlobWriteResource(buffer, gzip, csvWriter, blobUrl)
+    V2BlobWriteResource(buffer, gzip, csvWriter, blobUrl, oneLakeUploadContext = None)
   }
 
   private def splitUrlAndSas(url: String): (String, String) = {
@@ -252,13 +301,49 @@ object IngestV2QueuedWriter {
     resource.gzip.flush()
     resource.writer.close()
     resource.gzip.close()
+
+    // For OneLake paths, upload the buffered data with Bearer token
+    resource.oneLakeUploadContext.foreach { ctx =>
+      val data = ctx.outputStream.toByteArray
+      if (data.nonEmpty) {
+        KDSU.logDebug(myName, s"Uploading ${data.length} bytes to OneLake: ${ctx.blobName}")
+
+        val tokenCredential = new TokenCredential {
+          override def getToken(request: TokenRequestContext): Mono[AccessToken] = {
+            val token = ctx.tokenProvider.getToken
+            Mono.just(new AccessToken(token, OffsetDateTime.now().plusHours(1)))
+          }
+        }
+
+        val blobClient = new BlobClientBuilder()
+          .endpoint(ctx.containerBaseUrl)
+          .blobName(ctx.blobName)
+          .credential(tokenCredential)
+          .buildClient()
+
+        val headers = new BlobHttpHeaders()
+          .setContentType("application/gzip")
+
+        blobClient.upload(new ByteArrayInputStream(data), data.length.toLong, true)
+        blobClient.setHttpHeaders(headers)
+
+        KDSU.logDebug(myName, s"OneLake upload complete: ${ctx.blobName} (${data.length} bytes)")
+      }
+    }
   }
 }
+
+private[v2] case class OneLakeUploadContext(
+    containerBaseUrl: String,
+    blobName: String,
+    outputStream: ByteArrayOutputStream,
+    tokenProvider: StorageTokenProvider)
 
 private[v2] case class V2BlobWriteResource(
     writer: BufferedWriter,
     gzip: GZIPOutputStream,
     csvWriter: CountingWriter,
-    blobUrl: String)
+    blobUrl: String,
+    oneLakeUploadContext: Option[OneLakeUploadContext] = None)
 
 private[v2] case class BlobSourceWithInfo(blobUrl: String, size: Long)

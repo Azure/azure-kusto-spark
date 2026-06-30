@@ -15,7 +15,7 @@ import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
  *   - If preferredIngestionMethod == "REST" → V2 supported
  *   - If preferredIngestionMethod == "Legacy" or 404 → V1 fallback
  *
- * This enables zero-configuration auto-detection without requiring useIngestV2 flag.
+ * This enables zero-configuration V2 ingestion as the default path.
  */
 object IngestV2Detector {
   private val myName = this.getClass.getSimpleName

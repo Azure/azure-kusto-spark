@@ -17,6 +17,14 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration.FiniteDuration
 
+/**
+ * A serializable function that returns a Bearer token for storage access.
+ * Used for OneLake uploads where SAS tokens are not available.
+ */
+trait StorageTokenProvider extends Serializable {
+  def getToken: String
+}
+
 object KustoSinkOptions extends KustoOptions {
 
   /** Required options */
@@ -89,16 +97,16 @@ object KustoSinkOptions extends KustoOptions {
   // The ingestion storage to use. This expects a serialized json of type Array[IngestionStorageParameters]
   val KUSTO_INGESTION_STORAGE: String = newOption("kustoIngestionStorageContainer")
 
-  // If set to 'true', enables the use of the kusto-ingest-v2 SDK for ingestion.
-  // This uses REST-based queued ingestion (no Azure Storage Queue), multi-blob batch,
-  // and REST-based status tracking. Default: 'false'. Experimental/Preview feature.
-  val KUSTO_USE_INGEST_V2: String = newOption("useIngestV2")
-
-  // If set to 'true', bypasses V2 auto-detection entirely and always uses the legacy
-  // V1 (queue-based) ingestion path. Takes precedence over useIngestV2 and config API.
+  // If set to 'true', bypasses V2 entirely and always uses the legacy
+  // V1 (queue-based) ingestion path. Use as an escape hatch if V2 causes issues.
   val KUSTO_LEGACY_INGEST: String = newOption("legacyIngest")
 
-  // The ingestion format to use when useIngestV2 is enabled.
+  // Classpath of a class implementing StorageTokenProvider for OneLake Bearer token auth.
+  // The class must have a constructor accepting CaseInsensitiveMap[String] (parameters map).
+  // Used when config API returns preferredUploadMethod="Lake" (OneLake paths without SAS).
+  val KUSTO_STORAGE_TOKEN_PROVIDER_CLASSPATH: String = newOption("storageTokenProviderClasspath")
+
+  // The ingestion format to use for V2 ingestion.
   // Supported values: "csv" (default), "parquet".
   // "parquet" uses Spark's native Parquet writer for vectorized, columnar ingestion.
   val KUSTO_INGESTION_FORMAT: String = newOption("ingestionFormat")
@@ -144,6 +152,6 @@ final case class WriteOptions(
     streamIngestUncompressedMaxSize: Int = KustoConstants.DefaultMaxStreamingBytesUncompressed,
     maybeIngestionBlobStorage: Option[Array[IngestionStorageParameters]] = None,
     kustoCustomDebugWriteOptions: KustoCustomDebugWriteOptions,
-    useIngestV2: Boolean = false,
     legacyIngest: Boolean = false,
-    ingestionFormat: IngestionFormat = IngestionFormat.CSV)
+    ingestionFormat: IngestionFormat = IngestionFormat.CSV,
+    storageTokenProvider: Option[StorageTokenProvider] = None)

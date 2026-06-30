@@ -22,7 +22,7 @@ import scala.jdk.CollectionConverters._
 
 /**
  * Top-level orchestrator for the kusto-ingest-v2 SDK write path. This is the single entry point
- * called from KustoWriter when useIngestV2 = true.
+ * called from KustoWriter when V2 ingestion is active (the default path).
  *
  * Responsibilities:
  *   - Creates its own IngestV2ClientProvider (self-contained lifecycle)
@@ -39,7 +39,7 @@ object IngestV2WriterOrchestrator {
 
   /**
    * Main entry point: write a DataFrame to Kusto using the kusto-ingest-v2 SDK. Called from
-   * KustoWriter.write() when useIngestV2 = true.
+   * KustoWriter.write() when V2 ingestion is active (the default path).
    *
    * NOW WITH CONFIG API: Queries config API to validate V2 support and fetch DM capabilities.
    */
