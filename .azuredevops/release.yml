@@ -1,0 +1,138 @@
+# Azure DevOps Release Pipeline for azure-kusto-spark
+# Triggers on version tags (v3.0_* or v4.0_*)
+# Equivalent of .github/workflows/release.yml
+
+trigger:
+  tags:
+    include:
+      - 'v3.0_*'
+      - 'v4.0_*'
+
+pr: none
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  JAVA_VERSION: '21'
+  # Pipeline variables (set in ADO UI):
+  # APP_ID, TENANT_ID, AZURE_SUBSCRIPTION_ID, CLUSTER, DATABASE
+  # STORAGE_CONTAINER_URL (secret)
+  # GH_TOKEN (secret) - GitHub PAT for gh release create
+  # AZURE_RELEASE_STORAGE_ACCOUNT, AZURE_STORAGE_CONTAINER
+  # AZURESDKPARTNERDROPS_SUBSCRIPTION_ID
+
+steps:
+  - checkout: self
+    fetchDepth: 0
+
+  - task: JavaToolInstaller@0
+    displayName: 'Setup Java $(JAVA_VERSION)'
+    inputs:
+      versionSpec: '$(JAVA_VERSION)'
+      jdkArchitectureOption: 'x64'
+      jdkSourceOption: 'PreInstalled'
+
+  - task: Cache@2
+    displayName: 'Cache Maven local repository'
+    inputs:
+      key: 'maven | "$(Agent.OS)" | pom.xml | connector/pom.xml'
+      path: $(HOME)/.m2/repository
+      restoreKeys: |
+        maven | "$(Agent.OS)"
+
+  - task: AzureCLI@2
+    displayName: 'Get Kusto access token'
+    inputs:
+      azureSubscription: 'kusto-spark-wif'
+      scriptType: 'bash'
+      scriptLocation: 'inlineScript'
+      inlineScript: |
+        access_token=$(az account get-access-token --resource=$(APP_ID) --scope=$(CLUSTER)/.default --query accessToken -o tsv)
+        echo "##vso[task.setvariable variable=ACCESS_TOKEN;issecret=true]$access_token"
+
+  - task: Maven@4
+    displayName: 'Maven clean verify'
+    inputs:
+      mavenPomFile: 'pom.xml'
+      goals: 'clean verify'
+      options: >-
+        -DkustoAadAppId=$(APP_ID)
+        -DkustoAadAuthorityID=$(TENANT_ID)
+        -DkustoDatabase=$(DATABASE)
+        -DkustoCluster=$(CLUSTER)
+        -DaccessToken=$(ACCESS_TOKEN)
+      javaHomeOption: 'JDKVersion'
+      jdkVersionOption: '1.21'
+      publishJUnitResults: false
+    env:
+      kustoAadAuthorityID: $(TENANT_ID)
+      kustoDatabase: $(DATABASE)
+      kustoCluster: $(CLUSTER)
+      kustoAadAppId: $(APP_ID)
+      accessToken: $(ACCESS_TOKEN)
+      storageAccountUrl: $(STORAGE_CONTAINER_URL)
+    timeoutInMinutes: 40
+
+  - task: PublishTestResults@2
+    displayName: 'Publish test results'
+    condition: always()
+    inputs:
+      testResultsFormat: 'JUnit'
+      testResultsFiles: '**/surefire-reports/*.xml'
+      searchFolder: 'connector/target'
+      mergeTestResults: true
+      testRunTitle: 'Release Build Tests'
+
+  - script: |
+      VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+      SCALA_VERSION=$(mvn help:evaluate -Dexpression=scala.version.major -q -DforceStdout)
+      SPARK_VERSION=$(mvn help:evaluate -Dexpression=spark.version.major -q -DforceStdout)
+      echo "##vso[task.setvariable variable=VERSION]$VERSION"
+      echo "##vso[task.setvariable variable=SCALA_VERSION]$SCALA_VERSION"
+      echo "##vso[task.setvariable variable=SPARK_VERSION]$SPARK_VERSION"
+      echo "Version: $VERSION, Scala: $SCALA_VERSION, Spark: $SPARK_VERSION"
+    displayName: 'Get version info'
+
+  - script: |
+      mkdir -p staging
+      cp connector/target/*.jar staging/
+      cp connector/.flattened-pom.xml "staging/kusto-spark_$(SPARK_VERSION)_$(SCALA_VERSION)-$(VERSION).pom"
+      echo "Staged artifacts:"
+      ls -la staging/
+    displayName: 'Stage release artifacts'
+
+  - script: |
+      TAG_NAME=$(Build.SourceBranchName)
+      echo "Creating GitHub release for tag: $TAG_NAME"
+      gh release create "$TAG_NAME" \
+        --repo Azure/azure-kusto-spark \
+        --title "$TAG_NAME" \
+        --notes-file CHANGELOG.md \
+        "staging/kusto-spark_$(SPARK_VERSION)_$(SCALA_VERSION)-$(VERSION).jar" \
+        "staging/kusto-spark_$(SPARK_VERSION)_$(SCALA_VERSION)-$(VERSION)-sources.jar" \
+        "staging/kusto-spark_$(SPARK_VERSION)_$(SCALA_VERSION)-$(VERSION).pom"
+    displayName: 'Create GitHub Release'
+    env:
+      GH_TOKEN: $(GH_TOKEN)
+
+  - task: AzureCLI@2
+    displayName: 'Upload artifacts to Azure Blob Storage'
+    inputs:
+      azureSubscription: 'azuresdkpartnerdrops-wif'
+      scriptType: 'bash'
+      scriptLocation: 'inlineScript'
+      inlineScript: |
+        az storage blob upload-batch \
+          --account-name $(AZURE_RELEASE_STORAGE_ACCOUNT) \
+          --destination "$(AZURE_STORAGE_CONTAINER)/kusto/spark/$(SPARK_VERSION)_$(VERSION)" \
+          --source staging \
+          --auth-mode login \
+          --overwrite
+        echo "Uploaded to: $(AZURE_RELEASE_STORAGE_ACCOUNT)/$(AZURE_STORAGE_CONTAINER)/kusto/spark/$(SPARK_VERSION)_$(VERSION)"
+
+  - task: PublishPipelineArtifact@1
+    displayName: 'Publish pipeline artifacts'
+    inputs:
+      targetPath: 'staging'
+      artifactName: 'kusto-spark-$(SPARK_VERSION)-$(VERSION)'
