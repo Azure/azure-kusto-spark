@@ -1,14 +1,3 @@
 # Azure DevOps Release Pipeline for azure-kusto-spark
 # Triggers on version tags (v3.0_* or v4.0_*)
 # Equivalent of .github/workflows/release.yml
-
-trigger:
-  tags:
-    include:
-      - 'v3.0_*'
-      - 'v4.0_*'
-
-pr: none
-
-pool:
-  vmImage: 'ubuntu-latest'
