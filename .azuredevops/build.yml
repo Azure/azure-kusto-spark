@@ -1,20 +1,3 @@
 # Azure DevOps CI Build Pipeline for azure-kusto-spark
 # Triggers on push to any branch and PRs
 # Equivalent of .github/workflows/build.yml
-
-trigger:
-  branches:
-    include:
-      - '*'
-
-pr:
-  branches:
-    include:
-      - '*'
-
-pool:
-  vmImage: 'ubuntu-latest'
-
-variables:
-  MAVEN_CACHE_FOLDER: $(HOME)/.m2/repository
-  JAVA_VERSION: '21'
