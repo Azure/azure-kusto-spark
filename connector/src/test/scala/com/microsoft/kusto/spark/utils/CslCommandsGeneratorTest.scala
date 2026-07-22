@@ -129,4 +129,34 @@ class CslCommandsGeneratorTest extends AnyFlatSpec {
     assert(commandResult.contains(s"$canonicalHttpsUrl;impersonate"))
     assert(!commandResult.contains("abfss://"))
   }
+
+  "generateCountQuery" should "append the count operator on a new line" in {
+    val query = "Storms | take 100"
+
+    assert(CslCommandsGenerator.generateCountQuery(query) == "Storms | take 100\n| count")
+  }
+
+  it should "not let a trailing single-line comment swallow the count operator (issue #267)" in {
+    val query = "range _ from 1 to 500001 step 1 // this comment causes issue"
+
+    assert(
+      CslCommandsGenerator.generateCountQuery(query) ==
+        "range _ from 1 to 500001 step 1 // this comment causes issue\n| count")
+  }
+
+  "generateEstimateRowsCountQuery" should "append the evaluate operator on a new line" in {
+    val query = "Storms | take 100"
+
+    assert(
+      CslCommandsGenerator.generateEstimateRowsCountQuery(query) ==
+        "Storms | take 100\n| evaluate estimate_rows_count()")
+  }
+
+  it should "not let a trailing single-line comment swallow the evaluate operator (issue #267)" in {
+    val query = "range _ from 1 to 500001 step 1 // this comment causes issue"
+
+    assert(
+      CslCommandsGenerator.generateEstimateRowsCountQuery(query) ==
+        "range _ from 1 to 500001 step 1 // this comment causes issue\n| evaluate estimate_rows_count()")
+  }
 }
