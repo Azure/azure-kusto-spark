@@ -25,13 +25,27 @@ class KustoQueryUtilsTest
     val query = "Table | where column1 = 'abc' | summarize by count()"
 
     KustoQueryUtils.getQuerySchemaQuery(query) should be(
-      "Table | where column1 = 'abc' | summarize by count()| take 0")
+      "Table | where column1 = 'abc' | summarize by count()\n| take 0")
+  }
+
+  it should "not let a trailing single-line comment swallow the take operator" in {
+    val query = "range _ from 1 to 500001 step 1 // this comment causes issue"
+
+    KustoQueryUtils.getQuerySchemaQuery(query) should be(
+      "range _ from 1 to 500001 step 1 // this comment causes issue\n| take 0")
   }
 
   "limitQuery" should "add limit" in {
     val query = "Table | where column1 = 'abc' | summarize by count()"
 
     KustoQueryUtils.limitQuery(query, 5) should be(
-      "Table | where column1 = 'abc' | summarize by count()| take 5")
+      "Table | where column1 = 'abc' | summarize by count()\n| take 5")
+  }
+
+  it should "not let a trailing single-line comment swallow the take operator" in {
+    val query = "range _ from 1 to 500001 step 1 // this comment causes issue"
+
+    KustoQueryUtils.limitQuery(query, 5) should be(
+      "range _ from 1 to 500001 step 1 // this comment causes issue\n| take 5")
   }
 }
