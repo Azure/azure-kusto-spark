@@ -29,7 +29,9 @@ object KustoFilter {
   def buildColumnsClause(columns: Array[String], timespanColumns: Set[String]): String = {
     if (columns.isEmpty) ""
     else {
-      " | project " + columns
+      // Start the projection on a new line so that a query ending with a single-line
+      // comment (// ...) does not swallow the appended '| project' operator (issue #267).
+      "\n| project " + columns
         .map(col => if (timespanColumns.contains(col)) s"tostring(['$col'])" else s"['$col']")
         .mkString(", ")
     }
@@ -38,7 +40,9 @@ object KustoFilter {
   def buildFiltersClause(schema: StructType, filters: Seq[Filter]): String = {
     val filterExpressions =
       filters.flatMap(f => buildFilterExpression(schema, f)).mkString(" and ")
-    if (filterExpressions.isEmpty) "" else " | where " + filterExpressions
+    // Start the filter on a new line so that a query ending with a single-line comment
+    // (// ...) does not swallow the appended '| where' operator (issue #267).
+    if (filterExpressions.isEmpty) "" else "\n| where " + filterExpressions
   }
 
   def buildFilterExpression(schema: StructType, filter: Filter): Option[String] = {

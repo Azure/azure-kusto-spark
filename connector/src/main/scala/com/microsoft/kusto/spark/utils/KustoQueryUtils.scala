@@ -12,7 +12,9 @@ object KustoQueryUtils {
   }
 
   def limitQuery(query: String, limit: Int): String = {
-    query + s"| take $limit"
+    // Append the operator on a new line so that a query ending with a single-line
+    // comment (// ...) does not swallow the appended '| take' operator (issue #267).
+    query + s"\n| take $limit"
   }
 
   def getQuerySchemaQuery(query: String): String = {
