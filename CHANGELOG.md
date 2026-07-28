@@ -15,7 +15,7 @@ Tags are created as `v4.0_{version}` (Spark 4 / master) and `v3.0_{version}` (Sp
 - None
 
 ### Fixed
-- None
+- Read queries ending in a single-line comment (`// ...`) no longer disable the connector's appended operators. The generated `| take`, `| count`, `| evaluate estimate_rows_count()`, `| where`, and `| project` are now placed on a new line so a trailing comment cannot swallow them — fixing reads that failed with `E_QUERY_RESULT_SET_TOO_LARGE` on large results and a silent column-pruning corruption (#267)
 
 ## [7.1.1] - 2026-06-12
 

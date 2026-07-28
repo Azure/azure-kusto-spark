@@ -231,11 +231,15 @@ private[kusto] object CslCommandsGenerator {
   }
 
   def generateCountQuery(query: String): String = {
-    query + "| count"
+    // Append the operator on a new line so that a query ending with a single-line
+    // comment (// ...) does not swallow the appended '| count' operator (issue #267).
+    query + "\n| count"
   }
 
   def generateEstimateRowsCountQuery(query: String): String = {
-    query + "| evaluate estimate_rows_count()"
+    // Append the operator on a new line so that a query ending with a single-line
+    // comment (// ...) does not swallow the appended '| evaluate' operator (issue #267).
+    query + "\n| evaluate estimate_rows_count()"
   }
 
   def generateTableCount(table: String): String = {

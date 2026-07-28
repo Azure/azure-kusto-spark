@@ -157,7 +157,7 @@ class KustoFilterTests extends AnyFlatSpec with MockFactory with Matchers {
 
   "Non-empty columns filter" should "construct a project statement" in {
     val expr = KustoFilter.buildColumnsClause(Array("ColA", "ColB"), Set("ColB"))
-    expr shouldBe " | project ['ColA'], tostring(['ColB'])"
+    expr shouldBe "\n| project ['ColA'], tostring(['ColB'])"
   }
 
   "Providing multiple filters" should "lead to and-concatenation of these filters" in {
@@ -167,7 +167,7 @@ class KustoFilterTests extends AnyFlatSpec with MockFactory with Matchers {
       Array(StringEndsWith("ColA", "EndingString"), LessThanOrEqual("ColB", 5))
     val expr = KustoFilter.buildFiltersClause(testSchema, filters.toIndexedSeq)
 
-    expr shouldBe " | where ['ColA'] endswith_cs 'EndingString' and ['ColB'] <= 5"
+    expr shouldBe "\n| where ['ColA'] endswith_cs 'EndingString' and ['ColB'] <= 5"
   }
 
   "Providing two filters when one is resolved to NONE" should "only apply the second filter" in {
@@ -177,7 +177,7 @@ class KustoFilterTests extends AnyFlatSpec with MockFactory with Matchers {
       Array(StringEndsWith("ColA", "EndingString"), LessThanOrEqual("ColNotInTheSchema", 5))
     val expr = KustoFilter.buildFiltersClause(testSchema, filters.toIndexedSeq)
 
-    expr shouldBe " | where ['ColA'] endswith_cs 'EndingString'"
+    expr shouldBe "\n| where ['ColA'] endswith_cs 'EndingString'"
   }
 
   "Requesting only column pruning" should "adjust the query with prune expression" in {
@@ -192,6 +192,21 @@ class KustoFilterTests extends AnyFlatSpec with MockFactory with Matchers {
       originalQuery,
       KustoFiltering(columns, filters))
 
-    query shouldBe "MyTable | take 100 | where ['ColA'] endswith_cs 'EndingString' and ['ColB'] <= 5 | project tostring(['ColA']), ['ColB']"
+    query shouldBe "MyTable | take 100\n| where ['ColA'] endswith_cs 'EndingString' and ['ColB'] <= 5\n| project tostring(['ColA']), ['ColB']"
+  }
+
+  "pruneAndFilter" should "not let a trailing single-line comment swallow the where/project operators (issue #267)" in {
+    val testSchema =
+      StructType(Seq(StructField("ColA", StringType), StructField("ColB", IntegerType)))
+    val originalQuery = "MyTable // trailing comment"
+    val columns = Array("ColA", "ColB")
+    val filters: Array[Filter] =
+      Array(StringEndsWith("ColA", "EndingString"), LessThanOrEqual("ColB", 5))
+    val query = KustoFilter.pruneAndFilter(
+      KustoSchema(testSchema, Set("ColA")),
+      originalQuery,
+      KustoFiltering(columns, filters))
+
+    query shouldBe "MyTable // trailing comment\n| where ['ColA'] endswith_cs 'EndingString' and ['ColB'] <= 5\n| project tostring(['ColA']), ['ColB']"
   }
 }
