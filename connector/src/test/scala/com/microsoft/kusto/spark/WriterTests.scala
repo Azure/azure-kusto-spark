@@ -17,6 +17,7 @@ import org.scalatest.matchers.should.Matchers
 import java.io.{BufferedWriter, ByteArrayOutputStream, OutputStreamWriter}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
+import java.time.Duration
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.TimeZone
@@ -127,6 +128,13 @@ class WriterTests extends AnyFlatSpec with Matchers {
 
     verify(buffer, times(1)).flush()
     verify(buffer, times(1)).close()
+  }
+
+  "queueRequestOptions" should "use the intended 40 second timeout" in {
+    val options = KustoWriter.queueRequestOptions
+
+    options.getTryTimeoutDuration shouldEqual Duration.ofSeconds(40)
+    options.getMaxTries shouldEqual KustoConstants.QueueRetryAttempts
   }
 
   "getColumnsSchema" should "parse table schema correctly" in {

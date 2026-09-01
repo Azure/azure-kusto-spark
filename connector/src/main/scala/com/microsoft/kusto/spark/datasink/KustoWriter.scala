@@ -68,6 +68,14 @@ object KustoWriter {
     .maxAttempts(MaxIngestRetryAttempts)
     .retryExceptions(classOf[IngestionServiceException])
     .build
+  private[kusto] def queueRequestOptions: RequestRetryOptions =
+    new RequestRetryOptions(
+      RetryPolicyType.FIXED,
+      KCONST.QueueRetryAttempts,
+      Duration.ofMillis(KCONST.DefaultTimeoutQueueing.toLong),
+      null,
+      null,
+      null)
   private val formatter: DateTimeFormatter =
     DateTimeFormatter.ofPattern("HH-mm-ss-SSSSSS").withZone(ZoneId.systemDefault)
   private val objectMapper = new ObjectMapper()
@@ -505,6 +513,8 @@ object KustoWriter {
       parameters.coordinates.ingestionUrl,
       parameters.coordinates.clusterAlias)
     val ingestClient = clientCache.ingestClient
+    // Apply the queue policy before making subsequent SDK calls so newly created queue resources use it.
+    ingestClient.setQueueRequestOptions(queueRequestOptions)
     // Pre-warm the CloudInfo cache on the executor to avoid an extra metadata
     // fetch during authentication. We call retrieveCloudInfoForCluster (which
     // caches internally) instead of manuallyAddToCache to avoid a direct
@@ -512,15 +522,6 @@ object KustoWriter {
     // uber-jar and can cause NoSuchMethodError when an unshaded CloudInfo is
     // loaded from the Databricks/Spark runtime classpath.
     CloudInfo.retrieveCloudInfoForCluster(clientCache.ingestKcsb.getClusterUrl)
-
-    val reqRetryOpts = new RequestRetryOptions(
-      RetryPolicyType.FIXED,
-      KCONST.QueueRetryAttempts,
-      Duration.ofSeconds(KCONST.DefaultTimeoutQueueing),
-      null,
-      null,
-      null)
-    ingestClient.setQueueRequestOptions(reqRetryOpts)
     // We force blocking here, since the driver can only complete the ingestion process
     // once all partitions are ingested into the temporary table
     ingestRowsIntoKusto(
