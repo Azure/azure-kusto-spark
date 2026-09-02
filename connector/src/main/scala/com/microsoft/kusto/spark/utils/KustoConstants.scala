@@ -41,6 +41,11 @@ object KustoConstants {
   val EmptyString = ""
   val QueueRetryAttempts = 1
   val SourceLocationColumnName = "ingestion_source_location_url_blob_internal"
+  // Data Management REST route that returns the export storage targets the engine should export
+  // to. Preferred over '.show export containers' as it works when the cluster is behind a private
+  // link or has outbound access protection enabled.
+  val ExportStorageRestApiPath = "v1/rest/ingestion/exportstorage"
+  val IngestionConfigurationRestApiPath = "v1/rest/ingestion/configuration"
   val storageProtocolAbfs = "abfs"
   val storageProtocolAbfss = "abfss"
   val storageProtocolWasbs = "wasbs"

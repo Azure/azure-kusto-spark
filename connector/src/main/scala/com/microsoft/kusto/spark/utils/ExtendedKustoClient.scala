@@ -61,10 +61,17 @@ class ExtendedKustoClient(
   lazy val ingestClient: QueuedIngestClient = IngestClientFactory.createClient(ingestKcsb)
   lazy val streamingClient: ManagedStreamingIngestClient =
     IngestClientFactory.createManagedStreamingIngestClient(ingestKcsb, engineKcsb)
+  private[kusto] def exportStorageApiEnabled: Boolean = false
   private lazy val ingestContainersContainerProvider =
     new ContainerProvider(this, clusterAlias, generateCreateTmpStorageCommand())
   private lazy val exportContainersContainerProvider =
-    new ContainerProvider(this, clusterAlias, generateGetExportContainersCommand())
+    new ContainerProvider(
+      this,
+      clusterAlias,
+      generateGetExportContainersCommand(),
+      maybeExportStorageClient =
+        if (exportStorageApiEnabled) Some(new DmExportStorageClient(ingestKcsb, clusterAlias))
+        else None)
   RetryConfig.ofDefaults()
   private val retryConfig = buildRetryConfig
   private val retryConfigAsyncOp = buildRetryConfigForAsyncOp
@@ -277,7 +284,8 @@ class ExtendedKustoClient(
   def getTempBlobsForExport: TransientStorageParameters = {
     val storage = exportContainersContainerProvider.getExportContainers
     val transientStorage =
-      storage.map(c => new TransientStorageCredentials(c.containerUrl + c.sas))
+      if (exportStorageApiEnabled) storage.map(ExtendedKustoClient.toTransientStorageCredentials)
+      else storage.map(c => new TransientStorageCredentials(c.containerUrl + c.sas))
     val endpointSuffix = transientStorage.head.domainSuffix
     if (StringUtils.isNotBlank(endpointSuffix)) {
       new TransientStorageParameters(transientStorage.toArray, endpointSuffix)
@@ -710,6 +718,22 @@ object ExtendedKustoClient {
   private val DefaultDb: String = "NetDefaultDB"
   val BaseIntervalMs: Long = 1000L
   val MaxRetryIntervalMs: Long = 1000L * 10
+
+  private[kusto] def toTransientStorageCredentials(
+      container: ContainerAndSas): TransientStorageCredentials = {
+    if (container.isInstanceOf[OneLakeContainerAndSas]) {
+      // OneLake export folders are returned without a SAS - Kusto exports with ';impersonate'
+      // and Spark reads back over abfss using the ambient AAD credentials.
+      val credentials = new TransientStorageCredentials()
+      credentials.parseOneLake(container.containerUrl)
+      credentials
+    } else {
+      new TransientStorageCredentials(container.containerUrl + container.sas)
+    }
+  }
 }
 
 case class ContainerAndSas(containerUrl: String, sas: String)
+
+private[kusto] final class OneLakeContainerAndSas(containerUrl: String)
+    extends ContainerAndSas(containerUrl, KustoConstants.EmptyString)

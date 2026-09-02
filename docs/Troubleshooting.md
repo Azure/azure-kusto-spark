@@ -165,4 +165,3 @@ If stream fails after 3 retries → fallback to queued blob ingestion
 | Sub-second latency, small record rate | `KustoStreaming` |
 | Spark Structured Streaming | `Queued` (not `KustoStreaming`) |
 | Need to see service-side failures in Spark | `Transactional` |
-
