@@ -36,6 +36,7 @@ import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.TimeZone
 import java.util.concurrent.{Callable, CountDownLatch}
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.zip.GZIPOutputStream
 import com.sun.net.httpserver.HttpServer
 
@@ -170,6 +171,95 @@ class WriterTests extends AnyFlatSpec with Matchers {
 
     KustoWriter.initializeIngestClient(client, cloudInfo) should be theSameInstanceAs
       expectedIngestClient
+  }
+
+  "invokeCloudInfoCacheSeed" should "support direct and reactive SDK cache signatures" in {
+    val cloudInfo = new CloudInfo(
+      false,
+      "https://login.microsoftonline.com",
+      "client-id",
+      "http://localhost",
+      "https://kusto.kusto.windows.net",
+      "https://login.microsoftonline.com/common")
+    val directEndpoint = "http://localhost:31001"
+    KustoWriter.invokeCloudInfoCacheSeed(classOf[CloudInfo], null, directEndpoint, cloudInfo)
+    CloudInfo.retrieveCloudInfoForCluster(directEndpoint) should be theSameInstanceAs cloudInfo
+
+    class ReactiveCacheApi {
+      var cachedEndpoint: String = _
+      var cachedCloudInfo: CloudInfo = _
+      def manuallyAddToCache(
+          clusterUrl: String,
+          cloudInfoPublisher: reactor.core.publisher.Mono[CloudInfo]): Unit = {
+        cachedEndpoint = clusterUrl
+        cachedCloudInfo = cloudInfoPublisher.block()
+      }
+    }
+    val reactiveCache = new ReactiveCacheApi
+    val reactiveEndpoint = "http://localhost:31002"
+    KustoWriter.invokeCloudInfoCacheSeed(
+      reactiveCache.getClass,
+      reactiveCache,
+      reactiveEndpoint,
+      cloudInfo)
+    reactiveCache.cachedEndpoint shouldEqual reactiveEndpoint
+    reactiveCache.cachedCloudInfo should be theSameInstanceAs cloudInfo
+  }
+
+  "seedCloudInfoCache" should "bound a seed blocked on the SDK cache monitor" in {
+    val readySeed = new Callable[Void] {
+      override def call(): Void = null
+    }
+    KustoWriter.seedCloudInfoCache(
+      "https://ingest.example",
+      CloudInfo.DEFAULT_CLOUD,
+      timeoutMillis = 2000,
+      seed = readySeed)
+
+    val seedStarted = new CountDownLatch(1)
+    val releaseSeed = new CountDownLatch(1)
+    val queuedExecutions = new AtomicInteger(0)
+    val uninterruptibleSeed = new Callable[Void] {
+      override def call(): Void = {
+        seedStarted.countDown()
+        while (releaseSeed.getCount > 0) {
+          try {
+            releaseSeed.await()
+          } catch {
+            case _: InterruptedException => // Simulate waiting on an SDK monitor held by a stuck call.
+          }
+        }
+        null
+      }
+    }
+    val queuedSeed = new Callable[Void] {
+      override def call(): Void = {
+        queuedExecutions.incrementAndGet()
+        null
+      }
+    }
+
+    try {
+      val firstError = the[DataServiceException] thrownBy KustoWriter.seedCloudInfoCache(
+        "https://ingest.example",
+        CloudInfo.DEFAULT_CLOUD,
+        timeoutMillis = 500,
+        seed = uninterruptibleSeed)
+      seedStarted.getCount shouldEqual 0L
+      firstError.getMessage should include("Timed out seeding cluster metadata cache")
+
+      val secondStarted = System.nanoTime()
+      val secondError = the[DataServiceException] thrownBy KustoWriter.seedCloudInfoCache(
+        "https://ingest.example",
+        CloudInfo.DEFAULT_CLOUD,
+        timeoutMillis = 500,
+        seed = queuedSeed)
+      (System.nanoTime() - secondStarted) / 1000000 should be < 5000L
+      secondError.getMessage should include("Timed out seeding cluster metadata cache")
+      queuedExecutions.get() shouldEqual 0
+    } finally {
+      releaseSeed.countDown()
+    }
   }
 
   "getCloudInfoForIngestion" should "skip metadata lookup for streaming writes" in {

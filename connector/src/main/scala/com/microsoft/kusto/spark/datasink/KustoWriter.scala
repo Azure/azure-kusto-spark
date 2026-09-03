@@ -48,6 +48,7 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.CollectionAccumulator
 
 import java.io._
+import java.lang.reflect.{InvocationTargetException, Method, Modifier}
 import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.security.InvalidParameterException
@@ -592,31 +593,108 @@ object KustoWriter {
       clusterUrl: String,
       timeoutMillis: Long = CloudInfoTimeoutMillis,
       fetch: Callable[CloudInfo] = null): CloudInfo = {
-    require(timeoutMillis > 0, "timeoutMillis must be positive")
     val cloudInfoFetch = Option(fetch).getOrElse(new Callable[CloudInfo] {
       override def call(): CloudInfo = {
         val cloudInfo = CloudInfo.retrieveCloudInfoForCluster(clusterUrl)
-        CloudInfo.manuallyAddToCache(clusterUrl, cloudInfo)
+        invokeCloudInfoCacheSeed(classOf[CloudInfo], null, clusterUrl, cloudInfo)
         cloudInfo
       }
     })
-    val fetchTask = cloudInfoExecutor.submit(cloudInfoFetch)
+    executeCloudInfoOperation(
+      clusterUrl,
+      timeoutMillis,
+      "retrieving cluster metadata",
+      cloudInfoFetch)
+  }
+
+  private[kusto] def seedCloudInfoCache(
+      clusterUrl: String,
+      cloudInfo: CloudInfo,
+      timeoutMillis: Long = CloudInfoTimeoutMillis,
+      seed: Callable[Void] = null): Unit = {
+    val cloudInfoSeed = Option(seed).getOrElse(new Callable[Void] {
+      override def call(): Void = {
+        invokeCloudInfoCacheSeed(classOf[CloudInfo], null, clusterUrl, cloudInfo)
+        null
+      }
+    })
+    executeCloudInfoOperation(
+      clusterUrl,
+      timeoutMillis,
+      "seeding cluster metadata cache",
+      cloudInfoSeed)
+  }
+
+  private[kusto] def invokeCloudInfoCacheSeed(
+      cacheClass: Class[_],
+      cacheTarget: AnyRef,
+      clusterUrl: String,
+      cloudInfo: AnyRef): Unit = {
+    val cacheMethods = cacheClass.getMethods.filter { method =>
+      method.getName == "manuallyAddToCache" &&
+      method.getParameterTypes.toSeq.headOption.contains(classOf[String]) &&
+      method.getParameterCount == 2 &&
+      (cacheTarget != null || Modifier.isStatic(method.getModifiers))
+    }
+
+    val directSeed = cacheMethods
+      .find(_.getParameterTypes.apply(1).isAssignableFrom(cloudInfo.getClass))
+      .map(method => (method, cloudInfo))
+    val compatibleSeed = directSeed.orElse(
+      cacheMethods.iterator
+        .flatMap { method =>
+          val wrapperType = method.getParameterTypes.apply(1)
+          wrapperType.getMethods
+            .find(factory =>
+              factory.getName == "just" &&
+                Modifier.isStatic(factory.getModifiers) &&
+                factory.getParameterTypes.toSeq == Seq(classOf[Object]) &&
+                wrapperType.isAssignableFrom(factory.getReturnType))
+            .map(factory => (method, invokeReflective(factory, null, cloudInfo)))
+        }
+        .toSeq
+        .headOption)
+
+    val (cacheMethod, cacheValue) = compatibleSeed.getOrElse {
+      val signatures = cacheMethods.map(_.toGenericString).mkString(", ")
+      throw new NoSuchMethodException(
+        s"No compatible CloudInfo.manuallyAddToCache method found; candidates: $signatures")
+    }
+    invokeReflective(cacheMethod, cacheTarget, clusterUrl, cacheValue)
+  }
+
+  private def invokeReflective(method: Method, target: AnyRef, arguments: AnyRef*): AnyRef = {
     try {
-      fetchTask.get(timeoutMillis, TimeUnit.MILLISECONDS)
+      method.invoke(target, arguments: _*)
+    } catch {
+      case exception: InvocationTargetException =>
+        throw Option(exception.getCause).getOrElse(exception)
+    }
+  }
+
+  private def executeCloudInfoOperation[T](
+      clusterUrl: String,
+      timeoutMillis: Long,
+      operationDescription: String,
+      operation: Callable[T]): T = {
+    require(timeoutMillis > 0, "timeoutMillis must be positive")
+    val operationTask = cloudInfoExecutor.submit(operation)
+    try {
+      operationTask.get(timeoutMillis, TimeUnit.MILLISECONDS)
     } catch {
       case exception: TimeoutException =>
-        fetchTask.cancel(true)
+        operationTask.cancel(true)
         throw new DataServiceException(
           clusterUrl,
-          "Timed out retrieving cluster metadata",
+          s"Timed out $operationDescription",
           exception,
           false)
       case exception: InterruptedException =>
-        fetchTask.cancel(true)
+        operationTask.cancel(true)
         Thread.currentThread.interrupt()
         throw new DataServiceException(
           clusterUrl,
-          "Interrupted while retrieving cluster metadata",
+          s"Interrupted while $operationDescription",
           exception,
           false)
       case exception: ExecutionException =>
@@ -632,9 +710,7 @@ object KustoWriter {
   private[kusto] def initializeIngestClient(
       client: ExtendedKustoClient,
       cloudInfo: CloudInfo): QueuedIngestClient = {
-    CloudInfo.manuallyAddToCache(
-      getEffectiveIngestionEndpoint(client.ingestKcsb.getClusterUrl),
-      cloudInfo)
+    seedCloudInfoCache(getEffectiveIngestionEndpoint(client.ingestKcsb.getClusterUrl), cloudInfo)
     client.ingestClient
   }
 
