@@ -262,6 +262,51 @@ class WriterTests extends AnyFlatSpec with Matchers {
     }
   }
 
+  it should "bound the actual SDK 5.1.1 cache monitor" in {
+    val warmEndpoint = "http://localhost:31003"
+    KustoWriter.seedCloudInfoCache(warmEndpoint, CloudInfo.DEFAULT_CLOUD, timeoutMillis = 2000)
+
+    val cacheField = classOf[CloudInfo].getDeclaredField("cache")
+    cacheField.setAccessible(true)
+    val cacheMonitor = cacheField.get(null).asInstanceOf[AnyRef]
+    val monitorHeld = new CountDownLatch(1)
+    val releaseMonitor = new CountDownLatch(1)
+    val monitorHolder = new Thread(
+      new Runnable {
+        override def run(): Unit = cacheMonitor.synchronized {
+          monitorHeld.countDown()
+          releaseMonitor.await()
+        }
+      },
+      "cloud-info-cache-monitor-holder")
+    monitorHolder.setDaemon(true)
+    monitorHolder.start()
+
+    val endpoint = "http://localhost:31004"
+    try {
+      monitorHeld.await(5, java.util.concurrent.TimeUnit.SECONDS) shouldBe true
+      val started = System.nanoTime()
+      val error = the[DataServiceException] thrownBy KustoWriter.seedCloudInfoCache(
+        endpoint,
+        CloudInfo.DEFAULT_CLOUD,
+        timeoutMillis = 500)
+      val elapsedMillis = (System.nanoTime() - started) / 1000000L
+
+      error.getMessage should include("Timed out seeding cluster metadata cache")
+      error.isPermanent shouldBe false
+      elapsedMillis should be >= 400L
+      elapsedMillis should be < 2000L
+    } finally {
+      releaseMonitor.countDown()
+      monitorHolder.join(5000L)
+    }
+
+    monitorHolder.isAlive shouldBe false
+    KustoWriter.seedCloudInfoCache(endpoint, CloudInfo.DEFAULT_CLOUD, timeoutMillis = 5000)
+    CloudInfo.retrieveCloudInfoForCluster(endpoint) should be theSameInstanceAs
+      CloudInfo.DEFAULT_CLOUD
+  }
+
   "getCloudInfoForIngestion" should "skip metadata lookup for streaming writes" in {
     val client = new ExtendedKustoClient(
       new ConnectionStringBuilder("https://engine.kusto.windows.net"),
