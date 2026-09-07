@@ -35,7 +35,7 @@ import java.sql.{Date, Timestamp}
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.TimeZone
-import java.util.concurrent.{Callable, CountDownLatch}
+import java.util.concurrent.{Callable, CountDownLatch, Executors, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.zip.GZIPOutputStream
 import com.sun.net.httpserver.HttpServer
@@ -206,29 +206,81 @@ class WriterTests extends AnyFlatSpec with Matchers {
     reactiveCache.cachedCloudInfo should be theSameInstanceAs cloudInfo
   }
 
-  "seedCloudInfoCache" should "bound a seed blocked on the SDK cache monitor" in {
-    val readySeed = new Callable[Void] {
+  "seedCloudInfoCache" should "cancel a queued caller without affecting its peers" in {
+    val runningSeedStarted = new CountDownLatch(1)
+    val releaseRunningSeed = new CountDownLatch(1)
+    val cancelledExecutions = new AtomicInteger(0)
+    val callers = Executors.newSingleThreadExecutor()
+    val runningSeed = new Callable[Void] {
+      override def call(): Void = {
+        runningSeedStarted.countDown()
+        releaseRunningSeed.await()
+        null
+      }
+    }
+    val cancelledSeed = new Callable[Void] {
+      override def call(): Void = {
+        cancelledExecutions.incrementAndGet()
+        null
+      }
+    }
+    val laterSeed = new Callable[Void] {
       override def call(): Void = null
     }
-    KustoWriter.seedCloudInfoCache(
-      "https://ingest.example",
-      CloudInfo.DEFAULT_CLOUD,
-      timeoutMillis = 2000,
-      seed = readySeed)
 
-    val seedStarted = new CountDownLatch(1)
-    val releaseSeed = new CountDownLatch(1)
+    try {
+      val runningCaller = callers.submit(new Callable[String] {
+        override def call(): String = {
+          KustoWriter.seedCloudInfoCache(
+            "https://running-peer.example",
+            CloudInfo.DEFAULT_CLOUD,
+            timeoutMillis = 5000,
+            seed = runningSeed)
+          "completed"
+        }
+      })
+      runningSeedStarted.await(5, TimeUnit.SECONDS) shouldBe true
+
+      val cancelledError = the[DataServiceException] thrownBy KustoWriter.seedCloudInfoCache(
+        "https://cancelled-queued.example",
+        CloudInfo.DEFAULT_CLOUD,
+        timeoutMillis = 500,
+        seed = cancelledSeed)
+      cancelledError.getMessage should include("Timed out seeding cluster metadata cache")
+
+      releaseRunningSeed.countDown()
+      runningCaller.get(5, TimeUnit.SECONDS) shouldEqual "completed"
+      KustoWriter.seedCloudInfoCache(
+        "https://later-peer.example",
+        CloudInfo.DEFAULT_CLOUD,
+        timeoutMillis = 2000,
+        seed = laterSeed)
+      cancelledExecutions.get() shouldEqual 0
+    } finally {
+      releaseRunningSeed.countDown()
+      callers.shutdownNow()
+      callers.awaitTermination(5, TimeUnit.SECONDS)
+    }
+  }
+
+  it should "cancel a running caller without affecting queued or later callers" in {
+    val runningSeedStarted = new CountDownLatch(1)
+    val releaseRunningSeed = new CountDownLatch(1)
+    val runningCompletions = new AtomicInteger(0)
     val queuedExecutions = new AtomicInteger(0)
-    val uninterruptibleSeed = new Callable[Void] {
+    val queuedCallerStarted = new CountDownLatch(1)
+    val callers = Executors.newFixedThreadPool(2)
+    val interruptionResistantSeed = new Callable[Void] {
       override def call(): Void = {
-        seedStarted.countDown()
-        while (releaseSeed.getCount > 0) {
+        runningSeedStarted.countDown()
+        while (releaseRunningSeed.getCount > 0) {
           try {
-            releaseSeed.await()
+            releaseRunningSeed.await()
           } catch {
-            case _: InterruptedException => // Simulate waiting on an SDK monitor held by a stuck call.
+            case _: InterruptedException => // Model Java monitor entry, which ignores interruption.
           }
         }
+        runningCompletions.incrementAndGet()
         null
       }
     }
@@ -240,25 +292,53 @@ class WriterTests extends AnyFlatSpec with Matchers {
     }
 
     try {
-      val firstError = the[DataServiceException] thrownBy KustoWriter.seedCloudInfoCache(
-        "https://ingest.example",
-        CloudInfo.DEFAULT_CLOUD,
-        timeoutMillis = 500,
-        seed = uninterruptibleSeed)
-      seedStarted.getCount shouldEqual 0L
-      firstError.getMessage should include("Timed out seeding cluster metadata cache")
+      val runningCaller = callers.submit(new Callable[DataServiceException] {
+        override def call(): DataServiceException = {
+          try {
+            KustoWriter.seedCloudInfoCache(
+              "https://cancelled-running.example",
+              CloudInfo.DEFAULT_CLOUD,
+              timeoutMillis = 1000,
+              seed = interruptionResistantSeed)
+            null
+          } catch {
+            case exception: DataServiceException => exception
+          }
+        }
+      })
+      runningSeedStarted.await(5, TimeUnit.SECONDS) shouldBe true
 
-      val secondStarted = System.nanoTime()
-      val secondError = the[DataServiceException] thrownBy KustoWriter.seedCloudInfoCache(
-        "https://ingest.example",
+      val queuedCaller = callers.submit(new Callable[String] {
+        override def call(): String = {
+          queuedCallerStarted.countDown()
+          KustoWriter.seedCloudInfoCache(
+            "https://queued-peer.example",
+            CloudInfo.DEFAULT_CLOUD,
+            timeoutMillis = 5000,
+            seed = queuedSeed)
+          "completed"
+        }
+      })
+      queuedCallerStarted.await(5, TimeUnit.SECONDS) shouldBe true
+
+      val cancelledError = runningCaller.get(5, TimeUnit.SECONDS)
+      cancelledError should not be null
+      cancelledError.getMessage should include("Timed out seeding cluster metadata cache")
+
+      releaseRunningSeed.countDown()
+      queuedCaller.get(5, TimeUnit.SECONDS) shouldEqual "completed"
+      runningCompletions.get() shouldEqual 1
+      queuedExecutions.get() shouldEqual 1
+      KustoWriter.seedCloudInfoCache(
+        "https://post-cancellation-peer.example",
         CloudInfo.DEFAULT_CLOUD,
-        timeoutMillis = 500,
+        timeoutMillis = 2000,
         seed = queuedSeed)
-      (System.nanoTime() - secondStarted) / 1000000 should be < 5000L
-      secondError.getMessage should include("Timed out seeding cluster metadata cache")
-      queuedExecutions.get() shouldEqual 0
+      queuedExecutions.get() shouldEqual 2
     } finally {
-      releaseSeed.countDown()
+      releaseRunningSeed.countDown()
+      callers.shutdownNow()
+      callers.awaitTermination(5, TimeUnit.SECONDS)
     }
   }
 
