@@ -63,7 +63,8 @@ private[kusto] case class KustoRelation(
       kustoCoordinates.clusterUrl,
       authentication,
       kustoCoordinates.ingestionUrl,
-      kustoCoordinates.clusterAlias)
+      kustoCoordinates.clusterAlias,
+      readOptions.enableExportStorageApi)
     val isUserOptionForceSingleMode = readOptions.readMode.contains(ReadMode.ForceSingleMode)
     val (useSingleMode, estimatedRecordCount) = readOptions.readMode match {
       // if the user provides a specific option , this is to be used no matter what
@@ -209,7 +210,8 @@ private[kusto] case class KustoRelation(
         kustoCoordinates.clusterUrl,
         authentication,
         kustoCoordinates.ingestionUrl,
-        kustoCoordinates.clusterAlias),
+        kustoCoordinates.clusterAlias,
+        readOptions.enableExportStorageApi),
       clientRequestProperties)
   }
 

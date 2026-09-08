@@ -99,11 +99,11 @@ class ContainerProviderTest extends AnyFlatSpec with Matchers with MockFactory {
     val extendedMockClient = createExtendedKustoMockClient(mockDmClient = mockDmClient)
     val containerProvider =
       new ContainerProvider(extendedMockClient, clusterAlias, command, CACHE_EXPIRY_SEC)
-    containerProvider.getContainer().containerUrl should (not be "")
     val ingestionContainer1 =
       "https://sacc1.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0"
     val ingestionContainer2 =
       "https://sacc2.blob.core.windows.net/20230430-ingestdata-e5c334ee145d4b4-0"
+    containerProvider.getContainer().containerUrl shouldBe ingestionContainer1
     Some(containerProvider.getContainer().containerUrl) should contain oneOf
       (ingestionContainer1,
       ingestionContainer2)

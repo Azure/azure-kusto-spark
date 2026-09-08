@@ -15,6 +15,7 @@ import com.microsoft.kusto.spark.datasink.{
   SchemaAdjustmentMode,
   SparkIngestionProperties
 }
+import com.microsoft.kusto.spark.common.KustoDebugOptions
 import com.microsoft.kusto.spark.datasource.ReadMode.ForceDistributedMode
 import com.microsoft.kusto.spark.datasource.{
   KustoReadOptions,
@@ -39,7 +40,8 @@ class KustoDataSourceUtilsTest extends AnyFlatSpec with MockFactory {
       KustoSourceOptions.KUSTO_AAD_APP_SECRET -> "AppKey",
       KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID -> "Tenant",
       KustoSourceOptions.KUSTO_EXPORT_OPTIONS_JSON -> "{\"sizeLimit\":250,\"compressionType\":\"gzip\",\"async\":\"none\"}",
-      KustoSourceOptions.STORAGE_PROTOCOL -> "abfss")
+      KustoSourceOptions.STORAGE_PROTOCOL -> "abfss",
+      KustoDebugOptions.KUSTO_ENABLE_EXPORT_STORAGE_API -> true.toString)
     // a no interaction mock only for test
     val actualReadOptions = KustoDataSourceUtils.getReadParameters(conf, null)
     val expectedResult = KustoReadOptions(
@@ -48,9 +50,24 @@ class KustoDataSourceUtilsTest extends AnyFlatSpec with MockFactory {
       distributedReadModeTransientCacheEnabled = true,
       None,
       Map("sizeLimit" -> "250", "compressionType" -> "gzip", "async" -> "none"),
-      Some("abfss"))
+      Some("abfss"),
+      enableExportStorageApi = true)
     assert(actualReadOptions != null)
     assert(actualReadOptions == expectedResult)
+  }
+
+  it should "leave the export storage API disabled by default" in {
+    val actualReadOptions = KustoDataSourceUtils.getReadParameters(Map.empty, null)
+
+    assert(!actualReadOptions.enableExportStorageApi)
+  }
+
+  it should "keep the export storage API disabled when explicitly false" in {
+    val actualReadOptions = KustoDataSourceUtils.getReadParameters(
+      Map(KustoDebugOptions.KUSTO_ENABLE_EXPORT_STORAGE_API -> "false"),
+      null)
+
+    assert(!actualReadOptions.enableExportStorageApi)
   }
 
   "ReadParameters" should "throw an exception when an invalid export options is passed" in {

@@ -56,7 +56,8 @@ private[kusto] case class KustoReadOptions(
     distributedReadModeTransientCacheEnabled: Boolean = false,
     queryFilterPushDown: Option[Boolean],
     additionalExportOptions: Map[String, String] = Map.empty,
-    storageProtocol: Option[String] = None)
+    storageProtocol: Option[String] = None,
+    enableExportStorageApi: Boolean = false)
 
 private[kusto] case class PartitionOptions(
     amount: Int,
@@ -66,7 +67,8 @@ private[kusto] case class PartitionOptions(
 private[kusto] case class DistributedReadModeTransientCacheKey(
     query: String,
     kustoCoordinates: KustoCoordinates,
-    authentication: KustoAuthentication)
+    authentication: KustoAuthentication,
+    enableExportStorageApi: Boolean)
 
 object KustoReader {
   private val className = this.getClass.getSimpleName
@@ -144,7 +146,8 @@ object KustoReader {
       val key = DistributedReadModeTransientCacheKey(
         request.query,
         request.kustoCoordinates,
-        request.authentication)
+        request.authentication,
+        options.enableExportStorageApi)
       if (distributedReadModeTransientCache.contains(key)) {
         KDSU.logInfo(
           className,
