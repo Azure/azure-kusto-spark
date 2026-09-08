@@ -32,6 +32,11 @@ object KustoSourceOptions extends KustoOptions {
   //     (Fabric notebooks). The caller must have at least Workspace Contributor / item-level Write on the
   //     target Lakehouse Files path. Useful with DEP / OAP environments where Kusto-managed export blobs
   //     are unreachable from executors.
+  //     Private Link: the global `onelake.dfs.fabric.microsoft.com` host shown above resolves to a PUBLIC
+  //     address and is NOT reachable from a Private Link enabled workspace. There, use the
+  //     workspace-specific host the service itself returns, of the form
+  //     `<workspaceIdNoDashes>.z<nn>.<...>onelake.<...>` - note it carries NO `.dfs.` label, and the
+  //     `.dfs.`-bearing variant of that host does not resolve at all. Both forms are accepted here.
   //   The storage kind is determined solely by which field is populated: an entry with `oneLakeUrl`
   //   is treated as OneLake, otherwise it is treated as Azure blob/ADLS2.
   val KUSTO_TRANSIENT_STORAGE: String = newOption("transientStorage")

@@ -105,6 +105,10 @@ object KustoDataSourceUtils {
       .toBoolean
     val queryFilterPushDown =
       parameters.get(KustoSourceOptions.KUSTO_QUERY_FILTER_PUSH_DOWN).map(s => s.trim.toBoolean)
+    val enableExportStorageApi = parameters
+      .getOrElse(KustoDebugOptions.KUSTO_ENABLE_EXPORT_STORAGE_API, "false")
+      .trim
+      .toBoolean
     val partitionColumn = parameters.get(KustoDebugOptions.KUSTO_PARTITION_COLUMN)
     val partitionOptions = PartitionOptions(numPartitions, partitionColumn, partitioningMode)
     // Parse upfront and throw back an error if there is a wrongly formatted JSON
@@ -156,7 +160,8 @@ object KustoDataSourceUtils {
       distributedReadModeTransientCacheEnabled,
       queryFilterPushDown,
       additionalExportOptions,
-      storageProtocol)
+      storageProtocol,
+      enableExportStorageApi)
   }
 
   private def setNumPartitions(

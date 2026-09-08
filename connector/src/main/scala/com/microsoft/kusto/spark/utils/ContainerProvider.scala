@@ -13,6 +13,7 @@ import com.microsoft.azure.kusto.ingest.exceptions.{
   IngestionServiceException
 }
 import com.microsoft.kusto.spark.datasink.IngestionStorageParameters
+import com.microsoft.kusto.spark.datasource.{AuthMethod, TransientStorageCredentials}
 import com.microsoft.kusto.spark.exceptions.{ExceptionUtils, NoStorageContainersException}
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import io.github.resilience4j.core.IntervalFunction
@@ -20,8 +21,10 @@ import io.github.resilience4j.retry.{Retry, RetryConfig}
 import io.vavr.CheckedFunction0
 import org.apache.http.conn.HttpHostConnectException
 
-import java.time.{Clock, Instant, OffsetDateTime}
-import java.util.concurrent.ConcurrentHashMap
+import java.net.URI
+import java.security.InvalidParameterException
+import java.time.{Clock, Duration, Instant, OffsetDateTime}
+import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import java.util.function.Predicate
 import scala.collection.JavaConverters.asScalaBufferConverter
 import scala.collection.mutable
@@ -31,10 +34,24 @@ class ContainerProvider(
     val client: ExtendedKustoClient,
     val clusterAlias: String,
     val command: String,
-    cacheExpirySeconds: Int = KustoConstants.StorageExpirySeconds) { // Refactored for tests with short cache
+    cacheExpirySeconds: Int =
+      KustoConstants.StorageExpirySeconds, // Refactored for tests with short cache
+    maybeExportStorageClient: Option[DmExportStorageClient] = None) {
+
+  def this(
+      client: ExtendedKustoClient,
+      clusterAlias: String,
+      command: String,
+      cacheExpirySeconds: Int) =
+    this(client, clusterAlias, command, cacheExpirySeconds, None)
+
   private var roundRobinIdx = 0
   private var storageUris: Seq[ContainerAndSas] = Seq.empty
   private var lastRefresh: Instant = Instant.now(Clock.systemUTC())
+
+  // Only opt-in export discovery uses service-driven expiry and serialized refreshes.
+  private var exportStorageExpiresAtNanos = 0L
+  private val exportStorageRefreshLock = new Object
   private val className = this.getClass.getSimpleName
   private val maxCommandsRetryAttempts = 8
   private val retryConfigExportContainers = buildRetryConfig((e: Throwable) =>
@@ -96,39 +113,28 @@ class ContainerProvider(
     }
   }
 
-  def getExportContainers: Seq[ContainerAndSas] = {
-    val now = Instant.now(Clock.systemUTC())
-    val secondsElapsed =
-      now.getEpochSecond - lastRefresh.getEpochSecond // get the seconds between now and last refresh
-    if (storageUris.isEmpty || secondsElapsed > cacheExpirySeconds) {
-      refresh(true)
-    }
-    storageUris
+  def getExportContainers: Seq[ContainerAndSas] = maybeExportStorageClient match {
+    case Some(exportStorageClient) =>
+      exportStorageRefreshLock.synchronized {
+        if (storageUris.isEmpty || exportStorageExpiresAtNanos == 0L ||
+          System.nanoTime() - exportStorageExpiresAtNanos >= 0) {
+          refreshExportStorage(exportStorageClient)
+        }
+        storageUris
+      }
+    case None =>
+      val now = Instant.now(Clock.systemUTC())
+      val secondsElapsed =
+        now.getEpochSecond - lastRefresh.getEpochSecond // get the seconds between now and last refresh
+      if (storageUris.isEmpty || secondsElapsed > cacheExpirySeconds) {
+        refresh(true)
+      }
+      storageUris
   }
 
   private def refresh(exportContainer: Boolean = false): ContainerAndSas = {
     if (exportContainer) {
-      Try(
-        client.executeDM(
-          command,
-          None,
-          "refreshContainers",
-          Some(retryConfigExportContainers))) match {
-        case Success(res) =>
-          val storage = res.getPrimaryResults.getData.asScala.map(row => {
-            val parts = row.get(0).toString.split('?')
-            ContainerAndSas(parts(0), s"?${parts(1)}")
-          })
-          processContainerResults(storage)
-        case Failure(exception) =>
-          KDSU.reportExceptionAndThrow(
-            className,
-            exception,
-            "Error querying for create export containers",
-            clusterAlias,
-            shouldNotThrow = storageUris.nonEmpty)
-          storageUris(roundRobinIdx)
-      }
+      refreshExportContainersViaCommand()
     } else {
       val retryExecute: CheckedFunction0[ContainerAndSas] = Retry.decorateCheckedSupplier(
         Retry.of("refresh ingestion resources", retryConfigIngestionRefresh),
@@ -150,6 +156,88 @@ class ContainerProvider(
           }
         })
       retryExecute.apply()
+    }
+  }
+
+  private def refreshExportStorage(
+      exportStorageClient: DmExportStorageClient): ContainerAndSas = {
+    val resolution = exportStorageClient.resolveExportStorage
+    resolution.targets match {
+      case Some(targets) if targets.lakeFolders.nonEmpty =>
+        val validFolders = targets.lakeFolders.flatMap(ContainerProvider.parseValidApiLakeFolder)
+        logRejectedTargets(targets.lakeFolders.size - validFolders.size, "OneLake folder")
+        processApiTargetsOrFallback(
+          validFolders,
+          "Rest/Lake",
+          "OneLake folder",
+          resolution.refreshInterval)
+      case Some(targets) if targets.containers.nonEmpty =>
+        val validContainers =
+          targets.containers.flatMap(ContainerProvider.parseValidApiContainerWithSas)
+        logRejectedTargets(targets.containers.size - validContainers.size, "blob container")
+        processApiTargetsOrFallback(
+          validContainers,
+          "Rest/Storage",
+          "blob container",
+          resolution.refreshInterval)
+      case _ => refreshExportContainersViaCommand(Some(resolution.refreshInterval))
+    }
+  }
+
+  private def logRejectedTargets(rejectedCount: Int, targetType: String): Unit =
+    if (rejectedCount > 0) {
+      KDSU.logWarn(
+        className,
+        s"The export storage API of 'ingest-$clusterAlias' returned $rejectedCount invalid " +
+          s"$targetType target(s); those targets were ignored.")
+    }
+
+  private def processApiTargetsOrFallback(
+      targets: Seq[ContainerAndSas],
+      mode: String,
+      targetType: String,
+      refreshInterval: Duration): ContainerAndSas =
+    if (targets.nonEmpty) {
+      KDSU.logInfo(
+        className,
+        s"Using export storage mode $mode for 'ingest-$clusterAlias' with " +
+          s"${targets.size} validated $targetType target(s).")
+      val result = processContainerResults(targets.toBuffer)
+      exportStorageExpiresAtNanos = System.nanoTime() + refreshInterval.toNanos
+      result
+    } else {
+      KDSU.logWarn(
+        className,
+        s"Export storage mode $mode returned no valid $targetType targets for " +
+          s"'ingest-$clusterAlias'. Falling back to the export containers command.")
+      refreshExportContainersViaCommand(Some(refreshInterval))
+    }
+
+  private def refreshExportContainersViaCommand(
+      apiRefreshInterval: Option[Duration] = None): ContainerAndSas = {
+    Try(
+      client
+        .executeDM(command, None, "refreshContainers", Some(retryConfigExportContainers))) match {
+      case Success(res) =>
+        val storage = res.getPrimaryResults.getData.asScala.map(row => {
+          val parts = row.get(0).toString.split('?')
+          ContainerAndSas(parts(0), s"?${parts(1)}")
+        })
+        val result = processContainerResults(storage)
+        apiRefreshInterval.foreach(interval =>
+          exportStorageExpiresAtNanos = System.nanoTime() + interval.toNanos)
+        result
+      case Failure(exception) =>
+        KDSU.reportExceptionAndThrow(
+          className,
+          exception,
+          "Error querying for create export containers",
+          clusterAlias,
+          shouldNotThrow = storageUris.nonEmpty)
+        apiRefreshInterval.foreach(_ =>
+          exportStorageExpiresAtNanos =
+            System.nanoTime() + ContainerProvider.RefreshFailureBackoffNanos)
+        storageUris(roundRobinIdx)
     }
   }
 
@@ -242,7 +330,60 @@ class ContainerProvider(
 }
 
 object ContainerProvider {
+  private val DnsLabel = """[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"""
+  private val OneLakeLabel = s"(?:$DnsLabel-)?onelake(?:-$DnsLabel)?"
+  private val TrustedOneLakeHostPatterns = Seq(
+    s"(?i)^$OneLakeLabel\\.dfs\\.fabric\\.microsoft\\.com$$".r,
+    s"(?i)^(?:$DnsLabel\\.)+$OneLakeLabel\\.fabric\\.microsoft\\.com$$".r,
+    s"(?i)^$OneLakeLabel\\.dfs\\.pbidedicated\\.windows-int\\.net$$".r)
+
   private val className = this.getClass.getSimpleName
+  private val RefreshFailureBackoffNanos = TimeUnit.SECONDS.toNanos(5)
+
+  /**
+   * Splits a container URL of the form `https://account.blob.suffix/container?sv=...` into its
+   * URL and SAS parts. URLs without a query string yield an empty SAS rather than failing.
+   */
+  private[kusto] def parseContainerWithSas(containerUrlWithSas: String): ContainerAndSas = {
+    val sasSeparatorIdx = containerUrlWithSas.indexOf('?')
+    if (sasSeparatorIdx < 0) {
+      ContainerAndSas(containerUrlWithSas, KustoConstants.EmptyString)
+    } else {
+      ContainerAndSas(
+        containerUrlWithSas.substring(0, sasSeparatorIdx),
+        containerUrlWithSas.substring(sasSeparatorIdx))
+    }
+  }
+
+  private[kusto] def parseValidApiContainerWithSas(
+      containerUrlWithSas: String): Option[ContainerAndSas] =
+    Try {
+      val credentials = new TransientStorageCredentials(containerUrlWithSas)
+      credentials.validate()
+      if (credentials.authMethod != AuthMethod.Sas) {
+        throw new InvalidParameterException(
+          "The API-provided blob container must use SAS authentication")
+      }
+      parseContainerWithSas(containerUrlWithSas)
+    }.toOption
+
+  private[kusto] def parseValidApiLakeFolder(path: String): Option[ContainerAndSas] =
+    Try {
+      if (!isSupportedApiOneLakeHost(path)) {
+        throw new InvalidParameterException(
+          "The API-provided OneLake URL does not use a supported OneLake host")
+      }
+      val target = new OneLakeContainerAndSas(path)
+      ExtendedKustoClient.toTransientStorageCredentials(target)
+      target
+    }.toOption
+
+  private[kusto] def isSupportedApiOneLakeHost(path: String): Boolean =
+    Try(new URI(path)).toOption
+      .filter(uri => Option(uri.getScheme).exists(_.equalsIgnoreCase("https")))
+      .flatMap(uri => Option(uri.getHost))
+      .exists(host => TrustedOneLakeHostPatterns.exists(_.pattern.matcher(host).matches()))
+
   protected[kusto] def getUserDelegatedSas(
       cacheExpirySeconds: Long,
       listPermissions: Boolean,
