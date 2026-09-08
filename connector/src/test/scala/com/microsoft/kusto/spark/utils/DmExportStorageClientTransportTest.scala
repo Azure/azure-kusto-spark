@@ -19,7 +19,7 @@ import java.time.Duration
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 import java.util.zip.GZIPOutputStream
-import scala.jdk.CollectionConverters._
+import scala.collection.JavaConverters._
 
 /** Request-layer tests with an in-memory HTTP transport. */
 class DmExportStorageClientTransportTest extends AnyFlatSpec with Matchers {
@@ -60,7 +60,7 @@ class DmExportStorageClientTransportTest extends AnyFlatSpec with Matchers {
     override def getStatusCode: Int = status
     override def getHeaderValue(name: String): String = headers.getOrElse(name, null)
     override def getHeaders: HttpHeaders = new HttpHeaders(headers.asJava)
-    override def getBody: Flux[ByteBuffer] = Flux.just(ByteBuffer.wrap(bytes))
+    override def getBody: Flux[ByteBuffer] = Mono.just(ByteBuffer.wrap(bytes)).flux()
     override def getBodyAsByteArray: Mono[Array[Byte]] = Mono.just(bytes)
     override def getBodyAsString: Mono[String] = Mono.just(body)
     override def getBodyAsString(charset: java.nio.charset.Charset): Mono[String] =

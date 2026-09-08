@@ -74,7 +74,7 @@ class ContainerProviderExportStorageTest extends AnyFlatSpec with Matchers {
 
   "getExportContainers" should "use lake folders selected by the export storage client" in {
     val kustoClient = new StubKustoClient
-    val exportStorageClient = new StubExportStorageClient(
+    val exportStorageClient: StubExportStorageClient = new StubExportStorageClient(
       Some(ExportStorageTargets(containers = Seq.empty, lakeFolders = Seq(lakeFolder))))
 
     val containers = provider(kustoClient, Some(exportStorageClient)).getExportContainers
@@ -89,7 +89,7 @@ class ContainerProviderExportStorageTest extends AnyFlatSpec with Matchers {
 
   it should "discard invalid lake folders when at least one valid target remains" in {
     val kustoClient = new StubKustoClient
-    val exportStorageClient = new StubExportStorageClient(
+    val exportStorageClient: StubExportStorageClient = new StubExportStorageClient(
       Some(
         ExportStorageTargets(
           containers = Seq.empty,
@@ -105,7 +105,7 @@ class ContainerProviderExportStorageTest extends AnyFlatSpec with Matchers {
 
   it should "fall back when every lake folder is invalid" in {
     val kustoClient = new StubKustoClient
-    val exportStorageClient = new StubExportStorageClient(
+    val exportStorageClient: StubExportStorageClient = new StubExportStorageClient(
       Some(
         ExportStorageTargets(
           containers = Seq.empty,
@@ -125,7 +125,7 @@ class ContainerProviderExportStorageTest extends AnyFlatSpec with Matchers {
 
   it should "use blob containers when the API returns no lake folders" in {
     val kustoClient = new StubKustoClient
-    val exportStorageClient = new StubExportStorageClient(
+    val exportStorageClient: StubExportStorageClient = new StubExportStorageClient(
       Some(ExportStorageTargets(containers = Seq(apiContainer), lakeFolders = Seq.empty)))
 
     val containers = provider(kustoClient, Some(exportStorageClient)).getExportContainers
@@ -140,7 +140,7 @@ class ContainerProviderExportStorageTest extends AnyFlatSpec with Matchers {
 
   it should "discard invalid API blob targets when at least one valid target remains" in {
     val kustoClient = new StubKustoClient
-    val exportStorageClient = new StubExportStorageClient(
+    val exportStorageClient: StubExportStorageClient = new StubExportStorageClient(
       Some(
         ExportStorageTargets(
           containers = Seq(
@@ -160,7 +160,7 @@ class ContainerProviderExportStorageTest extends AnyFlatSpec with Matchers {
 
   it should "fall back when every API blob target is invalid or SAS-less" in {
     val kustoClient = new StubKustoClient
-    val exportStorageClient = new StubExportStorageClient(
+    val exportStorageClient: StubExportStorageClient = new StubExportStorageClient(
       Some(
         ExportStorageTargets(
           containers = Seq(
@@ -188,7 +188,7 @@ class ContainerProviderExportStorageTest extends AnyFlatSpec with Matchers {
 
   it should "use lake folders when the API returns no blob containers" in {
     val kustoClient = new StubKustoClient
-    val exportStorageClient = new StubExportStorageClient(
+    val exportStorageClient: StubExportStorageClient = new StubExportStorageClient(
       Some(ExportStorageTargets(containers = Seq.empty, lakeFolders = Seq(lakeFolder))))
 
     val containers = provider(kustoClient, Some(exportStorageClient)).getExportContainers

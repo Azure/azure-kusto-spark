@@ -27,7 +27,7 @@ import java.time.format.DateTimeFormatter
 import java.time.{Duration, Instant, ZonedDateTime}
 import java.util.UUID
 import java.util.zip.{GZIPInputStream, InflaterInputStream}
-import scala.jdk.CollectionConverters._
+import scala.collection.JavaConverters._
 import scala.util.{Failure, Success, Try}
 
 /** ExportStorage targets: SAS blob containers and OneLake folders. */
