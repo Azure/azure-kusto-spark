@@ -17,6 +17,18 @@ Tags are created as `v4.0_{version}` (Spark 4 / master) and `v3.0_{version}` (Sp
 ### Fixed
 - None
 
+## [7.1.3] - 2026-09-08
+
+### Changed
+- None
+
+### Added
+- Opt-in Data Management export storage discovery for distributed reads, supporting Fabric Private Link while preserving existing read and ingestion behavior by default (#509)
+
+### Fixed
+- Retry export storage discovery promptly after transient API failures instead of caching legacy fallback for the full refresh interval (#509)
+- Mask Azure access tokens in GitHub Actions build and release logs (#504)
+
 ## [7.1.2] - 2026-07-29
 
 ### Changed
