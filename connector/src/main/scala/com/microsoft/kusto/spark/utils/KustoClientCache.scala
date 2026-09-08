@@ -20,7 +20,27 @@ object KustoClientCache {
       authentication: KustoAuthentication,
       ingestionUrl: Option[String],
       clusterAlias: String): ExtendedKustoClient = {
-    val clusterAndAuth = ClusterAndAuth(clusterUrl, authentication, ingestionUrl, clusterAlias)
+    getClient(
+      clusterUrl,
+      authentication,
+      ingestionUrl,
+      clusterAlias,
+      enableExportStorageApi = false)
+  }
+
+  private[kusto] def getClient(
+      clusterUrl: String,
+      authentication: KustoAuthentication,
+      ingestionUrl: Option[String],
+      clusterAlias: String,
+      enableExportStorageApi: Boolean): ExtendedKustoClient = {
+    val clusterAndAuth =
+      ClusterAndAuth(
+        clusterUrl,
+        authentication,
+        ingestionUrl,
+        clusterAlias,
+        enableExportStorageApi)
     clientCache.computeIfAbsent(clusterAndAuth, adderSupplier)
   }
 
@@ -139,14 +159,21 @@ object KustoClientCache {
       null,
       Collections.singletonMap("spark.version", SPARK_VERSION))
 
-    new ExtendedKustoClient(engineKcsb, ingestKcsb, clusterAndAuth.clusterAlias)
+    if (clusterAndAuth.enableExportStorageApi) {
+      new ExtendedKustoClient(engineKcsb, ingestKcsb, clusterAndAuth.clusterAlias) {
+        override private[kusto] def exportStorageApiEnabled: Boolean = true
+      }
+    } else {
+      new ExtendedKustoClient(engineKcsb, ingestKcsb, clusterAndAuth.clusterAlias)
+    }
   }
 
   private[kusto] case class ClusterAndAuth(
       engineUrl: String,
       authentication: KustoAuthentication,
       ingestionUri: Option[String],
-      clusterAlias: String) {
+      clusterAlias: String,
+      enableExportStorageApi: Boolean = false) {
     val engineUri: String = engineUrl
     val ingestUri: String = ingestionUri.getOrElse(
       new URIBuilder()
@@ -156,7 +183,8 @@ object KustoClientCache {
 
     override def equals(that: Any): Boolean = that match {
       case aa: ClusterAndAuth =>
-        engineUrl == aa.engineUrl && authentication == aa.authentication && ingestUri == aa.ingestUri
+        engineUrl == aa.engineUrl && authentication == aa.authentication &&
+        ingestUri == aa.ingestUri && enableExportStorageApi == aa.enableExportStorageApi
       case _ => false
     }
 
@@ -166,7 +194,7 @@ object KustoClientCache {
       } else {
         authentication.hashCode()
       }
-      engineUri.hashCode + authenticationHash + ingestUri.hashCode
+      engineUri.hashCode + authenticationHash + ingestUri.hashCode + enableExportStorageApi.hashCode
     }
   }
 }

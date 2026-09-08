@@ -107,6 +107,9 @@ private[kusto] object KustoDebugOptions {
   // Default: 'true'
   val KUSTO_DBG_BLOB_COMPRESS_ON_EXPORT: String = newOption("dbgBlobCompressOnExport")
 
+  // Internal rollout switch. Public connector behavior must remain disabled by default.
+  val KUSTO_ENABLE_EXPORT_STORAGE_API: String = newOption("enableExportStorageApi")
+
   // Partitioning parameters, CURRENTLY NOT USED
   // CURRENTLY NOT USED
   val KUSTO_READ_PARTITION_MODE: String = newOption("partitionMode")
