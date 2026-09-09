@@ -7,6 +7,7 @@ import com.azure.storage.common.policy.{RequestRetryOptions, RetryPolicyType}
 import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import com.microsoft.azure.kusto.data.ClientRequestProperties
 import com.microsoft.azure.kusto.data.auth.CloudInfo
+import com.microsoft.azure.kusto.data.exceptions.DataServiceException
 import com.microsoft.azure.kusto.ingest.IngestionProperties.DataFormat
 import com.microsoft.azure.kusto.ingest.exceptions.IngestionServiceException
 import com.microsoft.azure.kusto.ingest.resources.ContainerWithSas
@@ -15,7 +16,8 @@ import com.microsoft.azure.kusto.ingest.source.{BlobSourceInfo, StreamSourceInfo
 import com.microsoft.azure.kusto.ingest.{
   IngestClient,
   IngestionProperties,
-  ManagedStreamingIngestClient
+  ManagedStreamingIngestClient,
+  QueuedIngestClient
 }
 import com.microsoft.azure.storage.blob.{BlobRequestOptions, CloudBlockBlob}
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
@@ -38,6 +40,7 @@ import com.microsoft.kusto.spark.utils.{
 }
 import io.github.resilience4j.retry.RetryConfig
 import org.apache.commons.io.IOUtils
+import org.apache.http.conn.util.InetAddressUtils
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.InternalRow
@@ -45,11 +48,20 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.CollectionAccumulator
 
 import java.io._
+import java.lang.reflect.{InvocationTargetException, Method, Modifier}
 import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.security.InvalidParameterException
 import java.time.{Clock, Duration, Instant}
 import java.util
+import java.util.concurrent.{
+  Callable,
+  ExecutionException,
+  ScheduledThreadPoolExecutor,
+  ThreadFactory,
+  TimeUnit,
+  TimeoutException
+}
 import java.util.zip.GZIPOutputStream
 import java.util.{TimeZone, UUID}
 import scala.collection.JavaConverters._
@@ -61,6 +73,20 @@ import java.util.concurrent.ConcurrentHashMap
 
 object KustoWriter {
   private val className = this.getClass.getSimpleName
+  private val CloudInfoTimeoutMillis = TimeUnit.SECONDS.toMillis(40)
+  private val cloudInfoExecutor = {
+    val executor = new ScheduledThreadPoolExecutor(
+      1,
+      new ThreadFactory {
+        override def newThread(runnable: Runnable): Thread = {
+          val thread = new Thread(runnable, "kusto-cloud-info-fetch")
+          thread.setDaemon(true)
+          thread
+        }
+      })
+    executor.setRemoveOnCancelPolicy(true)
+    executor
+  }
   val TempIngestionTablePrefix = "sparkTempTable_"
   val DelayPeriodBetweenCalls: Int = KCONST.DefaultPeriodicSamplePeriod.toMillis.toInt
   private val GzipBufferSize: Int = 1000 * KCONST.DefaultBufferSize
@@ -149,7 +175,12 @@ object KustoWriter {
             "Temp table name provided but the table does not exist. Either drop this " +
               "option or create the table beforehand.")
         }
-      } else {
+      }
+
+      // Resolve and cache ingestion metadata before creating or altering Kusto resources.
+      val cloudInfo = getCloudInfoForIngestion(writeOptions.writeMode, kustoClient)
+
+      if (writeOptions.userTempTableName.isEmpty) {
         // KustoWriter will create a temporary table ingesting the data to it.
         // Only if all executors succeeded the table will be appended to the original destination table.
         kustoClient.initializeTablesBySchema(
@@ -187,7 +218,7 @@ object KustoWriter {
       val sinkStartTime = getCreationTime(stagingTableIngestionProperties)
       if (writeOptions.isAsync) {
         val asyncWork = rdd.foreachPartitionAsync { rows =>
-          ingestRowsIntoTempTbl(rows, batchIdIfExists, partitionsResults, parameters)
+          ingestRowsIntoTempTbl(rows, batchIdIfExists, partitionsResults, parameters, cloudInfo)
         }
         KDSU.logInfo(className, s"asynchronous write to Kusto table '$table' in progress")
         // This part runs back on the driver
@@ -230,7 +261,7 @@ object KustoWriter {
       } else {
         try
           rdd.foreachPartition { rows =>
-            ingestRowsIntoTempTbl(rows, batchIdIfExists, partitionsResults, parameters)
+            ingestRowsIntoTempTbl(rows, batchIdIfExists, partitionsResults, parameters, cloudInfo)
           }
         catch {
           case exception: Exception =>
@@ -274,7 +305,8 @@ object KustoWriter {
       rows: Iterator[InternalRow],
       batchIdForTracing: String,
       partitionsResults: CollectionAccumulator[PartitionResult],
-      parameters: KustoWriteResource): Unit = {
+      parameters: KustoWriteResource,
+      cloudInfo: Option[CloudInfo]): Unit = {
     if (rows.isEmpty) {
       KDSU.logWarn(
         className,
@@ -297,7 +329,8 @@ object KustoWriter {
           rows,
           partitionsResults,
           ingestionProperties,
-          parameters)
+          parameters,
+          cloudInfo.get)
       }
     }
   }
@@ -494,7 +527,8 @@ object KustoWriter {
       rows: Iterator[InternalRow],
       partitionsResults: CollectionAccumulator[PartitionResult],
       ingestionProperties: IngestionProperties,
-      parameters: KustoWriteResource): Unit = {
+      parameters: KustoWriteResource,
+      cloudInfo: CloudInfo): Unit = {
     val partitionId = TaskContext.getPartitionId
     KDSU.logInfo(
       className,
@@ -504,14 +538,7 @@ object KustoWriter {
       parameters.authentication,
       parameters.coordinates.ingestionUrl,
       parameters.coordinates.clusterAlias)
-    val ingestClient = clientCache.ingestClient
-    // Pre-warm the CloudInfo cache on the executor to avoid an extra metadata
-    // fetch during authentication. We call retrieveCloudInfoForCluster (which
-    // caches internally) instead of manuallyAddToCache to avoid a direct
-    // dependency on reactor.core.publisher.Mono, which is shaded in the
-    // uber-jar and can cause NoSuchMethodError when an unshaded CloudInfo is
-    // loaded from the Databricks/Spark runtime classpath.
-    CloudInfo.retrieveCloudInfoForCluster(clientCache.ingestKcsb.getClusterUrl)
+    val ingestClient = initializeIngestClient(clientCache, cloudInfo)
 
     val reqRetryOpts = new RequestRetryOptions(
       RetryPolicyType.FIXED,
@@ -530,6 +557,161 @@ object KustoWriter {
       partitionsResults,
       batchIdForTracing,
       parameters)
+  }
+
+  private[kusto] def getCloudInfoForIngestion(
+      writeMode: WriteMode.Value,
+      client: ExtendedKustoClient): Option[CloudInfo] = {
+    if (writeMode == WriteMode.KustoStreaming) {
+      None
+    } else {
+      Some(
+        retrieveCloudInfoForCluster(
+          getEffectiveIngestionEndpoint(client.ingestKcsb.getClusterUrl)))
+    }
+  }
+
+  private[kusto] def getEffectiveIngestionEndpoint(clusterUrl: String): String = {
+    val uri = URI.create(clusterUrl)
+    val authority = Option(uri.getAuthority).getOrElse("").toLowerCase
+    val isReserved = !uri.isAbsolute ||
+      authority.contains("localhost") ||
+      InetAddressUtils.isIPv4Address(authority) ||
+      InetAddressUtils.isIPv6Address(authority) ||
+      authority.equalsIgnoreCase("onebox.dev.kusto.windows.net")
+
+    if (clusterUrl.contains("ingest-") || isReserved) {
+      clusterUrl
+    } else if (clusterUrl.contains("://")) {
+      clusterUrl.replaceFirst("://", "://ingest-")
+    } else {
+      s"ingest-$clusterUrl"
+    }
+  }
+
+  private[kusto] def retrieveCloudInfoForCluster(
+      clusterUrl: String,
+      timeoutMillis: Long = CloudInfoTimeoutMillis,
+      fetch: Callable[CloudInfo] = null): CloudInfo = {
+    val cloudInfoFetch = Option(fetch).getOrElse(new Callable[CloudInfo] {
+      override def call(): CloudInfo = {
+        val cloudInfo = CloudInfo.retrieveCloudInfoForCluster(clusterUrl)
+        invokeCloudInfoCacheSeed(classOf[CloudInfo], null, clusterUrl, cloudInfo)
+        cloudInfo
+      }
+    })
+    executeCloudInfoOperation(
+      clusterUrl,
+      timeoutMillis,
+      "retrieving cluster metadata",
+      cloudInfoFetch)
+  }
+
+  private[kusto] def seedCloudInfoCache(
+      clusterUrl: String,
+      cloudInfo: CloudInfo,
+      timeoutMillis: Long = CloudInfoTimeoutMillis,
+      seed: Callable[Void] = null): Unit = {
+    val cloudInfoSeed = Option(seed).getOrElse(new Callable[Void] {
+      override def call(): Void = {
+        invokeCloudInfoCacheSeed(classOf[CloudInfo], null, clusterUrl, cloudInfo)
+        null
+      }
+    })
+    executeCloudInfoOperation(
+      clusterUrl,
+      timeoutMillis,
+      "seeding cluster metadata cache",
+      cloudInfoSeed)
+  }
+
+  private[kusto] def invokeCloudInfoCacheSeed(
+      cacheClass: Class[_],
+      cacheTarget: AnyRef,
+      clusterUrl: String,
+      cloudInfo: AnyRef): Unit = {
+    val cacheMethods = cacheClass.getMethods.filter { method =>
+      method.getName == "manuallyAddToCache" &&
+      method.getParameterTypes.toSeq.headOption.contains(classOf[String]) &&
+      method.getParameterCount == 2 &&
+      (cacheTarget != null || Modifier.isStatic(method.getModifiers))
+    }
+
+    val directSeed = cacheMethods
+      .find(_.getParameterTypes.apply(1).isAssignableFrom(cloudInfo.getClass))
+      .map(method => (method, cloudInfo))
+    val compatibleSeed = directSeed.orElse(
+      cacheMethods.iterator
+        .flatMap { method =>
+          val wrapperType = method.getParameterTypes.apply(1)
+          wrapperType.getMethods
+            .find(factory =>
+              factory.getName == "just" &&
+                Modifier.isStatic(factory.getModifiers) &&
+                factory.getParameterTypes.toSeq == Seq(classOf[Object]) &&
+                wrapperType.isAssignableFrom(factory.getReturnType))
+            .map(factory => (method, invokeReflective(factory, null, cloudInfo)))
+        }
+        .toSeq
+        .headOption)
+
+    val (cacheMethod, cacheValue) = compatibleSeed.getOrElse {
+      val signatures = cacheMethods.map(_.toGenericString).mkString(", ")
+      throw new NoSuchMethodException(
+        s"No compatible CloudInfo.manuallyAddToCache method found; candidates: $signatures")
+    }
+    invokeReflective(cacheMethod, cacheTarget, clusterUrl, cacheValue)
+  }
+
+  private def invokeReflective(method: Method, target: AnyRef, arguments: AnyRef*): AnyRef = {
+    try {
+      method.invoke(target, arguments: _*)
+    } catch {
+      case exception: InvocationTargetException =>
+        throw Option(exception.getCause).getOrElse(exception)
+    }
+  }
+
+  private def executeCloudInfoOperation[T](
+      clusterUrl: String,
+      timeoutMillis: Long,
+      operationDescription: String,
+      operation: Callable[T]): T = {
+    require(timeoutMillis > 0, "timeoutMillis must be positive")
+    val operationTask = cloudInfoExecutor.submit(operation)
+    try {
+      operationTask.get(timeoutMillis, TimeUnit.MILLISECONDS)
+    } catch {
+      case exception: TimeoutException =>
+        operationTask.cancel(true)
+        throw new DataServiceException(
+          clusterUrl,
+          s"Timed out $operationDescription",
+          exception,
+          false)
+      case exception: InterruptedException =>
+        operationTask.cancel(true)
+        Thread.currentThread.interrupt()
+        throw new DataServiceException(
+          clusterUrl,
+          s"Interrupted while $operationDescription",
+          exception,
+          false)
+      case exception: ExecutionException =>
+        exception.getCause match {
+          case cause: DataServiceException => throw cause
+          case cause: RuntimeException => throw cause
+          case cause: Error => throw cause
+          case cause => throw new RuntimeException(cause)
+        }
+    }
+  }
+
+  private[kusto] def initializeIngestClient(
+      client: ExtendedKustoClient,
+      cloudInfo: CloudInfo): QueuedIngestClient = {
+    seedCloudInfoCache(getEffectiveIngestionEndpoint(client.ingestKcsb.getClusterUrl), cloudInfo)
+    client.ingestClient
   }
 
   private def createBlobWriter(

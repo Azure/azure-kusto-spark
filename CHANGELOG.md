@@ -17,6 +17,17 @@ Tags are created as `v4.0_{version}` (Spark 4 / master) and `v3.0_{version}` (Sp
 ### Fixed
 - None
 
+## [5.3.6] - 2026-09-01
+
+### Changed
+- None
+
+### Added
+- None
+
+### Fixed
+- Prevent queued and transactional writes from blocking Spark executors during ingestion metadata retrieval
+
 ## [5.3.5] - 2026-06-02
 
 ### Changed

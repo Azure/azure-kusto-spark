@@ -4,8 +4,15 @@
 package com.microsoft.kusto.spark
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.microsoft.azure.kusto.data.exceptions.DataServiceException
+import com.microsoft.azure.kusto.data.auth.{CloudInfo, ConnectionStringBuilder}
+import com.microsoft.azure.kusto.ingest.QueuedIngestClient
 import com.microsoft.kusto.spark.datasink._
-import com.microsoft.kusto.spark.utils.{KustoConstants, KustoDataSourceUtils => KDSU}
+import com.microsoft.kusto.spark.utils.{
+  ExtendedKustoClient,
+  KustoConstants,
+  KustoDataSourceUtils => KDSU
+}
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
@@ -14,13 +21,24 @@ import org.mockito.Mockito._
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
-import java.io.{BufferedWriter, ByteArrayOutputStream, OutputStreamWriter}
+import java.io.{
+  BufferedWriter,
+  ByteArrayInputStream,
+  ByteArrayOutputStream,
+  ObjectInputStream,
+  ObjectOutputStream,
+  OutputStreamWriter
+}
+import java.net.{InetSocketAddress, ServerSocket}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.TimeZone
+import java.util.concurrent.{Callable, CountDownLatch, Executors, TimeUnit}
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.zip.GZIPOutputStream
+import com.sun.net.httpserver.HttpServer
 
 class WriterTests extends AnyFlatSpec with Matchers {
 
@@ -127,6 +145,399 @@ class WriterTests extends AnyFlatSpec with Matchers {
 
     verify(buffer, times(1)).flush()
     verify(buffer, times(1)).close()
+  }
+
+  "initializeIngestClient" should "seed CloudInfo before creating the queued client" in {
+    val socket = new ServerSocket(0)
+    val endpoint = s"http://localhost:${socket.getLocalPort}"
+    socket.close()
+    val cloudInfo = new CloudInfo(
+      false,
+      "https://login.microsoftonline.com",
+      "client-id",
+      "http://localhost",
+      "https://kusto.kusto.windows.net",
+      "https://login.microsoftonline.com/common")
+    val expectedIngestClient = mock(classOf[QueuedIngestClient])
+    val client = new ExtendedKustoClient(
+      new ConnectionStringBuilder("https://engine.kusto.windows.net"),
+      new ConnectionStringBuilder(endpoint),
+      "engine") {
+      override lazy val ingestClient: QueuedIngestClient = {
+        CloudInfo.retrieveCloudInfoForCluster(endpoint) shouldEqual cloudInfo
+        expectedIngestClient
+      }
+    }
+
+    KustoWriter.initializeIngestClient(client, cloudInfo) should be theSameInstanceAs
+      expectedIngestClient
+  }
+
+  "invokeCloudInfoCacheSeed" should "support direct and reactive SDK cache signatures" in {
+    val cloudInfo = new CloudInfo(
+      false,
+      "https://login.microsoftonline.com",
+      "client-id",
+      "http://localhost",
+      "https://kusto.kusto.windows.net",
+      "https://login.microsoftonline.com/common")
+    val directEndpoint = "http://localhost:31001"
+    KustoWriter.invokeCloudInfoCacheSeed(classOf[CloudInfo], null, directEndpoint, cloudInfo)
+    CloudInfo.retrieveCloudInfoForCluster(directEndpoint) should be theSameInstanceAs cloudInfo
+
+    class ReactiveCacheApi {
+      var cachedEndpoint: String = _
+      var cachedCloudInfo: CloudInfo = _
+      def manuallyAddToCache(
+          clusterUrl: String,
+          cloudInfoPublisher: reactor.core.publisher.Mono[CloudInfo]): Unit = {
+        cachedEndpoint = clusterUrl
+        cachedCloudInfo = cloudInfoPublisher.block()
+      }
+    }
+    val reactiveCache = new ReactiveCacheApi
+    val reactiveEndpoint = "http://localhost:31002"
+    KustoWriter.invokeCloudInfoCacheSeed(
+      reactiveCache.getClass,
+      reactiveCache,
+      reactiveEndpoint,
+      cloudInfo)
+    reactiveCache.cachedEndpoint shouldEqual reactiveEndpoint
+    reactiveCache.cachedCloudInfo should be theSameInstanceAs cloudInfo
+  }
+
+  "seedCloudInfoCache" should "cancel a queued caller without affecting its peers" in {
+    val runningSeedStarted = new CountDownLatch(1)
+    val releaseRunningSeed = new CountDownLatch(1)
+    val cancelledExecutions = new AtomicInteger(0)
+    val callers = Executors.newSingleThreadExecutor()
+    val runningSeed = new Callable[Void] {
+      override def call(): Void = {
+        runningSeedStarted.countDown()
+        releaseRunningSeed.await()
+        null
+      }
+    }
+    val cancelledSeed = new Callable[Void] {
+      override def call(): Void = {
+        cancelledExecutions.incrementAndGet()
+        null
+      }
+    }
+    val laterSeed = new Callable[Void] {
+      override def call(): Void = null
+    }
+
+    try {
+      val runningCaller = callers.submit(new Callable[String] {
+        override def call(): String = {
+          KustoWriter.seedCloudInfoCache(
+            "https://running-peer.example",
+            CloudInfo.DEFAULT_CLOUD,
+            timeoutMillis = 5000,
+            seed = runningSeed)
+          "completed"
+        }
+      })
+      runningSeedStarted.await(5, TimeUnit.SECONDS) shouldBe true
+
+      val cancelledError = the[DataServiceException] thrownBy KustoWriter.seedCloudInfoCache(
+        "https://cancelled-queued.example",
+        CloudInfo.DEFAULT_CLOUD,
+        timeoutMillis = 500,
+        seed = cancelledSeed)
+      cancelledError.getMessage should include("Timed out seeding cluster metadata cache")
+
+      releaseRunningSeed.countDown()
+      runningCaller.get(5, TimeUnit.SECONDS) shouldEqual "completed"
+      KustoWriter.seedCloudInfoCache(
+        "https://later-peer.example",
+        CloudInfo.DEFAULT_CLOUD,
+        timeoutMillis = 2000,
+        seed = laterSeed)
+      cancelledExecutions.get() shouldEqual 0
+    } finally {
+      releaseRunningSeed.countDown()
+      callers.shutdownNow()
+      callers.awaitTermination(5, TimeUnit.SECONDS)
+    }
+  }
+
+  it should "cancel a running caller without affecting queued or later callers" in {
+    val runningSeedStarted = new CountDownLatch(1)
+    val releaseRunningSeed = new CountDownLatch(1)
+    val runningCompletions = new AtomicInteger(0)
+    val queuedExecutions = new AtomicInteger(0)
+    val queuedCallerStarted = new CountDownLatch(1)
+    val callers = Executors.newFixedThreadPool(2)
+    val interruptionResistantSeed = new Callable[Void] {
+      override def call(): Void = {
+        runningSeedStarted.countDown()
+        while (releaseRunningSeed.getCount > 0) {
+          try {
+            releaseRunningSeed.await()
+          } catch {
+            case _: InterruptedException => // Model Java monitor entry, which ignores interruption.
+          }
+        }
+        runningCompletions.incrementAndGet()
+        null
+      }
+    }
+    val queuedSeed = new Callable[Void] {
+      override def call(): Void = {
+        queuedExecutions.incrementAndGet()
+        null
+      }
+    }
+
+    try {
+      val runningCaller = callers.submit(new Callable[DataServiceException] {
+        override def call(): DataServiceException = {
+          try {
+            KustoWriter.seedCloudInfoCache(
+              "https://cancelled-running.example",
+              CloudInfo.DEFAULT_CLOUD,
+              timeoutMillis = 1000,
+              seed = interruptionResistantSeed)
+            null
+          } catch {
+            case exception: DataServiceException => exception
+          }
+        }
+      })
+      runningSeedStarted.await(5, TimeUnit.SECONDS) shouldBe true
+
+      val queuedCaller = callers.submit(new Callable[String] {
+        override def call(): String = {
+          queuedCallerStarted.countDown()
+          KustoWriter.seedCloudInfoCache(
+            "https://queued-peer.example",
+            CloudInfo.DEFAULT_CLOUD,
+            timeoutMillis = 5000,
+            seed = queuedSeed)
+          "completed"
+        }
+      })
+      queuedCallerStarted.await(5, TimeUnit.SECONDS) shouldBe true
+
+      val cancelledError = runningCaller.get(5, TimeUnit.SECONDS)
+      cancelledError should not be null
+      cancelledError.getMessage should include("Timed out seeding cluster metadata cache")
+
+      releaseRunningSeed.countDown()
+      queuedCaller.get(5, TimeUnit.SECONDS) shouldEqual "completed"
+      runningCompletions.get() shouldEqual 1
+      queuedExecutions.get() shouldEqual 1
+      KustoWriter.seedCloudInfoCache(
+        "https://post-cancellation-peer.example",
+        CloudInfo.DEFAULT_CLOUD,
+        timeoutMillis = 2000,
+        seed = queuedSeed)
+      queuedExecutions.get() shouldEqual 2
+    } finally {
+      releaseRunningSeed.countDown()
+      callers.shutdownNow()
+      callers.awaitTermination(5, TimeUnit.SECONDS)
+    }
+  }
+
+  it should "bound the actual SDK 5.1.1 cache monitor" in {
+    val warmEndpoint = "http://localhost:31003"
+    KustoWriter.seedCloudInfoCache(warmEndpoint, CloudInfo.DEFAULT_CLOUD, timeoutMillis = 2000)
+
+    val cacheField = classOf[CloudInfo].getDeclaredField("cache")
+    cacheField.setAccessible(true)
+    val cacheMonitor = cacheField.get(null).asInstanceOf[AnyRef]
+    val monitorHeld = new CountDownLatch(1)
+    val releaseMonitor = new CountDownLatch(1)
+    val monitorHolder = new Thread(
+      new Runnable {
+        override def run(): Unit = cacheMonitor.synchronized {
+          monitorHeld.countDown()
+          releaseMonitor.await()
+        }
+      },
+      "cloud-info-cache-monitor-holder")
+    monitorHolder.setDaemon(true)
+    monitorHolder.start()
+
+    val endpoint = "http://localhost:31004"
+    try {
+      monitorHeld.await(5, java.util.concurrent.TimeUnit.SECONDS) shouldBe true
+      val started = System.nanoTime()
+      val error = the[DataServiceException] thrownBy KustoWriter.seedCloudInfoCache(
+        endpoint,
+        CloudInfo.DEFAULT_CLOUD,
+        timeoutMillis = 500)
+      val elapsedMillis = (System.nanoTime() - started) / 1000000L
+
+      error.getMessage should include("Timed out seeding cluster metadata cache")
+      error.isPermanent shouldBe false
+      elapsedMillis should be >= 400L
+      elapsedMillis should be < 2000L
+    } finally {
+      releaseMonitor.countDown()
+      monitorHolder.join(5000L)
+    }
+
+    monitorHolder.isAlive shouldBe false
+    KustoWriter.seedCloudInfoCache(endpoint, CloudInfo.DEFAULT_CLOUD, timeoutMillis = 5000)
+    CloudInfo.retrieveCloudInfoForCluster(endpoint) should be theSameInstanceAs
+      CloudInfo.DEFAULT_CLOUD
+  }
+
+  "getCloudInfoForIngestion" should "skip metadata lookup for streaming writes" in {
+    val client = new ExtendedKustoClient(
+      new ConnectionStringBuilder("https://engine.kusto.windows.net"),
+      new ConnectionStringBuilder("http://127.0.0.1:1"),
+      "engine")
+
+    KustoWriter.getCloudInfoForIngestion(WriteMode.KustoStreaming, client) shouldBe None
+  }
+
+  "getEffectiveIngestionEndpoint" should "match SDK 5.1.1 endpoint correction" in {
+    KustoWriter.getEffectiveIngestionEndpoint("https://cluster.kusto.windows.net") shouldEqual
+      "https://ingest-cluster.kusto.windows.net"
+    KustoWriter.getEffectiveIngestionEndpoint(
+      "https://ingest-cluster.kusto.windows.net") shouldEqual
+      "https://ingest-cluster.kusto.windows.net"
+    KustoWriter.getEffectiveIngestionEndpoint("http://127.0.0.1") shouldEqual
+      "http://127.0.0.1"
+    KustoWriter.getEffectiveIngestionEndpoint("http://localhost:1234") shouldEqual
+      "http://localhost:1234"
+    KustoWriter.getEffectiveIngestionEndpoint("https://dm.contoso.example") shouldEqual
+      "https://ingest-dm.contoso.example"
+    KustoWriter.getEffectiveIngestionEndpoint(
+      "https://INGEST-cluster.kusto.windows.net") shouldEqual
+      "https://ingest-INGEST-cluster.kusto.windows.net"
+  }
+
+  "retrieveCloudInfoForCluster" should "read SDK metadata from the exact endpoint" in {
+    val server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0)
+    val metadata =
+      """{
+        |  "AzureAD": {
+        |    "LoginMfaRequired": true,
+        |    "LoginEndpoint": "https://login.sovereign.example",
+        |    "KustoClientAppId": "client-id",
+        |    "KustoClientRedirectUri": "https://redirect.sovereign.example",
+        |    "KustoServiceResourceId": "https://service.sovereign.example",
+        |    "FirstPartyAuthorityUrl": "https://authority.sovereign.example"
+        |  }
+        |}""".stripMargin
+    server.createContext(
+      "/v1/rest/auth/metadata",
+      exchange => {
+        val bytes = metadata.getBytes(StandardCharsets.UTF_8)
+        exchange.sendResponseHeaders(200, bytes.length)
+        try {
+          exchange.getResponseBody.write(bytes)
+        } finally {
+          exchange.close()
+        }
+      })
+    server.start()
+    try {
+      val result =
+        KustoWriter.retrieveCloudInfoForCluster(s"http://127.0.0.1:${server.getAddress.getPort}")
+      result.isLoginMfaRequired shouldBe true
+      result.getLoginEndpoint shouldEqual "https://login.sovereign.example"
+      result.getKustoClientAppId shouldEqual "client-id"
+      result.getKustoClientRedirectUri shouldEqual "https://redirect.sovereign.example"
+      result.getKustoServiceResourceId shouldEqual "https://service.sovereign.example"
+      result.getFirstPartyAuthorityUrl shouldEqual "https://authority.sovereign.example"
+    } finally {
+      server.stop(0)
+    }
+  }
+
+  it should "bound a metadata endpoint that does not respond" in {
+    val readyFetch = new Callable[CloudInfo] {
+      override def call(): CloudInfo = CloudInfo.DEFAULT_CLOUD
+    }
+    KustoWriter.retrieveCloudInfoForCluster(
+      "https://ingest.example",
+      timeoutMillis = 2000,
+      fetch = readyFetch) shouldEqual CloudInfo.DEFAULT_CLOUD
+
+    val fetchStarted = new CountDownLatch(1)
+    val releaseFetch = new CountDownLatch(1)
+    val uninterruptibleFetch = new Callable[CloudInfo] {
+      override def call(): CloudInfo = {
+        fetchStarted.countDown()
+        while (releaseFetch.getCount > 0) {
+          try {
+            releaseFetch.await()
+          } catch {
+            case _: InterruptedException => // Simulate an SDK transport call that ignores interruption.
+          }
+        }
+        CloudInfo.DEFAULT_CLOUD
+      }
+    }
+    val queuedFetch = new Callable[CloudInfo] {
+      override def call(): CloudInfo = CloudInfo.DEFAULT_CLOUD
+    }
+
+    try {
+      val firstStarted = System.nanoTime()
+      a[DataServiceException] should be thrownBy KustoWriter.retrieveCloudInfoForCluster(
+        "https://ingest.example",
+        timeoutMillis = 500,
+        fetch = uninterruptibleFetch)
+      fetchStarted.getCount shouldEqual 0L
+      (System.nanoTime() - firstStarted) / 1000000 should be < 5000L
+
+      val secondStarted = System.nanoTime()
+      a[DataServiceException] should be thrownBy KustoWriter.retrieveCloudInfoForCluster(
+        "https://ingest.example",
+        timeoutMillis = 500,
+        fetch = queuedFetch)
+      (System.nanoTime() - secondStarted) / 1000000 should be < 5000L
+    } finally {
+      releaseFetch.countDown()
+    }
+  }
+
+  it should "preserve SDK DataServiceException classification" in {
+    val expected = new DataServiceException("https://ingest.example", "metadata failed", true)
+    val fetch = new Callable[CloudInfo] {
+      override def call(): CloudInfo = throw expected
+    }
+
+    val actual = the[DataServiceException] thrownBy KustoWriter.retrieveCloudInfoForCluster(
+      "https://ingest.example",
+      fetch = fetch)
+    actual should be theSameInstanceAs expected
+    actual.isPermanent shouldBe true
+  }
+
+  "CloudInfo" should "serialize non-default cloud settings captured by executor closures" in {
+    val cloudInfo = new CloudInfo(
+      true,
+      "https://login.sovereign.example",
+      "sovereign-client-id",
+      "https://redirect.sovereign.example",
+      "https://service.sovereign.example",
+      "https://authority.sovereign.example")
+    val serialized = new ByteArrayOutputStream()
+    val objectOutput = new ObjectOutputStream(serialized)
+    try {
+      objectOutput.writeObject(Some(cloudInfo))
+    } finally {
+      objectOutput.close()
+    }
+
+    val objectInput = new ObjectInputStream(new ByteArrayInputStream(serialized.toByteArray))
+    val restored =
+      try {
+        objectInput.readObject().asInstanceOf[Option[CloudInfo]].get
+      } finally {
+        objectInput.close()
+      }
+
+    restored shouldEqual cloudInfo
   }
 
   "getColumnsSchema" should "parse table schema correctly" in {
