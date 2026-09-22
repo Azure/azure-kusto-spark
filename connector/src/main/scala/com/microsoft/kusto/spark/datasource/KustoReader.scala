@@ -185,11 +185,14 @@ object KustoReader {
           className,
           "Fetching from distributedReadModeTransientCache: hit, reusing cached export paths")
         val cached = distributedReadModeTransientCache(key)
-        // Re-install the storage credentials of the cached export: another read, another
-        // Spark session or another container of the same storage account may have
-        // overwritten the (account scoped) Hadoop/Spark configuration since it was created,
-        // so bypass the setup cache and write them unconditionally.
-        setupBlobAccess(request, cached.storage, cached.storageProtocol, forceRefresh = true)
+        // ABFS resolves credentials per storage account, so another read of the same account,
+        // another Spark session or a fresh Hadoop Configuration may have left the account
+        // scoped keys holding a different token since this entry was created - reinstall them.
+        // WASBS keys are container scoped and were never clobbered, so nothing is done there,
+        // exactly as before.
+        if (isAbfsProtocol(cached.storageProtocol)) {
+          setupBlobAccess(request, cached.storage, cached.storageProtocol, forceRefresh = true)
+        }
         paths = cached.paths
       } else {
         KDSU.logInfo(
@@ -356,7 +359,7 @@ object KustoReader {
       useAbfs,
       forceRefresh)
 
-    if (forceRefresh || !KustoAzureFsSetupCache.updateAndGetPrevNativeAzureFs(now)) {
+    if (!KustoAzureFsSetupCache.updateAndGetPrevNativeAzureFs(now)) {
       if (useAbfs) {
         // Hadoop already ships defaults for both schemes (core-default.xml) and runtimes such
         // as Fabric may install their own wrapper - only fill in when nothing is configured so
@@ -382,6 +385,26 @@ object KustoReader {
     }
   }
 
+  /**
+   * Kept as an overload rather than a defaulted parameter so that the pre-existing six argument
+   * signature stays binary compatible for anything already compiled against the connector.
+   */
+  def setHadoopAuth(
+      storageParameters: TransientStorageParameters,
+      storageProtocol: String,
+      config: Configuration,
+      sparkConf: RuntimeConfig,
+      now: Instant,
+      useAbfs: Boolean): Unit =
+    setHadoopAuth(
+      storageParameters,
+      storageProtocol,
+      config,
+      sparkConf,
+      now,
+      useAbfs,
+      forceRefresh = false)
+
   def setHadoopAuth(
       storageParameters: TransientStorageParameters,
       storageProtocol: String,
@@ -389,7 +412,7 @@ object KustoReader {
       sparkConf: RuntimeConfig,
       now: Instant,
       useAbfs: Boolean,
-      forceRefresh: Boolean = false): Unit = {
+      forceRefresh: Boolean): Unit = {
     // Ensure storage endpoint domain is in the valid ABFS endpoints list
     if (useAbfs) {
       whitelistExportContainers(storageParameters, config, sparkConf)
@@ -424,25 +447,23 @@ object KustoReader {
       useAbfs: Boolean,
       storageProtocol: String,
       forceRefresh: Boolean): Unit = {
-    // Reject the unsupported combination before consulting the cache, so that the failure does
-    // not depend on whether the same account was already configured for another protocol.
-    if (useAbfs) {
-      throw new InvalidParameterException(
-        s"Storage protocol '$storageProtocol' with Account Key authentication is not supported yet. " +
-          "Please use SAS based authentication or switch to 'wasbs' protocol.")
-    }
-
     val wasCached = !forceRefresh && KustoAzureFsSetupCache.updateAndGetPrevStorageAccountAccess(
       storage.storageAccountName,
       storage.storageAccountKey,
       now)
 
     if (!wasCached) {
-      setHadoopConf(
-        config,
-        sparkConf,
-        s"fs.azure.account.key.${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}",
-        storage.storageAccountKey)
+      if (useAbfs) {
+        throw new InvalidParameterException(
+          s"Storage protocol '$storageProtocol' with Account Key authentication is not supported yet. " +
+            "Please use SAS based authentication or switch to 'wasbs' protocol.")
+      } else {
+        setHadoopConf(
+          config,
+          sparkConf,
+          s"fs.azure.account.key.${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}",
+          storage.storageAccountKey)
+      }
     }
   }
 

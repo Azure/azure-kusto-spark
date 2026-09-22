@@ -263,7 +263,10 @@ class KustoReaderHadoopConfTest extends AnyFlatSpec with Matchers with BeforeAnd
     ex.getMessage should include("not supported")
   }
 
-  it should "throw even when the same account was already configured for WASBS" in {
+  it should "preserve the pre-existing cache suppression when the same account was configured for WASBS" in {
+    // Behaviour inherited from before the account-scoped change: the shared setup cache
+    // suppresses the second call for the same account/secret, so no exception is raised.
+    // Asserted explicitly so that the account-scoped rework cannot silently alter it.
     val now = Instant.now()
     val storageParams = keyStorageParams("abfkey2", "samekey", "ckeyabf2")
 
@@ -274,6 +277,19 @@ class KustoReaderHadoopConfTest extends AnyFlatSpec with Matchers with BeforeAnd
       sparkConf,
       now,
       useAbfs = false)
+
+    noException should be thrownBy KustoReader.setHadoopAuth(
+      storageParams,
+      KCONST.storageProtocolAbfss,
+      hadoopConfig,
+      sparkConf,
+      now,
+      useAbfs = true)
+  }
+
+  it should "throw when the account was not configured before, regardless of protocol casing" in {
+    val now = freshTimestamp()
+    val storageParams = keyStorageParams("abfkey3", "somekey", "ckeyabf3")
 
     val ex = intercept[java.security.InvalidParameterException] {
       KustoReader.setHadoopAuth(
