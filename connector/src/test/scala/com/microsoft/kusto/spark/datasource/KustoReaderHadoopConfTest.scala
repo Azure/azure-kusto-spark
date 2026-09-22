@@ -513,6 +513,29 @@ class KustoReaderHadoopConfTest extends AnyFlatSpec with Matchers with BeforeAnd
     result.storageCredentials.map(_.blobContainer).toSeq shouldBe Seq("c1")
   }
 
+  it should "keep the SAS container even when impersonation is returned first" in {
+    val params = new TransientStorageParameters(
+      Array(
+        new TransientStorageCredentials("https://dedup6.blob.core.windows.net/c1;impersonate"),
+        new TransientStorageCredentials("https://dedup6.blob.core.windows.net/c2?sig=one"),
+        new TransientStorageCredentials("https://dedup6.blob.core.windows.net/c3?sig=two")),
+      "core.windows.net")
+
+    val result = KustoReader.dedupeConflictingCredentials(params)
+    result.storageCredentials.map(_.blobContainer).toSeq shouldBe Seq("c2")
+  }
+
+  it should "keep every container of an account that only uses impersonation" in {
+    val params = new TransientStorageParameters(
+      Array(
+        new TransientStorageCredentials("https://dedup7.blob.core.windows.net/c1;impersonate"),
+        new TransientStorageCredentials("https://dedup7.blob.core.windows.net/c2;impersonate")),
+      "core.windows.net")
+
+    val result = KustoReader.dedupeConflictingCredentials(params)
+    result.storageCredentials.map(_.blobContainer).toSeq shouldBe Seq("c1", "c2")
+  }
+
   // ---------------------------------------------------------------------------
   // Helpers
   // ---------------------------------------------------------------------------

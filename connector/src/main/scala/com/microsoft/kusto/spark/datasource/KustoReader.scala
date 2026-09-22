@@ -102,6 +102,10 @@ object KustoReader {
   /**
    * Sets a Hadoop configuration key only when nothing is configured for it yet, so that
    * session-wide settings owned by the hosting runtime are never overwritten by the connector.
+   * Only the Hadoop Configuration is probed and written here on purpose: this is used for
+   * filesystem implementation keys, which are resolved exclusively from the Hadoop Configuration
+   * (spark.hadoop.* is copied into it at session start, never read back), so mirroring an
+   * inherited value into the session conf would only pin a runtime owned implementation.
    */
   private def setHadoopConfIfAbsent(
       config: Configuration,
@@ -541,13 +545,20 @@ object KustoReader {
     KCONST.storageProtocolAbfs.equalsIgnoreCase(storageProtocol) ||
       KCONST.storageProtocolAbfss.equalsIgnoreCase(storageProtocol)
 
+  private def credentialFingerprint(
+      credential: TransientStorageCredentials): (AuthMethod.AuthMethod, String) =
+    (credential.authMethod, normalizeSasToken(credential.sasKey))
+
   /**
    * ABFS auth settings (auth type and SAS token alike) are configured per storage account, so
    * several containers of the same account cannot be served when they carry different SAS tokens,
-   * or when they mix SAS with impersonation. Keep the first container of each such account and
-   * drop the conflicting siblings, so the export only targets locations that can be read back
-   * afterwards. OneLake credentials (which have no storage account) and accounts whose containers
-   * agree on one credential are left untouched.
+   * or when they mix SAS with impersonation. Elect one credential per account and drop the
+   * conflicting siblings, so the export only targets locations that can be read back afterwards.
+   * A self contained SAS token always wins over impersonation, which depends on the ambient
+   * identity of the runtime and would otherwise make the readback depend on the order in which
+   * the credentials were returned; between credentials of the same auth method the first one
+   * wins. OneLake credentials (which have no storage account) and accounts whose containers agree
+   * on one credential are left untouched.
    */
   private[kusto] def dedupeConflictingCredentials(
       storageParameters: TransientStorageParameters): TransientStorageParameters = {
@@ -555,25 +566,33 @@ object KustoReader {
     if (credentials == null || credentials.length < 2) {
       storageParameters
     } else {
-      val seenCredentialByAccount = mutable.Map.empty[String, (AuthMethod.AuthMethod, String)]
+      val electedCredentialByAccount = mutable.Map.empty[String, (AuthMethod.AuthMethod, String)]
+      credentials.foreach { credential =>
+        if (credential != null && !credential.isOneLake) {
+          val host = storageAccountHost(credential, storageParameters)
+          val fingerprint = credentialFingerprint(credential)
+          val elected = electedCredentialByAccount.get(host)
+          if (elected.isEmpty ||
+            (elected.get._1 != AuthMethod.Sas && fingerprint._1 == AuthMethod.Sas)) {
+            electedCredentialByAccount.put(host, fingerprint)
+          }
+        }
+      }
       val kept = credentials.filter { credential =>
         if (credential == null || credential.isOneLake) {
           true
         } else {
           val host = storageAccountHost(credential, storageParameters)
-          val fingerprint = (credential.authMethod, normalizeSasToken(credential.sasKey))
-          seenCredentialByAccount.get(host) match {
-            case None =>
-              seenCredentialByAccount.put(host, fingerprint)
-              true
-            case Some(seen) if seen == fingerprint => true
-            case Some(_) =>
-              KDSU.logWarn(
-                className,
-                s"Dropping export container '${credential.blobContainer}' of storage account " +
-                  s"'$host': ABFS resolves storage credentials per account and another " +
-                  "container of the same account with different credentials is already in use.")
-              false
+          val elected = electedCredentialByAccount(host)
+          if (credentialFingerprint(credential) == elected) {
+            true
+          } else {
+            KDSU.logWarn(
+              className,
+              s"Dropping export container '${credential.blobContainer}' of storage account " +
+                s"'$host': ABFS resolves storage credentials per account and another container " +
+                s"of the same account is already in use with ${elected._1} credentials.")
+            false
           }
         }
       }
