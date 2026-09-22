@@ -24,12 +24,26 @@ Required when results exceed query limits. Adds storage COGS.
 | `ForceDistributedMode` | Always exports to blob first |
 
 ### Distributed Mode Storage Auth
-The connector sets Hadoop/Spark config for the storage protocol in use:
+The connector sets Hadoop/Spark config for the storage protocol in use (every key is written to
+both the Hadoop `Configuration` and the Spark `RuntimeConfig` with a `spark.hadoop.` prefix, so
+that native engines such as Gluten/Velox see it):
 
-| Protocol | Auth config target | Notes |
+| Protocol | Config keys | Notes |
 |---|---|---|
-| `wasbs` (default) | Hadoop `Configuration` | SAS token stripped of leading `?` |
-| `abfss` / `abfs` | Spark `RuntimeConfig` | Account Key **not supported** — use SAS |
+| `wasbs` (default) | `fs.azure.sas.<container>.<account>.blob.<suffix>` | SAS token stripped of leading `?` |
+| `abfss` / `abfs` | `fs.azure.account.auth.type.<account>.blob.<suffix>`, `fs.azure.sas.fixed.token.<account>.blob.<suffix>`, `fs.azure.account.hns.enabled.<account>.blob.<suffix>` | Account Key **not supported** — use SAS. SAS token stripped of leading `?` |
+
+ABFS resolves these settings **per storage account** — Hadoop's `AbfsConfiguration` and the
+Velox native reader both look up `<key>.<account>.<suffix>` only, never a container-qualified
+key. Two consequences:
+
+* The connector never writes the account-agnostic `fs.azure.account.auth.type`; doing so would
+  force every other ABFS account of the session (OneLake, lakehouse, customer storage) into SAS
+  auth and break it with *"At least one of the fs.azure.sas.token.provider.type and
+  fs.azure.sas.fixed.token must be set"*.
+* When the transient storage returned by Kusto contains several containers of the *same* storage
+  account with different credentials, only the first is used for the export — the others are
+  dropped with a warning, since their tokens could not be configured simultaneously.
 
 ---
 
