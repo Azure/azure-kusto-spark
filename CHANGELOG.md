@@ -17,6 +17,17 @@ Tags are created as `v4.0_{version}` (Spark 4 / master) and `v3.0_{version}` (Sp
 ### Fixed
 - None
 
+## [7.1.4] - 2026-09-23
+
+### Changed
+- None
+
+### Added
+- None
+
+### Fixed
+- Scope ABFS distributed read storage credentials to the storage account, so the token resolves on both the JVM and native readers and other ABFS accounts in the session are no longer forced into SAS auth (#514)
+
 ## [7.1.3] - 2026-09-08
 
 ### Changed
