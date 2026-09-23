@@ -423,6 +423,49 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
     }
   }
 
+  "KustoBatchSinkSync" should "roll over blobs with duplicate protection enabled" taggedAs KustoE2E in {
+    val expectedRows = 3
+    val payload = "x" * (600 * 1024)
+    val df = (1 to expectedRows).map(id => (id, payload)).toDF("id", "payload").coalesce(1)
+    val prefix =
+      KustoQueryUtils.simplifyName(s"KustoBatchSinkE2E_DeduplicatedRollover_${UUID.randomUUID()}")
+    val table = s"${prefix}_Table"
+    val engineKcsb = ConnectionStringBuilder.createWithAadAccessTokenAuthentication(
+      kustoTestConnectionOptions.cluster,
+      kustoTestConnectionOptions.accessToken)
+    val kustoAdminClient = ClientFactory.createClient(engineKcsb)
+    kustoAdminClient.executeMgmt(
+      kustoTestConnectionOptions.database,
+      generateTempTableCreateCommand(table, columnsTypesAndNames = "Id:int, Payload:string"))
+
+    try {
+      df.write
+        .format("com.microsoft.kusto.spark.datasource")
+        .option(KustoSinkOptions.KUSTO_CLUSTER, kustoTestConnectionOptions.cluster)
+        .option(KustoSinkOptions.KUSTO_DATABASE, kustoTestConnectionOptions.database)
+        .option(KustoSinkOptions.KUSTO_TABLE, table)
+        .option(KustoSinkOptions.KUSTO_ACCESS_TOKEN, kustoTestConnectionOptions.accessToken)
+        .option(KustoSinkOptions.KUSTO_CLIENT_BATCHING_LIMIT, "1")
+        .option(KustoDebugOptions.KUSTO_ENSURE_NO_DUPLICATED_BLOBS, true.toString)
+        .option(KustoSinkOptions.KUSTO_TIMEOUT_LIMIT, (8 * 60).toString)
+        .mode(SaveMode.Append)
+        .save()
+
+      KustoTestUtils.validateResultsAndCleanup(
+        kustoAdminClient,
+        table,
+        kustoTestConnectionOptions.database,
+        expectedRows,
+        timeoutMs,
+        cleanupAllTables = false)
+    } finally {
+      KustoTestUtils.tryDropAllTablesByPrefix(
+        kustoAdminClient,
+        kustoTestConnectionOptions.database,
+        prefix)
+    }
+  }
+
   "KustoBatchSinkAsync" should "ingest structured data to a Kusto cluster in async mode" taggedAs KustoE2E in {
     val df = rows.toDF("name", "value")
     val prefix = "KustoBatchSinkE2EIngestAsync"
