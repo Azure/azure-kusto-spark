@@ -549,9 +549,11 @@ object KustoReader {
   }
 
   /**
-   * Strip a leading '?' from a SAS token. Hadoop's ABFS client tolerates it but the Gluten /
-   * Velox native reader concatenates the token onto the URL as "<url>?<token>", producing an
-   * unusable "??sv=..." query and a 401 from storage. WASB never accepts the prefix either.
+   * Strip a leading '?' from a SAS token, as the WASBS path has always done. Hadoop's ABFS client
+   * removes the prefix itself (AbfsClient.appendSASTokenToQuery), but the Gluten / Velox native
+   * reader takes the configured token verbatim and builds "<url>?<token>"
+   * (FixedSasAzureClientProvider::getReadFileClient), so a prefixed token would yield "??sv=...".
+   * Normalizing here keeps both readers on the same token shape.
    */
   private[kusto] def normalizeSasToken(sasKey: String): String = {
     if (sasKey != null && sasKey.startsWith("?")) sasKey.substring(1) else sasKey
