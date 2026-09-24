@@ -1,14 +1,85 @@
-# Temporary Azure Pipelines bootstrap for .github/workflows/build.yml
-
 trigger:
-- master
+  branches:
+    include:
+      - '*'
 
 pr:
-- master
+  branches:
+    include:
+      - '*'
 
 pool:
   vmImage: ubuntu-latest
 
-steps:
-- script: echo "Hello from Azure Pipelines"
-  displayName: Hello world
+jobs:
+- job: Build
+  displayName: Build and test
+  timeoutInMinutes: 40
+  steps:
+  - checkout: self
+    clean: true
+
+  - task: JavaToolInstaller@0
+    displayName: Use Java 21
+    inputs:
+      versionSpec: '21'
+      jdkArchitectureOption: x64
+      jdkSourceOption: PreInstalled
+
+  - task: Cache@2
+    displayName: Cache Maven dependencies
+    inputs:
+      key: 'maven | "$(Agent.OS)" | **/pom.xml'
+      restoreKeys: |
+        maven | "$(Agent.OS)"
+        maven
+      path: $(Pipeline.Workspace)/.m2/repository
+
+  - task: AzureCLI@2
+    displayName: Run Maven verification
+    inputs:
+      azureSubscription: $(AZURE_SERVICE_CONNECTION)
+      addSpnToEnvironment: true
+      scriptType: bash
+      scriptLocation: inlineScript
+      workingDirectory: $(Build.SourcesDirectory)
+      inlineScript: |
+        set -euo pipefail
+
+        access_token="$(
+          az account get-access-token \
+            --resource "$(KUSTO_CLUSTER)" \
+            --query accessToken \
+            --output tsv
+        )"
+        echo "##vso[task.setsecret]${access_token}"
+
+        export kustoAadAppId="${servicePrincipalId}"
+        export kustoAadAuthorityID="${tenantId}"
+        export kustoDatabase="$(KUSTO_DATABASE)"
+        export kustoCluster="$(KUSTO_CLUSTER)"
+        export accessToken="${access_token}"
+        export storageAccountUrl="$(STORAGE_CONTAINER_URL)"
+        export ingestStorageUrl="$(INGEST_STORAGE_URL)"
+        export ingestStorageContainer="$(INGEST_STORAGE_CONTAINER)"
+
+        mvn clean verify -B \
+          -DkustoAadAppId="${kustoAadAppId}" \
+          -DkustoAadAuthorityID="${kustoAadAuthorityID}" \
+          -DkustoDatabase="${kustoDatabase}" \
+          -DkustoCluster="${kustoCluster}" \
+          -DaccessToken="${accessToken}" \
+          -DingestStorageUrl="${ingestStorageUrl}" \
+          -DingestStorageContainer="${ingestStorageContainer}"
+    env:
+      MAVEN_OPTS: -Dmaven.repo.local=$(Pipeline.Workspace)/.m2/repository
+
+  - task: PublishTestResults@2
+    displayName: Publish test results
+    condition: always()
+    inputs:
+      testResultsFormat: JUnit
+      testResultsFiles: '**/surefire-reports/*.xml'
+      searchFolder: $(Build.SourcesDirectory)
+      testRunTitle: azure-kusto-spark
+      failTaskOnMissingResultsFile: true
