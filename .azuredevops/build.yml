@@ -15,6 +15,7 @@ jobs:
 - job: Build
   displayName: Build and test
   timeoutInMinutes: 40
+  condition: and(succeeded(), ne(variables['System.PullRequest.IsFork'], 'True'))
   steps:
   - checkout: self
     clean: true
@@ -79,7 +80,7 @@ jobs:
     condition: always()
     inputs:
       testResultsFormat: JUnit
-      testResultsFiles: '**/surefire-reports/*.xml'
+      testResultsFiles: connector/target/surefire-reports/*.xml
       searchFolder: $(Build.SourcesDirectory)
       testRunTitle: azure-kusto-spark
       failTaskOnMissingResultsFile: true
