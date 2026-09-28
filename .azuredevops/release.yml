@@ -4,8 +4,8 @@ trigger:
       - '*'
   tags:
     include:
-      - 'v3.0_*'
-      - 'v4.0_*'
+      - 'v3.0_*.*.*'
+      - 'v4.0_*.*.*'
 
 pr: none
 
@@ -49,10 +49,15 @@ jobs:
         exit 1
       fi
 
+      release_tag="${source_ref#refs/tags/}"
+      if [[ ! "${release_tag}" =~ ^v[34]\.0_[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        echo "Release tag '${release_tag}' must match v3.0_x.y.z or v4.0_x.y.z." >&2
+        exit 1
+      fi
+
       git fetch --force origin "${source_ref}"
       git checkout --detach FETCH_HEAD
 
-      release_tag="${source_ref#refs/tags/}"
       release_commit="$(git rev-parse HEAD)"
       echo "##vso[task.setvariable variable=RELEASE_TAG]${release_tag}"
       echo "##vso[task.setvariable variable=RELEASE_COMMIT]${release_commit}"
@@ -134,16 +139,6 @@ jobs:
       targetPath: $(Build.SourcesDirectory)/staging
       artifact: release
 
-  - task: PublishTestResults@2
-    displayName: Publish test results
-    condition: always()
-    inputs:
-      testResultsFormat: JUnit
-      testResultsFiles: '**/surefire-reports/*.xml'
-      searchFolder: $(Build.SourcesDirectory)
-      testRunTitle: azure-kusto-spark release
-      failTaskOnMissingResultsFile: true
-
   - task: GitHubRelease@1
     displayName: Create GitHub release
     condition: and(succeeded(), or(startsWith(variables['Build.SourceBranch'], 'refs/tags/'), ${{ eq(parameters.createGitHubRelease, true) }}))
@@ -157,8 +152,9 @@ jobs:
       title: $(RELEASE_TAG)
       releaseNotesFilePath: $(Build.SourcesDirectory)/CHANGELOG.md
       assets: |
-        $(Build.SourcesDirectory)/staging/*.jar
-        $(Build.SourcesDirectory)/staging/*.pom
+        $(Build.SourcesDirectory)/staging/kusto-spark_$(SPARK_VERSION)_$(SCALA_VERSION)-$(PROJECT_VERSION).jar
+        $(Build.SourcesDirectory)/staging/kusto-spark_$(SPARK_VERSION)_$(SCALA_VERSION)-$(PROJECT_VERSION)-sources.jar
+        $(Build.SourcesDirectory)/staging/kusto-spark_$(SPARK_VERSION)_$(SCALA_VERSION)-$(PROJECT_VERSION).pom
       addChangeLog: false
 
   - task: AzureCLI@2
