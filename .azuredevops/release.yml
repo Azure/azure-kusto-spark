@@ -133,6 +133,39 @@ jobs:
       echo "##vso[task.setvariable variable=SPARK_VERSION]${spark_version}"
     displayName: Stage release artifacts
 
+  - bash: |
+      set -euo pipefail
+
+      mkdir -p "$(Build.ArtifactStagingDirectory)"
+      awk -v heading="## [${RELEASE_VERSION}]" '
+        index($0, heading) == 1 {
+          found = 1
+          next
+        }
+        found && /^## \[/ {
+          exit
+        }
+        found {
+          print
+          if ($0 ~ /^### /) {
+            print ""
+          }
+        }
+        END {
+          if (!found) {
+            exit 2
+          }
+        }
+      ' CHANGELOG.md > "$(Build.ArtifactStagingDirectory)/release-notes.md"
+
+      if [[ ! -s "$(Build.ArtifactStagingDirectory)/release-notes.md" ]]; then
+        echo "No release notes found for version ${RELEASE_VERSION}." >&2
+        exit 1
+      fi
+    displayName: Extract release notes
+    env:
+      RELEASE_VERSION: $(PROJECT_VERSION)
+
   - task: PublishPipelineArtifact@1
     displayName: Publish staged artifacts
     inputs:
@@ -150,7 +183,7 @@ jobs:
       tagSource: userSpecifiedTag
       tag: $(RELEASE_TAG)
       title: $(RELEASE_TAG)
-      releaseNotesFilePath: $(Build.SourcesDirectory)/CHANGELOG.md
+      releaseNotesFilePath: $(Build.ArtifactStagingDirectory)/release-notes.md
       assets: |
         $(Build.SourcesDirectory)/staging/kusto-spark_$(SPARK_VERSION)_$(SCALA_VERSION)-$(PROJECT_VERSION).jar
         $(Build.SourcesDirectory)/staging/kusto-spark_$(SPARK_VERSION)_$(SCALA_VERSION)-$(PROJECT_VERSION)-sources.jar
