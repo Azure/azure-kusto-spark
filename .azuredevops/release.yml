@@ -203,7 +203,8 @@ jobs:
 
         az storage blob upload-batch \
           --account-name "$(AZURE_RELEASE_STORAGE_ACCOUNT)" \
-          --destination "$(AZURE_STORAGE_CONTAINER)/kusto/spark/$(SPARK_VERSION)_$(PROJECT_VERSION)" \
+          --destination "$(AZURE_STORAGE_CONTAINER)" \
+          --destination-path "kusto/spark/$(SPARK_VERSION)_$(PROJECT_VERSION)" \
           --source staging \
           --auth-mode login \
           --overwrite
