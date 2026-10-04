@@ -11,6 +11,7 @@ import com.microsoft.kusto.spark.datasink.SchemaAdjustmentMode.{
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
 import com.microsoft.kusto.spark.datasink.WriteMode.{Transactional, WriteMode}
 import com.microsoft.kusto.spark.utils.{KustoConstants, KustoCustomDebugWriteOptions}
+import org.apache.spark.sql.SaveMode
 
 import java.util.UUID
 import java.util.concurrent.TimeUnit
@@ -123,4 +124,5 @@ final case class WriteOptions(
     userTempTableName: Option[String] = None,
     streamIngestUncompressedMaxSize: Int = KustoConstants.DefaultMaxStreamingBytesUncompressed,
     maybeIngestionBlobStorage: Option[Array[IngestionStorageParameters]] = None,
-    kustoCustomDebugWriteOptions: KustoCustomDebugWriteOptions)
+    kustoCustomDebugWriteOptions: KustoCustomDebugWriteOptions,
+    saveMode: SaveMode = SaveMode.Append)

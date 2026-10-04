@@ -136,6 +136,37 @@ class CslCommandsGeneratorTest extends AnyFlatSpec {
     assert(CslCommandsGenerator.generateCountQuery(query) == "Storms | take 100\n| count")
   }
 
+  "generateTableReplaceExtentsAsyncCommand" should "generate a retry-safe replace command" in {
+    val command = CslCommandsGenerator.generateTableReplaceExtentsAsyncCommand(
+      "sourceTable",
+      "destinationTable")
+
+    assert(
+      command ==
+        """.replace async extents in table destinationTable  <|
+          |       {
+          |         .show table destinationTable extents
+          |         | where toscalar(sourceTable | take 1 | count) > 0
+          |         | project ExtentId
+          |       },
+          |       {
+          |         .show table sourceTable extents
+          |         | project ExtentId, TableName
+          |       }
+          |       """.stripMargin)
+  }
+
+  it should "set a new ingestion time when replacing a materialized view source" in {
+    val command = CslCommandsGenerator.generateTableReplaceExtentsAsyncCommand(
+      "sourceTable",
+      "destinationTable",
+      isDestinationTableMaterializedViewSource = true)
+
+    assert(
+      command.startsWith(
+        ".replace async extents in table destinationTable with(SetNewIngestionTime=true) <|"))
+  }
+
   it should "not let a trailing single-line comment swallow the count operator (issue #267)" in {
     val query = "range _ from 1 to 500001 step 1 // this comment causes issue"
 

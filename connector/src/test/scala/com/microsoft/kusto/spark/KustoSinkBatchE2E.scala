@@ -423,6 +423,55 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
     }
   }
 
+  "KustoBatchSinkReplace" should "replace existing rows when overwrite is explicitly enabled" taggedAs KustoE2E in {
+    val prefix = "KustoBatchSinkE2E_Replace"
+    val table = KustoQueryUtils.simplifyName(s"${prefix}_${UUID.randomUUID()}")
+    val engineKcsb = ConnectionStringBuilder.createWithAadAccessTokenAuthentication(
+      kustoTestConnectionOptions.cluster,
+      kustoTestConnectionOptions.accessToken)
+    val kustoAdminClient = ClientFactory.createClient(engineKcsb)
+    kustoAdminClient.executeMgmt(
+      kustoTestConnectionOptions.database,
+      generateTableCreateCommand(table, columnsTypesAndNames = "name:string, value:int"))
+
+    val initialRows = Seq(("initial-1", 1), ("initial-2", 2), ("initial-3", 3))
+    val replacementRows = Seq(("replacement-1", 10), ("replacement-2", 20))
+
+    try {
+      initialRows.toDF("name", "value").write
+        .format("com.microsoft.kusto.spark.datasource")
+        .option(KustoSinkOptions.KUSTO_CLUSTER, kustoTestConnectionOptions.cluster)
+        .option(KustoSinkOptions.KUSTO_DATABASE, kustoTestConnectionOptions.database)
+        .option(KustoSinkOptions.KUSTO_TABLE, table)
+        .option(KustoSinkOptions.KUSTO_ACCESS_TOKEN, kustoTestConnectionOptions.accessToken)
+        .option(KustoSinkOptions.KUSTO_WRITE_MODE, WriteMode.Transactional.toString)
+        .mode(SaveMode.Append)
+        .save()
+
+      replacementRows.toDF("name", "value").write
+        .format("com.microsoft.kusto.spark.datasource")
+        .option(KustoSinkOptions.KUSTO_CLUSTER, kustoTestConnectionOptions.cluster)
+        .option(KustoSinkOptions.KUSTO_DATABASE, kustoTestConnectionOptions.database)
+        .option(KustoSinkOptions.KUSTO_TABLE, table)
+        .option(KustoSinkOptions.KUSTO_ACCESS_TOKEN, kustoTestConnectionOptions.accessToken)
+        .option(KustoSinkOptions.KUSTO_WRITE_MODE, WriteMode.Transactional.toString)
+        .option(KustoDebugOptions.KUSTO_REPLACE_SAVE_MODE, "true")
+        .mode(SaveMode.Overwrite)
+        .save()
+
+      val result = kustoAdminClient
+        .executeQuery(kustoTestConnectionOptions.database, s"$table | count")
+        .getPrimaryResults
+      result.next()
+      assert(result.getLong(0) == replacementRows.size)
+    } finally {
+      KustoTestUtils.tryDropAllTablesByPrefix(
+        kustoAdminClient,
+        kustoTestConnectionOptions.database,
+        prefix)
+    }
+  }
+
   "KustoBatchSinkAsync" should "ingest structured data to a Kusto cluster in async mode" taggedAs KustoE2E in {
     val df = rows.toDF("name", "value")
     val prefix = "KustoBatchSinkE2EIngestAsync"

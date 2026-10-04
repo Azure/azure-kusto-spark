@@ -43,6 +43,7 @@ import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import io.github.resilience4j.core.IntervalFunction
 import io.github.resilience4j.retry.RetryConfig
 import org.apache.log4j.Level
+import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.types.StructType
 
 import java.time.{Duration, Instant, OffsetDateTime}
@@ -309,7 +310,8 @@ class ExtendedKustoClient(
         crp).getPrimaryResults
     extentsCountQuery.next()
     val extentsCount = extentsCountQuery.getInt(0)
-    if (extentsCount > writeOptions.kustoCustomDebugWriteOptions.minimalExtentsCountForSplitMergePerNode) {
+    if (writeOptions.saveMode != SaveMode.Overwrite &&
+      extentsCount > writeOptions.kustoCustomDebugWriteOptions.minimalExtentsCountForSplitMergePerNode) {
       val nodeCountQuery =
         executeEngine(database, generateNodesCountCommand(), "nodesCount", crp).getPrimaryResults
       nodeCountQuery.next()
@@ -362,14 +364,23 @@ class ExtendedKustoClient(
       // Execute move batch and keep any transient error for handling
       try {
         val timeRange = Array[Instant](ingestionStartTime, Instant.now())
+        val extentsCommand =
+          if (writeOptions.saveMode == SaveMode.Overwrite) {
+            generateTableReplaceExtentsAsyncCommand(
+              tmpTableName,
+              targetTable,
+              useMaterializedViewFlag)
+          } else {
+            generateTableMoveExtentsAsyncCommand(
+              tmpTableName,
+              targetTable,
+              timeRange,
+              if (batchSize.isEmpty) None else Some(curBatchSize),
+              useMaterializedViewFlag)
+          }
         val operation = executeEngine(
           database,
-          generateTableMoveExtentsAsyncCommand(
-            tmpTableName,
-            targetTable,
-            timeRange,
-            if (batchSize.isEmpty) None else Some(curBatchSize),
-            useMaterializedViewFlag),
+          extentsCommand,
           "extentsMove",
           crp).getPrimaryResults
         val operationResult = KDSU.verifyAsyncCommandCompletion(
