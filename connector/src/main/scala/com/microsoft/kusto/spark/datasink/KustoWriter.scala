@@ -667,14 +667,14 @@ object KustoWriter {
         if (shouldNotCommitBlockBlob) {
           blobWriter
         } else {
+          KDSU.logInfo(
+            className,
+            s"Sealing blob in partition $partitionIdString for requestId: '${parameters.writeOptions.requestId}', " +
+              s"blob number ${row._2}, with size $count")
+          finalizeBlobWrite(blobWriter)
           if (parameters.writeOptions.kustoCustomDebugWriteOptions.ensureNoDuplicatedBlobs) {
             taskMap.put(curBlobUUID, blobWriter)
           } else {
-            KDSU.logInfo(
-              className,
-              s"Sealing blob in partition $partitionIdString for requestId: '${parameters.writeOptions.requestId}', " +
-                s"blob number ${row._2}, with size $count")
-            finalizeBlobWrite(blobWriter)
             ingest(
               blobWriter,
               blobWriter.sas,
@@ -682,9 +682,9 @@ object KustoWriter {
                 !parameters.writeOptions.kustoCustomDebugWriteOptions.disableFlushImmediately,
               curBlobUUID,
               kustoClient)
-            curBlobUUID = UUID.randomUUID().toString
-            createBlobWriter(parameters, kustoClient, partitionIdString, row._2, curBlobUUID)
           }
+          curBlobUUID = UUID.randomUUID().toString
+          createBlobWriter(parameters, kustoClient, partitionIdString, row._2, curBlobUUID)
         }
     }
 
