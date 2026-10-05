@@ -134,9 +134,8 @@ class KustoDataSourceUtilsTest extends AnyFlatSpec with MockFactory {
       KustoDataSourceUtils.parseSinkParameters(validSinkParameters, SaveMode.Overwrite)
     }
 
-    assert(
-      exception.getMessage ==
-        s"${KustoCustomDebugWriteOptions.ReplaceSaveModeDataLossWarning} Set the internal 'replaceSaveMode' option to true to enable it.")
+    assert(exception.getMessage ==
+      s"${KustoCustomDebugWriteOptions.ReplaceSaveModeDataLossWarning} Set the internal 'replaceSaveMode' option to true to enable it.")
   }
 
   it should "reject overwrite with queued write mode" in {

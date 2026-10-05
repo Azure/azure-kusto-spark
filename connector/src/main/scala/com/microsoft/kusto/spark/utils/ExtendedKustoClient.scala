@@ -354,6 +354,16 @@ class ExtendedKustoClient(
     var delayPeriodBetweenCalls = DelayPeriodBetweenCalls
     var consecutiveSuccesses = 0
     val useMaterializedViewFlag = shouldUseMaterializedViewFlag(database, targetTable, crp)
+    val replaceExtentsCommand =
+      if (writeOptions.saveMode == SaveMode.Overwrite) {
+        Some(
+          generateTableReplaceExtentsAsyncCommand(
+            tmpTableName,
+            targetTable,
+            useMaterializedViewFlag))
+      } else {
+        None
+      }
     val firstMoveRetries = writeOptions.kustoCustomDebugWriteOptions.maxRetriesOnMoveExtents
     val secondMovesRetries =
       Math.max(10, writeOptions.kustoCustomDebugWriteOptions.maxRetriesOnMoveExtents)
@@ -363,26 +373,17 @@ class ExtendedKustoClient(
       var failed = false
       // Execute move batch and keep any transient error for handling
       try {
-        val timeRange = Array[Instant](ingestionStartTime, Instant.now())
-        val extentsCommand =
-          if (writeOptions.saveMode == SaveMode.Overwrite) {
-            generateTableReplaceExtentsAsyncCommand(
-              tmpTableName,
-              targetTable,
-              useMaterializedViewFlag)
-          } else {
-            generateTableMoveExtentsAsyncCommand(
-              tmpTableName,
-              targetTable,
-              timeRange,
-              if (batchSize.isEmpty) None else Some(curBatchSize),
-              useMaterializedViewFlag)
-          }
-        val operation = executeEngine(
-          database,
-          extentsCommand,
-          "extentsMove",
-          crp).getPrimaryResults
+        val extentsCommand = replaceExtentsCommand.getOrElse {
+          val timeRange = Array[Instant](ingestionStartTime, Instant.now())
+          generateTableMoveExtentsAsyncCommand(
+            tmpTableName,
+            targetTable,
+            timeRange,
+            if (batchSize.isEmpty) None else Some(curBatchSize),
+            useMaterializedViewFlag)
+        }
+        val operation =
+          executeEngine(database, extentsCommand, "extentsMove", crp).getPrimaryResults
         val operationResult = KDSU.verifyAsyncCommandCompletion(
           engineClient,
           database,
