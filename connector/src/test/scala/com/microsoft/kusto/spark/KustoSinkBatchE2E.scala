@@ -483,7 +483,7 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
       KustoTestUtils.tryDropAllTablesByPrefix(
         kustoAdminClient,
         kustoTestConnectionOptions.database,
-        prefix)
+        table)
     }
   }
 
