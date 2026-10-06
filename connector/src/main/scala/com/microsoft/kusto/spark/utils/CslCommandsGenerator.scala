@@ -137,6 +137,29 @@ private[kusto] object CslCommandsGenerator {
        """
   }
 
+  def generateTableReplaceExtentsAsyncCommand(
+      sourceTableName: String,
+      destinationTableName: String,
+      isDestinationTableMaterializedViewSource: Boolean = false): String = {
+    val setNewIngestionTime: String =
+      if (isDestinationTableMaterializedViewSource) {
+        "with(SetNewIngestionTime=true)"
+      } else {
+        ""
+      }
+    s""".replace async extents in table $destinationTableName $setNewIngestionTime <|
+       {
+         .show table $destinationTableName extents
+         | where toscalar($sourceTableName | take 1 | count) > 0
+         | project ExtentId
+       },
+       {
+         .show table $sourceTableName extents
+         | project ExtentId, TableName
+       }
+       """
+  }
+
   def generateShowOperationDetails(operataionId: String): String = {
     s".show operation $operataionId details"
   }

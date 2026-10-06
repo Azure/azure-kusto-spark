@@ -4,11 +4,13 @@
 package com.microsoft.kusto.spark.datasink
 
 import java.io._
+import java.security.InvalidParameterException
 
 import com.microsoft.azure.kusto.data.ClientRequestProperties
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 import com.microsoft.kusto.spark.common.KustoCoordinates
+import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.execution.streaming.Sink
 import org.apache.spark.sql.DataFrame
 
@@ -27,6 +29,10 @@ class KustoSink(
   override def toString = "KustoSink"
 
   override def addBatch(batchId: Long, data: DataFrame): Unit = {
+    if (writeOptions.saveMode == SaveMode.Overwrite) {
+      throw new InvalidParameterException(
+        "SaveMode.Overwrite is not supported for Spark structured streaming writes.")
+    }
     if (batchId <= latestBatchId) {
       KDSU.logInfo(myName, s"Skipping already committed batch $batchId")
     } else {

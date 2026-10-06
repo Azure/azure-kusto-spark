@@ -37,6 +37,7 @@ import com.microsoft.kusto.spark.utils.KustoConstants.{
   DefaultMaxStreamingBytesUncompressed,
   OneMegaByte
 }
+import com.microsoft.kusto.spark.utils.KustoCustomDebugWriteOptions.ReplaceSaveModeDataLossWarning
 import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
 import io.github.resilience4j.retry.{Retry, RetryConfig}
 import io.vavr.CheckedFunction0
@@ -442,9 +443,9 @@ object KustoDataSourceUtils {
   def parseSinkParameters(
       parameters: Map[String, String],
       mode: SaveMode = SaveMode.Append): SinkParameters = {
-    if (mode != SaveMode.Append) {
+    if (mode != SaveMode.Append && mode != SaveMode.Overwrite) {
       throw new InvalidParameterException(
-        s"Kusto data source supports only 'Append' mode, '$mode' directive is invalid. Please use df.write.mode(SaveMode.Append)..")
+        s"Kusto data source supports only 'Append' and 'Overwrite' modes, '$mode' directive is invalid.")
     }
 
     // TODO get defaults from KustoWriter()
@@ -538,6 +539,21 @@ object KustoDataSourceUtils {
     val disableFlushImmediately =
       parameters.getOrElse(KustoDebugOptions.KUSTO_DISABLE_FLUSH_IMMEDIATELY, "false").toBoolean
 
+    val replaceSaveMode =
+      parameters.getOrElse(KustoDebugOptions.KUSTO_REPLACE_SAVE_MODE, "false").toBoolean
+
+    if (mode == SaveMode.Overwrite) {
+      if (!replaceSaveMode) {
+        throw new InvalidParameterException(
+          s"$ReplaceSaveModeDataLossWarning Set the internal 'replaceSaveMode' option to true to enable it.")
+      }
+      if (writeMode != WriteMode.Transactional) {
+        throw new InvalidParameterException(
+          s"SaveMode.Overwrite with replace is supported only with Transactional write mode. '$writeMode' is not supported.")
+      }
+      logWarn("parseSinkParameters", ReplaceSaveModeDataLossWarning)
+    }
+
     val ensureNoDupBlobs =
       parameters.getOrElse(KustoDebugOptions.KUSTO_ENSURE_NO_DUPLICATED_BLOBS, "false").toBoolean
 
@@ -561,7 +577,8 @@ object KustoDataSourceUtils {
       disableFlushImmediately,
       ensureNoDupBlobs,
       addSourceLocationTransform,
-      maybeSparkIngestionProperties)
+      maybeSparkIngestionProperties,
+      replaceSaveMode)
 
     val writeOptions = WriteOptions(
       pollingOnDriver,
@@ -579,7 +596,8 @@ object KustoDataSourceUtils {
       userTempTableName,
       streamIngestMaxSize,
       maybeIngestionStorageParameters,
-      kustoCustomDebugOptions)
+      kustoCustomDebugOptions,
+      mode)
 
     if (sourceParameters.kustoCoordinates.table.isEmpty) {
       throw new InvalidParameterException(
@@ -589,7 +607,8 @@ object KustoDataSourceUtils {
     logInfo(
       "parseSinkParameters",
       s"Parsed write options for sink: {'table': '${sourceParameters.kustoCoordinates.table}', " +
-        s"'timeout': '${writeOptions.timeout}, 'async': ${writeOptions.isAsync}, 'writeMode': ${writeOptions.writeMode}, " +
+        s"'timeout': '${writeOptions.timeout}, 'async': ${writeOptions.isAsync}, 'saveMode': ${writeOptions.saveMode}, " +
+        s"'writeMode': ${writeOptions.writeMode}, " +
         s"'tableCreationMode': ${writeOptions.tableCreateOptions}, 'writeLimit': ${writeOptions.writeResultLimit}, " +
         s"'batchLimit': ${writeOptions.batchLimit}" +
         s", 'timeout': ${writeOptions.timeout}, 'timezone': ${writeOptions.timeZone}, " +
@@ -611,8 +630,8 @@ object KustoDataSourceUtils {
       disableFlushImmediately: Boolean,
       ensureNoDupBlobs: Boolean,
       addSourceLocationTransform: Boolean,
-      maybeSparkIngestionProperties: Option[SparkIngestionProperties])
-      : KustoCustomDebugWriteOptions = {
+      maybeSparkIngestionProperties: Option[SparkIngestionProperties],
+      replaceSaveMode: Boolean = false): KustoCustomDebugWriteOptions = {
 
     val isMappingAlreadyPresent = maybeSparkIngestionProperties match {
       case Some(sparkIngestionProperties) =>
@@ -635,6 +654,7 @@ object KustoDataSourceUtils {
       minimalExtentsCountForSplitMergePerNode = minimalExtentsCountForSplitMergePerNode,
       maxRetriesOnMoveExtents = maxRetriesOnMoveExtents,
       disableFlushImmediately = disableFlushImmediately,
+      replaceSaveMode = replaceSaveMode,
       ensureNoDuplicatedBlobs = ensureNoDupBlobs,
       addSourceLocationTransform = addSourceLocationTransform)
   }

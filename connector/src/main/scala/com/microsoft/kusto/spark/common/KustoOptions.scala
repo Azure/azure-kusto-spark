@@ -135,6 +135,8 @@ private[kusto] object KustoDebugOptions {
 
   val KUSTO_DISABLE_FLUSH_IMMEDIATELY: String = newOption("disableFlushImmediately")
 
+  val KUSTO_REPLACE_SAVE_MODE: String = newOption("replaceSaveMode")
+
   // Needed only if your task produce big blobs in high volume
   val KUSTO_ENSURE_NO_DUPLICATED_BLOBS: String = newOption("ensureNoDuplicatedBlobs")
   // If set to true, the connector will add a source location transform to the ingestion mapping.

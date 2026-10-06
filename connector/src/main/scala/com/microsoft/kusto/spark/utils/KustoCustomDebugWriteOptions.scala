@@ -15,4 +15,11 @@ final case class KustoCustomDebugWriteOptions(
     ensureNoDuplicatedBlobs: Boolean = false,
     addSourceLocationTransform: Boolean = false,
     keyVaultPemFilePath: Option[String] = None,
-    keyVaultPemFileKey: Option[String] = None)
+    keyVaultPemFileKey: Option[String] = None,
+    replaceSaveMode: Boolean = false)
+
+object KustoCustomDebugWriteOptions {
+  private[kusto] val ReplaceSaveModeDataLossWarning: String =
+    "Replace is guarded by an extra flag because it may delete data currently in the table " +
+      "even if it was not written by this connector, and may cause data loss if not used correctly."
+}
