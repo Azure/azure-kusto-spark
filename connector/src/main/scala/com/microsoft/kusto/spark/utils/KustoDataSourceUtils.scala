@@ -631,8 +631,7 @@ object KustoDataSourceUtils {
       ensureNoDupBlobs: Boolean,
       addSourceLocationTransform: Boolean,
       maybeSparkIngestionProperties: Option[SparkIngestionProperties],
-      replaceSaveMode: Boolean = false)
-      : KustoCustomDebugWriteOptions = {
+      replaceSaveMode: Boolean = false): KustoCustomDebugWriteOptions = {
 
     val isMappingAlreadyPresent = maybeSparkIngestionProperties match {
       case Some(sparkIngestionProperties) =>

@@ -423,7 +423,7 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
     }
   }
 
-  "KustoBatchSinkReplace" should "replace existing rows when overwrite is explicitly enabled" taggedAs KustoE2E in {
+  "KustoBatchSinkReplace" should "replace existing rows when overwrite is explicitly enabled" in {
     val prefix = "KustoBatchSinkE2E_Replace"
     val table = KustoQueryUtils.simplifyName(s"${prefix}_${UUID.randomUUID()}")
     val engineKcsb = ConnectionStringBuilder.createWithAadAccessTokenAuthentication(
@@ -438,7 +438,9 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
     val replacementRows = Seq(("replacement-1", 10), ("replacement-2", 20))
 
     try {
-      initialRows.toDF("name", "value").write
+      initialRows
+        .toDF("name", "value")
+        .write
         .format("com.microsoft.kusto.spark.datasource")
         .option(KustoSinkOptions.KUSTO_CLUSTER, kustoTestConnectionOptions.cluster)
         .option(KustoSinkOptions.KUSTO_DATABASE, kustoTestConnectionOptions.database)
@@ -448,7 +450,9 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
         .mode(SaveMode.Append)
         .save()
 
-      replacementRows.toDF("name", "value").write
+      replacementRows
+        .toDF("name", "value")
+        .write
         .format("com.microsoft.kusto.spark.datasource")
         .option(KustoSinkOptions.KUSTO_CLUSTER, kustoTestConnectionOptions.cluster)
         .option(KustoSinkOptions.KUSTO_DATABASE, kustoTestConnectionOptions.database)
