@@ -447,6 +447,7 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
         .option(KustoSinkOptions.KUSTO_TABLE, table)
         .option(KustoSinkOptions.KUSTO_ACCESS_TOKEN, kustoTestConnectionOptions.accessToken)
         .option(KustoSinkOptions.KUSTO_WRITE_MODE, WriteMode.Transactional.toString)
+        .option(KustoSourceOptions.KUSTO_CUSTOM_DATAFRAME_COLUMN_TYPES, "name STRING, value INT")
         .mode(SaveMode.Append)
         .save()
 
@@ -460,14 +461,24 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
         .option(KustoSinkOptions.KUSTO_ACCESS_TOKEN, kustoTestConnectionOptions.accessToken)
         .option(KustoSinkOptions.KUSTO_WRITE_MODE, WriteMode.Transactional.toString)
         .option(KustoDebugOptions.KUSTO_REPLACE_SAVE_MODE, "true")
+        .option(KustoSourceOptions.KUSTO_CUSTOM_DATAFRAME_COLUMN_TYPES, "name STRING, value INT")
         .mode(SaveMode.Overwrite)
         .save()
 
-      val result = kustoAdminClient
-        .executeQuery(kustoTestConnectionOptions.database, s"$table | count")
-        .getPrimaryResults
-      result.next()
-      assert(result.getLong(0) == replacementRows.size)
+      val rowCount = Awaitility
+        .await()
+        .ignoreExceptions()
+        .atMost(timeoutMs, TimeUnit.MILLISECONDS)
+        .until(
+          () => {
+            val result = kustoAdminClient
+              .executeQuery(kustoTestConnectionOptions.database, s"$table | count")
+              .getPrimaryResults
+            result.next()
+            result.getLong(0)
+          },
+          (count: Long) => count == replacementRows.size)
+      assert(rowCount == replacementRows.size)
     } finally {
       KustoTestUtils.tryDropAllTablesByPrefix(
         kustoAdminClient,
