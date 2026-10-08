@@ -1,14 +1,214 @@
-# Temporary Azure Pipelines bootstrap for .github/workflows/release.yml
-
 trigger:
-- master
+  branches:
+    exclude:
+      - '*'
+  tags:
+    include:
+      - 'v3.0_*.*.*'
+      - 'v4.0_*.*.*'
 
-pr:
-- master
+pr: none
+
+parameters:
+- name: sourceTag
+  displayName: Tag to release when manually queued
+  type: string
+  default: ''
+- name: uploadToAzure
+  displayName: Upload artifacts to Azure Storage
+  type: boolean
+  default: false
+- name: createGitHubRelease
+  displayName: Create the GitHub release
+  type: boolean
+  default: false
 
 pool:
   vmImage: ubuntu-latest
 
-steps:
-- script: echo "Hello from Azure Pipelines"
-  displayName: Hello world
+variables:
+- group: azure-kusto-spark-e2e
+- group: azure-kusto-spark-release
+
+jobs:
+- job: Release
+  displayName: Verify and stage release
+  timeoutInMinutes: 60
+  steps:
+  - checkout: self
+    clean: true
+    fetchDepth: 0
+
+  - bash: |
+      set -euo pipefail
+
+      source_ref="$(Build.SourceBranch)"
+      if [[ -n "${SOURCE_TAG}" ]]; then
+        source_ref="${SOURCE_TAG}"
+        if [[ "${source_ref}" != refs/tags/* ]]; then
+          source_ref="refs/tags/${source_ref}"
+        fi
+      elif [[ "${source_ref}" != refs/tags/* ]]; then
+        echo "The sourceTag parameter is required for a manual release run." >&2
+        exit 1
+      fi
+
+      release_tag="${source_ref#refs/tags/}"
+      if [[ ! "${release_tag}" =~ ^v[34]\.0_[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        echo "Release tag '${release_tag}' must match v3.0_x.y.z or v4.0_x.y.z." >&2
+        exit 1
+      fi
+
+      git fetch --force origin "${source_ref}"
+      git checkout --detach FETCH_HEAD
+
+      release_commit="$(git rev-parse HEAD)"
+      echo "##vso[task.setvariable variable=RELEASE_TAG]${release_tag}"
+      echo "##vso[task.setvariable variable=RELEASE_COMMIT]${release_commit}"
+    displayName: Check out release tag
+    env:
+      SOURCE_TAG: ${{ parameters.sourceTag }}
+
+  - task: JavaToolInstaller@0
+    displayName: Use Java 21
+    inputs:
+      versionSpec: '21'
+      jdkArchitectureOption: x64
+      jdkSourceOption: PreInstalled
+
+  - task: Cache@2
+    displayName: Cache Maven dependencies
+    inputs:
+      key: 'maven | "$(Agent.OS)" | **/pom.xml'
+      restoreKeys: |
+        maven | "$(Agent.OS)"
+        maven
+      path: $(Pipeline.Workspace)/.m2/repository
+
+  - task: AzureCLI@2
+    displayName: Verify release
+    inputs:
+      azureSubscription: $(AZURE_SERVICE_CONNECTION)
+      addSpnToEnvironment: true
+      scriptType: bash
+      scriptLocation: inlineScript
+      workingDirectory: $(Build.SourcesDirectory)
+      inlineScript: |
+        set -euo pipefail
+
+        access_token="$(
+          az account get-access-token \
+            --resource "$(KUSTO_CLUSTER)" \
+            --query accessToken \
+            --output tsv
+        )"
+        echo "##vso[task.setsecret]${access_token}"
+
+        export kustoAadAppId="${servicePrincipalId}"
+        export kustoAadAuthorityID="${tenantId}"
+        export kustoDatabase="$(KUSTO_DATABASE)"
+        export kustoCluster="$(KUSTO_CLUSTER)"
+        export accessToken="${access_token}"
+        export storageAccountUrl="$(STORAGE_CONTAINER_URL)"
+
+        mvn clean verify -B \
+          -DkustoAadAppId="${kustoAadAppId}" \
+          -DkustoAadAuthorityID="${kustoAadAuthorityID}" \
+          -DkustoDatabase="${kustoDatabase}" \
+          -DkustoCluster="${kustoCluster}" \
+          -DaccessToken="${accessToken}"
+    env:
+      MAVEN_OPTS: -Dmaven.repo.local=$(Pipeline.Workspace)/.m2/repository
+
+  - bash: |
+      set -euo pipefail
+
+      version="$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)"
+      scala_version="$(mvn help:evaluate -Dexpression=scala.version.major -q -DforceStdout)"
+      spark_version="$(mvn help:evaluate -Dexpression=spark.version.major -q -DforceStdout)"
+
+      mkdir -p staging
+      cp connector/target/*.jar staging/
+      cp connector/.flattened-pom.xml \
+        "staging/kusto-spark_${spark_version}_${scala_version}-${version}.pom"
+
+      echo "##vso[task.setvariable variable=PROJECT_VERSION]${version}"
+      echo "##vso[task.setvariable variable=SCALA_VERSION]${scala_version}"
+      echo "##vso[task.setvariable variable=SPARK_VERSION]${spark_version}"
+    displayName: Stage release artifacts
+
+  - bash: |
+      set -euo pipefail
+
+      mkdir -p "$(Build.ArtifactStagingDirectory)"
+      awk -v heading="## [${RELEASE_VERSION}]" '
+        index($0, heading) == 1 {
+          found = 1
+          next
+        }
+        found && /^## \[/ {
+          exit
+        }
+        found {
+          print
+          if ($0 ~ /^### /) {
+            print ""
+          }
+        }
+        END {
+          if (!found) {
+            exit 2
+          }
+        }
+      ' CHANGELOG.md > "$(Build.ArtifactStagingDirectory)/release-notes.md"
+
+      if [[ ! -s "$(Build.ArtifactStagingDirectory)/release-notes.md" ]]; then
+        echo "No release notes found for version ${RELEASE_VERSION}." >&2
+        exit 1
+      fi
+    displayName: Extract release notes
+    env:
+      RELEASE_VERSION: $(PROJECT_VERSION)
+
+  - task: PublishPipelineArtifact@1
+    displayName: Publish staged artifacts
+    inputs:
+      targetPath: $(Build.SourcesDirectory)/staging
+      artifact: release
+
+  - task: GitHubRelease@1
+    displayName: Create GitHub release
+    condition: and(succeeded(), or(startsWith(variables['Build.SourceBranch'], 'refs/tags/'), ${{ eq(parameters.createGitHubRelease, true) }}))
+    inputs:
+      gitHubConnection: $(GITHUB_SERVICE_CONNECTION)
+      repositoryName: Azure/azure-kusto-spark
+      action: create
+      target: $(RELEASE_COMMIT)
+      tagSource: userSpecifiedTag
+      tag: $(RELEASE_TAG)
+      title: $(RELEASE_TAG)
+      releaseNotesFilePath: $(Build.ArtifactStagingDirectory)/release-notes.md
+      assets: |
+        $(Build.SourcesDirectory)/staging/kusto-spark_$(SPARK_VERSION)_$(SCALA_VERSION)-$(PROJECT_VERSION).jar
+        $(Build.SourcesDirectory)/staging/kusto-spark_$(SPARK_VERSION)_$(SCALA_VERSION)-$(PROJECT_VERSION)-sources.jar
+        $(Build.SourcesDirectory)/staging/kusto-spark_$(SPARK_VERSION)_$(SCALA_VERSION)-$(PROJECT_VERSION).pom
+      addChangeLog: false
+
+  - task: AzureCLI@2
+    displayName: Upload artifacts to Azure Storage
+    condition: and(succeeded(), or(startsWith(variables['Build.SourceBranch'], 'refs/tags/'), ${{ eq(parameters.uploadToAzure, true) }}))
+    inputs:
+      azureSubscription: $(AZURE_RELEASE_SERVICE_CONNECTION)
+      scriptType: bash
+      scriptLocation: inlineScript
+      workingDirectory: $(Build.SourcesDirectory)
+      inlineScript: |
+        set -euo pipefail
+
+        az storage blob upload-batch \
+          --account-name "$(AZURE_RELEASE_STORAGE_ACCOUNT)" \
+          --destination "$(AZURE_STORAGE_CONTAINER)" \
+          --destination-path "kusto/spark/$(SPARK_VERSION)_$(PROJECT_VERSION)" \
+          --source staging \
+          --auth-mode login \
+          --overwrite
