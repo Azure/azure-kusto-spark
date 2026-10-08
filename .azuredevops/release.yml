@@ -26,6 +26,10 @@ parameters:
 pool:
   vmImage: ubuntu-latest
 
+variables:
+- group: azure-kusto-spark-e2e
+- group: azure-kusto-spark-release
+
 jobs:
 - job: Release
   displayName: Verify and stage release

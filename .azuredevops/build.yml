@@ -11,6 +11,9 @@ pr:
 pool:
   vmImage: ubuntu-latest
 
+variables:
+- group: azure-kusto-spark-e2e
+
 jobs:
 - job: Build
   displayName: Build and test
