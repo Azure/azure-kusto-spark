@@ -22,11 +22,11 @@ that is using it. Please verify the following first:
  The connector implements Spark 'Datasource V1' API. 
  Kusto data source identifier is "com.microsoft.kusto.spark.datasource". 
  Kusto table schema is translated into a spark schema as explained in [Spark-Kusto DataTypes](Spark-Kusto%20DataTypes%20mapping.md).
- The reading is done in one of two modes: 'Single' and 'Distributed'. By default, if the user did not override the read mode - an estimated
- count for the query is made; for small row count - a 'Single' mode is chosen with a fallback to the 'Distributed' mode (as the first might
- fail due to [kusto limit policy](https://docs.microsoft.com/azure/kusto/concepts/querylimits)). In 'Distributed' mode, a distributed
- [export command](https://docs.microsoft.com/azure/kusto/management/data-export/export-data-to-storage) is called followed by a
- distributed spark Parquet read.  
+ The reading is done in one of two modes: 'Single' and 'Distributed'. By default, the connector estimates the query's row count.
+ An estimate of 5,000 rows or fewer selects 'Single' mode; larger estimates, or a failure to obtain a row count, select 'Distributed' mode.
+ A failed automatic 'Single' read can also fall back to 'Distributed' mode. In 'Distributed' mode, the connector runs an asynchronous
+ [export command](https://learn.microsoft.com/en-us/kusto/management/data-export/export-data-to-storage) to temporary storage, followed by a
+ distributed Spark Parquet read. This export can happen even when the user only requested a read and no query-result limit was exceeded.
  The connector implements TableScan, PrunedFilteredScan, and InsertableRelation.
  
  ### Command Syntax
@@ -102,13 +102,34 @@ Scala and Java users may take these options from com.microsoft.kusto.spark.datas
 
   The following is the behavior of the connector in either of these read modes
 
-  * **Single mode** : In single mode Direct query and get the results
+  * **Single mode**: Executes a direct query and materializes its results on the Spark driver. Both driver memory and Kusto
+    [query-result limits](https://learn.microsoft.com/en-us/kusto/concepts/query-limits#limit-on-result-set-size-result-truncation)
+    apply (by default, 500,000 rows or 64 MB). `ForceSingleMode` overrides the initial selection, not the service limits or
+    driver-memory requirements. Do not rely on automatic fallback when a forced single-mode read exceeds query limits.
 
-  * **Distributed mode** : When you hit Kusto [query limits](https://aka.ms/kustoquerylimits) (memory / number of records), data is [exported](https://learn.microsoft.com/en-us/azure/data-explorer/kusto/management/data-export/export-data-to-storage) to Blob storage (export containers) , then the exported data is read and processed into a Dataframe. 
+  * **Distributed mode**: Exports query results to temporary storage, then reads the exported Parquet data into a DataFrame.
+    This mode can be selected automatically, explicitly requested, or used after a direct-read failure; it does not require
+    the query to exceed the service's query-result limits.
 
-  * **Default selection of the mode** : In case these options are not specified, the connector tries to approximate row count and the time the query would take. If the approximated row count exceeds the query limits specified above, the connector will automatically use Distributed mode.
+  * **Default selection of the mode**: Estimates of 5,000 rows or fewer select 'Single' mode. Larger estimates or a failure to
+    obtain a row count select 'Distributed' mode. A zero count returns an empty DataFrame. The 5,000-row selection threshold is
+    a connector heuristic, not the service's 500,000-row query-result limit.
 
   **Note**: Distributed mode will use an external storage hop and will add to COGS because of the storage that is used in between.
+
+  **Export-capacity throttling during a read**
+
+  A failure with `State: 'Throttled'`, `CommandType: 'DataExportToFile'`, and `Origin: 'CapacityPolicy/Export'` means the
+  distributed read's export was aborted because concurrent export capacity was exceeded. Concurrent notebooks and other
+  exports share this capacity; this is not the same as query-concurrency throttling or a query-memory error. Spark evaluates
+  reads lazily, so this source-read failure can surface at a downstream action such as `.save()`.
+
+  Reduce or stagger concurrent reads/exports and retry after backoff. If throttling persists, ask the service administrator
+  to review effective export capacity. The connector retries some transient command-submission failures, but does not
+  automatically resubmit an accepted export whose asynchronous operation later becomes `Throttled`. Increasing `timeoutLimit`
+  does not restart an aborted export. Failed exports can leave artifacts in temporary storage; see
+  [export failure behavior](https://learn.microsoft.com/en-us/kusto/management/data-export/export-data-to-storage#failures-during-export-commands).
+  If retrying an entire pipeline, ensure its downstream writes are safe to repeat.
 
   **Storage security**
   In Distributed mode by default the internal Kusto storage accounts are queried and used for ease of the connector. This is not recommended in production scenarios. The storage to be used can be customized by passing [Transient storage parameters](#transient-storage-parameters) parameter specified below. This gives the caller of the read a more granular control on blob security policies as opposed to default blob security policies used by the connector and Kusto. This will also come in useful when Kusto administrators restrict security by applying callout policies on what hosts can traffic be let onto. If traffic is not permitted by administrators to the default internal storage, the read operation will fail for Distributed mode.

@@ -10,6 +10,7 @@ import com.microsoft.azure.kusto.data.{ClientRequestProperties, KustoResultSetTa
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasource.ReadMode.ReadMode
+import com.microsoft.kusto.spark.exceptions.FailedOperationException
 import com.microsoft.kusto.spark.utils.{
   CslCommandsGenerator,
   ExtendedKustoClient,
@@ -31,6 +32,7 @@ import java.time.{Clock, Instant}
 import java.util.UUID
 import scala.collection.{concurrent, mutable}
 import scala.concurrent.duration.FiniteDuration
+import scala.util.Try
 
 private[kusto] case class KustoPartition(predicate: Option[String], idx: Int) extends Partition {
   override def index: Int = idx
@@ -84,6 +86,42 @@ private[kusto] case class DistributedReadModeTransientCacheEntry(
 object KustoReader {
   private val className = this.getClass.getSimpleName
   private val sparkHadoopConfigPrefix = "spark.hadoop."
+  private val exportCapacityOrigin =
+    """(?:^|,\s*)Origin:\s*'CapacityPolicy/Export'(?:[.,\s]|$)""".r
+
+  private def withExportReadContext(
+      exception: FailedOperationException,
+      requestId: String): FailedOperationException = {
+    val result = exception.getResult
+    // Read the current operation row without advancing the cursor or masking the original error.
+    def field(name: String): Option[String] =
+      result.flatMap(table => Try(table.getString(name)).toOption.flatMap(Option(_)))
+
+    val throttled = field("State").contains("Throttled")
+    val exportCapacityExceeded = throttled && field("Status").exists(status =>
+      exportCapacityOrigin.findFirstIn(status).isDefined)
+    val reason = if (exportCapacityExceeded) {
+      "Kusto Spark read failed because the concurrent export capacity was exceeded."
+    } else if (throttled) {
+      "Kusto Spark read failed because its distributed export was throttled."
+    } else {
+      "Kusto Spark read failed during a distributed export."
+    }
+    val guidance = if (exportCapacityExceeded) {
+      " Reduce concurrent reads or exports against the same Kusto cluster or Eventhouse and retry after backoff." +
+        " If throttling persists, ask the service administrator to review export capacity."
+    } else if (throttled) {
+      " Retry the read after backoff. If throttling persists, ask the service administrator to review the applicable limit."
+    } else {
+      ""
+    }
+    val enriched = new FailedOperationException(
+      s"$reason Distributed reads export query results to temporary storage before Spark reads them." +
+        guidance + s" Connector requestId: $requestId. Original error: ${exception.getMessage}",
+      result)
+    enriched.initCause(exception)
+    enriched
+  }
 
   /**
    * Sets a Hadoop configuration key on both the Hadoop Configuration object and the Spark session
@@ -727,20 +765,25 @@ private[kusto] class KustoReader(client: ExtendedKustoClient) {
       additionalExportOptions = options.additionalExportOptions,
       supportNewParquetWriter = supportNewParquetWriter)
 
-    val commandResult: KustoResultSetTable = client
-      .executeEngine(
+    try {
+      val commandResult: KustoResultSetTable = client
+        .executeEngine(
+          request.kustoCoordinates.database,
+          exportCommand,
+          "exportPartitionToBlob",
+          request.clientRequestProperties.orNull)
+        .getPrimaryResults
+      KDSU.verifyAsyncCommandCompletion(
+        client.engineClient,
         request.kustoCoordinates.database,
-        exportCommand,
-        "exportPartitionToBlob",
-        request.clientRequestProperties.orNull)
-      .getPrimaryResults
-    KDSU.verifyAsyncCommandCompletion(
-      client.engineClient,
-      request.kustoCoordinates.database,
-      commandResult,
-      timeOut = request.timeout,
-      doingWhat = s"export data to  blob directory: ('$directory') preparing it for reading.",
-      loggerName = myName,
-      requestId = request.requestId)
+        commandResult,
+        timeOut = request.timeout,
+        doingWhat = s"export data to  blob directory: ('$directory') preparing it for reading.",
+        loggerName = myName,
+        requestId = request.requestId)
+    } catch {
+      case exception: FailedOperationException =>
+        throw KustoReader.withExportReadContext(exception, request.requestId)
+    }
   }
 }
