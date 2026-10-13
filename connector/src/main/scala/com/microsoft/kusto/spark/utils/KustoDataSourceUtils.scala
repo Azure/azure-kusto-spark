@@ -93,7 +93,6 @@ object KustoDataSourceUtils {
     val requestedPartitions = parameters.get(KustoDebugOptions.KUSTO_NUM_PARTITIONS)
     val partitioningMode = parameters.get(KustoDebugOptions.KUSTO_READ_PARTITION_MODE)
     val numPartitions = setNumPartitions(sqlContext, requestedPartitions, partitioningMode)
-    // Set default export split limit as 1GB, maximal allowed
     val readModeOption = parameters.get(KustoSourceOptions.KUSTO_READ_MODE)
     val readMode: Option[ReadMode] = if (readModeOption.isDefined) {
       Some(ReadMode.withName(readModeOption.get))
@@ -175,7 +174,7 @@ object KustoDataSourceUtils {
         case Some("hash") => sqlContext.getConf("spark.sql.shuffle.partitions", "10").toInt
         // In "auto" mode we don't explicitly partition the data:
         // The data is exported and split to multiple files if required by Kusto 'export' command
-        // The data is then read from the base directory for parquet files and partitioned by the parquet data source
+        // Spark reads the selected export paths and partitions the Parquet input.
         case _ => 1
       }
     }
@@ -776,11 +775,8 @@ object KustoDataSourceUtils {
   }
 
   /**
-   * A function to run sequentially async work on TimerTask using a Timer. The function passed is
-   * scheduled sequentially by the timer, until last calculated returned value by func does not
-   * satisfy the condition of doWhile or a given number of times has passed. After this condition
-   * was satisfied, the finalWork function is called over the last returned value by func. Returns
-   * a CountDownLatch object used to count down iterations and await on it synchronously if needed
+   * Runs func sequentially with backoff while doWhileCondition holds. Calls finalWork when the
+   * condition becomes false. The returned latch is released on completion or a caught exception.
    *
    * @param func
    *   \- the function to run
@@ -789,7 +785,7 @@ object KustoDataSourceUtils {
    * @param delayBeforeEach
    *   \- delay between jobs
    * @param doWhileCondition
-   *   \- go one while the condition holds for the func.apply output
+   *   \- continue while the condition holds for the func.apply output
    * @param finalWork
    *   \- do final work with the last func.apply output
    */

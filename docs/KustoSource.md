@@ -128,7 +128,7 @@ Scala and Java users may take these options from com.microsoft.kusto.spark.datas
   `State: 'Throttled'`, or submission is explicitly rejected with the SDK's HTTP 429 `ThrottleException`.
   There are **at most four attempts total (the initial attempt plus three retries)** per partition. HTTP rejections and
   asynchronous throttling share this limit. Before retries, the nominal delays are **5, 10, and 20 seconds**, each
-  independently randomized by ±50%: **2.5–7.5, 5–15, and 10–30 seconds**, respectively. Jitter prevents competing reads
+  independently randomized by ±50%: **2.5–7.5, 5–15, and 10–30 seconds**, respectively. Jitter reduces the chance of competing reads
   from retrying in lockstep. These are bounded defaults for transient contention, not a guarantee that capacity will
   become available. The asynchronous status response and the SDK's throttling exception do not expose a `Retry-After`
   delay to this retry path.
@@ -144,7 +144,7 @@ Scala and Java users may take these options from com.microsoft.kusto.spark.datas
   does not cancel an export already running on the service. Increasing `timeoutLimit` does not increase the attempt limit.
 
   Every attempt uses a separate temporary directory. Only directories from successfully completed attempts are read
-  by Spark and stored in the transient read cache; successful partitions are not re-exported when another partition is
+  by Spark and, when enabled, stored in the transient read cache; successful partitions are not re-exported when another partition is
   throttled. `Failed`, `PartiallySucceeded`, authorization errors, cancellations, and unknown submission outcomes are
   **not** retried by this path. In particular, the generic command-submission retry policy is disabled for these exports:
   losing a response does not prove an export was rejected, and blindly replaying it could duplicate output. Transient
@@ -162,7 +162,7 @@ Scala and Java users may take these options from com.microsoft.kusto.spark.datas
   In Distributed mode by default the internal Kusto storage accounts are queried and used for ease of the connector. This is not recommended in production scenarios. The storage to be used can be customized by passing [Transient storage parameters](#transient-storage-parameters) parameter specified below. This gives the caller of the read a more granular control on blob security policies as opposed to default blob security policies used by the connector and Kusto. This will also come in useful when Kusto administrators restrict security by applying callout policies on what hosts can traffic be let onto. If traffic is not permitted by administrators to the default internal storage, the read operation will fail for Distributed mode.
 
 * **KUSTO_DISTRIBUTED_READ_MODE_TRANSIENT_CACHE**
-When 'Distributed' read mode is used and this is set to 'true', the request query is exported only once and exported data is reused.
+When 'Distributed' read mode is used and this is set to 'true', successful exported paths are cached and reused on subsequent cache hits. Establishing the cached result may require partition retries.
 
 * **KUSTO_QUERY_FILTER_PUSH_DOWN**
 If set to 'true', query executed on kusto cluster will include the filters.
@@ -170,11 +170,11 @@ If set to 'true', query executed on kusto cluster will include the filters.
   'true' by default if KUSTO_DISTRIBUTED_READ_MODE_TRANSIENT_CACHE=false
 
 * **KUSTO_EXPORT_OPTIONS_JSON**:
-  'kustoExportOptionsJson' - JSON that provides the list of [export options](https://learn.microsoft.com/azure/data-explorer/kusto/management/data-export/export-data-to-storage) in case of distributed read (either because of query limits getting hit or user request for distributed mode). 
+  'kustoExportOptionsJson' - JSON that provides the list of [export options](https://learn.microsoft.com/azure/data-explorer/kusto/management/data-export/export-data-to-storage) for a distributed read, whether selected automatically, explicitly requested, or reached through fallback.
   The export options do not support the _OutputDataFormat_ which is defaulted to _parquet_, _namePrefix_ which is a new directory specifically for the current read,
    _compressionType_ is defaulted to snappy and the command also specifies _compressed_ (to create .snappy.gz files), to turn extra compression off - it can be set to _none_ (**not recommended**)
   i.e .option("kustoExportOptionsJson", "{\"distribution\":\"per_node\"}")
->Note: Connector versions >= 3.1.10 will automatically set useNativeParquetWriter=false if Spark version < 3.3.0 as Kusto service uses now vectorized parquet writer introduced in this version. Do not set to true for lower versions as it will fail. Users are advised to move to Spark 3.3.0 to leverage this new great performance enhancement on both Spark side and Kusto service side.
+>Note: The connector defaults `useNativeParquetWriter` to `false` for Spark versions at or below 3.3.0 unless explicitly overridden in the export options. Older Spark readers may not support the native writer's Parquet encodings.
 
 * **STORAGE_PROTOCOL**:
   'storageProtocol' - Specifies the storage protocol to use when reading from blob storage in distributed mode. 
@@ -194,7 +194,7 @@ If set to 'true', query executed on kusto cluster will include the filters.
   - ABFS with Account Key authentication is not currently supported; use SAS authentication instead
  
 #### Transient Storage Parameters
-When reading data from Kusto in 'distributed' mode, the data is exported from Kusto into a blob storage every time the corresponding RDD is materialized.
+An uncached distributed read exports data from Kusto to temporary storage. A transient read-cache hit reuses the successful exported paths instead of exporting again.
 If the user doesn't specify storage parameters and a 'Distributed' read mode is chosen - the storage used will be provided by Kusto ingest service.
 
 >Note: If the user provides the blob storage - the blobs created are the caller's responsibility. This includes provisioning the storage, rotating access keys,

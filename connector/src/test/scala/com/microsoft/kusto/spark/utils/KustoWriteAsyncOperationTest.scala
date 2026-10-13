@@ -4,10 +4,18 @@
 package com.microsoft.kusto.spark.utils
 
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.microsoft.azure.kusto.data.{Client, ClientRequestProperties, KustoOperationResult, KustoResultSetTable}
+import com.microsoft.azure.kusto.data.{
+  Client,
+  ClientRequestProperties,
+  KustoOperationResult,
+  KustoResultSetTable
+}
 import com.microsoft.azure.kusto.data.exceptions.DataServiceException
 import com.microsoft.kusto.spark.datasink.WriteOptions
-import com.microsoft.kusto.spark.exceptions.{FailedOperationException, TimeoutAwaitingPendingOperationException}
+import com.microsoft.kusto.spark.exceptions.{
+  FailedOperationException,
+  TimeoutAwaitingPendingOperationException
+}
 import org.mockito.ArgumentMatchers.{any, anyString, eq => eqTo, startsWith}
 import org.mockito.Mockito.{mock, times, verify, verifyNoMoreInteractions, when}
 import org.scalatest.flatspec.AnyFlatSpec
@@ -22,8 +30,10 @@ class KustoWriteAsyncOperationTest extends AnyFlatSpec with Matchers {
   private val database = "test-database"
   private val source = "staging"
   private val target = "destination"
-  private val dropCommand = CslCommandsGenerator.generateExtentTagsDropByPrefixCommand(source, "dedup")
-  private val mvCommand = CslCommandsGenerator.generateIsTableMaterializedViewSourceCommand(target)
+  private val dropCommand =
+    CslCommandsGenerator.generateExtentTagsDropByPrefixCommand(source, "dedup")
+  private val mvCommand =
+    CslCommandsGenerator.generateIsTableMaterializedViewSourceCommand(target)
   private val movePrefix = s".move async extents to table $target "
   private val mapper = new ObjectMapper()
 
@@ -58,8 +68,10 @@ class KustoWriteAsyncOperationTest extends AnyFlatSpec with Matchers {
       }
     }
 
-    def pollCommand(index: Int): String = CslCommandsGenerator.generateOperationsShowCommand(ids(index))
-    def detailsCommand(index: Int): String = CslCommandsGenerator.generateShowOperationDetails(ids(index))
+    def pollCommand(index: Int): String =
+      CslCommandsGenerator.generateOperationsShowCommand(ids(index))
+    def detailsCommand(index: Int): String =
+      CslCommandsGenerator.generateShowOperationDetails(ids(index))
 
     when(engine.executeMgmt(anyString(), anyString(), any[ClientRequestProperties]()))
       .thenAnswer { invocation =>
@@ -73,7 +85,8 @@ class KustoWriteAsyncOperationTest extends AnyFlatSpec with Matchers {
             """{"Tables":[{"TableName":"Table_0","Columns":[{"ColumnName":"Count","DataType":"Int64","ColumnType":"long"}],"Rows":[[0]]}]}""",
             "v1")
         } else {
-          val index = ids.indices.find(i => command == detailsCommand(i))
+          val index = ids.indices
+            .find(i => command == detailsCommand(i))
             .getOrElse(throw new IllegalArgumentException(s"Unexpected command: $command"))
           response(
             Seq("SourceExtentId", "TargetExtentId", "Details"),
@@ -82,7 +95,8 @@ class KustoWriteAsyncOperationTest extends AnyFlatSpec with Matchers {
       }
     when(engine.executeMgmt(anyString(), anyString())).thenAnswer { invocation =>
       val command = invocation.getArgument[String](1)
-      val index = ids.indices.find(i => command == pollCommand(i))
+      val index = ids.indices
+        .find(i => command == pollCommand(i))
         .getOrElse(throw new IllegalArgumentException(s"Unexpected poll: $command"))
       val result = response(
         Seq("OperationId", "State", "Status"),
@@ -93,24 +107,41 @@ class KustoWriteAsyncOperationTest extends AnyFlatSpec with Matchers {
 
     def drop(timeout: FiniteDuration = 5.seconds): Option[KustoResultSetTable] =
       client.retryAsyncOp(
-        database, dropCommand, new ClientRequestProperties(), timeout,
-        "drop dedup tags", "extentsDrop", "write-test")
+        database,
+        dropCommand,
+        new ClientRequestProperties(),
+        timeout,
+        "drop dedup tags",
+        "extentsDrop",
+        "write-test")
 
     def move(totalAmount: Int): Unit =
       client.moveExtentsWithRetries(
-        Some(2), totalAmount, database, source, target, Instant.EPOCH,
+        Some(2),
+        totalAmount,
+        database,
+        source,
+        target,
+        Instant.EPOCH,
         new ClientRequestProperties(),
         WriteOptions(
           timeout = 5.seconds,
           requestId = "write-test",
-          kustoCustomDebugWriteOptions = KustoCustomDebugWriteOptions(maxRetriesOnMoveExtents = 2)))
+          kustoCustomDebugWriteOptions =
+            KustoCustomDebugWriteOptions(maxRetriesOnMoveExtents = 2)))
 
     def verifyDropSubmissions(count: Int): Unit =
-      verify(engine, times(count)).executeMgmt(eqTo(database), eqTo(dropCommand), any[ClientRequestProperties]())
+      verify(engine, times(count)).executeMgmt(
+        eqTo(database),
+        eqTo(dropCommand),
+        any[ClientRequestProperties]())
 
     def verifyMoveSubmissions(count: Int): Unit = {
       verify(engine).executeMgmt(eqTo(database), eqTo(mvCommand), any[ClientRequestProperties]())
-      verify(engine, times(count)).executeMgmt(eqTo(database), startsWith(movePrefix), any[ClientRequestProperties]())
+      verify(engine, times(count)).executeMgmt(
+        eqTo(database),
+        startsWith(movePrefix),
+        any[ClientRequestProperties]())
     }
   }
 
@@ -182,7 +213,10 @@ class KustoWriteAsyncOperationTest extends AnyFlatSpec with Matchers {
       states.indices.foreach { i =>
         verify(f.engine).executeMgmt(database, f.pollCommand(i))
         if (states(i) == "Completed") {
-          verify(f.engine).executeMgmt(eqTo(database), eqTo(f.detailsCommand(i)), any[ClientRequestProperties]())
+          verify(f.engine).executeMgmt(
+            eqTo(database),
+            eqTo(f.detailsCommand(i)),
+            any[ClientRequestProperties]())
         }
       }
       verifyNoMoreInteractions(f.engine)

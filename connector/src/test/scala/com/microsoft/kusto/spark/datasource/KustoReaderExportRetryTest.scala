@@ -317,10 +317,10 @@ class KustoReaderExportRetryTest extends AnyFlatSpec with Matchers {
 
     error.getMessage shouldBe
       "Kusto Spark read failed because its distributed export submission was throttled (HTTP 429)." +
-        " Distributed reads export query results to temporary storage before Spark reads them." +
-        " Retry the read after backoff. If throttling persists, ask the service administrator to review the applicable limit." +
-        " Automatic export retries exhausted after 4 attempts." +
-        s" Connector requestId: $requestId. Original error: ${original.getMessage}"
+      " Distributed reads export query results to temporary storage before Spark reads them." +
+      " Retry the read after backoff. If throttling persists, ask the service administrator to review the applicable limit." +
+      " Automatic export retries exhausted after 4 attempts." +
+      s" Connector requestId: $requestId. Original error: ${original.getMessage}"
     error.getCause should be theSameInstanceAs original
     error.getResult shouldBe None
     fixture.commands.size shouldBe 4
@@ -487,7 +487,7 @@ class KustoReaderExportRetryTest extends AnyFlatSpec with Matchers {
       "wasbs",
       (_, directory) => {
         probed += directory
-        // Failed-attempt files are present too; only successful leaves may be probed/read.
+        // Model both failed and successful directories as existing; probe only successful leaves.
         fixture.directories.contains(directory)
       })
 
@@ -502,7 +502,6 @@ class KustoReaderExportRetryTest extends AnyFlatSpec with Matchers {
       s"wasbs://testcontainer@teststorage.blob.core.windows.net/$dir")
     paths.exists(_.contains(fixture.directories(1))) shouldBe false
     paths.exists(_.endsWith(root)) shouldBe false
-    DistributedReadModeTransientCacheEntry(paths, fixture.storage, "wasbs").paths shouldBe paths
   }
 
   it should "stop at an exhausted partition without exporting later partitions" in {

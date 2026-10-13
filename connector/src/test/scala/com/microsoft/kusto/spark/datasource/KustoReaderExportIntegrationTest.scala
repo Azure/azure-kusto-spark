@@ -17,6 +17,7 @@ import org.apache.parquet.example.data.simple.SimpleGroupFactory
 import org.apache.parquet.hadoop.example.ExampleParquetWriter
 import org.apache.parquet.io.LocalOutputFile
 import org.apache.parquet.schema.MessageTypeParser
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.types.{LongType, StructField, StructType}
 import org.mockito.MockMakers
@@ -44,33 +45,45 @@ class KustoReadbackFileSystem extends RawLocalFileSystem {
     if (!status.isDirectory) Array(status)
     else {
       val children = Files.list(pathToFile(path).toPath)
-      try children.iterator().asScala.map(child =>
-        getFileStatus(new HadoopPath(path, child.getFileName.toString))).toArray
+      try
+        children
+          .iterator()
+          .asScala
+          .map(child => getFileStatus(new HadoopPath(path, child.getFileName.toString)))
+          .toArray
       finally children.close()
     }
   }
 }
 
-/** Validates SDK HTTP -> export directory selection -> local Parquet, not cloud filesystem setup. */
+/**
+ * Validates SDK HTTP -> export directory selection -> local Parquet, not cloud filesystem setup.
+ */
 class KustoReaderExportIntegrationTest extends AnyFlatSpec with Matchers {
   private val mapper = new ObjectMapper()
   private val database = "local-export-test"
   private val requestId = "local-export-integration"
   private val namePrefix = """namePrefix="([^"]+)"""".r
-  private val capacity = "CommandType: 'DataExportToFile', Capacity: 1, Origin: 'CapacityPolicy/Export'."
+  private val capacity =
+    "CommandType: 'DataExportToFile', Capacity: 1, Origin: 'CapacityPolicy/Export'."
 
   private case class Outcome(
       submissionStatus: Int = 200,
       state: String = "Completed",
       pollStatuses: Seq[Int] = Seq(200))
-  private case class Export(csl: String, clientRequestId: String, outcome: Outcome, operationId: String) {
+  private case class Export(
+      csl: String,
+      clientRequestId: String,
+      outcome: Outcome,
+      operationId: String) {
     def prefix: String = namePrefix.findFirstMatchIn(csl).get.group(1)
     def directory: String = prefix.replaceFirst("part[0-9]+$", "")
   }
 
   private def table(columns: Seq[String], values: Seq[String]): String = {
-    val columnJson = columns.map(name =>
-      s"""{"ColumnName":"$name","DataType":"String","ColumnType":"string"}""").mkString(",")
+    val columnJson = columns
+      .map(name => s"""{"ColumnName":"$name","DataType":"String","ColumnType":"string"}""")
+      .mkString(",")
     val row = values.map(mapper.writeValueAsString).mkString(",")
     s"""{"Tables":[{"TableName":"Table_0","Columns":[$columnJson],"Rows":[[$row]]}]}"""
   }
@@ -81,7 +94,8 @@ class KustoReaderExportIntegrationTest extends AnyFlatSpec with Matchers {
     val delays = mutable.ArrayBuffer.empty[Long]
     private val handlerFailure = new AtomicReference[Throwable]()
     private val executor = Executors.newSingleThreadExecutor()
-    private val server = HttpServer.create(new InetSocketAddress(InetAddress.getByName("localhost"), 0), 0)
+    private val server =
+      HttpServer.create(new InetSocketAddress(InetAddress.getByName("localhost"), 0), 0)
     private val operations = mutable.Map.empty[String, (Outcome, Int)]
     private var closeTransport: () => Unit = () => ()
     private lazy val transport = {
@@ -93,7 +107,8 @@ class KustoReaderExportIntegrationTest extends AnyFlatSpec with Matchers {
       created
     }
     private val endpoint = s"http://localhost:${server.getAddress.getPort}"
-    private val csb = ConnectionStringBuilder.createWithAadAccessTokenAuthentication(endpoint, "unused")
+    private val csb =
+      ConnectionStringBuilder.createWithAadAccessTokenAuthentication(endpoint, "unused")
     private val client = new ExtendedKustoClient(csb, csb, "localhost") {
       override lazy val engineClient: Client = ClientFactory.createClient(csb, transport)
     }
@@ -113,8 +128,10 @@ class KustoReaderExportIntegrationTest extends AnyFlatSpec with Matchers {
       2.minutes,
       Some(crp),
       requestId)
-    private val storage = new TransientStorageParameters(Array(new TransientStorageCredentials(
-      "https://dummyaccount.blob.core.windows.net/dummycontainer?sig=unused")))
+    private val storage = new TransientStorageParameters(
+      Array(
+        new TransientStorageCredentials(
+          "https://dummyaccount.blob.core.windows.net/dummycontainer?sig=unused")))
 
     private def reply(exchange: HttpExchange, status: Int, body: String): Unit = {
       val bytes = body.getBytes(UTF_8)
@@ -136,28 +153,44 @@ class KustoReaderExportIntegrationTest extends AnyFlatSpec with Matchers {
           val csl = json.path("csl").asText()
           if (csl.startsWith(".export async ")) {
             val index = exports.size()
-            val currentTestOutcome = outcomes.lift(index).getOrElse(
-              throw new IllegalStateException(s"Unexpected export submission ${index + 1}"))
+            val currentTestOutcome = outcomes
+              .lift(index)
+              .getOrElse(
+                throw new IllegalStateException(s"Unexpected export submission ${index + 1}"))
             val operationId = new UUID(0, index.toLong + 1).toString
-            exports.add(Export(csl, exchange.getRequestHeaders.getFirst("x-ms-client-request-id"),
-              currentTestOutcome, operationId))
+            exports.add(
+              Export(
+                csl,
+                exchange.getRequestHeaders.getFirst("x-ms-client-request-id"),
+                currentTestOutcome,
+                operationId))
             if (currentTestOutcome.submissionStatus == 200) {
               operations(operationId) = (currentTestOutcome, 0)
               reply(exchange, 200, table(Seq("OperationId"), Seq(operationId)))
-            } else reply(exchange, currentTestOutcome.submissionStatus,
-              """{"message":"submission outcome unknown"}""")
+            } else
+              reply(
+                exchange,
+                currentTestOutcome.submissionStatus,
+                """{"message":"submission outcome unknown"}""")
           } else {
             require(csl.startsWith(".show operations "), s"Unexpected management command: $csl")
             val operationId = csl.stripPrefix(".show operations ")
             val (currentTestOutcome, index) = operations(operationId)
-            val status = currentTestOutcome.pollStatuses.lift(index).getOrElse(
-              throw new IllegalStateException(s"Unexpected extra poll for $operationId"))
+            val status = currentTestOutcome.pollStatuses
+              .lift(index)
+              .getOrElse(
+                throw new IllegalStateException(s"Unexpected extra poll for $operationId"))
             operations(operationId) = (currentTestOutcome, index + 1)
             polls.add((operationId, status))
-            val body = if (status == 200) table(Seq("OperationId", "State", "Status"),
-              Seq(operationId, currentTestOutcome.state,
-                if (currentTestOutcome.state == "Throttled") capacity else ""))
-            else """{"message":"status lookup throttled"}"""
+            val body =
+              if (status == 200)
+                table(
+                  Seq("OperationId", "State", "Status"),
+                  Seq(
+                    operationId,
+                    currentTestOutcome.state,
+                    if (currentTestOutcome.state == "Throttled") capacity else ""))
+              else """{"message":"status lookup throttled"}"""
             reply(exchange, status, body)
           }
         case path => throw new IllegalStateException(s"Unexpected SDK route: $path")
@@ -166,32 +199,43 @@ class KustoReaderExportIntegrationTest extends AnyFlatSpec with Matchers {
 
     def start(): Unit = {
       server.setExecutor(executor)
-      server.createContext("/", new HttpHandler {
-        override def handle(exchange: HttpExchange): Unit = {
-          try Fixture.this.handle(exchange)
-          catch {
-            case NonFatal(error) =>
-              handlerFailure.compareAndSet(null, error)
-              reply(exchange, 500, """{"message":"local fixture failure"}""")
-          } finally exchange.close()
-        }
-      })
+      server.createContext(
+        "/",
+        new HttpHandler {
+          override def handle(exchange: HttpExchange): Unit = {
+            try Fixture.this.handle(exchange)
+            catch {
+              case NonFatal(error) =>
+                handlerFailure.compareAndSet(null, error)
+                reply(exchange, 500, """{"message":"local fixture failure"}""")
+            } finally exchange.close()
+          }
+        })
       server.start()
     }
 
     def run(partitions: Int = 1): Seq[String] = reader.exportPartitionsToBlob(
-      (0 until partitions).map(id => KustoPartition(None, id)), request, storage, "read/",
-      KustoReadOptions(partitionOptions = PartitionOptions(partitions, None, Some("hash")),
-        queryFilterPushDown = None), KustoFiltering())
+      (0 until partitions).map(id => KustoPartition(None, id)),
+      request,
+      storage,
+      "read/",
+      KustoReadOptions(
+        partitionOptions = PartitionOptions(partitions, None, Some("hash")),
+        queryFilterPushDown = None),
+      KustoFiltering())
 
     def close(): Unit = {
       try server.stop(0)
       finally {
         executor.shutdownNow()
-        try assert(executor.awaitTermination(5, TimeUnit.SECONDS), "HTTP executor did not terminate")
+        try
+          assert(
+            executor.awaitTermination(5, TimeUnit.SECONDS),
+            "HTTP executor did not terminate")
         finally closeTransport()
       }
-      Option(handlerFailure.get()).foreach(error => throw new AssertionError("HTTP fixture failed", error))
+      Option(handlerFailure.get()).foreach(error =>
+        throw new AssertionError("HTTP fixture failed", error))
     }
   }
 
@@ -208,28 +252,34 @@ class KustoReaderExportIntegrationTest extends AnyFlatSpec with Matchers {
     try {
       fixture.start()
       test(fixture)
-    }
-    finally fixture.close()
+    } finally fixture.close()
   }
 
   private def withLocalSpark(test: (SparkSession, Path) => Unit): Unit = {
     val previousActive = SparkSession.getActiveSession
     val previousDefault = SparkSession.getDefaultSession
     val root = Files.createTempDirectory("kusto-export-integration-")
-    var owned: Option[SparkSession] = None
+    var ownedContext: Option[SparkContext] = None
     try {
-      val spark = previousActive.orElse(previousDefault).filterNot(_.sparkContext.isStopped) match {
+      val existingSession = previousActive
+        .filterNot(_.sparkContext.isStopped)
+        .orElse(previousDefault.filterNot(_.sparkContext.isStopped))
+      val spark = existingSession match {
         case Some(existing) =>
-          require(existing.sparkContext.master.startsWith("local"), "Parquet regression requires local Spark")
+          require(
+            existing.sparkContext.master.startsWith("local"),
+            "Parquet regression requires local Spark")
           existing.newSession()
         case None =>
-          val created = SparkSession.builder().master("local[1]")
-            .appName("KustoReaderExportIntegrationTest")
-            .config("spark.ui.enabled", "false")
-            .config("spark.sql.warehouse.dir", root.resolve("warehouse").toUri.toString)
-            .getOrCreate()
-          owned = Some(created)
-          created
+          // Own the context explicitly; a session builder can reuse another suite's context.
+          val context = new SparkContext(
+            new SparkConf()
+              .setMaster("local[1]")
+              .setAppName("KustoReaderExportIntegrationTest")
+              .set("spark.ui.enabled", "false")
+              .set("spark.sql.warehouse.dir", root.resolve("warehouse").toUri.toString))
+          ownedContext = Some(context)
+          SparkSession.builder().getOrCreate()
       }
       val conf = spark.sparkContext.hadoopConfiguration
       val settings = Map(
@@ -248,14 +298,16 @@ class KustoReaderExportIntegrationTest extends AnyFlatSpec with Matchers {
         }
       }
     } finally {
-      try owned.foreach(_.stop())
+      try ownedContext.foreach(_.stop())
       finally {
         SparkSession.clearActiveSession()
         SparkSession.clearDefaultSession()
         previousActive.foreach(SparkSession.setActiveSession)
         previousDefault.foreach(SparkSession.setDefaultSession)
         val paths = Files.walk(root)
-        val created = try paths.iterator().asScala.toVector finally paths.close()
+        val created =
+          try paths.iterator().asScala.toVector
+          finally paths.close()
         created.sortBy(_.getNameCount).reverse.foreach(Files.delete(_))
       }
     }
@@ -298,14 +350,21 @@ class KustoReaderExportIntegrationTest extends AnyFlatSpec with Matchers {
         sent.zip(Seq(999L, 10L, 20L)).foreach { case (attempt, value) =>
           val path = root.resolve(attempt.directory)
           Files.createDirectories(path)
-          val schema = MessageTypeParser.parseMessageType("message export { required int64 value; }")
+          val schema =
+            MessageTypeParser.parseMessageType("message export { required int64 value; }")
           // NIO fixture writes avoid Hadoop's Windows-only winutils prerequisite.
-          val writer = ExampleParquetWriter.builder(new LocalOutputFile(path.resolve("part.parquet")))
-            .withType(schema).build()
+          val writer = ExampleParquetWriter
+            .builder(new LocalOutputFile(path.resolve("part.parquet")))
+            .withType(schema)
+            .build()
           try writer.write(new SimpleGroupFactory(schema).newGroup().append("value", value))
           finally writer.close()
         }
-        spark.read.parquet(local(sent.head.directory)).collect().map(_.getLong(0)).toSeq shouldBe Seq(999L)
+        spark.read
+          .parquet(local(sent.head.directory))
+          .collect()
+          .map(_.getLong(0))
+          .toSeq shouldBe Seq(999L)
         val successDirs = directories.map(local)
         val rows = spark.read.parquet(successDirs: _*).collect().map(_.getLong(0)).sorted.toSeq
         rows shouldBe Seq(10L, 20L)
@@ -320,7 +379,9 @@ class KustoReaderExportIntegrationTest extends AnyFlatSpec with Matchers {
       val sent = f.exports.asScala.toSeq
       sent.size shouldBe 1
       directories shouldBe Seq(sent.head.directory)
-      f.polls.asScala.toSeq shouldBe Seq((sent.head.operationId, 429), (sent.head.operationId, 200))
+      f.polls.asScala.toSeq shouldBe Seq(
+        (sent.head.operationId, 429),
+        (sent.head.operationId, 200))
       f.delays shouldBe empty
     }
   }

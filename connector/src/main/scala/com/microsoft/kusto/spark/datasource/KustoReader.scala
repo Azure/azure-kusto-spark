@@ -80,10 +80,8 @@ private[kusto] case class DistributedReadModeTransientCacheKey(
     enableExportStorageApi: Boolean)
 
 /**
- * A previously exported result set: the parquet paths together with the storage credentials and
- * protocol they must be read with. The credentials are needed on every cache hit because the
- * Hadoop/Spark configuration they install is session global and may have been overwritten by
- * another read in the meantime.
+ * Cached export paths and storage settings. ABFS cache hits reinstall credentials because
+ * account-scoped Hadoop/Spark configuration may have changed since the export.
  */
 private[kusto] case class DistributedReadModeTransientCacheEntry(
     paths: Seq[String],
@@ -164,12 +162,8 @@ object KustoReader {
   }
 
   /**
-   * Sets a Hadoop configuration key only when nothing is configured for it yet, so that
-   * session-wide settings owned by the hosting runtime are never overwritten by the connector.
-   * Only the Hadoop Configuration is probed and written here on purpose: this is used for
-   * filesystem implementation keys, which are resolved exclusively from the Hadoop Configuration
-   * (spark.hadoop.* is copied into it at session start, never read back), so mirroring an
-   * inherited value into the session conf would only pin a runtime owned implementation.
+   * Preserves an existing Hadoop configuration value. When absent, sets the default in both
+   * Hadoop and Spark session configuration without mirroring an inherited implementation.
    */
   private def setHadoopConfIfAbsent(
       config: Configuration,
@@ -187,11 +181,7 @@ object KustoReader {
     DistributedReadModeTransientCacheKey,
     DistributedReadModeTransientCacheEntry] =
     new concurrent.TrieMap()
-  /*
-  A new native implementation of Parquet writer that uses new encoding schemes was rolled out on the ADX side. This uses delta byte array for strings and other byte array-based Parquet types (default in Parquet V2 which most modern parquet readers support by default).
-  To avoid breaking changes for applications, if the runtime is on a lower version than 3.3.0 of spark runtime we explicitly set the ADX export to not use the useNativeIngestion
-  TODO - add test
-   */
+  // Unless explicitly overridden, disable the native Parquet writer at or below this version.
   private val minimalParquetWriterVersion = "3.3.0"
   private[kusto] def singleBuildScan(
       kustoClient: ExtendedKustoClient,
@@ -249,11 +239,7 @@ object KustoReader {
           className,
           "Fetching from distributedReadModeTransientCache: hit, reusing cached export paths")
         val cached = distributedReadModeTransientCache(key)
-        // ABFS resolves credentials per storage account, so another read of the same account,
-        // another Spark session or a fresh Hadoop Configuration may have left the account
-        // scoped keys holding a different token since this entry was created - reinstall them.
-        // WASBS keys are container scoped and were never clobbered, so nothing is done there,
-        // exactly as before.
+        // Reinstall account-scoped ABFS credentials before reusing cached paths.
         if (isAbfsProtocol(cached.storageProtocol)) {
           setupBlobAccess(request, cached.storage, cached.storageProtocol, forceRefresh = true)
         }
@@ -344,7 +330,6 @@ object KustoReader {
         case _ => throw new InvalidParameterException("")
       }
       val exists = container.listBlobsByHierarchy(directory).stream().count() > 0
-      // Existing logic container.exists() && container.getDirectoryReference(directory).listBlobsSegmented().getLength > 0
       exists
     }
   }
@@ -368,7 +353,7 @@ object KustoReader {
       else options.storageProtocol.getOrElse(KCONST.storageProtocolWasbs)
     // ABFS resolves SAS tokens per storage account (never per container), so two containers
     // of the same account carrying different SAS tokens cannot both be configured. Keep a
-    // single container per account in that case to avoid reading with the wrong token.
+    // single credential per account in that case, retaining containers that share it.
     val exportStorage =
       if (isAbfsProtocol(protocol)) dedupeConflictingCredentials(storage) else storage
     setupBlobAccess(request, exportStorage, protocol)
@@ -572,12 +557,8 @@ object KustoReader {
       className,
       s"Setting up SAS auth for ${storage.storageAccountName}/${storage.blobContainer}, key: $sasConfigKey")
 
-    // The cache must mirror what is actually installed, but ABFS keys are account scoped: a
-    // sibling container of the same account, a second Spark session or a fresh Hadoop
-    // Configuration can all leave the account key holding a different token while the
-    // per-container cache entry still reports a hit. Config writes are cheap, so always
-    // (re)install them for ABFS and keep the cache only for the WASBS keys, which are
-    // container scoped and therefore never clobber each other.
+    // Always install account-scoped ABFS settings: a cache hit does not verify session state.
+    // WASBS retains its container-scoped setup cache.
     val wasCached = !forceRefresh && !useAbfs && KustoAzureFsSetupCache.updateAndGetPrevSas(
       storage.blobContainer,
       storage.storageAccountName,
@@ -911,7 +892,7 @@ private[kusto] class KustoReader(client: ExtendedKustoClient) {
     attempt(1)
   }
 
-  // Preserve the single-attempt API and its caller-supplied output directory.
+  // Uses the caller-supplied output directory and the existing submission retry policy.
   private[kusto] def exportPartitionToBlob(
       partition: KustoPartition,
       request: KustoReadRequest,
@@ -949,8 +930,7 @@ private[kusto] class KustoReader(client: ExtendedKustoClient) {
     if (!supportNewParquetWriter) {
       KDSU.logWarn(
         myName,
-        "Setting useNativeParquetWriter=false. Users are advised to move to Spark versions >= 3.3.0 to leverage the performance and cost improvements of" +
-          "new encoding schemes introduced in both Kusto parquet files write and Spark parquet read")
+        "For this Spark version, useNativeParquetWriter defaults to false unless explicitly overridden.")
     }
     val exportCommand = CslCommandsGenerator.generateExportDataCommand(
       query = KustoFilter.pruneAndFilter(request.schema, request.query, filtering),
