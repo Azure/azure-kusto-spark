@@ -136,6 +136,8 @@ jobs:
       echo "##vso[task.setvariable variable=SCALA_VERSION]${scala_version}"
       echo "##vso[task.setvariable variable=SPARK_VERSION]${spark_version}"
     displayName: Stage release artifacts
+    env:
+      MAVEN_OPTS: -Dmaven.repo.local=$(Pipeline.Workspace)/.m2/repository
 
   - bash: |
       set -euo pipefail

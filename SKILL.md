@@ -130,8 +130,8 @@ If information is missing, the agent should ask for:
 | Spark 4 tag format | `v4.0_{version}` (e.g., `v4.0_7.0.5`) |
 | Spark 3 tag format | `v3.0_{version}` (e.g., `v3.0_7.0.5`) |
 | Version property | `<revision>` in root `pom.xml` |
-| CI workflow | `.github/workflows/build.yml` — runs on all pushes and PRs |
-| Release workflow | `.github/workflows/release.yml` — triggers on tags matching `v[34].0_*` or via manual dispatch |
+| CI pipeline | `.azuredevops/build.yml` — Azure Pipelines build, runs on pushes and PRs |
+| Release pipeline | `.azuredevops/release.yml` — Azure Pipelines release, triggers on tags matching `v3.0_*.*.*` / `v4.0_*.*.*` or via manual run |
 | Merge strategy | **Squash merge** for all PRs |
 | Changelog | `CHANGELOG.md` in repo root |
 
@@ -576,27 +576,25 @@ git push origin "v3.0_${NEW_VERSION}"
 
 ### Trigger Release
 
-After pushing tags, the release pipeline (`.github/workflows/release.yml`) needs to be triggered manually via `workflow_dispatch`:
+After pushing tags, the Azure release pipeline (`.azuredevops/release.yml`) runs automatically for tags matching `v3.0_*.*.*` / `v4.0_*.*.*`. To run it manually (for example to publish with the optional steps enabled):
 
-1. Go to **GitHub → Actions → release workflow**
-2. Click **Run workflow**
-3. For Spark 4: set tag to `v4.0_{NEW_VERSION}`, enable `github_release: true` and `upload_to_azure: true`
-4. For Spark 3: set tag to `v3.0_{NEW_VERSION}`, enable `github_release: true` and `upload_to_azure: true`
+1. Go to **Azure DevOps → Pipelines → the azure-kusto-spark release pipeline**
+2. Click **Run pipeline**
+3. For Spark 4: set `sourceTag` to `v4.0_{NEW_VERSION}`, enable `createGitHubRelease` and `uploadToAzure`
+4. For Spark 3: set `sourceTag` to `v3.0_{NEW_VERSION}`, enable `createGitHubRelease` and `uploadToAzure`
 
-Alternatively, via GitHub CLI:
+Alternatively, via Azure CLI (requires the `azure-devops` extension):
 
 ```bash
 # Trigger release for Spark 4
-gh workflow run release.yml \
-  -f tag="v4.0_${NEW_VERSION}" \
-  -f github_release=true \
-  -f upload_to_azure=true
+az pipelines run --name "<release-pipeline-name>" \
+  --branch "refs/tags/v4.0_${NEW_VERSION}" \
+  --parameters sourceTag="v4.0_${NEW_VERSION}" createGitHubRelease=true uploadToAzure=true
 
 # Trigger release for Spark 3
-gh workflow run release.yml \
-  -f tag="v3.0_${NEW_VERSION}" \
-  -f github_release=true \
-  -f upload_to_azure=true
+az pipelines run --name "<release-pipeline-name>" \
+  --branch "refs/tags/v3.0_${NEW_VERSION}" \
+  --parameters sourceTag="v3.0_${NEW_VERSION}" createGitHubRelease=true uploadToAzure=true
 ```
 
 ### Validation
@@ -606,8 +604,8 @@ gh workflow run release.yml \
 git ls-remote --tags origin | grep "${NEW_VERSION}"
 # Should show both v4.0_{NEW_VERSION} and v3.0_{NEW_VERSION}
 
-# Check release workflow status (via GitHub CLI)
-gh run list --workflow=release.yml --limit=4
+# Check release pipeline status (via Azure CLI)
+az pipelines runs list --pipeline-name "<release-pipeline-name>" --top 4
 # Should show two runs (one per tag) in progress or completed
 ```
 
@@ -645,9 +643,9 @@ gh run list --workflow=release.yml --limit=4
 - Ask the user whether to use a different version number or delete the existing tag
 
 ### Release workflow failure
-- Check the workflow run logs: `gh run view <run-id> --log-failed`
-- Common issues: missing secrets, Maven build failure, Azure storage upload failure
-- Re-trigger the workflow after fixing the issue
+- Check the pipeline run logs in Azure DevOps (`az pipelines runs show --id <run-id>`)
+- Common issues: missing variable group values or service connection approval, Maven build failure, Azure storage upload failure
+- Re-run the pipeline after fixing the issue
 
 ## Rules
 
