@@ -124,12 +124,34 @@ Scala and Java users may take these options from com.microsoft.kusto.spark.datas
   exports share this capacity; this is not the same as query-concurrency throttling or a query-memory error. Spark evaluates
   reads lazily, so this source-read failure can surface at a downstream action such as `.save()`.
 
-  Reduce or stagger concurrent reads/exports and retry after backoff. If throttling persists, ask the service administrator
-  to review effective export capacity. The connector retries some transient command-submission failures, but does not
-  automatically resubmit an accepted export whose asynchronous operation later becomes `Throttled`. Increasing `timeoutLimit`
-  does not restart an aborted export. Failed exports can leave artifacts in temporary storage; see
+  The connector automatically resubmits a distributed-read partition when its asynchronous operation reports
+  `State: 'Throttled'`, or submission is explicitly rejected with the SDK's HTTP 429 `ThrottleException`.
+  There are **at most four attempts total (the initial attempt plus three retries)** per partition. HTTP rejections and
+  asynchronous throttling share this limit. Before retries, the nominal delays are **5, 10, and 20 seconds**, each
+  independently randomized by ±50%: **2.5–7.5, 5–15, and 10–30 seconds**, respectively. Jitter prevents competing reads
+  from retrying in lockstep. These are bounded defaults for transient contention, not a guarantee that capacity will
+  become available. The asynchronous status response and the SDK's throttling exception do not expose a `Retry-After`
+  delay to this retry path.
+
+  Each partition shares its original `timeoutLimit` budget across submissions, polling, and retry backoff; retries do
+  not reset that budget. If the next delay does not fit, the latest throttling failure is returned immediately. Deadline
+  expiry and interruption stop polling/retries. This is not a hard deadline for an in-flight synchronous SDK call and
+  does not cancel an export already running on the service. Increasing `timeoutLimit` does not increase the attempt limit.
+
+  Every attempt uses a separate temporary directory. Only directories from successfully completed attempts are read
+  by Spark and stored in the transient read cache; successful partitions are not re-exported when another partition is
+  throttled. `Failed`, `PartiallySucceeded`, authorization errors, cancellations, and unknown submission outcomes are
+  **not** retried by this path. In particular, the generic command-submission retry policy is disabled for these exports:
+  losing a response does not prove an export was rejected, and blindly replaying it could duplicate output. Transient
+  status-lookup failures continue polling the same operation instead of starting another export.
+
+  Reduce or stagger concurrent reads/exports if throttling persists, and ask the service administrator to review
+  effective export capacity. Retries add latency and some service load; they do not solve sustained capacity shortages.
+  Retried queries can observe newer source data, so this is not a point-in-time snapshot guarantee. Failed exports can
+  leave artifacts in temporary storage; the connector excludes them from readback but does not delete them or change
+  the caller's storage lifecycle policy. See
   [export failure behavior](https://learn.microsoft.com/en-us/kusto/management/data-export/export-data-to-storage#failures-during-export-commands).
-  If retrying an entire pipeline, ensure its downstream writes are safe to repeat.
+  If retrying an entire pipeline outside the connector, ensure its downstream writes are safe to repeat.
 
   **Storage security**
   In Distributed mode by default the internal Kusto storage accounts are queried and used for ease of the connector. This is not recommended in production scenarios. The storage to be used can be customized by passing [Transient storage parameters](#transient-storage-parameters) parameter specified below. This gives the caller of the read a more granular control on blob security policies as opposed to default blob security policies used by the connector and Kusto. This will also come in useful when Kusto administrators restrict security by applying callout policies on what hosts can traffic be let onto. If traffic is not permitted by administrators to the default internal storage, the read operation will fail for Distributed mode.
