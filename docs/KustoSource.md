@@ -133,6 +133,11 @@ Scala and Java users may take these options from com.microsoft.kusto.spark.datas
   become available. The asynchronous status response and the SDK's throttling exception do not expose a `Retry-After`
   delay to this retry path.
 
+  When throttling retries stop because of the attempt limit or insufficient backoff budget, the connector reports a
+  `FailedOperationException` with read/export context, the retry summary, and the connector request ID. For HTTP 429
+  submission failures, the original SDK `ThrottleException` is preserved as the cause; HTTP 429 alone is not labeled
+  export-capacity exhaustion because other service limits can also cause it.
+
   Each partition shares its original `timeoutLimit` budget across submissions, polling, and retry backoff; retries do
   not reset that budget. If the next delay does not fit, the latest throttling failure is returned immediately. Deadline
   expiry and interruption stop polling/retries. This is not a hard deadline for an in-flight synchronous SDK call and

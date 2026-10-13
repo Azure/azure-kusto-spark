@@ -108,17 +108,24 @@ object KustoReader {
     exception.getResult.flatMap(table => Try(table.getString(name)).toOption.flatMap(Option(_)))
 
   private def withExportReadContext(
-      exception: FailedOperationException,
+      exception: Exception,
       requestId: String,
       retrySummary: String = ""): FailedOperationException = {
-    val result = exception.getResult
+    val result = exception match {
+      case failed: FailedOperationException => failed.getResult
+      case _ => None
+    }
     // Read the current operation row without advancing the cursor or masking the original error.
-    def field(name: String): Option[String] = operationField(exception, name)
+    def field(name: String): Option[String] =
+      result.flatMap(table => Try(table.getString(name)).toOption.flatMap(Option(_)))
 
-    val throttled = field("State").contains("Throttled")
+    val submissionThrottled = exception.isInstanceOf[ThrottleException]
+    val throttled = submissionThrottled || field("State").contains("Throttled")
     val exportCapacityExceeded = throttled && field("Status").exists(status =>
       exportCapacityOrigin.findFirstIn(status).isDefined)
-    val reason = if (exportCapacityExceeded) {
+    val reason = if (submissionThrottled) {
+      "Kusto Spark read failed because its distributed export submission was throttled (HTTP 429)."
+    } else if (exportCapacityExceeded) {
       "Kusto Spark read failed because the concurrent export capacity was exceeded."
     } else if (throttled) {
       "Kusto Spark read failed because its distributed export was throttled."
@@ -832,6 +839,8 @@ private[kusto] class KustoReader(client: ExtendedKustoClient) {
       exception match {
         case failed: FailedOperationException =>
           throw KustoReader.withExportReadContext(failed, request.requestId, summary)
+        case throttled: ThrottleException =>
+          throw KustoReader.withExportReadContext(throttled, request.requestId, summary)
         case other => throw other
       }
     }

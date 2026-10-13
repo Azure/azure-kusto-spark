@@ -297,11 +297,52 @@ class KustoReaderExportRetryTest extends AnyFlatSpec with Matchers {
     val rejected = Outcome(submissionError = Some(original))
     val fixture = new Fixture(Seq(throttled, rejected, throttled, rejected))
 
-    intercept[ThrottleException](fixture.run()) should be theSameInstanceAs original
+    val error = intercept[FailedOperationException](fixture.run())
+
+    error.getCause should be theSameInstanceAs original
+    error.getResult shouldBe None
+    error.getMessage should include("Automatic export retries exhausted after 4 attempts.")
+    error.getMessage should not include "concurrent export capacity was exceeded"
 
     fixture.commands.size shouldBe 4
     fixture.polledOperationIds.size() shouldBe 2
     fixture.delays.toSeq shouldBe Seq(5000L, 10000L, 20000L)
+  }
+
+  it should "explain HTTP 429 exhaustion without inferring export-capacity throttling" in {
+    val original = new ThrottleException("testcluster")
+    val fixture = new Fixture(Seq(Outcome(submissionError = Some(original))))
+
+    val error = intercept[FailedOperationException](fixture.run())
+
+    error.getMessage shouldBe
+      "Kusto Spark read failed because its distributed export submission was throttled (HTTP 429)." +
+        " Distributed reads export query results to temporary storage before Spark reads them." +
+        " Retry the read after backoff. If throttling persists, ask the service administrator to review the applicable limit." +
+        " Automatic export retries exhausted after 4 attempts." +
+        s" Connector requestId: $requestId. Original error: ${original.getMessage}"
+    error.getCause should be theSameInstanceAs original
+    error.getResult shouldBe None
+    fixture.commands.size shouldBe 4
+    fixture.polledOperationIds shouldBe empty
+    fixture.delays.toSeq shouldBe Seq(5000L, 10000L, 20000L)
+  }
+
+  it should "include HTTP 429 read context when the backoff cannot fit in the budget" in {
+    val original = new ThrottleException("testcluster")
+    val fixture = new Fixture(Seq(Outcome(submissionError = Some(original))))
+
+    val error = intercept[FailedOperationException](fixture.run(5.seconds))
+
+    error.getMessage should startWith(
+      "Kusto Spark read failed because its distributed export submission was throttled (HTTP 429).")
+    error.getMessage should include("the next backoff does not fit within timeoutLimit")
+    error.getMessage should include(requestId)
+    error.getMessage should not include "concurrent export capacity was exceeded"
+    error.getCause should be theSameInstanceAs original
+    error.getResult shouldBe None
+    fixture.commands.size shouldBe 1
+    fixture.delays shouldBe empty
   }
 
   it should "stop immediately if a retry's submission outcome becomes unknown" in {
