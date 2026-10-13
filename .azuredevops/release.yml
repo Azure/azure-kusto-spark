@@ -127,6 +127,12 @@ jobs:
       scala_version="$(mvn help:evaluate -Dexpression=scala.version.major -q -DforceStdout)"
       spark_version="$(mvn help:evaluate -Dexpression=spark.version.major -q -DforceStdout)"
 
+      expected_tag="v${spark_version}_${version}"
+      if [[ "${RELEASE_TAG}" != "${expected_tag}" ]]; then
+        echo "Release tag '${RELEASE_TAG}' does not match the checked-out project (expected '${expected_tag}')." >&2
+        exit 1
+      fi
+
       mkdir -p staging
       cp connector/target/*.jar staging/
       cp connector/.flattened-pom.xml \
@@ -138,6 +144,7 @@ jobs:
     displayName: Stage release artifacts
     env:
       MAVEN_OPTS: -Dmaven.repo.local=$(Pipeline.Workspace)/.m2/repository
+      RELEASE_TAG: $(RELEASE_TAG)
 
   - bash: |
       set -euo pipefail
@@ -180,7 +187,7 @@ jobs:
 
   - task: GitHubRelease@1
     displayName: Create GitHub release
-    condition: and(succeeded(), or(startsWith(variables['Build.SourceBranch'], 'refs/tags/'), ${{ eq(parameters.createGitHubRelease, true) }}))
+    condition: and(succeeded(), or(and(startsWith(variables['Build.SourceBranch'], 'refs/tags/'), ne(variables['Build.Reason'], 'Manual')), ${{ eq(parameters.createGitHubRelease, true) }}))
     inputs:
       gitHubConnection: $(GITHUB_SERVICE_CONNECTION)
       repositoryName: Azure/azure-kusto-spark
@@ -198,7 +205,7 @@ jobs:
 
   - task: AzureCLI@2
     displayName: Upload artifacts to Azure Storage
-    condition: and(succeeded(), or(startsWith(variables['Build.SourceBranch'], 'refs/tags/'), ${{ eq(parameters.uploadToAzure, true) }}))
+    condition: and(succeeded(), or(and(startsWith(variables['Build.SourceBranch'], 'refs/tags/'), ne(variables['Build.Reason'], 'Manual')), ${{ eq(parameters.uploadToAzure, true) }}))
     inputs:
       azureSubscription: $(AZURE_RELEASE_SERVICE_CONNECTION)
       scriptType: bash

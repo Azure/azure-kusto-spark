@@ -605,7 +605,8 @@ git ls-remote --tags origin | grep "${NEW_VERSION}"
 # Should show both v4.0_{NEW_VERSION} and v3.0_{NEW_VERSION}
 
 # Check release pipeline status (via Azure CLI)
-az pipelines runs list --pipeline-name "<release-pipeline-name>" --top 4
+PIPELINE_ID="$(az pipelines show --name "<release-pipeline-name>" --query id --output tsv)"
+az pipelines runs list --pipeline-ids "${PIPELINE_ID}" --top 4
 # Should show two runs (one per tag) in progress or completed
 ```
 
