@@ -368,8 +368,21 @@ class KustoAsyncOperationPollerTest extends AnyFlatSpec with Matchers {
     })
   }
 
-  it should "fail unknown or malformed terminal metadata while retaining the table" in {
-    Seq(status("Unknown"), status(null), response(Seq("Status"), Seq(Seq("missing state"))))
+  it should "report unknown or malformed state as a monitoring error" in {
+    val unreadable = response(Seq("State"), Seq(Seq("unreadable")))
+    unreadable.getPrimaryResults.getData
+      .get(0)
+      .set(
+        0,
+        new Object {
+          override def toString: String = throw new IllegalArgumentException("Unreadable state")
+        })
+    Seq(
+      status("Unknown"),
+      status(null),
+      status(""),
+      response(Seq("Status"), Seq(Seq("missing state"))),
+      unreadable)
       .foreach { terminal =>
         withFixture(f => {
           when(f.client.executeMgmt(database, command)).thenReturn(terminal)
@@ -377,9 +390,40 @@ class KustoAsyncOperationPollerTest extends AnyFlatSpec with Matchers {
           f.timer.runNext()
           call.await()
 
+          val error = call.error.get()
+          error shouldBe a[IllegalStateException]
+          error.getMessage should include("Cannot determine the outcome")
+          error.getMessage should include(operationId)
+          error.getMessage should include("test-request")
+          f.timer.cancelled.get() shouldBe true
+          f.timer.pendingCount shouldBe 0
+          verify(f.client, times(1)).executeMgmt(database, command)
+        })
+      }
+  }
+
+  it should "retain recognized terminal failures even when status text is missing" in {
+    Seq(
+      "Failed",
+      "PartiallySucceeded",
+      "Abandoned",
+      "BadInput",
+      "Throttled",
+      "Canceled",
+      "Skipped")
+      .foreach { state =>
+        withFixture(f => {
+          val terminal = response(Seq("OperationId", "State"), Seq(Seq(operationId, state)))
+          when(f.client.executeMgmt(database, command)).thenReturn(terminal)
+          val call = f.start()
+          f.timer.runNext()
+          call.await()
+
           val error = call.error.get().asInstanceOf[FailedOperationException]
           error.getResult.get should be theSameInstanceAs terminal.getPrimaryResults
+          error.getResult.get.getString("State") shouldBe state
           error.getMessage should include(operationId)
+          error.getMessage should include("Status: '<unavailable>'")
           f.timer.cancelled.get() shouldBe true
           verify(f.client, times(1)).executeMgmt(database, command)
         })

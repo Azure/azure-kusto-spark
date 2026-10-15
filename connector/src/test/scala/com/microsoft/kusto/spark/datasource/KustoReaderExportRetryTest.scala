@@ -79,6 +79,7 @@ class KustoReaderExportRetryTest extends AnyFlatSpec with Matchers {
     val results = new ConcurrentLinkedQueue[KustoResultSetTable]()
     val polledOperationIds = new ConcurrentLinkedQueue[String]()
     var submissionDuration: FiniteDuration = Duration.Zero
+    var submissionResultOverride: Option[KustoOperationResult] = None
     var pollingDuration: FiniteDuration = Duration.Zero
     var extraWait: FiniteDuration = Duration.Zero
     var waitError: Option[InterruptedException] = None
@@ -115,7 +116,8 @@ class KustoReaderExportRetryTest extends AnyFlatSpec with Matchers {
         clock.addAndGet(submissionDuration.toNanos)
         val current = outcome(commands.size - 1)
         current.submissionError.foreach(error => throw error)
-        response(Seq("OperationId"), Seq(new UUID(0, commands.size.toLong).toString))
+        submissionResultOverride.getOrElse(
+          response(Seq("OperationId"), Seq(new UUID(0, commands.size.toLong).toString)))
       }
     when(engine.executeMgmt(anyString(), anyString())).thenAnswer { invocation =>
       val operationId = invocation.getArgument[String](1).stripPrefix(".show operations ")
@@ -235,15 +237,7 @@ class KustoReaderExportRetryTest extends AnyFlatSpec with Matchers {
   }
 
   it should "not retry other terminal states even when status mentions throttling" in {
-    Seq(
-      "Failed",
-      "Canceled",
-      "PartiallySucceeded",
-      "BadInput",
-      "Abandoned",
-      "Skipped",
-      "Unknown",
-      null)
+    Seq("Failed", "Canceled", "PartiallySucceeded", "BadInput", "Abandoned", "Skipped")
       .foreach { state =>
         val fixture = new Fixture(Seq(Outcome(state, capacityStatus)))
 
@@ -255,13 +249,22 @@ class KustoReaderExportRetryTest extends AnyFlatSpec with Matchers {
   }
 
   it should "not infer a retry from malformed state metadata" in {
-    val fixture = new Fixture(Seq(Outcome("Throttled", capacityStatus, columns = Seq("Status"))))
+    Seq(
+      Outcome("Unknown"),
+      Outcome(null),
+      Outcome(""),
+      Outcome("Throttled", capacityStatus, columns = Seq("Status"))).foreach { outcome =>
+      val fixture = new Fixture(Seq(outcome))
 
-    val error = intercept[FailedOperationException](fixture.run())
+      val error = intercept[IllegalStateException](fixture.run())
 
-    error.getMessage should include("State: '<unavailable>'")
-    fixture.commands.size shouldBe 1
-    fixture.delays shouldBe empty
+      error.getMessage should include("Cannot determine the outcome")
+      error.getMessage should include(new UUID(0, 1).toString)
+      error.getMessage should include(requestId)
+      fixture.commands.size shouldBe 1
+      fixture.polledOperationIds.size() shouldBe 1
+      fixture.delays shouldBe empty
+    }
   }
 
   it should "not replay ambiguous submission failures through the generic command retry policy" in {
@@ -394,9 +397,51 @@ class KustoReaderExportRetryTest extends AnyFlatSpec with Matchers {
   it should "not poll or resubmit if submission has consumed the remaining budget" in {
     val fixture = new Fixture(Seq(Outcome()))
     fixture.submissionDuration = 11.seconds
+    val accepted = response(Seq("OperationId"), Seq(new UUID(0, 1).toString))
+    fixture.submissionResultOverride = Some(accepted)
 
-    intercept[TimeoutAwaitingPendingOperationException](fixture.run(10.seconds))
+    val error = intercept[TimeoutAwaitingPendingOperationException](fixture.run(10.seconds))
 
+    error.getMessage should include(new UUID(0, 1).toString)
+    error.getMessage should include(requestId)
+    error.getMessage should include("partition 0")
+    error.getCause shouldBe a[TimeoutAwaitingPendingOperationException]
+    error.getCause.getCause shouldBe null
+    fixture.commands.size shouldBe 1
+    fixture.pollingBudgets shouldBe empty
+    fixture.polledOperationIds shouldBe empty
+    fixture.delays shouldBe empty
+    accepted.getPrimaryResults.next() shouldBe true
+    accepted.getPrimaryResults.getString("OperationId") shouldBe new UUID(0, 1).toString
+  }
+
+  it should "identify the newly accepted operation when a retry submission exhausts the budget" in {
+    val fixture = new Fixture(Seq(throttled, Outcome()))
+    fixture.submissionDuration = 3.seconds
+
+    val error = intercept[TimeoutAwaitingPendingOperationException](fixture.run(10.seconds))
+
+    error.getMessage should include(new UUID(0, 2).toString)
+    error.getMessage should not include new UUID(0, 1).toString
+    error.getMessage should include(requestId)
+    error.getCause shouldBe a[TimeoutAwaitingPendingOperationException]
+    val priorFailure = error.getCause.getCause.asInstanceOf[FailedOperationException]
+    priorFailure.getResult.get.getString("OperationId") shouldBe new UUID(0, 1).toString
+    fixture.commands.size shouldBe 2
+    fixture.pollingBudgets.toSeq shouldBe Seq(7.seconds)
+    fixture.polledOperationIds.asScala.toSeq shouldBe Seq(new UUID(0, 1).toString)
+    fixture.delays.toSeq shouldBe Seq(5000L)
+  }
+
+  it should "preserve post-submission timeout when the accepted operation ID is unavailable" in {
+    val fixture = new Fixture(Seq(Outcome()))
+    fixture.submissionDuration = 11.seconds
+    fixture.submissionResultOverride = Some(response(Seq("OperationId"), Seq.empty))
+
+    val error = intercept[TimeoutAwaitingPendingOperationException](fixture.run(10.seconds))
+
+    error.getMessage should include("OperationId: '<unavailable>'")
+    error.getMessage should include(requestId)
     fixture.commands.size shouldBe 1
     fixture.pollingBudgets shouldBe empty
     fixture.polledOperationIds shouldBe empty

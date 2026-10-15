@@ -777,6 +777,7 @@ object KustoDataSourceUtils {
   /**
    * Runs func sequentially with backoff while doWhileCondition holds. Calls finalWork when the
    * condition becomes false. The returned latch is released on completion or a caught exception.
+   * The latch does not propagate worker errors to its waiting caller.
    *
    * @param func
    *   \- the function to run
@@ -970,15 +971,21 @@ object KustoDataSourceUtils {
 
       val state = metadata(stateCol)
       val status = metadata(statusCol)
-      if (!state.contains("Completed")) {
-        throw new FailedOperationException(
-          s"Failed to execute Kusto operation with OperationId '$operationId', State: '${state
-              .getOrElse("<unavailable>")}'," +
-            s" Status: '${status.getOrElse("<unavailable>")}'",
-          lastResponse)
+      state match {
+        case Some("Completed") => lastResponse
+        case Some(
+              "Failed" | "PartiallySucceeded" | "Abandoned" | "BadInput" | "Throttled" |
+              "Canceled" | "Skipped") =>
+          throw new FailedOperationException(
+            s"Failed to execute Kusto operation with OperationId '$operationId', State: '${state.get}'," +
+              s" Status: '${status.getOrElse("<unavailable>")}'",
+            lastResponse)
+        case _ =>
+          // An unknown outcome must not trigger callers' failed-operation retry policies.
+          throw new IllegalStateException(
+            s"Cannot determine the outcome of Kusto operation with OperationId '$operationId'," +
+              s" State: '${state.getOrElse("<unavailable>")}'. Connector requestId: $requestId.")
       }
-
-      lastResponse
     } finally {
       timer.cancel()
     }

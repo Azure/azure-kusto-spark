@@ -49,6 +49,38 @@ class KustoWriteAsyncOperationTest extends AnyFlatSpec with Matchers {
       "v1")
   }
 
+  private def malformedStatuses: Seq[KustoOperationResult] = {
+    val unreadable = response(Seq("State"), Seq(Seq("unreadable")))
+    unreadable.getPrimaryResults.getData
+      .get(0)
+      .set(
+        0,
+        new Object {
+          override def toString: String = throw new IllegalArgumentException("Unreadable state")
+        })
+    Seq(
+      response(Seq("Status"), Seq(Seq("missing state"))),
+      response(Seq("State"), Seq(Seq(null))),
+      response(Seq("State"), Seq(Seq(""))),
+      response(Seq("State"), Seq(Seq("Unknown"))),
+      unreadable)
+  }
+
+  private def failedStatusesWithoutText: Seq[KustoOperationResult] = {
+    val unreadable = response(Seq("State", "Status"), Seq(Seq("Failed", "unreadable")))
+    unreadable.getPrimaryResults.getData
+      .get(0)
+      .set(
+        1,
+        new Object {
+          override def toString: String = throw new IllegalArgumentException("Unreadable status")
+        })
+    Seq(
+      response(Seq("State"), Seq(Seq("Failed"))),
+      response(Seq("State", "Status"), Seq(Seq("Failed", null))),
+      unreadable)
+  }
+
   private class Fixture(states: Seq[String], detailCounts: Seq[Int] = Seq.empty) {
     val engine: Client = mock(classOf[Client])
     val ids: Seq[String] = states.indices.map(i => f"00000000-0000-0000-0000-${i + 1}%012d")
@@ -199,6 +231,36 @@ class KustoWriteAsyncOperationTest extends AnyFlatSpec with Matchers {
     verifyNoMoreInteractions(f.engine)
   }
 
+  it should "not resubmit dedup-tag removal when the operation state cannot be determined" in {
+    malformedStatuses.foreach { result =>
+      val f = new Fixture(Seq("Failed", "Completed"))
+      when(f.engine.executeMgmt(database, f.pollCommand(0))).thenReturn(result)
+
+      val error = intercept[IllegalStateException](f.drop())
+
+      error.getMessage should include("Cannot determine the outcome")
+      error.getMessage should include(f.ids.head)
+      error.getMessage should include("write-test")
+      f.submissions.get() shouldBe 1
+      f.verifyDropSubmissions(1)
+      verify(f.engine).executeMgmt(database, f.pollCommand(0))
+      verifyNoMoreInteractions(f.engine)
+    }
+  }
+
+  it should "keep confirmed dedup-tag failures retryable without optional status text" in {
+    failedStatusesWithoutText.foreach { result =>
+      val f = new Fixture(Seq("Failed", "Completed"))
+      when(f.engine.executeMgmt(database, f.pollCommand(0))).thenReturn(result)
+
+      f.drop().get.getString("OperationId") shouldBe f.ids.last
+
+      f.verifyDropSubmissions(2)
+      f.ids.indices.foreach(i => verify(f.engine).executeMgmt(database, f.pollCommand(i)))
+      verifyNoMoreInteractions(f.engine)
+    }
+  }
+
   "moveExtentsWithRetries" should "consume successful operation details and counts with or without a Failed retry" in {
     Seq(false, true).foreach { failFirst =>
       val states = (if (failFirst) Seq("Failed") else Seq.empty) ++ Seq("Completed", "Completed")
@@ -236,5 +298,44 @@ class KustoWriteAsyncOperationTest extends AnyFlatSpec with Matchers {
     f.verifyMoveSubmissions(1)
     verify(f.engine).executeMgmt(database, f.pollCommand(0))
     verifyNoMoreInteractions(f.engine)
+  }
+
+  it should "not move again when the operation state cannot be determined" in {
+    malformedStatuses.foreach { result =>
+      val f = new Fixture(Seq("Failed", "Completed"), Seq(0, 1))
+      when(f.engine.executeMgmt(database, f.pollCommand(0))).thenReturn(result)
+
+      val error = intercept[IllegalStateException](f.move(totalAmount = 1))
+
+      error.getMessage should include("Cannot determine the outcome")
+      error.getMessage should include(f.ids.head)
+      error.getMessage should include("write-test")
+      f.submissions.get() shouldBe 1
+      f.moveRetryErrors shouldBe empty
+      f.verifyMoveSubmissions(1)
+      verify(f.engine).executeMgmt(database, f.pollCommand(0))
+      verifyNoMoreInteractions(f.engine)
+    }
+  }
+
+  it should "retry confirmed move failures without masking missing status text" in {
+    failedStatusesWithoutText.foreach { result =>
+      val f = new Fixture(Seq("Failed", "Completed"), Seq(0, 1))
+      when(f.engine.executeMgmt(database, f.pollCommand(0))).thenReturn(result)
+
+      f.move(totalAmount = 1)
+
+      f.submissions.get() shouldBe 2
+      f.moveRetryErrors.size shouldBe 1
+      f.moveRetryErrors.head.toString should include(f.ids.head)
+      f.moveRetryErrors.head.toString should include("State: 'Failed'")
+      f.verifyMoveSubmissions(2)
+      f.ids.indices.foreach(i => verify(f.engine).executeMgmt(database, f.pollCommand(i)))
+      verify(f.engine).executeMgmt(
+        eqTo(database),
+        eqTo(f.detailsCommand(1)),
+        any[ClientRequestProperties]())
+      verifyNoMoreInteractions(f.engine)
+    }
   }
 }

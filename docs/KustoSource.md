@@ -82,10 +82,11 @@ All the options that can be used in the Kusto Source can be found in KustoSource
  **Optional Parameters:** 
  
  * **KUSTO_TIMEOUT_LIMIT**:
- 'timeoutLimit' - An integer corresponding to the period in seconds after which the operation will timeout.
- This is an upper limit that may coexist with addition timeout limits as configured on Spark or Kusto clusters.
+ 'timeoutLimit' - The distributed export timeout budget in seconds, applied separately to each connector export partition.
+ Submission elapsed time, status polling, and retry backoff share this budget. It is not an end-to-end Spark-job deadline
+ and does not cancel in-flight SDK calls or server-side exports. Spark and Kusto can impose additional timeouts.
  
-    **Default:** '172000' (2 days)    
+    **Default:** '172800' (2 days)
     
 * **KUSTO_CLIENT_REQUEST_PROPERTIES_JSON**:
   'clientRequestPropertiesJson' - A json representation for [ClientRequestProperties](https://github.com/Azure/azure-kusto-java/blob/master/data/src/main/java/com/microsoft/azure/kusto/data/ClientRequestProperties.java)
@@ -133,22 +134,24 @@ Scala and Java users may take these options from com.microsoft.kusto.spark.datas
   become available. The asynchronous status response and the SDK's throttling exception do not expose a `Retry-After`
   delay to this retry path.
 
-  When throttling retries stop because of the attempt limit or insufficient backoff budget, the connector reports a
-  `FailedOperationException` with read/export context, the retry summary, and the connector request ID. For HTTP 429
+  When the attempt limit is reached, or a positive remaining budget cannot accommodate the next backoff, the connector
+  reports a `FailedOperationException` with read/export context, the retry summary, and the connector request ID. For HTTP 429
   submission failures, the original SDK `ThrottleException` is preserved as the cause; HTTP 429 alone is not labeled
   export-capacity exhaustion because other service limits can also cause it.
 
   Each partition shares its original `timeoutLimit` budget across submissions, polling, and retry backoff; retries do
-  not reset that budget. If the next delay does not fit, the latest throttling failure is returned immediately. Deadline
-  expiry and interruption stop polling/retries. This is not a hard deadline for an in-flight synchronous SDK call and
-  does not cancel an export already running on the service. Increasing `timeoutLimit` does not increase the attempt limit.
+  not reset that budget. When a timeout check detects an expired budget, it raises `TimeoutAwaitingPendingOperationException`.
+  Deadline expiry and interruption stop further polling/retry scheduling, but an in-flight synchronous SDK call can
+  continue and an export already running on the service is not canceled. When a submission returns after the budget
+  expires, the timeout includes its accepted operation ID if available. Increasing `timeoutLimit` does not increase the attempt limit.
 
   Every attempt uses a separate temporary directory. Only directories from successfully completed attempts are read
   by Spark and, when enabled, stored in the transient read cache; successful partitions are not re-exported when another partition is
   throttled. `Failed`, `PartiallySucceeded`, authorization errors, cancellations, and unknown submission outcomes are
   **not** retried by this path. In particular, the generic command-submission retry policy is disabled for these exports:
   losing a response does not prove an export was rejected, and blindly replaying it could duplicate output. Transient
-  status-lookup failures continue polling the same operation instead of starting another export.
+  status-lookup failures continue polling the same operation instead of starting another export. Missing, unreadable,
+  or unrecognized operation state raises a monitoring error without resubmitting the operation.
 
   Reduce or stagger concurrent reads/exports if throttling persists, and ask the service administrator to review
   effective export capacity. Retries add latency and some service load; they do not solve sustained capacity shortages.
@@ -184,11 +187,11 @@ If set to 'true', query executed on kusto cluster will include the filters.
   - 'abfss' (Azure Blob File System over HTTPS - recommended for secure connections)
   
   Defaults to 'wasbs' if not specified. The default should work in most cases.
-  This option is only valid when using 'ForceDistributedMode' as the read mode.
+  This option applies whenever a distributed read occurs, including automatic selection and fallback from Single mode.
+  It has no effect on direct Single-mode reads.
   Example: .option("storageProtocol", "abfss")
   
   **Important**: 
-  - This option can only be used with KUSTO_READ_MODE='ForceDistributedMode'. If specified with any other read mode, an error will be thrown.
   - ABFS/ABFSS protocols require the platform to support Azure Hadoop libraries version >= 3.4.2
   - If your platform does not support WASB (legacy blob storage), migrating to ABFS is recommended
   - ABFS with Account Key authentication is not currently supported; use SAS authentication instead

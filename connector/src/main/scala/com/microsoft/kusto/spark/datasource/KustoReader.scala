@@ -954,7 +954,21 @@ private[kusto] class KustoReader(client: ExtendedKustoClient) {
         request.clientRequestProperties.orNull,
         retryConfig = retryConfig)
       .getPrimaryResults
-    awaitExportCompletion(request, commandResult, directory, remainingTimeout())
+    val pollingTimeout =
+      try remainingTimeout()
+      catch {
+        case timeout: TimeoutAwaitingPendingOperationException =>
+          // Leave the result cursor untouched for the completion helper.
+          val operationId = Try(commandResult.getData.get(0).get(0).toString).toOption
+            .filter(_.nonEmpty)
+            .getOrElse("<unavailable>")
+          val error = new TimeoutAwaitingPendingOperationException(
+            s"Timed out exporting partition ${partition.idx} after submission. OperationId: '$operationId'." +
+              s" Connector requestId: ${request.requestId}. The operation may still be running.")
+          error.initCause(timeout)
+          throw error
+      }
+    awaitExportCompletion(request, commandResult, directory, pollingTimeout)
   }
 
   private[kusto] def awaitExportCompletion(
