@@ -22,11 +22,11 @@ that is using it. Please verify the following first:
  The connector implements Spark 'Datasource V1' API. 
  Kusto data source identifier is "com.microsoft.kusto.spark.datasource". 
  Kusto table schema is translated into a spark schema as explained in [Spark-Kusto DataTypes](Spark-Kusto%20DataTypes%20mapping.md).
- The reading is done in one of two modes: 'Single' and 'Distributed'. By default, if the user did not override the read mode - an estimated
- count for the query is made; for small row count - a 'Single' mode is chosen with a fallback to the 'Distributed' mode (as the first might
- fail due to [kusto limit policy](https://docs.microsoft.com/azure/kusto/concepts/querylimits)). In 'Distributed' mode, a distributed
- [export command](https://docs.microsoft.com/azure/kusto/management/data-export/export-data-to-storage) is called followed by a
- distributed spark Parquet read.  
+ The reading is done in one of two modes: 'Single' and 'Distributed'. By default, the connector estimates the query's row count.
+ An estimate of 5,000 rows or fewer selects 'Single' mode; larger estimates, or a failure to obtain a row count, select 'Distributed' mode.
+ A failed automatic 'Single' read can also fall back to 'Distributed' mode. In 'Distributed' mode, the connector runs an asynchronous
+ [export command](https://learn.microsoft.com/en-us/kusto/management/data-export/export-data-to-storage) to temporary storage, followed by a
+ distributed Spark Parquet read. This export can happen even when the user only requested a read and no query-result limit was exceeded.
  The connector implements TableScan, PrunedFilteredScan, and InsertableRelation.
  
  ### Command Syntax
@@ -82,10 +82,11 @@ All the options that can be used in the Kusto Source can be found in KustoSource
  **Optional Parameters:** 
  
  * **KUSTO_TIMEOUT_LIMIT**:
- 'timeoutLimit' - An integer corresponding to the period in seconds after which the operation will timeout.
- This is an upper limit that may coexist with addition timeout limits as configured on Spark or Kusto clusters.
+ 'timeoutLimit' - The distributed export timeout budget in seconds, applied separately to each connector export partition.
+ Submission elapsed time, status polling, and retry backoff share this budget. It is not an end-to-end Spark-job deadline
+ and does not cancel in-flight SDK calls or server-side exports. Spark and Kusto can impose additional timeouts.
  
-    **Default:** '172000' (2 days)    
+    **Default:** '172800' (2 days)
     
 * **KUSTO_CLIENT_REQUEST_PROPERTIES_JSON**:
   'clientRequestPropertiesJson' - A json representation for [ClientRequestProperties](https://github.com/Azure/azure-kusto-java/blob/master/data/src/main/java/com/microsoft/azure/kusto/data/ClientRequestProperties.java)
@@ -102,19 +103,69 @@ Scala and Java users may take these options from com.microsoft.kusto.spark.datas
 
   The following is the behavior of the connector in either of these read modes
 
-  * **Single mode** : In single mode Direct query and get the results
+  * **Single mode**: Executes a direct query and materializes its results on the Spark driver. Both driver memory and Kusto
+    [query-result limits](https://learn.microsoft.com/en-us/kusto/concepts/query-limits#limit-on-result-set-size-result-truncation)
+    apply (by default, 500,000 rows or 64 MB). `ForceSingleMode` overrides the initial selection, not the service limits or
+    driver-memory requirements. Do not rely on automatic fallback when a forced single-mode read exceeds query limits.
 
-  * **Distributed mode** : When you hit Kusto [query limits](https://aka.ms/kustoquerylimits) (memory / number of records), data is [exported](https://learn.microsoft.com/en-us/azure/data-explorer/kusto/management/data-export/export-data-to-storage) to Blob storage (export containers) , then the exported data is read and processed into a Dataframe. 
+  * **Distributed mode**: Exports query results to temporary storage, then reads the exported Parquet data into a DataFrame.
+    This mode can be selected automatically, explicitly requested, or used after a direct-read failure; it does not require
+    the query to exceed the service's query-result limits.
 
-  * **Default selection of the mode** : In case these options are not specified, the connector tries to approximate row count and the time the query would take. If the approximated row count exceeds the query limits specified above, the connector will automatically use Distributed mode.
+  * **Default selection of the mode**: Estimates of 5,000 rows or fewer select 'Single' mode. Larger estimates or a failure to
+    obtain a row count select 'Distributed' mode. A zero count returns an empty DataFrame. The 5,000-row selection threshold is
+    a connector heuristic, not the service's 500,000-row query-result limit.
 
   **Note**: Distributed mode will use an external storage hop and will add to COGS because of the storage that is used in between.
+
+  **Export-capacity throttling during a read**
+
+  A failure with `State: 'Throttled'`, `CommandType: 'DataExportToFile'`, and `Origin: 'CapacityPolicy/Export'` means the
+  distributed read's export was aborted because concurrent export capacity was exceeded. Concurrent notebooks and other
+  exports share this capacity; this is not the same as query-concurrency throttling or a query-memory error. Spark evaluates
+  reads lazily, so this source-read failure can surface at a downstream action such as `.save()`.
+
+  The connector automatically resubmits a distributed-read partition when its asynchronous operation reports
+  `State: 'Throttled'`, or submission is explicitly rejected with the SDK's HTTP 429 `ThrottleException`.
+  There are **at most four attempts total (the initial attempt plus three retries)** per partition. HTTP rejections and
+  asynchronous throttling share this limit. Before retries, the nominal delays are **5, 10, and 20 seconds**, each
+  independently randomized by ±50%: **2.5–7.5, 5–15, and 10–30 seconds**, respectively. Jitter reduces the chance of competing reads
+  from retrying in lockstep. These are bounded defaults for transient contention, not a guarantee that capacity will
+  become available. The asynchronous status response and the SDK's throttling exception do not expose a `Retry-After`
+  delay to this retry path.
+
+  When the attempt limit is reached, or a positive remaining budget cannot accommodate the next backoff, the connector
+  reports a `FailedOperationException` with read/export context, the retry summary, and the connector request ID. For HTTP 429
+  submission failures, the original SDK `ThrottleException` is preserved as the cause; HTTP 429 alone is not labeled
+  export-capacity exhaustion because other service limits can also cause it.
+
+  Each partition shares its original `timeoutLimit` budget across submissions, polling, and retry backoff; retries do
+  not reset that budget. When a timeout check detects an expired budget, it raises `TimeoutAwaitingPendingOperationException`.
+  Deadline expiry and interruption stop further polling/retry scheduling, but an in-flight synchronous SDK call can
+  continue and an export already running on the service is not canceled. When a submission returns after the budget
+  expires, the timeout includes its accepted operation ID if available. Increasing `timeoutLimit` does not increase the attempt limit.
+
+  Every attempt uses a separate temporary directory. Only directories from successfully completed attempts are read
+  by Spark and, when enabled, stored in the transient read cache; successful partitions are not re-exported when another partition is
+  throttled. `Failed`, `PartiallySucceeded`, authorization errors, cancellations, and unknown submission outcomes are
+  **not** retried by this path. In particular, the generic command-submission retry policy is disabled for these exports:
+  losing a response does not prove an export was rejected, and blindly replaying it could duplicate output. Transient
+  status-lookup failures continue polling the same operation instead of starting another export. Missing, unreadable,
+  or unrecognized operation state raises a monitoring error without resubmitting the operation.
+
+  Reduce or stagger concurrent reads/exports if throttling persists, and ask the service administrator to review
+  effective export capacity. Retries add latency and some service load; they do not solve sustained capacity shortages.
+  Retried queries can observe newer source data, so this is not a point-in-time snapshot guarantee. Failed exports can
+  leave artifacts in temporary storage; the connector excludes them from readback but does not delete them or change
+  the caller's storage lifecycle policy. See
+  [export failure behavior](https://learn.microsoft.com/en-us/kusto/management/data-export/export-data-to-storage#failures-during-export-commands).
+  If retrying an entire pipeline outside the connector, ensure its downstream writes are safe to repeat.
 
   **Storage security**
   In Distributed mode by default the internal Kusto storage accounts are queried and used for ease of the connector. This is not recommended in production scenarios. The storage to be used can be customized by passing [Transient storage parameters](#transient-storage-parameters) parameter specified below. This gives the caller of the read a more granular control on blob security policies as opposed to default blob security policies used by the connector and Kusto. This will also come in useful when Kusto administrators restrict security by applying callout policies on what hosts can traffic be let onto. If traffic is not permitted by administrators to the default internal storage, the read operation will fail for Distributed mode.
 
 * **KUSTO_DISTRIBUTED_READ_MODE_TRANSIENT_CACHE**
-When 'Distributed' read mode is used and this is set to 'true', the request query is exported only once and exported data is reused.
+When 'Distributed' read mode is used and this is set to 'true', successful exported paths are cached and reused on subsequent cache hits. Establishing the cached result may require partition retries.
 
 * **KUSTO_QUERY_FILTER_PUSH_DOWN**
 If set to 'true', query executed on kusto cluster will include the filters.
@@ -122,11 +173,11 @@ If set to 'true', query executed on kusto cluster will include the filters.
   'true' by default if KUSTO_DISTRIBUTED_READ_MODE_TRANSIENT_CACHE=false
 
 * **KUSTO_EXPORT_OPTIONS_JSON**:
-  'kustoExportOptionsJson' - JSON that provides the list of [export options](https://learn.microsoft.com/azure/data-explorer/kusto/management/data-export/export-data-to-storage) in case of distributed read (either because of query limits getting hit or user request for distributed mode). 
+  'kustoExportOptionsJson' - JSON that provides the list of [export options](https://learn.microsoft.com/azure/data-explorer/kusto/management/data-export/export-data-to-storage) for a distributed read, whether selected automatically, explicitly requested, or reached through fallback.
   The export options do not support the _OutputDataFormat_ which is defaulted to _parquet_, _namePrefix_ which is a new directory specifically for the current read,
    _compressionType_ is defaulted to snappy and the command also specifies _compressed_ (to create .snappy.gz files), to turn extra compression off - it can be set to _none_ (**not recommended**)
   i.e .option("kustoExportOptionsJson", "{\"distribution\":\"per_node\"}")
->Note: Connector versions >= 3.1.10 will automatically set useNativeParquetWriter=false if Spark version < 3.3.0 as Kusto service uses now vectorized parquet writer introduced in this version. Do not set to true for lower versions as it will fail. Users are advised to move to Spark 3.3.0 to leverage this new great performance enhancement on both Spark side and Kusto service side.
+>Note: The connector defaults `useNativeParquetWriter` to `false` for Spark versions at or below 3.3.0 unless explicitly overridden in the export options. Older Spark readers may not support the native writer's Parquet encodings.
 
 * **STORAGE_PROTOCOL**:
   'storageProtocol' - Specifies the storage protocol to use when reading from blob storage in distributed mode. 
@@ -136,17 +187,17 @@ If set to 'true', query executed on kusto cluster will include the filters.
   - 'abfss' (Azure Blob File System over HTTPS - recommended for secure connections)
   
   Defaults to 'wasbs' if not specified. The default should work in most cases.
-  This option is only valid when using 'ForceDistributedMode' as the read mode.
+  This option applies whenever a distributed read occurs, including automatic selection and fallback from Single mode.
+  It has no effect on direct Single-mode reads.
   Example: .option("storageProtocol", "abfss")
   
   **Important**: 
-  - This option can only be used with KUSTO_READ_MODE='ForceDistributedMode'. If specified with any other read mode, an error will be thrown.
   - ABFS/ABFSS protocols require the platform to support Azure Hadoop libraries version >= 3.4.2
   - If your platform does not support WASB (legacy blob storage), migrating to ABFS is recommended
   - ABFS with Account Key authentication is not currently supported; use SAS authentication instead
  
 #### Transient Storage Parameters
-When reading data from Kusto in 'distributed' mode, the data is exported from Kusto into a blob storage every time the corresponding RDD is materialized.
+An uncached distributed read exports data from Kusto to temporary storage. A transient read-cache hit reuses the successful exported paths instead of exporting again.
 If the user doesn't specify storage parameters and a 'Distributed' read mode is chosen - the storage used will be provided by Kusto ingest service.
 
 >Note: If the user provides the blob storage - the blobs created are the caller's responsibility. This includes provisioning the storage, rotating access keys,
