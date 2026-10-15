@@ -4,7 +4,8 @@
 package com.microsoft.kusto.spark.datasource
 
 import com.azure.core.credential.AzureSasCredential
-import com.azure.storage.blob.BlobContainerClientBuilder
+import com.azure.storage.blob.{BlobContainerClient, BlobContainerClientBuilder}
+import com.azure.storage.blob.models.ListBlobsOptions
 import com.azure.storage.common.StorageSharedKeyCredential
 import com.microsoft.azure.kusto.data.{ClientRequestProperties, KustoResultSetTable}
 import com.microsoft.azure.kusto.data.exceptions.ThrottleException
@@ -329,10 +330,14 @@ object KustoReader {
             .buildClient()
         case _ => throw new InvalidParameterException("")
       }
-      val exists = container.listBlobsByHierarchy(directory).stream().count() > 0
-      exists
+      blobDirectoryExists(container, directory)
     }
   }
+
+  private[kusto] def blobDirectoryExists(
+      container: BlobContainerClient,
+      directory: String): Boolean =
+    container.listBlobs(new ListBlobsOptions().setPrefix(directory), null).iterator().hasNext
 
   private def exportToStorage(
       kustoClient: ExtendedKustoClient,

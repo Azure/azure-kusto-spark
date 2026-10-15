@@ -3,6 +3,8 @@
 
 package com.microsoft.kusto.spark.datasource
 
+import com.azure.storage.blob.{BlobContainerClient, BlobContainerClientBuilder}
+import com.azure.storage.blob.models.BlobStorageException
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.microsoft.azure.kusto.data.{Client, ClientFactory, ClientRequestProperties}
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
@@ -25,12 +27,13 @@ import org.mockito.Mockito.{mock, when, withSettings}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
-import java.net.{InetAddress, InetSocketAddress, URI}
+import java.net.{InetAddress, InetSocketAddress, URI, URLDecoder}
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.{Files, Path}
 import java.util.UUID
 import java.util.concurrent.{ConcurrentLinkedQueue, Executors, TimeUnit}
 import java.util.concurrent.atomic.AtomicReference
+import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
@@ -57,7 +60,8 @@ class KustoReadbackFileSystem extends RawLocalFileSystem {
 }
 
 /**
- * Validates SDK HTTP -> export directory selection -> local Parquet, not cloud filesystem setup.
+ * Validates SDK HTTP -> blob prefix checks -> export path selection -> local Parquet. Cloud
+ * filesystem authentication is not exercised.
  */
 class KustoReaderExportIntegrationTest extends AnyFlatSpec with Matchers {
   private val mapper = new ObjectMapper()
@@ -91,6 +95,10 @@ class KustoReaderExportIntegrationTest extends AnyFlatSpec with Matchers {
   private class Fixture(outcomes: Seq[Outcome], spark: SparkSession) {
     val exports = new ConcurrentLinkedQueue[Export]()
     val polls = new ConcurrentLinkedQueue[(String, Int)]()
+    val blobNames = TrieMap.empty[String, Seq[String]]
+    val blobRequests = new ConcurrentLinkedQueue[(String, Map[String, String])]()
+    val emptyFirstBlobPage = TrieMap.empty[String, Boolean]
+    val deniedBlobContainers = TrieMap.empty[String, Boolean]
     val delays = mutable.ArrayBuffer.empty[Long]
     private val handlerFailure = new AtomicReference[Throwable]()
     private val executor = Executors.newSingleThreadExecutor()
@@ -133,11 +141,76 @@ class KustoReaderExportIntegrationTest extends AnyFlatSpec with Matchers {
         new TransientStorageCredentials(
           "https://dummyaccount.blob.core.windows.net/dummycontainer?sig=unused")))
 
-    private def reply(exchange: HttpExchange, status: Int, body: String): Unit = {
+    def blobContainer(name: String): BlobContainerClient = new BlobContainerClientBuilder()
+      .endpoint(endpoint)
+      .containerName(name)
+      .buildClient()
+
+    private def reply(
+        exchange: HttpExchange,
+        status: Int,
+        body: String,
+        contentType: String = "application/json"): Unit = {
       val bytes = body.getBytes(UTF_8)
-      exchange.getResponseHeaders.set("Content-Type", "application/json")
+      exchange.getResponseHeaders.set("Content-Type", contentType)
       exchange.sendResponseHeaders(status, bytes.length.toLong)
       exchange.getResponseBody.write(bytes)
+    }
+
+    private def listBlobs(exchange: HttpExchange, container: String): Unit = {
+      require(exchange.getRequestMethod == "GET")
+      val query = exchange.getRequestURI.getRawQuery
+        .split("&")
+        .map { part =>
+          val pair = part.split("=", 2)
+          URLDecoder.decode(pair(0), UTF_8) -> URLDecoder.decode(pair(1), UTF_8)
+        }
+        .toMap
+      require(query("restype") == "container" && query("comp") == "list")
+      blobRequests.add((container, query))
+      if (deniedBlobContainers.getOrElse(container, false)) {
+        reply(
+          exchange,
+          403,
+          "<Error><Code>AuthorizationPermissionMismatch</Code><Message>Denied</Message></Error>",
+          "application/xml")
+      } else {
+        val prefix = query.getOrElse("prefix", "")
+        val delimiter = query.get("delimiter").filter(_.nonEmpty)
+        val items = blobNames(container)
+          .filter(_.startsWith(prefix))
+          .map { name =>
+            val remainder = name.substring(prefix.length)
+            delimiter match {
+              case Some(separator) if remainder.contains(separator) =>
+                (prefix + remainder.take(remainder.indexOf(separator) + separator.length), true)
+              case _ => (name, false)
+            }
+          }
+          .distinct
+          .sortBy(_._1)
+        val offset = query.get("marker").fold(0)(_.toInt)
+        val emptyPage =
+          emptyFirstBlobPage.getOrElse(container, false) && !query.contains("marker")
+        val page = if (emptyPage) Seq.empty else items.slice(offset, offset + 1)
+        val nextMarker =
+          if (emptyPage) "0"
+          else if (offset + 1 < items.size) (offset + 1).toString
+          else ""
+        val blobs = page.map {
+          case (name, true) => s"<BlobPrefix><Name>$name</Name></BlobPrefix>"
+          case (name, false) =>
+            s"<Blob><Name>$name</Name><Properties><BlobType>BlockBlob</BlobType></Properties></Blob>"
+        }.mkString
+        reply(
+          exchange,
+          200,
+          s"""<?xml version="1.0" encoding="utf-8"?>
+             |<EnumerationResults ServiceEndpoint="$endpoint/" ContainerName="$container">
+             |<Prefix>$prefix</Prefix><Blobs>$blobs</Blobs><NextMarker>$nextMarker</NextMarker>
+             |</EnumerationResults>""".stripMargin,
+          "application/xml")
+      }
     }
 
     private def handle(exchange: HttpExchange): Unit = {
@@ -193,6 +266,8 @@ class KustoReaderExportIntegrationTest extends AnyFlatSpec with Matchers {
               else """{"message":"status lookup throttled"}"""
             reply(exchange, status, body)
           }
+        case path if path.startsWith("/blob-") =>
+          listBlobs(exchange, path.stripPrefix("/"))
         case path => throw new IllegalStateException(s"Unexpected SDK route: $path")
       }
     }
@@ -327,7 +402,7 @@ class KustoReaderExportIntegrationTest extends AnyFlatSpec with Matchers {
     }
   }
 
-  it should "retry async throttling and read only successful multi-root local Parquet" in {
+  it should "read only successful attempts when retry output is uneven across blob containers" in {
     withLocalSpark { (spark, root) =>
       withFixture(Seq(Outcome(state = "Throttled"), Outcome(), Outcome()), spark) { f =>
         val directories = f.run(partitions = 2)
@@ -342,13 +417,18 @@ class KustoReaderExportIntegrationTest extends AnyFlatSpec with Matchers {
         f.delays.size shouldBe 1
         directories shouldBe sent.tail.map(_.directory)
         directories.distinct.size shouldBe 2
-        def local(directory: String): String = {
-          val path = root.resolve(directory).normalize()
+        def local(container: String, directory: String): String = {
+          val path = root.resolve(container).resolve(directory).normalize()
           require(path.startsWith(root), "Export path escaped the local fixture")
           new URI("kustotest", null, path.toUri.getPath, null, null).toString
         }
-        sent.zip(Seq(999L, 10L, 20L)).foreach { case (attempt, value) =>
-          val path = root.resolve(attempt.directory)
+        val output =
+          Seq((sent(0), "blob-a", 999L), (sent(1), "blob-b", 10L), (sent(2), "blob-a", 20L))
+        output.groupBy(_._2).foreach { case (container, attempts) =>
+          f.blobNames(container) = attempts.map(_._1.directory + "part.parquet")
+        }
+        output.foreach { case (attempt, container, value) =>
+          val path = root.resolve(container).resolve(attempt.directory)
           Files.createDirectories(path)
           val schema =
             MessageTypeParser.parseMessageType("message export { required int64 value; }")
@@ -361,11 +441,30 @@ class KustoReaderExportIntegrationTest extends AnyFlatSpec with Matchers {
           finally writer.close()
         }
         spark.read
-          .parquet(local(sent.head.directory))
+          .parquet(local("blob-a", sent.head.directory))
           .collect()
           .map(_.getLong(0))
           .toSeq shouldBe Seq(999L)
-        val successDirs = directories.map(local)
+        val storage = new TransientStorageParameters(
+          Array("blob-a", "blob-b").map(container =>
+            new TransientStorageCredentials(
+              s"https://dummyaccount.blob.core.windows.net/$container?sig=unused")))
+        val paths = KustoReader.exportedPaths(
+          storage,
+          directories,
+          "wasbs",
+          (credential, directory) =>
+            KustoReader.blobDirectoryExists(f.blobContainer(credential.blobContainer), directory))
+        paths shouldBe Seq(
+          s"wasbs://blob-b@dummyaccount.blob.core.windows.net/${sent(1).directory}",
+          s"wasbs://blob-a@dummyaccount.blob.core.windows.net/${sent(2).directory}")
+        val probes = f.blobRequests.asScala.toSeq
+        probes.size shouldBe 4
+        probes.map(_._2.get("prefix")).toSet shouldBe directories.map(Some(_)).toSet
+        val successDirs = paths.map { path =>
+          val uri = URI.create(path)
+          local(uri.getUserInfo, uri.getPath.stripPrefix("/"))
+        }
         val rows = spark.read.parquet(successDirs: _*).collect().map(_.getLong(0)).sorted.toSeq
         rows shouldBe Seq(10L, 20L)
         rows should not contain 999L
@@ -373,7 +472,62 @@ class KustoReaderExportIntegrationTest extends AnyFlatSpec with Matchers {
     }
   }
 
-  it should "retry polling HTTP 429 on the same operation without another export" in {
+  "Blob directory probing" should "ignore failed attempts, sibling prefixes, and empty containers" in {
+    withFixture(Seq.empty) { f =>
+      val directory = "read/part0/attempt2/"
+      f.blobNames("blob-other") = Seq(
+        "read/part0/attempt1/part.parquet",
+        "read/part0/attempt2",
+        "read/part0/attempt2_other/part.parquet",
+        "read/part1/attempt2/part.parquet")
+      f.blobNames("blob-empty") = Seq.empty
+
+      KustoReader.blobDirectoryExists(f.blobContainer("blob-other"), directory) shouldBe false
+      KustoReader.blobDirectoryExists(f.blobContainer("blob-empty"), directory) shouldBe false
+      val probes = f.blobRequests.asScala.toSeq
+      probes.size shouldBe 2
+      all(probes.map(_._2.get("prefix"))) shouldBe Some(directory)
+    }
+  }
+
+  it should "find nested attempt output after an empty page with a continuation token" in {
+    withFixture(Seq.empty) { f =>
+      val directory = "read/part0/attempt2/"
+      f.blobNames("blob-paged") = Seq(directory + "nested/part.parquet")
+      f.emptyFirstBlobPage("blob-paged") = true
+
+      KustoReader.blobDirectoryExists(f.blobContainer("blob-paged"), directory) shouldBe true
+      val probes = f.blobRequests.asScala.toSeq
+      probes.map(_._2.get("marker")) shouldBe Seq(None, Some("0"))
+      all(probes.map(_._2.get("prefix"))) shouldBe Some(directory)
+    }
+  }
+
+  it should "stop listing once it finds a matching blob" in {
+    withFixture(Seq.empty) { f =>
+      val directory = "read/part0/attempt2/"
+      f.blobNames("blob-many") = (1 to 3).map(i => s"${directory}part$i.parquet")
+
+      KustoReader.blobDirectoryExists(f.blobContainer("blob-many"), directory) shouldBe true
+      f.blobRequests.size() shouldBe 1
+      f.blobRequests.peek()._2.get("prefix") shouldBe Some(directory)
+    }
+  }
+
+  it should "propagate blob-listing authorization failures instead of treating them as empty output" in {
+    withFixture(Seq.empty) { f =>
+      f.deniedBlobContainers("blob-denied") = true
+
+      val error = intercept[BlobStorageException] {
+        KustoReader.blobDirectoryExists(f.blobContainer("blob-denied"), "read/part0/attempt2/")
+      }
+
+      error.getStatusCode shouldBe 403
+      f.blobRequests.size() shouldBe 1
+    }
+  }
+
+  "Local SDK export integration" should "retry polling HTTP 429 on the same operation without another export" in {
     withFixture(Seq(Outcome(pollStatuses = Seq(429, 200)))) { f =>
       val directories = f.run()
       val sent = f.exports.asScala.toSeq
