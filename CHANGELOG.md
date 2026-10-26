@@ -17,6 +17,21 @@ Tags are created as `v4.0_{version}` (Spark 4 / master) and `v3.0_{version}` (Sp
 ### Fixed
 - None
 
+## [7.1.5] - 2026-10-26
+
+### Changed
+- Distributed-read export submissions no longer use the generic command retry policy to replay ambiguous failures. Exhausted HTTP 429 submissions report a `FailedOperationException` with the original SDK exception retained as the cause (#520)
+- Unrecognized or unreadable asynchronous operation states report a monitoring error rather than triggering failed-operation retries in shared write callers (#520)
+
+### Added
+- None
+
+### Fixed
+- Retry explicitly throttled distributed-read exports up to four total attempts per partition, with jittered exponential backoff and a shared per-partition timeout budget (#520)
+- Isolate each export attempt's output and read/cache only successful attempt paths; stop blob-prefix existence checks after the first match (#520)
+- Correct shared asynchronous polling timeout/error propagation and timer cleanup; preserve accepted operation IDs in post-submission timeout diagnostics and handle unavailable write-failure status text safely (#520)
+- Default ingestion-test cleanup to the exact validated table so concurrent runs do not delete each other's tables (#520)
+
 ## [7.1.4] - 2026-09-23
 
 ### Changed
