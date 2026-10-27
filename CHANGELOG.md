@@ -13,6 +13,7 @@ Tags are created as `v4.0_{version}` (Spark 4 / master) and `v3.0_{version}` (Sp
 
 ### Added
 - Log the OSS connector and Kusto Java SDK versions as searchable `Kusto.Spark.Connector:<version>|Kusto.Java.Client:<version>` identifiers at INFO once per class loader, with troubleshooting guidance
+- Ingest-v2 write path for queued and transactional writes, used when the hidden `enableIngestV2` option is set and the service asks for REST ingestion or OneLake uploads (for Fabric Private Link). Off by default; streaming writes are unchanged. See `docs/INGEST_V2_SPECS_AND_INTEGRATION.md`
 
 ### Fixed
 - None

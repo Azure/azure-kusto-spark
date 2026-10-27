@@ -4,79 +4,130 @@
 package com.microsoft.kusto.spark.datasink.v2
 
 import com.microsoft.azure.kusto.ingest.v2.client.{IngestionOperation, QueuedIngestClient}
-import com.microsoft.azure.kusto.ingest.v2.models.{Status, StatusResponse}
+import com.microsoft.azure.kusto.ingest.v2.common.models.IngestKind
+import com.microsoft.azure.kusto.ingest.v2.models.Status
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 
 import java.time.Duration
+import java.util.concurrent.{ExecutionException, TimeUnit, TimeoutException}
+import scala.util.control.NonFatal
 
-/**
- * Self-contained status tracker for kusto-ingest-v2 SDK ingestion operations. Uses the SDK's
- * built-in REST-based status tracking (no Azure Storage Queue polling).
- *
- * This replaces v1's queue-based polling approach.
- */
+/** Waits for ingest-v2 operations through the service's REST status API. */
 object IngestV2StatusTracker {
   private val myName = this.getClass.getSimpleName
-  private val DefaultPollingInterval: Duration = Duration.ofSeconds(10)
+  private[v2] val PollingInterval: Duration = Duration.ofSeconds(10)
+  private val MaxStatusCallDuration: Duration = Duration.ofMinutes(2)
 
-  /**
-   * Polls all operations until completion or timeout. Uses the kusto-ingest-v2 SDK's built-in
-   * `pollForCompletion` method which uses REST API.
-   *
-   * @return
-   *   true if all operations completed successfully, false if any failed
-   */
-  def waitForCompletion(
-      operations: List[IngestionOperation],
-      queuedClient: QueuedIngestClient,
-      timeout: Duration): Boolean = {
+  /** Counts reported for one operation. */
+  private[v2] final case class Counts(
+      succeeded: Long,
+      failed: Long,
+      canceled: Long,
+      inProgress: Long)
 
-    if (operations.isEmpty) return true
-
-    KDSU.logInfo(
-      myName,
-      s"Waiting for ${operations.size} ingestion operations to complete (timeout: $timeout)")
-
-    val results = operations.map { op =>
-      try {
-        val statusResponse: StatusResponse = queuedClient
-          .pollForCompletion(op, DefaultPollingInterval, timeout)
-          .join()
-
-        val status = statusResponse.getStatus
-        val succeeded = Option(status.getSucceeded).map(_.longValue()).getOrElse(0L)
-        val failed = Option(status.getFailed).map(_.longValue()).getOrElse(0L)
-        val inProgress = Option(status.getInProgress).map(_.longValue()).getOrElse(0L)
-
-        KDSU.logDebug(
-          myName,
-          s"Operation ${op.getOperationId}: succeeded=$succeeded, failed=$failed, inProgress=$inProgress")
-
-        failed == 0 && inProgress == 0
-      } catch {
-        case e: Exception =>
-          KDSU.logError(myName, s"Failed to poll operation ${op.getOperationId}: ${e.getMessage}")
-          false
-      }
+  private[v2] object Counts {
+    def of(status: Status): Counts = {
+      def value(v: java.lang.Long): Long = Option(v).map(_.longValue()).getOrElse(0L)
+      if (status == null) Counts(0, 0, 0, 0)
+      else
+        Counts(
+          value(status.getSucceeded),
+          value(status.getFailed),
+          value(status.getCanceled),
+          value(status.getInProgress))
     }
-
-    val allSucceeded = results.forall(identity)
-    if (allSucceeded) {
-      KDSU.logInfo(myName, s"All ${operations.size} operations completed successfully")
-    } else {
-      KDSU.logError(
-        myName,
-        s"Some operations failed: ${results.count(identity)}/${results.size} succeeded")
-    }
-    allSucceeded
   }
 
+  /** Done when nothing is in progress and every submitted blob has a final state. */
+  private[v2] def isDone(counts: Counts, blobCount: Int): Boolean =
+    counts.inProgress == 0 && counts.succeeded + counts.failed + counts.canceled >= blobCount
+
+  /** Successful only when every submitted blob succeeded. */
+  private[v2] def isSuccess(counts: Counts, blobCount: Int): Boolean =
+    counts.failed == 0 && counts.canceled == 0 && counts.inProgress == 0 &&
+      counts.succeeded >= blobCount
+
   /**
-   * Gets the current status summary for an operation without blocking.
+   * Waits until every operation finished, sharing one deadline. Throws if any blob failed or was
+   * canceled, or if the deadline passed first.
    */
-  def getOperationStatus(
+  def waitForCompletion(
+      operations: Seq[IngestV2SubmittedOperation],
+      queuedClient: QueuedIngestClient,
+      timeout: Duration,
+      requestId: String): Unit = {
+    if (operations.isEmpty) return
+
+    val deadline = System.nanoTime() + timeout.toNanos
+    KDSU.logInfo(
+      myName,
+      s"Waiting for ${operations.size} ingestion operation(s) (timeout: $timeout), requestId: $requestId")
+
+    operations.foreach { op =>
+      val operation =
+        new IngestionOperation(
+          op.operationId,
+          op.database,
+          op.table,
+          IngestKind.valueOf(op.ingestKind))
+      var counts = Counts(0, 0, 0, 0)
+      var lastError: Option[Throwable] = None
+      var done = false
+      while (!done) {
+        try {
+          counts = Counts.of(getSummary(queuedClient, operation, remaining(deadline)))
+          lastError = None
+          done = isDone(counts, op.blobCount)
+        } catch {
+          case NonFatal(e) =>
+            // Status reads are retried until the deadline; the operation itself is unaffected.
+            KDSU.logWarn(
+              myName,
+              s"Reading the status of ingestion operation ${op.operationId} failed, will retry: $e")
+            lastError = Some(e)
+        }
+        if (!done) {
+          val left = remaining(deadline)
+          if (left.isZero) {
+            lastError.foreach(e => throw e)
+            throw new TimeoutException(
+              s"Ingestion operation ${op.operationId} did not finish within $timeout " +
+                s"(succeeded=${counts.succeeded}, failed=${counts.failed}, " +
+                s"canceled=${counts.canceled}, inProgress=${counts.inProgress}), requestId: $requestId")
+          }
+          Thread.sleep(math.min(PollingInterval.toMillis, left.toMillis))
+        }
+      }
+      if (!isSuccess(counts, op.blobCount)) {
+        throw new IllegalStateException(
+          s"Ingestion operation ${op.operationId} into '${op.table}' did not fully succeed " +
+            s"(blobs=${op.blobCount}, succeeded=${counts.succeeded}, failed=${counts.failed}, " +
+            s"canceled=${counts.canceled}), requestId: $requestId. Run '.show ingestion failures' " +
+            "on the database for details.")
+      }
+      KDSU.logDebug(myName, s"Ingestion operation ${op.operationId} succeeded: $counts")
+    }
+    KDSU.logInfo(
+      myName,
+      s"All ${operations.size} ingestion operation(s) succeeded, requestId: $requestId")
+  }
+
+  private def remaining(deadline: Long): Duration =
+    Duration.ofNanos(math.max(0L, deadline - System.nanoTime()))
+
+  private def getSummary(
+      queuedClient: QueuedIngestClient,
       operation: IngestionOperation,
-      queuedClient: QueuedIngestClient): Status = {
-    queuedClient.getOperationSummaryAsyncJava(operation).join()
+      left: Duration): Status = {
+    val bound = math.max(1000L, math.min(left.toMillis, MaxStatusCallDuration.toMillis))
+    val future = queuedClient.getOperationSummaryAsyncJava(operation)
+    try future.get(bound, TimeUnit.MILLISECONDS)
+    catch {
+      case _: TimeoutException =>
+        future.cancel(true)
+        throw new TimeoutException(
+          s"Reading the status of ingestion operation ${operation.getOperationId} timed out")
+      case e: ExecutionException if e.getCause != null => throw e.getCause
+    }
   }
 }

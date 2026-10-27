@@ -30,8 +30,8 @@ import scala.collection.immutable
  *   - If preferredIngestionMethod == "REST" → Use V2 SDK (auto-detected)
  *   - If preferredIngestionMethod == "Legacy" or 404 → Use V1 SDK (auto-fallback)
  *
- * Key difference from KustoSinkIngestV2E2E: Tests rely on V2 being the default path,
- * with auto-fallback to V1 based on config API response.
+ * Key difference from KustoSinkIngestV2E2E: Tests rely on V2 being the default path, with
+ * auto-fallback to V1 based on config API response.
  *
  * Run with: mvn test -pl connector -Dtest=KustoSinkAutoDetectionE2E -DKustoE2E
  *

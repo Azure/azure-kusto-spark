@@ -3,175 +3,130 @@
 
 package com.microsoft.kusto.spark.datasink.v2
 
-import com.azure.core.credential.TokenCredential
 import com.microsoft.azure.kusto.ingest.v2.ConfigurationClient
 import com.microsoft.azure.kusto.ingest.v2.common.models.ClientDetails
+import com.microsoft.azure.kusto.ingest.v2.models.ConfigurationResponse
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 
-import java.util.concurrent.{CompletableFuture, ConcurrentHashMap}
-import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContext}
+import java.time.Duration
+import java.util.concurrent.{ConcurrentHashMap, TimeUnit, TimeoutException}
 import scala.util.{Failure, Success, Try}
 
 /**
- * Queries and caches DM configuration for ingest-v2.
+ * Reads the DM ingestion configuration (`/v1/rest/ingestion/configuration`) through the ingest-v2
+ * SDK `ConfigurationClient`.
  *
- * CRITICAL: Honors the config API contract:
- *   - Query /v1/rest/ingestion/configuration
- *   - If preferredIngestionMethod == "REST" → use V2
- *   - If preferredIngestionMethod == "Legacy" or missing or 404 → use V1
+ * Only successful answers are cached (per DM URL and authentication), for the service's
+ * `refreshInterval` capped at one hour, like the SDK `DefaultConfigurationCache`. Failures are
+ * never cached, so a transient error does not pin a whole session to the V1 path.
  *
- * This is the authoritative source of truth for V1 vs V2 decision.
+ * The raw response is never logged because storage container URLs carry SAS tokens.
  */
 object IngestV2ConfigurationProvider {
   private val myName = this.getClass.getSimpleName
+  private[v2] val MaxCacheTtl: Duration = Duration.ofHours(1)
+  private[v2] val MinCacheTtl: Duration = Duration.ofMinutes(1)
+  private val RequestTimeoutSeconds = 30L
 
-  // Cache: dmUrl -> Option[IngestionConfig]
-  // Both Some(config) and None (404/error) are cached
-  private val configCache =
-    new ConcurrentHashMap[String, Option[IngestionConfig]]()
+  private final case class CacheKey(dmUrl: String, authentication: KustoAuthentication)
+  private final case class CachedEntry(config: IngestionConfig, expiresAtNanos: Long)
 
-  /**
-   * Query ingestion configuration from DM, with caching.
-   *
-   * Returns:
-   *   - Some(config) if config API succeeds
-   *   - None if config API returns 404, network error, or auth failure
-   *
-   * Result is cached for session lifetime.
-   */
+  private val configCache = new ConcurrentHashMap[CacheKey, CachedEntry]()
+
+  /** Returns the configuration, or the reason it could not be read. */
   def getConfiguration(
       dmUrl: String,
-      authentication: KustoAuthentication): Option[IngestionConfig] = {
-
-    // Check cache first
-//    if (configCache.containsKey(dmUrl)) {
-//      val cached = configCache.get(dmUrl)
-//      KDSU.logDebug(myName, s"Using cached config for $dmUrl: ${cached.isDefined}")
-//      return cached
-//    }
-
-    // Query config API
-    val configOpt = queryConfigurationAPI(dmUrl, authentication)
-
-    // Cache result (both Some and None)
-//    configCache.put(dmUrl, configOpt)
-
-    configOpt
-  }
-
-  /**
-   * Query /v1/rest/ingestion/configuration endpoint.
-   *
-   * Uses V2 SDK's ConfigurationClient to query the config API. Logs the response at INFO level
-   * for debugging (critical for rollout).
-   */
-  private def queryConfigurationAPI(
-      dmUrl: String,
-      authentication: KustoAuthentication): Option[IngestionConfig] = {
-
-    KDSU.logInfo(myName, s"Querying config API for $dmUrl")
-
-    val result = Try {
-      // Create token credential
-      val tokenCredential =
-        IngestV2Authentication.createTokenCredential(authentication)
-
-      // Create ConfigurationClient (no Fabric Private Link for now - use defaults)
-      val configClient = new ConfigurationClient(
-        dmUrl,
-        tokenCredential,
-        false, // skipSecurityChecks
-        new ClientDetails(
-          "Kusto.Spark.Connector",
-          KDSU.clientName,
-          "" // appName
-        ),
-        null, // s2sTokenProvider - not used for now
-        null // s2sFabricPrivateLinkAccessContext - not used for now
-      )
-
-      // Query config endpoint - this is a Kotlin suspend function
-      // Use kotlinx.coroutines.future to bridge suspend → CompletableFuture
-      val future = kotlinx.coroutines.future.FutureKt.future(
-        kotlinx.coroutines.GlobalScope.INSTANCE,
-        kotlin.coroutines.EmptyCoroutineContext.INSTANCE,
-        kotlinx.coroutines.CoroutineStart.DEFAULT,
-        new kotlin.jvm.functions.Function2[
-          kotlinx.coroutines.CoroutineScope,
-          kotlin.coroutines.Continuation[
-            _ >: com.microsoft.azure.kusto.ingest.v2.models.ConfigurationResponse],
-          AnyRef] {
-          override def invoke(
-              scope: kotlinx.coroutines.CoroutineScope,
-              cont: kotlin.coroutines.Continuation[
-                _ >: com.microsoft.azure.kusto.ingest.v2.models.ConfigurationResponse]
-          ): AnyRef = {
-            configClient.getConfigurationDetails(
-              cont.asInstanceOf[kotlin.coroutines.Continuation[
-                _ >: com.microsoft.azure.kusto.ingest.v2.models.ConfigurationResponse]])
-          }
-        }
-      )
-
-      // Wait for result with timeout
-      val response = future.get(30, java.util.concurrent.TimeUnit.SECONDS)
-
-      KDSU.logWarn(myName, s"Config API raw response for $dmUrl: $response")
-
-      // Parse response
-      IngestionConfig.fromConfigurationResponse(response)
+      authentication: KustoAuthentication): Try[IngestionConfig] = {
+    val key = CacheKey(dmUrl, authentication)
+    val cached = configCache.get(key)
+    if (cached != null && System.nanoTime() - cached.expiresAtNanos < 0) {
+      return Success(cached.config)
     }
 
+    val result = queryConfigurationApi(dmUrl, authentication)
     result match {
-      case Success(Some(config)) =>
-        // Config API succeeded and parsed successfully
-        logConfigResponse(dmUrl, config)
-        Some(config)
-
-      case Success(None) =>
-        // Config API succeeded but failed to parse
+      case Success((config, ttl)) =>
+        configCache.put(key, CachedEntry(config, System.nanoTime() + ttl.toNanos))
+        KDSU.logInfo(myName, s"Ingestion configuration for $dmUrl: $config")
+      case Failure(e) =>
+        configCache.remove(key)
         KDSU.logWarn(
           myName,
-          s"Config API returned response but failed to parse for $dmUrl. Fallback to V1.")
-        None
+          s"Could not read the ingestion configuration from $dmUrl: " +
+            s"${e.getClass.getSimpleName}: ${e.getMessage}")
+    }
+    result.map(_._1)
+  }
 
-      case Failure(exception) =>
-        // Config API failed (404, network error, auth failure)
-        KDSU.logWarn(
-          myName,
-          s"Config API not available for $dmUrl: ${exception.getClass.getSimpleName}: ${exception.getMessage}")
-        // Log full stack trace for debugging
-        val sw = new java.io.StringWriter()
-        exception.printStackTrace(new java.io.PrintWriter(sw))
-        KDSU.logWarn(myName, s"Config API failure stack trace:\n${sw.toString}")
-        KDSU.logInfo(myName, s"Fallback to V1 ingestion for $dmUrl")
-        None
+  private def queryConfigurationApi(
+      dmUrl: String,
+      authentication: KustoAuthentication): Try[(IngestionConfig, Duration)] = Try {
+    val configClient = new ConfigurationClient(
+      dmUrl,
+      IngestV2Authentication.createTokenCredential(authentication),
+      false, // skipSecurityChecks
+      new ClientDetails(IngestV2ClientProvider.ApplicationName, KDSU.clientName, ""),
+      null, // s2sTokenProvider
+      null // s2sFabricPrivateLinkAccessContext
+    )
+
+    // Bridge the Kotlin suspend function to a CompletableFuture.
+    val future = kotlinx.coroutines.future.FutureKt.future(
+      kotlinx.coroutines.GlobalScope.INSTANCE,
+      kotlin.coroutines.EmptyCoroutineContext.INSTANCE,
+      kotlinx.coroutines.CoroutineStart.DEFAULT,
+      new kotlin.jvm.functions.Function2[
+        kotlinx.coroutines.CoroutineScope,
+        kotlin.coroutines.Continuation[_ >: ConfigurationResponse],
+        AnyRef] {
+        override def invoke(
+            scope: kotlinx.coroutines.CoroutineScope,
+            cont: kotlin.coroutines.Continuation[_ >: ConfigurationResponse]): AnyRef =
+          configClient.getConfigurationDetails(cont)
+      })
+
+    val response =
+      try future.get(RequestTimeoutSeconds, TimeUnit.SECONDS)
+      catch {
+        case e: TimeoutException =>
+          // Cancels the coroutine so the request does not keep running in the background.
+          future.cancel(true)
+          throw e
+        case e: java.util.concurrent.ExecutionException if e.getCause != null =>
+          throw e.getCause
+      }
+
+    val config = IngestionConfig
+      .fromConfigurationResponse(response)
+      .getOrElse(throw new IllegalStateException("The ingestion configuration is empty"))
+    val refresh = Option(response.getContainerSettings)
+      .flatMap(s => parseTimeSpan(s.getRefreshInterval))
+    (config, cacheTtl(refresh))
+  }
+
+  private[v2] def cacheTtl(refreshInterval: Option[Duration]): Duration =
+    refreshInterval match {
+      case Some(d) if d.compareTo(MinCacheTtl) < 0 => MinCacheTtl
+      case Some(d) if d.compareTo(MaxCacheTtl) < 0 => d
+      case _ => MaxCacheTtl
+    }
+
+  /** Parses a .NET TimeSpan string ("hh:mm:ss", "d.hh:mm:ss", optional fraction). */
+  private[v2] def parseTimeSpan(value: String): Option[Duration] = {
+    val pattern = """^(?:(\d+)\.)?(\d{1,2}):(\d{1,2}):(\d{1,2})(?:\.\d+)?$""".r
+    Option(value).map(_.trim).flatMap {
+      case pattern(days, h, m, s) =>
+        Try(
+          Duration
+            .ofDays(Option(days).map(_.toLong).getOrElse(0L))
+            .plusHours(h.toLong)
+            .plusMinutes(m.toLong)
+            .plusSeconds(s.toLong)).toOption
+      case _ => None
     }
   }
 
-  /**
-   * Log config response at INFO level.
-   *
-   * CRITICAL: Required for debugging rollout issues. Config may vary across environments, feature
-   * flags, etc.
-   */
-  private def logConfigResponse(dmUrl: String, config: IngestionConfig): Unit = {
-    KDSU.logInfo(myName, s"Config API response for $dmUrl:")
-    KDSU.logInfo(myName, s"  preferredIngestionMethod: ${config.preferredIngestionMethod}")
-    KDSU.logInfo(myName, s"  preferredUploadMethod: ${config.preferredUploadMethod}")
-    KDSU.logInfo(myName, s"  maxBlobsPerBatch: ${config.maxBlobsPerBatch}")
-    KDSU.logInfo(myName, s"  maxDataSizeBytes: ${config.maxDataSizeBytes}")
-    KDSU.logInfo(myName, s"  blobPaths: ${config.blobPaths.size} containers")
-    KDSU.logInfo(myName, s"  oneLakePaths: ${config.oneLakePaths.size} paths")
-  }
-
-  /**
-   * Clear cache (for testing purposes).
-   */
-  def clearCache(): Unit = {
-    configCache.clear()
-    KDSU.logDebug(myName, "Config cache cleared")
-  }
+  /** Clears the cache (tests). */
+  def clearCache(): Unit = configCache.clear()
 }

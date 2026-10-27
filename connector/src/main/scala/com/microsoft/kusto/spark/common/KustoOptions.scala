@@ -110,6 +110,10 @@ private[kusto] object KustoDebugOptions {
   // Internal rollout switch. Public connector behavior must remain disabled by default.
   val KUSTO_ENABLE_EXPORT_STORAGE_API: String = newOption("enableExportStorageApi")
 
+  // Internal rollout switch for writes through ingest-v2 (queued ingestion only; streaming writes
+  // always use the existing path). Public connector behavior must remain disabled by default.
+  val KUSTO_ENABLE_INGEST_V2: String = newOption("enableIngestV2")
+
   // Partitioning parameters, CURRENTLY NOT USED
   // CURRENTLY NOT USED
   val KUSTO_READ_PARTITION_MODE: String = newOption("partitionMode")

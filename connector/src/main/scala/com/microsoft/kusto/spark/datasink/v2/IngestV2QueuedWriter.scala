@@ -3,21 +3,14 @@
 
 package com.microsoft.kusto.spark.datasink.v2
 
-import com.microsoft.azure.kusto.ingest.v2.client.{IngestionOperation, QueuedIngestClient}
-import com.microsoft.azure.kusto.ingest.v2.common.models.{
-  ExtendedIngestResponse,
-  IngestRequestPropertiesBuilder
-}
-import com.microsoft.azure.kusto.ingest.v2.common.models.mapping.IngestionMapping
-import com.microsoft.azure.kusto.ingest.v2.common.models.mapping.IngestionMapping.IngestionMappingType
+import com.azure.storage.blob.{BlobContainerClient, BlobContainerClientBuilder}
+import com.microsoft.azure.kusto.ingest.v2.client.QueuedIngestClient
 import com.microsoft.azure.kusto.ingest.v2.models.{Format, IngestRequestProperties}
 import com.microsoft.azure.kusto.ingest.v2.source.{BlobSource, CompressionType}
 import com.microsoft.azure.storage.blob.{BlobRequestOptions, CloudBlockBlob}
-import com.azure.core.credential.{AccessToken, TokenCredential, TokenRequestContext}
-import com.azure.storage.blob.{BlobClientBuilder}
-import com.azure.storage.blob.models.BlobHttpHeaders
 import com.microsoft.kusto.spark.datasink.{
   CountingWriter,
+  IngestionFormat,
   RowCSVWriterUtils,
   StorageTokenProvider,
   WriteOptions
@@ -30,320 +23,242 @@ import com.microsoft.kusto.spark.utils.{
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types.StructType
-import reactor.core.publisher.Mono
 
-import java.io.{BufferedWriter, ByteArrayInputStream, ByteArrayOutputStream, OutputStreamWriter}
+import java.io.{BufferedWriter, OutputStream, OutputStreamWriter}
 import java.net.URI
 import java.nio.charset.StandardCharsets
-import java.time.{Instant, OffsetDateTime, ZoneId}
 import java.time.format.DateTimeFormatter
+import java.time.{Instant, ZoneId}
+import java.util.concurrent.{CompletableFuture, ExecutionException, TimeUnit, TimeoutException}
 import java.util.zip.GZIPOutputStream
 import java.util.{TimeZone, UUID}
 import scala.collection.mutable.ListBuffer
 import scala.jdk.CollectionConverters._
 
 /**
- * Self-contained queued writer using the kusto-ingest-v2 SDK. Handles:
- *   - CSV serialization of Spark rows (via shared RowCSVWriterUtils)
- *   - GZip-compressed blob upload (duplicate of v1's createBlobWriter logic)
- *   - Multi-blob batch ingestion via kusto-ingest-v2 SDK QueuedIngestClient
- *
- * This class has NO dependency on ExtendedKustoClient or KustoClientCache.
+ * Writes one Spark partition as gzipped CSV blobs to the storage chosen from the ingestion
+ * configuration and submits them, in batches, through the ingest-v2 queued client.
  */
 object IngestV2QueuedWriter {
   private val myName = this.getClass.getSimpleName
-  private val GzipBufferSize: Int = 1000 * KCONST.DefaultBufferSize
-  private val DefaultMaxBlobsPerBatch: Int = 70 // Default if no config available
+  private[v2] val SubmitTimeoutMinutes = 10L
   private val formatter: DateTimeFormatter =
     DateTimeFormatter.ofPattern("HH-mm-ss-SSSSSS").withZone(ZoneId.systemDefault)
 
-  /**
-   * Ingest rows from a single partition using the kusto-ingest-v2 SDK queued path. Serializes
-   * rows to CSV, uploads to blob, batches blobs, then calls kusto-ingest-v2 SDK for ingestion.
-   *
-   * @param dmConfig
-   *   Optional config from DM config API (for batch limits, storage paths)
-   * @return
-   *   The list of IngestionOperations for status tracking
-   */
   def ingestPartition(
       rows: Iterator[InternalRow],
       schema: StructType,
       database: String,
       table: String,
       queuedClient: QueuedIngestClient,
-      dmConfig: Option[IngestionConfig],
+      targets: UploadTargets,
+      maxBlobsPerBatch: Int,
+      maxBlobSizeBytes: Long,
       writeOptions: WriteOptions,
-      batchIdForTracing: String): List[IngestionOperation] = {
+      batchIdForTracing: String): List[IngestV2SubmittedOperation] = {
 
     val partitionId = TaskContext.getPartitionId()
-
-    // Use config's maxBlobsPerBatch if available, otherwise use default
-    val maxBlobsPerBatch = dmConfig.map(_.maxBlobsPerBatch).getOrElse(DefaultMaxBlobsPerBatch)
-
-    KDSU.logDebug(
-      myName,
-      s"Using maxBlobsPerBatch=$maxBlobsPerBatch ${dmConfig.map(_ => "(from config)").getOrElse("(default)")}")
-    val partitionIdStr = partitionId.toString
     val timeZone = TimeZone.getTimeZone(writeOptions.timeZone).toZoneId
-    val maxBlobSize = writeOptions.batchLimit * KCONST.OneMegaByte
-    val blobNamePrefix = s"${database}_${table}_${batchIdForTracing}"
+    val blobNamePrefix =
+      KustoQueryUtils.simplifyName(s"${database}_${table}_${writeOptions.requestId}")
+    val sparkProps = writeOptions.maybeSparkIngestionProperties
+    val props = IngestV2RequestProperties.build(sparkProps, IngestionFormat.CSV)
+    // Like the existing path, blobs sealed because they are full skip batching unless disabled.
+    val fullBlobProps =
+      if (writeOptions.kustoCustomDebugWriteOptions.disableFlushImmediately) props
+      else
+        IngestV2RequestProperties.build(sparkProps, IngestionFormat.CSV, forceSkipBatching = true)
+    val target = BlobTarget(targets.pathFor(partitionId), targets.isLake, writeOptions)
 
-    // Get container path from config API
-    val (containerPath, isOneLake) = getContainerFromConfig(dmConfig)
-
-    KDSU.logInfo(myName, s"Starting partition $partitionIdStr for $database.$table (storage: ${if (isOneLake) "OneLake" else "Blob"})")
-
-    val completedBlobs = ListBuffer[BlobSourceWithInfo]()
-    val operations = ListBuffer[IngestionOperation]()
-
+    val pendingFull = ListBuffer[String]()
+    val operations = ListBuffer[IngestV2SubmittedOperation]()
     var blobNumber = 0
-    var curBlobUUID = UUID.randomUUID().toString
-    var blobWriter = createBlobWriterFromConfig(
-      containerPath,
-      isOneLake,
-      writeOptions.storageTokenProvider,
-      blobNamePrefix,
-      partitionIdStr,
-      blobNumber,
-      curBlobUUID)
+    var current: Option[V2BlobWriteResource] = None
 
-    for (row <- rows) {
-      RowCSVWriterUtils.writeRowAsCSV(row, schema, timeZone, blobWriter.csvWriter)
-
-      if (blobWriter.csvWriter.getCounter >= maxBlobSize) {
-        finalizeBlobWrite(blobWriter)
-        completedBlobs += BlobSourceWithInfo(blobWriter.blobUrl, blobWriter.csvWriter.getCounter)
-
-        KDSU.logDebug(
-          myName,
-          s"Partition $partitionIdStr: sealed blob $blobNumber (size: ${blobWriter.csvWriter.getCounter} bytes)")
-
-        // If we've accumulated maxBlobsPerBatch, flush the batch
-        if (completedBlobs.size >= maxBlobsPerBatch) {
-          val op = ingestBatch(queuedClient, database, table, completedBlobs.toList, writeOptions)
-          operations += op
-          completedBlobs.clear()
-        }
-
-        blobNumber += 1
-        curBlobUUID = UUID.randomUUID().toString
-        blobWriter = createBlobWriterFromConfig(
-          containerPath,
-          isOneLake,
-          writeOptions.storageTokenProvider,
-          blobNamePrefix,
-          partitionIdStr,
-          blobNumber,
-          curBlobUUID)
+    def submitFull(): Unit = {
+      if (pendingFull.nonEmpty) {
+        operations += submit(queuedClient, database, table, pendingFull.toList, fullBlobProps)
+        pendingFull.clear()
       }
     }
 
-    // Finalize the last blob
-    finalizeBlobWrite(blobWriter)
-    if (blobWriter.csvWriter.getCounter > 0) {
-      completedBlobs += BlobSourceWithInfo(blobWriter.blobUrl, blobWriter.csvWriter.getCounter)
+    def seal(): Option[String] = current.map { blob =>
+      blob.close()
+      current = None
+      blobNumber += 1
+      blob.blobUrl
     }
 
-    // Ingest remaining blobs
-    if (completedBlobs.nonEmpty) {
-      val op = ingestBatch(queuedClient, database, table, completedBlobs.toList, writeOptions)
-      operations += op
+    try {
+      for (row <- rows) {
+        val blob = current.getOrElse {
+          val name =
+            s"${blobNamePrefix}_${UUID.randomUUID()}_${partitionId}_${blobNumber}_" +
+              s"${formatter.format(Instant.now())}_spark.csv.gz"
+          val created = target.newBlob(name)
+          current = Some(created)
+          created
+        }
+        RowCSVWriterUtils.writeRowAsCSV(row, schema, timeZone, blob.csvWriter)
+        if (blob.csvWriter.getCounter >= maxBlobSizeBytes) {
+          seal().foreach(pendingFull += _)
+          if (pendingFull.size >= maxBlobsPerBatch) submitFull()
+        }
+      }
+      submitFull()
+      seal().foreach(last =>
+        operations += submit(queuedClient, database, table, List(last), props))
+    } catch {
+      case e: Throwable =>
+        current.foreach(_.abort())
+        throw e
     }
 
     KDSU.logInfo(
       myName,
-      s"Partition $partitionIdStr: completed with ${blobNumber + 1} blobs in ${operations.size} batches (maxBlobsPerBatch=$maxBlobsPerBatch)")
-
+      s"Partition $partitionId ($batchIdForTracing): wrote $blobNumber blob(s) to " +
+        s"${if (targets.isLake) "lake folder" else "storage container"}, submitted " +
+        s"${operations.size} ingestion operation(s), requestId: ${writeOptions.requestId}")
     operations.toList
   }
 
-  private def ingestBatch(
+  private[v2] def submit(
       queuedClient: QueuedIngestClient,
       database: String,
       table: String,
-      blobs: List[BlobSourceWithInfo],
-      writeOptions: WriteOptions): IngestionOperation = {
-
-    val blobSources: java.util.List[BlobSource] = blobs.map { b =>
-      new BlobSource(b.blobUrl, Format.csv, UUID.randomUUID(), CompressionType.GZIP)
+      blobUrls: List[String],
+      props: IngestRequestProperties,
+      format: Format = Format.csv,
+      compression: CompressionType = CompressionType.GZIP): IngestV2SubmittedOperation = {
+    val sources: java.util.List[BlobSource] = blobUrls.map { url =>
+      new BlobSource(url, format, UUID.randomUUID(), compression)
     }.asJava
-
-    val props = buildIngestRequestProperties(writeOptions)
-
-    KDSU.logInfo(myName, s"Ingesting batch of ${blobSources.size()} blobs to $database.$table")
-
-    val response: ExtendedIngestResponse = queuedClient
-      .ingestAsyncJava(database, table, blobSources, props)
-      .join()
-
-    val operationId = response.getIngestResponse.getIngestionOperationId
-    KDSU.logDebug(myName, s"Batch ingestion operationId: $operationId")
-    new IngestionOperation(operationId, database, table, response.getIngestionType)
+    val response = awaitSubmit(queuedClient.ingestAsyncJava(database, table, sources, props))
+    val operationId = Option(response.getIngestResponse)
+      .flatMap(r => Option(r.getIngestionOperationId))
+      .filter(_.trim.nonEmpty)
+      .getOrElse(throw new IllegalStateException(
+        "The ingestion service accepted the blobs but returned no operation id"))
+    IngestV2SubmittedOperation(
+      operationId,
+      database,
+      table,
+      response.getIngestionType.name(),
+      blobUrls.size)
   }
 
-  private def buildIngestRequestProperties(
-      writeOptions: WriteOptions): IngestRequestProperties = {
-    val builder = IngestRequestPropertiesBuilder.create()
-    builder.withEnableTracking(true)
-
-    writeOptions.maybeSparkIngestionProperties.foreach { sparkProps =>
-      if (sparkProps.flushImmediately) {
-        builder.withSkipBatching(true)
-      }
-      Option(sparkProps.csvMappingNameReference).filter(_.nonEmpty).foreach { ref =>
-        builder.withIngestionMapping(new IngestionMapping(ref, IngestionMappingType.CSV))
-      }
-    }
-
-    builder.build()
-  }
-
-  /**
-   * Get container path from config API. Uses blobPaths for Storage, oneLakePaths for Lake.
-   * Returns (path, isOneLake) tuple.
-   */
-  private def getContainerFromConfig(dmConfig: Option[IngestionConfig]): (String, Boolean) = {
-    dmConfig match {
-      case Some(config) if config.preferredUploadMethod == "Lake" && config.oneLakePaths.nonEmpty =>
-        val paths = config.oneLakePaths
-        val idx = TaskContext.getPartitionId() % paths.size
-        (paths(math.abs(idx)), true)
-      case Some(config) if config.blobPaths.nonEmpty =>
-        val paths = config.blobPaths
-        val idx = TaskContext.getPartitionId() % paths.size
-        (paths(math.abs(idx)), false)
-      case _ =>
-        throw new RuntimeException(
-          "No storage containers available from config API. Cannot write CSV blobs.")
-    }
-  }
-
-  private def createBlobWriterFromConfig(
-      containerPath: String,
-      isOneLake: Boolean,
-      storageTokenProvider: Option[StorageTokenProvider],
-      blobNamePrefix: String,
-      partitionId: String,
-      blobNumber: Int,
-      blobUUID: String): V2BlobWriteResource = {
-
-    val now = Instant.now()
-    val blobName =
-      s"${KustoQueryUtils.simplifyName(blobNamePrefix)}_${blobUUID}_${partitionId}_${blobNumber}_${formatter
-          .format(now)}_spark.csv.gz"
-
-    // Parse container URL from config API
-    val (baseUrl, sasToken) = splitUrlAndSas(containerPath)
-    val blobUrl = if (sasToken.nonEmpty) {
-      s"$baseUrl/$blobName?$sasToken"
-    } else {
-      s"$baseUrl/$blobName"
-    }
-
-    if (isOneLake && sasToken.isEmpty) {
-      // OneLake path: use Bearer token auth via new Azure Storage SDK
-      createOneLakeBlobWriter(baseUrl, blobName, blobUrl, storageTokenProvider)
-    } else {
-      // Blob Storage path with SAS: use legacy CloudBlockBlob
-      createSasBlobWriter(blobUrl)
+  /** Waits for a submission with a hard upper bound, unwrapping the SDK's error. */
+  private[v2] def awaitSubmit[T](future: CompletableFuture[T]): T = {
+    try future.get(SubmitTimeoutMinutes, TimeUnit.MINUTES)
+    catch {
+      case _: TimeoutException =>
+        future.cancel(true)
+        throw new TimeoutException(
+          s"Submitting blobs to ingest-v2 did not finish within $SubmitTimeoutMinutes minutes")
+      case e: ExecutionException if e.getCause != null => throw e.getCause
     }
   }
 
   /**
-   * Create a blob writer for OneLake using Bearer token auth (new Azure Storage SDK).
-   * Buffers data in memory and uploads on finalize.
+   * Where the blobs of one partition are written. Lake folders are written with AAD tokens from
+   * the StorageTokenProvider; storage containers with the SAS from the configuration.
    */
-  private def createOneLakeBlobWriter(
-      containerBaseUrl: String,
-      blobName: String,
-      blobUrl: String,
-      storageTokenProvider: Option[StorageTokenProvider]): V2BlobWriteResource = {
-
-    val tokenProvider = storageTokenProvider.getOrElse(
-      throw new RuntimeException(
-        "OneLake upload requires a storageTokenProvider but none was provided. " +
-          "Set the storageTokenProvider in WriteOptions for OneLake ingestion."))
-
-    val outputStream = new ByteArrayOutputStream()
-    val gzip = new GZIPOutputStream(outputStream)
-    val writer = new OutputStreamWriter(gzip, StandardCharsets.UTF_8)
-    val buffer = new BufferedWriter(writer, GzipBufferSize)
-    val csvWriter = CountingWriter(buffer)
-
-    V2BlobWriteResource(buffer, gzip, csvWriter, blobUrl,
-      oneLakeUploadContext = Some(OneLakeUploadContext(containerBaseUrl, blobName, outputStream, tokenProvider)))
+  private sealed trait BlobTarget {
+    def newBlob(name: String): V2BlobWriteResource
   }
 
-  /**
-   * Create a blob writer for Azure Blob Storage using SAS token (legacy CloudBlockBlob).
-   */
-  private def createSasBlobWriter(blobUrl: String): V2BlobWriteResource = {
-    val currentBlob = new CloudBlockBlob(new URI(blobUrl))
-    val options = new BlobRequestOptions()
-    options.setConcurrentRequestCount(4)
-    val gzip = new GZIPOutputStream(currentBlob.openOutputStream(null, options, null))
-    val writer = new OutputStreamWriter(gzip, StandardCharsets.UTF_8)
-    val buffer = new BufferedWriter(writer, GzipBufferSize)
-    val csvWriter = CountingWriter(buffer)
-
-    V2BlobWriteResource(buffer, gzip, csvWriter, blobUrl, oneLakeUploadContext = None)
-  }
-
-  private def splitUrlAndSas(url: String): (String, String) = {
-    val idx = url.indexOf('?')
-    if (idx < 0) (url, "")
-    else (url.substring(0, idx), url.substring(idx + 1))
-  }
-
-  private def finalizeBlobWrite(resource: V2BlobWriteResource): Unit = {
-    resource.writer.flush()
-    resource.gzip.flush()
-    resource.writer.close()
-    resource.gzip.close()
-
-    // For OneLake paths, upload the buffered data with Bearer token
-    resource.oneLakeUploadContext.foreach { ctx =>
-      val data = ctx.outputStream.toByteArray
-      if (data.nonEmpty) {
-        KDSU.logDebug(myName, s"Uploading ${data.length} bytes to OneLake: ${ctx.blobName}")
-
-        val tokenCredential = new TokenCredential {
-          override def getToken(request: TokenRequestContext): Mono[AccessToken] = {
-            val token = ctx.tokenProvider.getToken
-            Mono.just(new AccessToken(token, OffsetDateTime.now().plusHours(1)))
-          }
-        }
-
-        val blobClient = new BlobClientBuilder()
-          .endpoint(ctx.containerBaseUrl)
-          .blobName(ctx.blobName)
-          .credential(tokenCredential)
-          .buildClient()
-
-        val headers = new BlobHttpHeaders()
-          .setContentType("application/gzip")
-
-        blobClient.upload(new ByteArrayInputStream(data), data.length.toLong, true)
-        blobClient.setHttpHeaders(headers)
-
-        KDSU.logDebug(myName, s"OneLake upload complete: ${ctx.blobName} (${data.length} bytes)")
+  private object BlobTarget {
+    def apply(path: String, isLake: Boolean, writeOptions: WriteOptions): BlobTarget =
+      if (isLake) {
+        new LakeTarget(
+          path,
+          writeOptions.storageTokenProvider.getOrElse(
+            throw new IllegalStateException(
+              "Uploading to a OneLake lake folder requires a storage token provider " +
+                "(storageTokenProviderClasspath)")))
+      } else {
+        new SasContainerTarget(path)
       }
+  }
+
+  private final class SasContainerTarget(containerUrlWithSas: String) extends BlobTarget {
+    private val (baseUrl, sas) = {
+      val idx = containerUrlWithSas.indexOf('?')
+      if (idx < 0) (containerUrlWithSas, "")
+      else (containerUrlWithSas.substring(0, idx), containerUrlWithSas.substring(idx + 1))
+    }
+
+    override def newBlob(name: String): V2BlobWriteResource = {
+      val blobUrl = if (sas.isEmpty) s"$baseUrl/$name" else s"$baseUrl/$name?$sas"
+      val blob = new CloudBlockBlob(new URI(blobUrl))
+      val options = new BlobRequestOptions()
+      options.setConcurrentRequestCount(4)
+      V2BlobWriteResource(blob.openOutputStream(null, options, null), blobUrl)
+    }
+  }
+
+  private final class LakeTarget(lakeFolder: String, tokenProvider: StorageTokenProvider)
+      extends BlobTarget {
+    private val location = LakeFolderLocation.parse(lakeFolder)
+    private val containerClient: BlobContainerClient = new BlobContainerClientBuilder()
+      .endpoint(location.containerUrl)
+      .credential(new StorageProviderTokenCredential(tokenProvider))
+      .buildClient()
+
+    override def newBlob(name: String): V2BlobWriteResource = {
+      val blobClient = containerClient.getBlobClient(location.blobPath(name))
+      val stream = blobClient.getBlockBlobClient.getBlobOutputStream(true)
+      V2BlobWriteResource(stream, blobClient.getBlobUrl)
     }
   }
 }
 
-private[v2] case class OneLakeUploadContext(
-    containerBaseUrl: String,
-    blobName: String,
-    outputStream: ByteArrayOutputStream,
-    tokenProvider: StorageTokenProvider)
+/**
+ * A lake folder URL split like the .NET SDK (`Kusto.Ingest.Common/Storage/LakeFolder.cs`): the
+ * ".dfs." host label is replaced by ".blob.", the first path segment is the container (the
+ * workspace) and the rest is the folder inside it. The URL is otherwise used exactly as returned
+ * by the service; the host is not derived or checked here.
+ */
+private[v2] final case class LakeFolderLocation(
+    containerUrl: String,
+    folder: String,
+    rawFolder: String) {
 
-private[v2] case class V2BlobWriteResource(
-    writer: BufferedWriter,
-    gzip: GZIPOutputStream,
-    csvWriter: CountingWriter,
-    blobUrl: String,
-    oneLakeUploadContext: Option[OneLakeUploadContext] = None)
+  /** Blob name inside the container, for the storage SDK (not URL encoded). */
+  def blobPath(name: String): String = if (folder.isEmpty) name else s"$folder/$name"
+}
 
-private[v2] case class BlobSourceWithInfo(blobUrl: String, size: Long)
+private[v2] object LakeFolderLocation {
+  def parse(lakeFolder: String): LakeFolderLocation = {
+    val uri = new URI(lakeFolder.trim.replace(".dfs.", ".blob."))
+    if (!"https".equalsIgnoreCase(uri.getScheme) || uri.getHost == null) {
+      throw new IllegalArgumentException("The lake folder must be an absolute https URL")
+    }
+    val segments = Option(uri.getRawPath).getOrElse("").split('/').filter(_.nonEmpty)
+    if (segments.isEmpty) {
+      throw new IllegalArgumentException("The lake folder URL has no container segment")
+    }
+    LakeFolderLocation(
+      containerUrl = s"https://${uri.getRawAuthority}/${segments.head}",
+      folder = segments.tail.map(s => new URI(s"/$s").getPath.stripPrefix("/")).mkString("/"),
+      rawFolder = segments.tail.mkString("/"))
+  }
+}
+
+/** One gzipped CSV blob being written. */
+private[v2] final case class V2BlobWriteResource(target: OutputStream, blobUrl: String) {
+  private val gzip = new GZIPOutputStream(target)
+  private val buffer =
+    new BufferedWriter(
+      new OutputStreamWriter(gzip, StandardCharsets.UTF_8),
+      1000 * KCONST.DefaultBufferSize)
+  val csvWriter: CountingWriter = CountingWriter(buffer)
+
+  /** Flushes and commits the blob. */
+  def close(): Unit = buffer.close()
+
+  /** Best-effort release after a failure; the uncommitted blob is discarded by the service. */
+  def abort(): Unit =
+    try target.close()
+    catch { case _: Exception => }
+}

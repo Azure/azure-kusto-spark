@@ -11,9 +11,14 @@ import com.azure.identity.{
 }
 import com.microsoft.kusto.spark.authentication._
 import com.microsoft.kusto.spark.utils.{KeyVaultUtils, KustoDataSourceUtils => KDSU}
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.microsoft.kusto.spark.datasink.StorageTokenProvider
 import reactor.core.publisher.Mono
 
-import java.time.OffsetDateTime
+import java.nio.charset.StandardCharsets
+import java.time.{Instant, OffsetDateTime, ZoneOffset}
+import java.util.Base64
+import scala.util.Try
 
 /**
  * Self-contained authentication module for the ingest-v2 SDK path. Converts KustoAuthentication
@@ -27,7 +32,7 @@ object IngestV2Authentication {
   private val myName = this.getClass.getSimpleName
 
   def createTokenCredential(authentication: KustoAuthentication): TokenCredential = {
-    KDSU.logInfo(
+    KDSU.logDebug(
       myName,
       s"Creating TokenCredential from auth type: ${authentication.getClass.getSimpleName}")
 
@@ -76,31 +81,54 @@ object IngestV2Authentication {
 }
 
 /**
- * TokenCredential that returns a static access token. Used when the user provides a pre-obtained
- * token.
+ * Builds AccessTokens with the real expiry of the token. azure-core caches tokens until shortly
+ * before `expiresAt`, so a made-up expiry would keep serving a stale token. When the token is not
+ * a readable JWT, it is reported as already expiring so that it is fetched again for every
+ * request.
  */
-private[v2] class StaticTokenCredential(token: String) extends TokenCredential {
-  override def getToken(request: TokenRequestContext): Mono[AccessToken] = {
-    Mono.just(new AccessToken(token, OffsetDateTime.now().plusHours(1)))
-  }
+private[v2] object AccessTokens {
+  private val mapper = new ObjectMapper()
 
-  override def getTokenSync(request: TokenRequestContext): AccessToken = {
-    new AccessToken(token, OffsetDateTime.now().plusHours(1))
+  def fromRawToken(token: String): AccessToken =
+    new AccessToken(token, expiryOf(token).getOrElse(OffsetDateTime.now(ZoneOffset.UTC)))
+
+  private[v2] def expiryOf(token: String): Option[OffsetDateTime] = {
+    Try {
+      val parts = token.split('.')
+      val payload = new String(Base64.getUrlDecoder.decode(parts(1)), StandardCharsets.UTF_8)
+      val exp = mapper.readTree(payload).get("exp")
+      if (exp != null && exp.canConvertToLong) {
+        Some(OffsetDateTime.ofInstant(Instant.ofEpochSecond(exp.asLong()), ZoneOffset.UTC))
+      } else None
+    }.toOption.flatten
   }
 }
 
-/**
- * TokenCredential that delegates to a user-provided callback (Callable[String]) for token
- * acquisition.
- */
+/** TokenCredential for a token supplied by the user. */
+private[v2] class StaticTokenCredential(token: String) extends TokenCredential {
+  override def getToken(request: TokenRequestContext): Mono[AccessToken] =
+    Mono.fromCallable(() => getTokenSync(request))
+
+  override def getTokenSync(request: TokenRequestContext): AccessToken =
+    AccessTokens.fromRawToken(token)
+}
+
+/** TokenCredential that delegates to a user-provided callback. */
 private[v2] class CallbackTokenCredential(callback: java.util.concurrent.Callable[String])
     extends TokenCredential {
-  override def getToken(request: TokenRequestContext): Mono[AccessToken] = {
+  override def getToken(request: TokenRequestContext): Mono[AccessToken] =
     Mono.fromCallable(() => getTokenSync(request))
-  }
 
-  override def getTokenSync(request: TokenRequestContext): AccessToken = {
-    val token = callback.call()
-    new AccessToken(token, OffsetDateTime.now().plusHours(1))
-  }
+  override def getTokenSync(request: TokenRequestContext): AccessToken =
+    AccessTokens.fromRawToken(callback.call())
+}
+
+/** TokenCredential backed by a StorageTokenProvider (OneLake uploads). */
+private[v2] class StorageProviderTokenCredential(provider: StorageTokenProvider)
+    extends TokenCredential {
+  override def getToken(request: TokenRequestContext): Mono[AccessToken] =
+    Mono.fromCallable(() => getTokenSync(request))
+
+  override def getTokenSync(request: TokenRequestContext): AccessToken =
+    AccessTokens.fromRawToken(provider.getToken)
 }

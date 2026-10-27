@@ -112,7 +112,7 @@ rdd.foreachPartition (per Spark partition)
   └─── [Streaming Path]
         ├── Serialize rows to in-memory CSV buffer
         ├── Split if buffer > 4MB threshold
-        └── Call managedStreamingClient.ingestFromStream()
+        └── Call streamingClient.ingestFromStream()
   │
   ▼
 FinalizeHelper (Transactional mode only)

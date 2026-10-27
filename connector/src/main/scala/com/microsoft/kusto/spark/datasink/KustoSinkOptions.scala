@@ -18,8 +18,8 @@ import java.util.concurrent.TimeUnit
 import scala.concurrent.duration.FiniteDuration
 
 /**
- * A serializable function that returns a Bearer token for storage access.
- * Used for OneLake uploads where SAS tokens are not available.
+ * A serializable function that returns a Bearer token for storage access. Used for OneLake
+ * uploads where SAS tokens are not available.
  */
 trait StorageTokenProvider extends Serializable {
   def getToken: String
@@ -97,16 +97,12 @@ object KustoSinkOptions extends KustoOptions {
   // The ingestion storage to use. This expects a serialized json of type Array[IngestionStorageParameters]
   val KUSTO_INGESTION_STORAGE: String = newOption("kustoIngestionStorageContainer")
 
-  // If set to 'true', bypasses V2 entirely and always uses the legacy
-  // V1 (queue-based) ingestion path. Use as an escape hatch if V2 causes issues.
-  val KUSTO_LEGACY_INGEST: String = newOption("legacyIngest")
-
-  // Classpath of a class implementing StorageTokenProvider for OneLake Bearer token auth.
-  // The class must have a constructor accepting CaseInsensitiveMap[String] (parameters map).
-  // Used when config API returns preferredUploadMethod="Lake" (OneLake paths without SAS).
+  // Classpath of a class implementing StorageTokenProvider, used to authenticate CSV uploads to
+  // OneLake lake folders. The class must have a constructor accepting the options map
+  // (CaseInsensitiveMap[String]). Only used when ingest-v2 is enabled.
   val KUSTO_STORAGE_TOKEN_PROVIDER_CLASSPATH: String = newOption("storageTokenProviderClasspath")
 
-  // The ingestion format to use for V2 ingestion.
+  // The ingestion format to use for V2 ingestion. Only used when ingest-v2 is enabled.
   // Supported values: "csv" (default), "parquet".
   // "parquet" uses Spark's native Parquet writer for vectorized, columnar ingestion.
   val KUSTO_INGESTION_FORMAT: String = newOption("ingestionFormat")
@@ -152,6 +148,6 @@ final case class WriteOptions(
     streamIngestUncompressedMaxSize: Int = KustoConstants.DefaultMaxStreamingBytesUncompressed,
     maybeIngestionBlobStorage: Option[Array[IngestionStorageParameters]] = None,
     kustoCustomDebugWriteOptions: KustoCustomDebugWriteOptions,
-    legacyIngest: Boolean = false,
+    enableIngestV2: Boolean = false,
     ingestionFormat: IngestionFormat = IngestionFormat.CSV,
     storageTokenProvider: Option[StorageTokenProvider] = None)

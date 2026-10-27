@@ -568,13 +568,16 @@ object KustoDataSourceUtils {
       addSourceLocationTransform,
       maybeSparkIngestionProperties)
 
-    val legacyIngest =
-      parameters.getOrElse(KustoSinkOptions.KUSTO_LEGACY_INGEST, "false").trim.toBoolean
+    val enableIngestV2 = parameters
+      .getOrElse(KustoDebugOptions.KUSTO_ENABLE_INGEST_V2, "false")
+      .trim
+      .toBoolean
 
+    // Loaded only when ingest-v2 is enabled, so the provider can never affect the default path.
     val storageTokenProviderClasspath =
-      parameters.getOrElse(KustoSinkOptions.KUSTO_STORAGE_TOKEN_PROVIDER_CLASSPATH, "")
+      parameters.getOrElse(KustoSinkOptions.KUSTO_STORAGE_TOKEN_PROVIDER_CLASSPATH, "").trim
     val storageTokenProvider: Option[StorageTokenProvider] =
-      if (storageTokenProviderClasspath.nonEmpty) {
+      if (enableIngestV2 && storageTokenProviderClasspath.nonEmpty) {
         val classLoader = Thread.currentThread().getContextClassLoader
         val provider = classLoader
           .loadClass(storageTokenProviderClasspath)
@@ -611,7 +614,7 @@ object KustoDataSourceUtils {
       streamIngestMaxSize,
       maybeIngestionStorageParameters,
       kustoCustomDebugOptions,
-      legacyIngest,
+      enableIngestV2,
       ingestionFormat,
       storageTokenProvider)
 

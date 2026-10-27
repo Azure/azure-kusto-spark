@@ -3,23 +3,13 @@
 
 package com.microsoft.kusto.spark.datasink.v2
 
-import com.azure.core.credential.TokenCredential
-import com.microsoft.azure.kusto.ingest.v2.builders.{
-  ManagedStreamingIngestClientBuilder,
-  QueuedIngestClientBuilder
-}
-import com.microsoft.azure.kusto.ingest.v2.client.{
-  ManagedStreamingIngestClient,
-  QueuedIngestClient
-}
+import com.microsoft.azure.kusto.ingest.v2.builders.QueuedIngestClientBuilder
+import com.microsoft.azure.kusto.ingest.v2.client.QueuedIngestClient
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.utils.{KustoDataSourceUtils => KDSU}
 
 /**
- * Self-contained client provider for the kusto-ingest-v2 SDK. Builds and caches ingest-v2 SDK
- * clients independently of the v1 ExtendedKustoClient and KustoClientCache.
- *
- * This class owns its own lifecycle and can be removed or replaced without affecting the v1 path.
+ * Lazily builds the ingest-v2 SDK queued client for one DM endpoint and authentication.
  */
 class IngestV2ClientProvider(
     dmUrl: String,
@@ -27,32 +17,30 @@ class IngestV2ClientProvider(
     connectorVersion: String) {
 
   private val myName = this.getClass.getSimpleName
-  private val tokenCredential: TokenCredential =
-    IngestV2Authentication.createTokenCredential(authentication)
+  @volatile private var queuedClientCreated = false
 
   lazy val queuedClient: QueuedIngestClient = {
     KDSU.logInfo(myName, s"Creating QueuedIngestClient for DM: $dmUrl")
-    QueuedIngestClientBuilder
+    val client = QueuedIngestClientBuilder
       .create(dmUrl)
-      .withAuthentication(tokenCredential)
-      .withClientDetails("Kusto.Spark.Connector", connectorVersion, "")
+      .withAuthentication(IngestV2Authentication.createTokenCredential(authentication))
+      .withClientDetails(IngestV2ClientProvider.ApplicationName, connectorVersion, "")
       .build()
-  }
-
-  lazy val managedStreamingClient: ManagedStreamingIngestClient = {
-    KDSU.logInfo(myName, s"Creating ManagedStreamingIngestClient for DM: $dmUrl")
-    ManagedStreamingIngestClientBuilder
-      .create(dmUrl)
-      .withAuthentication(tokenCredential)
-      .withClientDetails("Kusto.Spark.Connector", connectorVersion, "")
-      .build()
+    queuedClientCreated = true
+    client
   }
 
   def close(): Unit = {
-    KDSU.logDebug(myName, "Closing ingest-v2 clients")
-    try { queuedClient.close() }
-    catch { case _: Exception => }
-    try { managedStreamingClient.close() }
-    catch { case _: Exception => }
+    if (queuedClientCreated) {
+      try queuedClient.close()
+      catch {
+        case e: Exception =>
+          KDSU.logDebug(myName, s"Ignoring failure while closing the ingest client: $e")
+      }
+    }
   }
+}
+
+object IngestV2ClientProvider {
+  val ApplicationName = "Kusto.Spark.Connector"
 }
