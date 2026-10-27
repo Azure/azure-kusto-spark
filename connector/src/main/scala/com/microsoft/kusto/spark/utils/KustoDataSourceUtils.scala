@@ -49,6 +49,7 @@ import java.io.InputStream
 import java.net.URI
 import java.security.InvalidParameterException
 import java.util
+import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.{Callable, CountDownLatch, TimeUnit}
 import java.util.{
   NoSuchElementException,
@@ -92,7 +93,6 @@ object KustoDataSourceUtils {
     val requestedPartitions = parameters.get(KustoDebugOptions.KUSTO_NUM_PARTITIONS)
     val partitioningMode = parameters.get(KustoDebugOptions.KUSTO_READ_PARTITION_MODE)
     val numPartitions = setNumPartitions(sqlContext, requestedPartitions, partitioningMode)
-    // Set default export split limit as 1GB, maximal allowed
     val readModeOption = parameters.get(KustoSourceOptions.KUSTO_READ_MODE)
     val readMode: Option[ReadMode] = if (readModeOption.isDefined) {
       Some(ReadMode.withName(readModeOption.get))
@@ -174,7 +174,7 @@ object KustoDataSourceUtils {
         case Some("hash") => sqlContext.getConf("spark.sql.shuffle.partitions", "10").toInt
         // In "auto" mode we don't explicitly partition the data:
         // The data is exported and split to multiple files if required by Kusto 'export' command
-        // The data is then read from the base directory for parquet files and partitioned by the parquet data source
+        // Spark reads the selected export paths and partitions the Parquet input.
         case _ => 1
       }
     }
@@ -775,11 +775,9 @@ object KustoDataSourceUtils {
   }
 
   /**
-   * A function to run sequentially async work on TimerTask using a Timer. The function passed is
-   * scheduled sequentially by the timer, until last calculated returned value by func does not
-   * satisfy the condition of doWhile or a given number of times has passed. After this condition
-   * was satisfied, the finalWork function is called over the last returned value by func. Returns
-   * a CountDownLatch object used to count down iterations and await on it synchronously if needed
+   * Runs func sequentially with backoff while doWhileCondition holds. Calls finalWork when the
+   * condition becomes false. The returned latch is released on completion or a caught exception.
+   * The latch does not propagate worker errors to its waiting caller.
    *
    * @param func
    *   \- the function to run
@@ -788,7 +786,7 @@ object KustoDataSourceUtils {
    * @param delayBeforeEach
    *   \- delay between jobs
    * @param doWhileCondition
-   *   \- go one while the condition holds for the func.apply output
+   *   \- continue while the condition holds for the func.apply output
    * @param finalWork
    *   \- do final work with the last func.apply output
    */
@@ -800,8 +798,29 @@ object KustoDataSourceUtils {
       finalWork: A => Unit,
       maxWaitTimeBetweenCallsMillis: Int,
       maxWaitTimeAfterMinute: Int): CountDownLatch = {
+    doWhile(
+      func,
+      delayBeforeStart,
+      delayBeforeEach,
+      doWhileCondition,
+      finalWork,
+      maxWaitTimeBetweenCallsMillis,
+      maxWaitTimeAfterMinute,
+      new Timer(),
+      exception => throw exception)
+  }
+
+  private def doWhile[A](
+      func: () => A,
+      delayBeforeStart: Long,
+      delayBeforeEach: Int,
+      doWhileCondition: A => Boolean,
+      finalWork: A => Unit,
+      maxWaitTimeBetweenCallsMillis: Int,
+      maxWaitTimeAfterMinute: Int,
+      timer: Timer,
+      onError: Exception => Unit): CountDownLatch = {
     val latch = new CountDownLatch(1)
-    val t = new Timer()
     var currentWaitTime = delayBeforeEach
     var waitedTime = 0
     var maxWaitTime = maxWaitTimeBetweenCallsMillis
@@ -814,7 +833,7 @@ object KustoDataSourceUtils {
           if (!doWhileCondition.apply(res)) {
             finalWork.apply(res)
             while (latch.getCount > 0) latch.countDown()
-            t.cancel()
+            timer.cancel()
           } else {
             waitedTime += currentWaitTime
             if (waitedTime > TimeUnit.MINUTES.toMillis(1)) {
@@ -823,19 +842,23 @@ object KustoDataSourceUtils {
             currentWaitTime =
               if (currentWaitTime + currentWaitTime > maxWaitTime) maxWaitTime
               else currentWaitTime + currentWaitTime
-            t.schedule(new ExponentialBackoffTask(), currentWaitTime)
+            // The owner may cancel while a status request is still in flight.
+            try timer.schedule(new ExponentialBackoffTask(), currentWaitTime)
+            catch {
+              case _: IllegalStateException => ()
+            }
           }
         } catch {
           case exception: Exception =>
-            while (latch.getCount > 0) latch.countDown()
-            t.cancel()
-            throw exception
+            timer.cancel()
+            try onError(exception)
+            finally latch.countDown()
         }
       }
     }
 
     val task: TimerTask = new ExponentialBackoffTask()
-    t.schedule(task, delayBeforeStart)
+    timer.schedule(task, delayBeforeStart)
 
     latch
   }
@@ -850,12 +873,39 @@ object KustoDataSourceUtils {
       doingWhat: String,
       loggerName: String,
       requestId: String): Option[KustoResultSetTable] = {
+    verifyAsyncCommandCompletion(
+      client,
+      database,
+      commandResult,
+      samplePeriod,
+      timeOut,
+      doingWhat,
+      loggerName,
+      requestId,
+      () => new Timer("kusto-async-operation-poller", true))
+  }
+
+  private[kusto] def verifyAsyncCommandCompletion(
+      client: Client,
+      database: String,
+      commandResult: KustoResultSetTable,
+      samplePeriod: FiniteDuration,
+      timeOut: FiniteDuration,
+      doingWhat: String,
+      loggerName: String,
+      requestId: String,
+      timerFactory: () => Timer): Option[KustoResultSetTable] = {
     commandResult.next()
     val operationId = commandResult.getString(0)
     val operationsShowCommand = CslCommandsGenerator.generateOperationsShowCommand(operationId)
     val sampleInMillis = samplePeriod.toMillis.toInt
-    val timeoutInMillis = timeOut.toMillis
     val delayPeriodBetweenCalls = if (sampleInMillis < 1) 1 else sampleInMillis
+
+    def timeout(): Nothing = {
+      throw new TimeoutAwaitingPendingOperationException(
+        s"Timed out while waiting for operation with OperationId '$operationId'")
+    }
+    if (timeOut == Duration.Zero) timeout()
 
     val stateCol = "State"
     val statusCol = "Status"
@@ -880,51 +930,65 @@ object KustoDataSourceUtils {
       }
     }
     var lastResponse: Option[KustoResultSetTable] = None
-    val task = doWhile[Option[KustoResultSetTable]](
-      func = statusCheck,
-      delayBeforeStart = 0,
-      delayBeforeEach = delayPeriodBetweenCalls,
-      doWhileCondition = (result: Option[KustoResultSetTable]) => {
-        val inProgress =
-          result.isEmpty || (result.get.next() && result.get.getString(stateCol) == "InProgress")
-        if (inProgress) {
-          logDebug(
-            loggerName,
-            s"Async operation $doingWhat on requestId $requestId, is in status 'InProgress'," +
-              "polling status again in a few seconds")
-        }
-        inProgress
-      },
-      finalWork = (result: Option[KustoResultSetTable]) => {
-        lastResponse = result
-      },
-      maxWaitTimeBetweenCallsMillis = ReadInitialMaxWaitTime.toMillis.toInt,
-      ReadMaxWaitTime.toMillis.toInt)
+    val workerError = new AtomicReference[Exception]()
+    val timer = timerFactory()
+    try {
+      val task = doWhile[Option[KustoResultSetTable]](
+        func = statusCheck,
+        delayBeforeStart = 0,
+        delayBeforeEach = delayPeriodBetweenCalls,
+        doWhileCondition = (result: Option[KustoResultSetTable]) => {
+          val inProgress = result.forall { table =>
+            !table.next() || Try(table.getString(stateCol)).toOption.exists { state =>
+              state == "InProgress" || state == "Scheduled"
+            }
+          }
+          if (inProgress) {
+            logDebug(
+              loggerName,
+              s"Async operation $doingWhat on requestId $requestId is pending," +
+                " polling status again in a few seconds")
+          }
+          inProgress
+        },
+        finalWork = (result: Option[KustoResultSetTable]) => {
+          lastResponse = result
+        },
+        maxWaitTimeBetweenCallsMillis = ReadInitialMaxWaitTime.toMillis.toInt,
+        maxWaitTimeAfterMinute = ReadMaxWaitTime.toMillis.toInt,
+        timer = timer,
+        onError = exception => workerError.set(exception))
 
-    var success = true
-    if (timeOut < FiniteDuration.apply(0, SECONDS)) {
-      task.await()
-    } else {
-      if (!task.await(timeoutInMillis, TimeUnit.MILLISECONDS)) {
-        // Timed out
-        success = false
+      if (timeOut < Duration.Zero) {
+        task.await()
+      } else if (!task.await(timeOut.toNanos, TimeUnit.NANOSECONDS)) {
+        timeout()
       }
-    }
+      Option(workerError.get()).foreach(error => throw error)
 
-    if (lastResponse.isEmpty || lastResponse.get.getString(stateCol) != "Completed") {
-      throw new FailedOperationException(
-        s"Failed to execute Kusto operation with OperationId '$operationId', State: '${lastResponse.get
-            .getString(stateCol)}'," +
-          s" Status: '${lastResponse.get.getString(statusCol)}'",
-        lastResponse)
-    }
+      def metadata(column: String): Option[String] =
+        lastResponse.flatMap(table => Try(table.getString(column)).toOption.flatMap(Option(_)))
 
-    if (!success) {
-      throw new TimeoutAwaitingPendingOperationException(
-        s"Timed out while waiting for operation with OperationId '$operationId'")
+      val state = metadata(stateCol)
+      val status = metadata(statusCol)
+      state match {
+        case Some("Completed") => lastResponse
+        case Some(
+              "Failed" | "PartiallySucceeded" | "Abandoned" | "BadInput" | "Throttled" |
+              "Canceled" | "Skipped") =>
+          throw new FailedOperationException(
+            s"Failed to execute Kusto operation with OperationId '$operationId', State: '${state.get}'," +
+              s" Status: '${status.getOrElse("<unavailable>")}'",
+            lastResponse)
+        case _ =>
+          // An unknown outcome must not trigger callers' failed-operation retry policies.
+          throw new IllegalStateException(
+            s"Cannot determine the outcome of Kusto operation with OperationId '$operationId'," +
+              s" State: '${state.getOrElse("<unavailable>")}'. Connector requestId: $requestId.")
+      }
+    } finally {
+      timer.cancel()
     }
-
-    lastResponse
   }
 
   private[kusto] def mergeKeyVaultAndOptionsAuthentication(
