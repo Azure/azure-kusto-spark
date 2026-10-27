@@ -247,7 +247,7 @@ private[v2] object LakeFolderLocation {
 
 /** One gzipped CSV blob being written. */
 private[v2] final case class V2BlobWriteResource(target: OutputStream, blobUrl: String) {
-  private val gzip = new GZIPOutputStream(target)
+  private val gzip = new ReleasableGzipOutputStream(target)
   private val buffer =
     new BufferedWriter(
       new OutputStreamWriter(gzip, StandardCharsets.UTF_8),
@@ -258,7 +258,15 @@ private[v2] final case class V2BlobWriteResource(target: OutputStream, blobUrl: 
   def close(): Unit = buffer.close()
 
   /** Best-effort release after a failure; the uncommitted blob is discarded by the service. */
-  def abort(): Unit =
+  def abort(): Unit = {
+    gzip.release()
     try target.close()
     catch { case _: Exception => }
+  }
+}
+
+/** GZIP stream whose native compressor can be freed without writing to the target. */
+private[v2] final class ReleasableGzipOutputStream(target: OutputStream)
+    extends GZIPOutputStream(target) {
+  def release(): Unit = `def`.end()
 }

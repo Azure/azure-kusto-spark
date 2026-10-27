@@ -33,6 +33,7 @@ object IngestV2ConfigurationProvider {
   private final case class CachedEntry(config: IngestionConfig, expiresAtNanos: Long)
 
   private val configCache = new ConcurrentHashMap[CacheKey, CachedEntry]()
+  private val configClients = new ConcurrentHashMap[CacheKey, ConfigurationClient]()
 
   /** Returns the configuration, or the reason it could not be read. */
   def getConfiguration(
@@ -62,14 +63,18 @@ object IngestV2ConfigurationProvider {
   private def queryConfigurationApi(
       dmUrl: String,
       authentication: KustoAuthentication): Try[(IngestionConfig, Duration)] = Try {
-    val configClient = new ConfigurationClient(
-      dmUrl,
-      IngestV2Authentication.createTokenCredential(authentication),
-      false, // skipSecurityChecks
-      new ClientDetails(IngestV2ClientProvider.ApplicationName, KDSU.clientName, ""),
-      null, // s2sTokenProvider
-      null // s2sFabricPrivateLinkAccessContext
-    )
+    // The SDK client owns an HTTP client it never releases, so one is kept per key and reused.
+    val configClient = configClients.computeIfAbsent(
+      CacheKey(dmUrl, authentication),
+      _ =>
+        new ConfigurationClient(
+          dmUrl,
+          IngestV2Authentication.createTokenCredential(authentication, dmUrl),
+          false, // skipSecurityChecks
+          new ClientDetails(IngestV2ClientProvider.ApplicationName, KDSU.clientName, ""),
+          null, // s2sTokenProvider
+          null // s2sFabricPrivateLinkAccessContext
+        ))
 
     // Bridge the Kotlin suspend function to a CompletableFuture.
     val future = kotlinx.coroutines.future.FutureKt.future(

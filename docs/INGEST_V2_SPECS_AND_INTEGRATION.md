@@ -89,6 +89,16 @@ too, the ingest-v2 error is attached to it as a suppressed exception.
   SDK deletes them; folder retention should be managed on the Fabric side.
 - **Spark task retries** can submit a partition's data twice: blobs submitted by a failed task
   attempt may still be ingested. The existing path has the same behaviour.
+- **`ingestIfNotExists`** is cleared before ingestion and before the "already ingested" check,
+  on both paths (`KustoWriter.getSparkIngestionProperties`). This path keeps that behaviour; the
+  fix belongs to the existing path first.
+- **SDK logging.** `kusto-ingest-v2` 0.0.1-beta logs the full ingestion configuration, including
+  container URLs with SAS, at DEBUG (`ConfigurationClient`). Do not enable DEBUG for
+  `com.microsoft.azure.kusto.ingest.v2` until the SDK redacts it.
+- **Token audience.** The SDK asks for `<dm url>/.default`. Entra ID credentials (application,
+  certificate, managed identity, Key Vault) are wrapped to ask for the Kusto resource from the
+  endpoint metadata instead, like the existing clients. User tokens and token providers are used as
+  given.
 - **Private Link headers.** No extra S2S actor header is sent; the SDK makes it optional.
   Confirm with the service team that this is enough in every Private Link setup.
 

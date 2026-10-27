@@ -9,6 +9,7 @@ import com.azure.identity.{
   ClientSecretCredentialBuilder,
   ManagedIdentityCredentialBuilder
 }
+import com.microsoft.azure.kusto.data.auth.CloudInfo
 import com.microsoft.kusto.spark.authentication._
 import com.microsoft.kusto.spark.utils.{KeyVaultUtils, KustoDataSourceUtils => KDSU}
 import com.fasterxml.jackson.databind.ObjectMapper
@@ -31,30 +32,42 @@ import scala.util.Try
 object IngestV2Authentication {
   private val myName = this.getClass.getSimpleName
 
-  def createTokenCredential(authentication: KustoAuthentication): TokenCredential = {
+  /**
+   * @param dmUrl
+   *   the ingestion endpoint. Credentials that ask Entra ID for a token request the Kusto
+   *   resource published in its metadata (`/v1/rest/auth/metadata`), like the existing Java and
+   *   .NET clients, instead of the scope "dmUrl/.default" that the ingest-v2 SDK asks for.
+   */
+  def createTokenCredential(
+      authentication: KustoAuthentication,
+      dmUrl: String): TokenCredential = {
     KDSU.logDebug(
       myName,
       s"Creating TokenCredential from auth type: ${authentication.getClass.getSimpleName}")
 
     authentication match {
       case app: AadApplicationAuthentication =>
-        new ClientSecretCredentialBuilder()
-          .clientId(app.ID)
-          .clientSecret(app.password)
-          .tenantId(app.authority)
-          .build()
+        new KustoResourceCredential(
+          new ClientSecretCredentialBuilder()
+            .clientId(app.ID)
+            .clientSecret(app.password)
+            .tenantId(app.authority)
+            .build(),
+          dmUrl)
 
       case app: AadApplicationCertificateAuthentication =>
-        new ClientCertificateCredentialBuilder()
-          .clientId(app.appId)
-          .pfxCertificate(app.certFilePath, app.certPassword)
-          .tenantId(app.authority)
-          .build()
+        new KustoResourceCredential(
+          new ClientCertificateCredentialBuilder()
+            .clientId(app.appId)
+            .pfxCertificate(app.certFilePath, app.certPassword)
+            .tenantId(app.authority)
+            .build(),
+          dmUrl)
 
       case mi: ManagedIdentityAuthentication =>
         val builder = new ManagedIdentityCredentialBuilder()
         mi.clientId.foreach(id => builder.clientId(id))
-        builder.build()
+        new KustoResourceCredential(builder.build(), dmUrl)
 
       case token: KustoAccessTokenAuthentication =>
         new StaticTokenCredential(token.token)
@@ -64,11 +77,13 @@ object IngestV2Authentication {
 
       case kv: KeyVaultAppAuthentication =>
         val app = KeyVaultUtils.getAadAppParametersFromKeyVault(kv)
-        new ClientSecretCredentialBuilder()
-          .clientId(app.ID)
-          .clientSecret(app.password)
-          .tenantId(app.authority)
-          .build()
+        new KustoResourceCredential(
+          new ClientSecretCredentialBuilder()
+            .clientId(app.ID)
+            .clientSecret(app.password)
+            .tenantId(app.authority)
+            .build(),
+          dmUrl)
 
       case _ =>
         KDSU.logError(
@@ -102,6 +117,28 @@ private[v2] object AccessTokens {
       } else None
     }.toOption.flatten
   }
+}
+
+/**
+ * Requests tokens for the Kusto resource of the endpoint (from its cached cloud metadata),
+ * whatever scope the SDK asks for. Claims and tenant of the request are kept.
+ */
+private[v2] class KustoResourceCredential(inner: TokenCredential, dmUrl: String)
+    extends TokenCredential {
+  private def scopedRequest(request: TokenRequestContext): TokenRequestContext = {
+    val scoped = new TokenRequestContext()
+      .addScopes(CloudInfo.retrieveCloudInfoForCluster(dmUrl).determineScope())
+    if (request != null) {
+      scoped.setClaims(request.getClaims).setTenantId(request.getTenantId)
+    }
+    scoped
+  }
+
+  override def getToken(request: TokenRequestContext): Mono[AccessToken] =
+    Mono.fromCallable(() => scopedRequest(request)).flatMap(r => inner.getToken(r))
+
+  override def getTokenSync(request: TokenRequestContext): AccessToken =
+    inner.getTokenSync(scopedRequest(request))
 }
 
 /** TokenCredential for a token supplied by the user. */

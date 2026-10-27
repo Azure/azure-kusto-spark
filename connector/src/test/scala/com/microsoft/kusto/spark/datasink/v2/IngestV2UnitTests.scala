@@ -163,6 +163,36 @@ class IngestV2UnitTests extends AnyFlatSpec with Matchers {
       .isAfter(OffsetDateTime.now().plusMinutes(1)) shouldBe false
   }
 
+  "KustoResourceCredential" should "ask for the Kusto resource from the endpoint metadata, not the DM URL" in {
+    import com.azure.core.credential.{AccessToken, TokenCredential, TokenRequestContext}
+    import com.microsoft.azure.kusto.data.auth.CloudInfo
+    val dm = "https://ingest-scope-test.kusto.windows.net"
+    CloudInfo.manuallyAddToCache(
+      dm,
+      reactor.core.publisher.Mono.just(
+        new CloudInfo(
+          false,
+          "https://login.example",
+          "app",
+          "redirect",
+          "https://kusto.example",
+          "fpa")))
+    val seen = new java.util.concurrent.CopyOnWriteArrayList[String]()
+    val inner = new TokenCredential {
+      override def getToken(r: TokenRequestContext) =
+        reactor.core.publisher.Mono.fromCallable(() => getTokenSync(r))
+      override def getTokenSync(r: TokenRequestContext) = {
+        seen.addAll(r.getScopes)
+        new AccessToken("t", OffsetDateTime.now().plusHours(1))
+      }
+    }
+    val credential = new KustoResourceCredential(inner, dm)
+    val sdkRequest = new TokenRequestContext().addScopes(s"$dm/.default")
+    credential.getTokenSync(sdkRequest)
+    credential.getToken(sdkRequest).block()
+    seen.asScala.toSet shouldBe Set("https://kusto.example/.default")
+  }
+
   "LakeFolderLocation" should "split the URL like the .NET LakeFolder" in {
     val location = LakeFolderLocation.parse(
       "https://ws1.z6.dfs.fabric.microsoft.com/workspace-id/item/Files/my%20folder")

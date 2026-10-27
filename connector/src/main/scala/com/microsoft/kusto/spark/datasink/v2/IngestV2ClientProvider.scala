@@ -23,7 +23,7 @@ class IngestV2ClientProvider(
     KDSU.logInfo(myName, s"Creating QueuedIngestClient for DM: $dmUrl")
     val client = QueuedIngestClientBuilder
       .create(dmUrl)
-      .withAuthentication(IngestV2Authentication.createTokenCredential(authentication))
+      .withAuthentication(IngestV2Authentication.createTokenCredential(authentication, dmUrl))
       .withClientDetails(IngestV2ClientProvider.ApplicationName, connectorVersion, "")
       .build()
     queuedClientCreated = true
