@@ -206,6 +206,9 @@ object KustoDataSourceUtils {
   private val PlayFabClustersAlias: String = "PlayFab proxy"
   var loggingLevel: Level = Level.INFO
 
+  // One message per class loader, shared by the read and ingestion paths.
+  logInfo(className, s"Kusto Spark connector version: $Version")
+
   def setLoggingLevel(level: String): Unit = {
     setLoggingLevel(Level.toLevel(level))
   }

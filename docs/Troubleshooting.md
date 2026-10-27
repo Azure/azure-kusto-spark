@@ -160,9 +160,29 @@ If stream fails after 3 retries → fallback to queued blob ingestion
 
 ## Diagnostic Checklist
 
+### Identify the loaded connector version
+
+Starting with 7.1.5, the `KustoConnector` logger emits an INFO message when the shared connector
+utilities initialize: `KustoDataSourceUtils$: Kusto Spark connector version: <version>`.
+The version comes from the loaded OSS connector's packaged build properties, not the Java SDK,
+Spark runtime, or Fabric/Synapse wrapper version. Collect those versions separately when relevant.
+
+Look near the first connector use in the Spark driver logs and in executor logs where the utilities
+initialize. The message is emitted once per class loader, not once per operation, partition, or retry.
+It applies to reads, batch ingestion, and Structured Streaming ingestion.
+
+Enable INFO for `KustoConnector` **before the first connector use**. With Log4j 2, configure
+`logger.kusto.name = KustoConnector` and `logger.kusto.level = info`; with legacy Log4j properties,
+use `log4j.logger.KustoConnector=INFO`. Runtime filters and appenders must also allow INFO messages.
+If initialization happened while INFO was disabled, changing the level later does not replay the
+message; collect startup logs from a new application run. For older connectors, collect the installed
+connector artifact version instead.
+
+### Collect operation diagnostics
+
 1. **Check `requestId`** — every operation generates one. Search ADX logs: `.show commands | where ClientActivityId has "<requestId>"`.
 2. **Check `.show operations`** — for async operations (export, move extents) the `OperationId` is logged.
-3. **Enable debug logging** — set `log4j.logger.com.microsoft.kusto.spark=DEBUG` to see SAS config setup, polling status, retry attempts.
+3. **Enable debug logging** — set the `KustoConnector` logger to DEBUG in the runtime logging configuration (`logger.kusto.level = debug` for the Log4j 2 logger above, or `log4j.logger.KustoConnector=DEBUG` for legacy Log4j properties) to see configuration, polling, and retry diagnostics. Review and redact sensitive values before sharing logs.
 4. **Inspect temp tables** — `sparkTempTable_*` tables indicate incomplete Transactional writes. Use `.show tables | where TableName startswith "sparkTempTable_"`.
 5. **Check ingestion queue** — `.show ingestion failures` on the cluster surfaces service-side ingestion errors that `Queued` mode won't propagate to Spark.
 6. **Verify batching policy** — a long `MaximumBatchingTimeSpan` on the destination table delays ingestion completion, causing polling timeouts in Transactional mode.

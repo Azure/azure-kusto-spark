@@ -1,0 +1,132 @@
+// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT License.
+
+package com.microsoft.kusto.spark.utils
+
+import org.apache.log4j.{AppenderSkeleton, Level, Logger}
+import org.apache.log4j.spi.LoggingEvent
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
+
+import java.net.URLClassLoader
+import java.util.Properties
+import java.util.concurrent.ConcurrentLinkedQueue
+
+class KustoConnectorVersionLoggingTest extends AnyFlatSpec with Matchers {
+  private val moduleName = "com.microsoft.kusto.spark.utils.KustoDataSourceUtils$"
+
+  private class CapturingAppender extends AppenderSkeleton {
+    val events = new ConcurrentLinkedQueue[(Level, String)]()
+    override protected def append(event: LoggingEvent): Unit = {
+      events.add((event.getLevel, event.getRenderedMessage))
+    }
+    override def close(): Unit = ()
+    override def requiresLayout(): Boolean = false
+  }
+
+  private def withLogging(level: Level)(test: (Logger, CapturingAppender) => Unit): Unit = {
+    val logger = Logger.getLogger("KustoConnector")
+    val previousLevel = logger.getLevel
+    val previousAdditivity = logger.getAdditivity
+    val appender = new CapturingAppender()
+    try {
+      logger.setLevel(level)
+      logger.setAdditivity(false)
+      logger.addAppender(appender)
+      test(logger, appender)
+    } finally {
+      logger.removeAppender(appender)
+      appender.close()
+      logger.setLevel(previousLevel)
+      logger.setAdditivity(previousAdditivity)
+    }
+  }
+
+  private def withFreshUtilities(test: ClassLoader => Unit): Unit = {
+    val parent = getClass.getClassLoader
+    val location =
+      Class.forName(moduleName, false, parent).getProtectionDomain.getCodeSource.getLocation
+    // Reload only the utility singleton; keep the real logger and dependencies shared.
+    val loader = new URLClassLoader(Array(location), parent) {
+      override protected def loadClass(name: String, resolve: Boolean): Class[_] = synchronized {
+        if (name.startsWith(moduleName)) {
+          val loaded: Class[_] = Option(findLoadedClass(name)).getOrElse(findClass(name))
+          if (resolve) resolveClass(loaded)
+          loaded
+        } else super.loadClass(name, resolve)
+      }
+    }
+    try test(loader)
+    finally loader.close()
+  }
+
+  private def initialize(loader: ClassLoader): AnyRef =
+    Class.forName(moduleName, true, loader).getField("MODULE$").get(null)
+
+  private def packagedVersion(loader: ClassLoader): String = {
+    val properties = new Properties()
+    val input = loader.getResourceAsStream("spark.kusto.properties")
+    require(input != null, "Packaged connector properties are missing")
+    try properties.load(input)
+    finally input.close()
+    val version = properties.getProperty("application.version")
+    version should not be null
+    version should not be empty
+    version should not include "${"
+    version
+  }
+
+  private def banner(version: String): String =
+    s"KustoDataSourceUtils$$: Kusto Spark connector version: $version"
+
+  "Connector version logging" should "log the packaged version once when utilities initialize" in {
+    withLogging(Level.INFO) { (logger, appender) =>
+      withFreshUtilities { loader =>
+        val expectedVersion = packagedVersion(loader)
+        Class.forName(moduleName, false, loader)
+        appender.events shouldBe empty
+
+        val utilities = initialize(loader)
+        utilities.getClass.getMethod("Version").invoke(utilities) shouldBe expectedVersion
+        appender.events.size() shouldBe 1
+        appender.events.peek() shouldBe ((Level.INFO, banner(expectedVersion)))
+
+        initialize(loader) should be theSameInstanceAs utilities
+        utilities.getClass
+          .getMethod("getDedupTagsPrefix", classOf[String], classOf[String])
+          .invoke(utilities, "request", "batch") shouldBe "request_batch"
+        appender.events.size() shouldBe 1
+        logger.getLevel shouldBe Level.INFO
+      }
+    }
+  }
+
+  it should "log independently for each utility class loader" in {
+    withLogging(Level.INFO) { (_, appender) =>
+      withFreshUtilities { loader =>
+        initialize(loader)
+        appender.events.poll() shouldBe ((Level.INFO, banner(packagedVersion(loader))))
+        appender.events shouldBe empty
+      }
+      withFreshUtilities { loader =>
+        initialize(loader)
+        appender.events.poll() shouldBe ((Level.INFO, banner(packagedVersion(loader))))
+        appender.events shouldBe empty
+      }
+    }
+  }
+
+  it should "respect the configured log level without replaying initialization" in {
+    withLogging(Level.WARN) { (logger, appender) =>
+      withFreshUtilities { loader =>
+        val utilities = initialize(loader)
+        logger.getLevel shouldBe Level.WARN
+        appender.events shouldBe empty
+
+        logger.setLevel(Level.INFO)
+        initialize(loader) should be theSameInstanceAs utilities
+        appender.events shouldBe empty
+      }
+    }
+  }
+}

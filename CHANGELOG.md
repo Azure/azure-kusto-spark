@@ -24,7 +24,7 @@ Tags are created as `v4.0_{version}` (Spark 4 / master) and `v3.0_{version}` (Sp
 - Unrecognized or unreadable asynchronous operation states report a monitoring error rather than triggering failed-operation retries in shared write callers (#520)
 
 ### Added
-- None
+- Log the loaded OSS connector version at INFO once per class loader during shared utility initialization, with troubleshooting guidance for collecting it (#520)
 
 ### Fixed
 - Retry explicitly throttled distributed-read exports up to four total attempts per partition, with jittered exponential backoff and a shared per-partition timeout budget (#520)
