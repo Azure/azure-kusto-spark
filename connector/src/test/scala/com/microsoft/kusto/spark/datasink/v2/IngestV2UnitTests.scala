@@ -163,34 +163,90 @@ class IngestV2UnitTests extends AnyFlatSpec with Matchers {
       .isAfter(OffsetDateTime.now().plusMinutes(1)) shouldBe false
   }
 
-  "KustoResourceCredential" should "ask for the Kusto resource from the endpoint metadata, not the DM URL" in {
+  "KustoResourceCredential" should "use the endpoint audience like the .NET Kusto.Ingest.V2 client" in {
     import com.azure.core.credential.{AccessToken, TokenCredential, TokenRequestContext}
     import com.microsoft.azure.kusto.data.auth.CloudInfo
-    val dm = "https://ingest-scope-test.kusto.windows.net"
-    CloudInfo.manuallyAddToCache(
-      dm,
-      reactor.core.publisher.Mono.just(
+    import com.microsoft.azure.kusto.data.exceptions.{
+      DataClientException,
+      DataServiceException,
+      ExceptionUtils,
+      KustoClientInvalidConnectionStringException
+    }
+    import reactor.core.publisher.Mono
+
+    def endpoint(name: String, metadata: Mono[CloudInfo]): String = {
+      val dm = s"https://ingest-$name.kusto.windows.net"
+      CloudInfo.manuallyAddToCache(dm, metadata)
+      dm
+    }
+    def scopesSeen(dm: String, rescope: Boolean = true): Set[String] = {
+      val seen = new java.util.concurrent.CopyOnWriteArrayList[String]()
+      val inner = new TokenCredential {
+        override def getToken(r: TokenRequestContext) =
+          Mono.fromCallable(() => getTokenSync(r))
+        override def getTokenSync(r: TokenRequestContext) = {
+          seen.addAll(r.getScopes)
+          new AccessToken("t", OffsetDateTime.now().plusHours(1))
+        }
+      }
+      val credential = new KustoResourceCredential(inner, dm, rescope)
+      val sdkRequest = new TokenRequestContext().addScopes(s"$dm/.default")
+      credential.getTokenSync(sdkRequest)
+      credential.getToken(sdkRequest).block()
+      seen.asScala.toSet
+    }
+    def cloud(resource: String, mfa: Boolean = false) =
+      Mono.just(
         new CloudInfo(
-          false,
-          "https://login.example",
+          mfa,
+          CloudInfo.DEFAULT_PUBLIC_LOGIN_URL,
           "app",
           "redirect",
-          "https://kusto.example",
-          "fpa")))
-    val seen = new java.util.concurrent.CopyOnWriteArrayList[String]()
-    val inner = new TokenCredential {
-      override def getToken(r: TokenRequestContext) =
-        reactor.core.publisher.Mono.fromCallable(() => getTokenSync(r))
-      override def getTokenSync(r: TokenRequestContext) = {
-        seen.addAll(r.getScopes)
-        new AccessToken("t", OffsetDateTime.now().plusHours(1))
-      }
-    }
-    val credential = new KustoResourceCredential(inner, dm)
-    val sdkRequest = new TokenRequestContext().addScopes(s"$dm/.default")
-    credential.getTokenSync(sdkRequest)
-    credential.getToken(sdkRequest).block()
-    seen.asScala.toSet shouldBe Set("https://kusto.example/.default")
+          resource,
+          "fpa"))
+
+    // Metadata resource kept as is (no ".kustomfa." rewrite, no slash trimming), like .NET.
+    scopesSeen(
+      endpoint(
+        "aud-meta",
+        cloud("https://kusto.example.kusto.windows.net/", mfa = true))) shouldBe
+      Set("https://kusto.example.kusto.windows.net//.default")
+    // Empty resource, or an error status from the metadata endpoint: public cloud default.
+    val defaultScope = Set("https://kusto.kusto.windows.net/.default")
+    scopesSeen(endpoint("aud-empty", cloud(""))) shouldBe defaultScope
+    scopesSeen(
+      endpoint(
+        "aud-status",
+        Mono.error(
+          new DataServiceException(
+            "x",
+            "Error in metadata endpoint, got code: 500",
+            true)))) shouldBe defaultScope
+    // A 429 that persists after retries, as CloudInfo reports it.
+    val throttled = ExceptionUtils.unwrapCloudInfoException(
+      "x",
+      new DataServiceException(
+        "x",
+        "Error in metadata endpoint, got code: 429\nWith error: ",
+        false))
+    throttled shouldBe a[DataClientException]
+    scopesSeen(endpoint("aud-429", Mono.error(throttled))) shouldBe defaultScope
+    // Unreachable metadata endpoint: fail, like .NET.
+    val unreachable = endpoint(
+      "aud-down",
+      Mono.error(
+        new DataServiceException("x", "IOException", new java.io.IOException("down"), false)))
+    a[DataServiceException] should be thrownBy scopesSeen(unreachable)
+    val down = ExceptionUtils.unwrapCloudInfoException("x", new java.net.ConnectException("down"))
+    an[Exception] should be thrownBy scopesSeen(endpoint("aud-down2", Mono.error(down)))
+    // User tokens keep the requested scope but still need a trusted endpoint.
+    val requested = endpoint("aud-raw", cloud("https://kusto.kusto.windows.net"))
+    scopesSeen(requested, rescope = false) shouldBe Set(s"$requested/.default")
+    val untrusted = "https://ingest-aud.not-kusto.example.com"
+    CloudInfo.manuallyAddToCache(untrusted, cloud("https://kusto.kusto.windows.net"))
+    a[KustoClientInvalidConnectionStringException] should be thrownBy scopesSeen(
+      untrusted,
+      rescope = false)
   }
 
   "LakeFolderLocation" should "split the URL like the .NET LakeFolder" in {

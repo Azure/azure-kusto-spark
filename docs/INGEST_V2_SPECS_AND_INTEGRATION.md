@@ -95,10 +95,14 @@ too, the ingest-v2 error is attached to it as a suppressed exception.
 - **SDK logging.** `kusto-ingest-v2` 0.0.1-beta logs the full ingestion configuration, including
   container URLs with SAS, at DEBUG (`ConfigurationClient`). Do not enable DEBUG for
   `com.microsoft.azure.kusto.ingest.v2` until the SDK redacts it.
-- **Token audience.** The SDK asks for `<dm url>/.default`. Entra ID credentials (application,
-  certificate, managed identity, Key Vault) are wrapped to ask for the Kusto resource from the
-  endpoint metadata instead, like the existing clients. User tokens and token providers are used as
-  given.
+- **Token audience.** The SDK asks for `<dm url>/.default`. The connector follows the .NET
+  `Kusto.Ingest.V2` client (`IngestHttpClient.AuthenticateAsync`) instead:
+  - the ingestion endpoint must be a trusted Kusto endpoint (same check as the V1 path);
+  - Entra ID credentials (application, certificate, managed identity, Key Vault) ask for
+    `<KustoServiceResourceId>/.default` from `/v1/rest/auth/metadata`, with no MFA rewrite;
+  - if that endpoint answers with an error status or no AAD details, the public default
+    `https://kusto.kusto.windows.net` is used; if it cannot be reached, the write fails;
+  - user tokens and token providers are used as given, so they must already be for that resource.
 - **Private Link headers.** No extra S2S actor header is sent; the SDK makes it optional.
   Confirm with the service team that this is enough in every Private Link setup.
 

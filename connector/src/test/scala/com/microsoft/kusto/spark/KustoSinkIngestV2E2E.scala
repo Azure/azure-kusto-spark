@@ -6,6 +6,7 @@ package com.microsoft.kusto.spark
 import com.microsoft.azure.kusto.data.ClientFactory
 import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.kusto.spark.KustoTestUtils.getSystemTestOptions
+import com.microsoft.kusto.spark.common.KustoDebugOptions
 import com.microsoft.kusto.spark.datasink.{KustoSinkOptions, SinkTableCreationMode, WriteMode}
 import com.microsoft.kusto.spark.datasource.{KustoSourceOptions, ReadMode}
 import com.microsoft.kusto.spark.sql.extension.SparkExtension.DataFrameReaderExtension
@@ -20,7 +21,9 @@ import scala.collection.immutable
 
 /**
  * End-to-end tests for the kusto-ingest-v2 SDK integration. These tests mirror KustoSinkBatchE2E
- * and exercise the v2 write path (now the default).
+ * with the hidden `enableIngestV2` option turned on. The ingest-v2 path is used only when the
+ * cluster's ingestion configuration asks for REST ingestion or OneLake uploads; otherwise (and
+ * always for streaming) the writes go through the existing path.
  *
  * Run with: mvn test -pl connector -Dtest=KustoSinkIngestV2E2E -DKustoE2E Requires environment
  * variables: kustoCluster, kustoDatabase, storageAccountUrl
@@ -72,6 +75,7 @@ class KustoSinkIngestV2E2E extends AnyFlatSpec with BeforeAndAfterAll {
         KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS,
         SinkTableCreationMode.CreateIfNotExist.toString)
       .option(KustoSinkOptions.KUSTO_WRITE_MODE, WriteMode.Queued.toString)
+      .option(KustoDebugOptions.KUSTO_ENABLE_INGEST_V2, "true")
       .mode(SaveMode.Append)
       .save()
 
@@ -113,6 +117,7 @@ class KustoSinkIngestV2E2E extends AnyFlatSpec with BeforeAndAfterAll {
         KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS,
         SinkTableCreationMode.CreateIfNotExist.toString)
       .option(KustoSinkOptions.KUSTO_WRITE_MODE, WriteMode.Transactional.toString)
+      .option(KustoDebugOptions.KUSTO_ENABLE_INGEST_V2, "true")
       .mode(SaveMode.Append)
       .save()
 
@@ -154,6 +159,7 @@ class KustoSinkIngestV2E2E extends AnyFlatSpec with BeforeAndAfterAll {
         KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS,
         SinkTableCreationMode.CreateIfNotExist.toString)
       .option(KustoSinkOptions.KUSTO_WRITE_MODE, WriteMode.KustoStreaming.toString)
+      .option(KustoDebugOptions.KUSTO_ENABLE_INGEST_V2, "true")
       .mode(SaveMode.Append)
       .save()
 
@@ -195,6 +201,7 @@ class KustoSinkIngestV2E2E extends AnyFlatSpec with BeforeAndAfterAll {
         KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS,
         SinkTableCreationMode.CreateIfNotExist.toString)
       .option(KustoSinkOptions.KUSTO_WRITE_MODE, WriteMode.Queued.toString)
+      .option(KustoDebugOptions.KUSTO_ENABLE_INGEST_V2, "true")
       .option(KustoSinkOptions.KUSTO_INGESTION_FORMAT, "parquet")
       .mode(SaveMode.Append)
       .save()
@@ -237,6 +244,7 @@ class KustoSinkIngestV2E2E extends AnyFlatSpec with BeforeAndAfterAll {
         KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS,
         SinkTableCreationMode.CreateIfNotExist.toString)
       .option(KustoSinkOptions.KUSTO_WRITE_MODE, WriteMode.Transactional.toString)
+      .option(KustoDebugOptions.KUSTO_ENABLE_INGEST_V2, "true")
       .option(KustoSinkOptions.KUSTO_INGESTION_FORMAT, "parquet")
       .mode(SaveMode.Append)
       .save()
@@ -281,6 +289,7 @@ class KustoSinkIngestV2E2E extends AnyFlatSpec with BeforeAndAfterAll {
         KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS,
         SinkTableCreationMode.CreateIfNotExist.toString)
       .option(KustoSinkOptions.KUSTO_WRITE_MODE, WriteMode.Queued.toString)
+      .option(KustoDebugOptions.KUSTO_ENABLE_INGEST_V2, "true")
       .option(KustoSinkOptions.KUSTO_INGESTION_FORMAT, "parquet")
       .mode(SaveMode.Append)
       .save()
@@ -325,6 +334,7 @@ class KustoSinkIngestV2E2E extends AnyFlatSpec with BeforeAndAfterAll {
         KustoSinkOptions.KUSTO_TABLE_CREATE_OPTIONS,
         SinkTableCreationMode.CreateIfNotExist.toString)
       .option(KustoSinkOptions.KUSTO_WRITE_MODE, WriteMode.Transactional.toString)
+      .option(KustoDebugOptions.KUSTO_ENABLE_INGEST_V2, "true")
       .option(KustoSinkOptions.KUSTO_INGESTION_FORMAT, "parquet")
       .mode(SaveMode.Append)
       .save()
