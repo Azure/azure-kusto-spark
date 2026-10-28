@@ -3,6 +3,9 @@
 Kusto Source Connector allows reading data from a table in the specified Kusto cluster and database 
 to a Spark DataFrame 
 
+For identifying the loaded OSS connector version in driver and executor logs, see
+[connector version logging](KustoSink.md#connector-version).
+
 ## Authentication
 
 The connector uses **Azure Active Directory (AAD)** to authenticate the client application 
