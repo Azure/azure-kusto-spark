@@ -98,7 +98,7 @@ Ask the user for:
 - Output of `.show operations <operationId>` if available
 - Output of `.show ingestion failures | where IngestionSourcePath has "<blobPath>"` for Queued failures
 - Spark driver and executor logs with the `KustoConnector` logger at DEBUG; review and redact sensitive values before sharing
-- OSS connector version from the INFO initialization message `Kusto Spark connector version: <version>` when available, plus Spark and Fabric/Synapse wrapper versions separately when applicable, and cluster URI. See [version logging availability and configuration](Troubleshooting.md#identify-the-loaded-connector-version); the message is emitted once per class loader and is not replayed if INFO was disabled during initialization.
+- OSS connector and Kusto Java SDK versions from the INFO initialization message `Kusto.Spark.Connector:<connector-version>|Kusto.Java.Client:<sdk-version>` when available, plus Spark and Fabric/Synapse wrapper versions separately when applicable, and cluster URI. See [version logging availability and configuration](Troubleshooting.md#identify-the-loaded-connector-version); the message is emitted once per class loader and is not replayed if INFO was disabled during initialization.
 
 ### Step 5 — Resolve
 Provide the specific fix from the patterns above. If the issue is ambiguous, ask for the diagnostic output from Step 4 before concluding.

@@ -164,10 +164,12 @@ If stream fails after 3 retries → fallback to queued blob ingestion
 
 **Availability:** This initialization message is currently unreleased; see the [changelog](../CHANGELOG.md).
 
-The `KustoConnector` logger emits an INFO message when the shared connector
-utilities initialize: `KustoDataSourceUtils$: Kusto Spark connector version: <version>`.
-The version comes from the loaded OSS connector's packaged build properties, not the Java SDK,
-Spark runtime, or Fabric/Synapse wrapper version. Collect those versions separately when relevant.
+The `KustoConnector` logger emits an INFO message when the shared connector utilities initialize:
+`KustoDataSourceUtils$: Kusto.Spark.Connector:<connector-version>|Kusto.Java.Client:<sdk-version>`.
+The compact identifiers contain no spaces and can be searched directly. The connector version comes
+from its packaged build properties; the Kusto Java data SDK version comes from the SDK's own
+version metadata (`unknown` when unavailable). Spark runtime and Fabric/Synapse wrapper versions
+are separate; collect those when relevant.
 
 Look near the first connector use in the Spark driver logs and in executor logs where the utilities
 initialize. The message is emitted once per class loader, not once per operation, partition, or retry.

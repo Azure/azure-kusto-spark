@@ -3,7 +3,7 @@
 
 package com.microsoft.kusto.spark.utils
 
-import com.microsoft.azure.kusto.data.StringUtils
+import com.microsoft.azure.kusto.data.{StringUtils, Utils => KustoSdkUtils}
 import com.azure.core.credential.TokenRequestContext
 import com.azure.identity.{
   AzureCliCredentialBuilder,
@@ -207,7 +207,9 @@ object KustoDataSourceUtils {
   var loggingLevel: Level = Level.INFO
 
   // One message per class loader, shared by the read and ingestion paths.
-  logInfo(className, s"Kusto Spark connector version: $Version")
+  private val javaSdkVersion =
+    Option(KustoSdkUtils.getPackageVersion()).filter(_.nonEmpty).getOrElse("unknown")
+  logInfo(className, s"$clientName|Kusto.Java.Client:$javaSdkVersion")
 
   def setLoggingLevel(level: String): Unit = {
     setLoggingLevel(Level.toLevel(level))
