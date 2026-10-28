@@ -12,7 +12,7 @@ Tags are created as `v4.0_{version}` (Spark 4 / master) and `v3.0_{version}` (Sp
 - None
 
 ### Added
-- None
+- Log the loaded OSS connector version at INFO once per class loader during shared utility initialization, with troubleshooting guidance for collecting it
 
 ### Fixed
 - None
