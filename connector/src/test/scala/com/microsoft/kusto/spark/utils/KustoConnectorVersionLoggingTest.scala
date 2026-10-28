@@ -8,12 +8,14 @@ import org.apache.log4j.spi.LoggingEvent
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
+import java.io.InputStream
 import java.net.URLClassLoader
 import java.util.Properties
 import java.util.concurrent.ConcurrentLinkedQueue
 
 class KustoConnectorVersionLoggingTest extends AnyFlatSpec with Matchers {
   private val moduleName = "com.microsoft.kusto.spark.utils.KustoDataSourceUtils$"
+  private val sdkUtilsName = "com.microsoft.azure.kusto.data.Utils"
 
   private class CapturingAppender extends AppenderSkeleton {
     val events = new ConcurrentLinkedQueue[(Level, String)]()
@@ -42,19 +44,30 @@ class KustoConnectorVersionLoggingTest extends AnyFlatSpec with Matchers {
     }
   }
 
-  private def withFreshUtilities(test: ClassLoader => Unit): Unit = {
+  private def withFreshUtilities(test: ClassLoader => Unit): Unit =
+    withFreshUtilities(hideSdkMetadata = false)(test)
+
+  private def withFreshUtilities(hideSdkMetadata: Boolean)(test: ClassLoader => Unit): Unit = {
     val parent = getClass.getClassLoader
     val location =
       Class.forName(moduleName, false, parent).getProtectionDomain.getCodeSource.getLocation
-    // Reload only the utility singleton; keep the real logger and dependencies shared.
-    val loader = new URLClassLoader(Array(location), parent) {
+    val sdkLocation =
+      Class.forName(sdkUtilsName, false, parent).getProtectionDomain.getCodeSource.getLocation
+    // Isolate initialization and optional SDK metadata failure; keep the real logger shared.
+    val loader = new URLClassLoader(Array(location, sdkLocation), parent) {
       override protected def loadClass(name: String, resolve: Boolean): Class[_] = synchronized {
-        if (name.startsWith(moduleName)) {
+        val isolatedSdk = hideSdkMetadata &&
+          (name == sdkUtilsName || name.startsWith(sdkUtilsName + "$"))
+        if (name.startsWith(moduleName) || isolatedSdk) {
           val loaded: Class[_] = Option(findLoadedClass(name)).getOrElse(findClass(name))
           if (resolve) resolveClass(loaded)
           loaded
         } else super.loadClass(name, resolve)
       }
+
+      override def getResourceAsStream(name: String): InputStream =
+        if (hideSdkMetadata && name == "app.properties") null
+        else super.getResourceAsStream(name)
     }
     try test(loader)
     finally loader.close()
@@ -63,33 +76,49 @@ class KustoConnectorVersionLoggingTest extends AnyFlatSpec with Matchers {
   private def initialize(loader: ClassLoader): AnyRef =
     Class.forName(moduleName, true, loader).getField("MODULE$").get(null)
 
-  private def packagedVersion(loader: ClassLoader): String = {
+  private def resourceVersion(loader: ClassLoader, resource: String, key: String): String = {
     val properties = new Properties()
-    val input = loader.getResourceAsStream("spark.kusto.properties")
-    require(input != null, "Packaged connector properties are missing")
+    val input = loader.getResourceAsStream(resource)
+    require(input != null, s"Packaged version properties are missing: $resource")
     try properties.load(input)
     finally input.close()
-    val version = properties.getProperty("application.version")
+    val version = properties.getProperty(key)
     version should not be null
     version should not be empty
     version should not include "${"
     version
   }
 
-  private def banner(version: String): String =
-    s"KustoDataSourceUtils$$: Kusto Spark connector version: $version"
+  private def packagedVersion(loader: ClassLoader): String =
+    resourceVersion(loader, "spark.kusto.properties", "application.version")
 
-  "Connector version logging" should "log the packaged version once when utilities initialize" in {
+  private def packagedSdkVersion(loader: ClassLoader): String =
+    resourceVersion(
+      loader,
+      "META-INF/maven/com.microsoft.azure.kusto/kusto-data/pom.properties",
+      "version")
+
+  private def banner(version: String, sdkVersion: String): String =
+    s"KustoDataSourceUtils$$: Kusto.Spark.Connector:$version|Kusto.Java.Client:$sdkVersion"
+
+  "Connector version logging" should "log searchable connector and SDK versions once at initialization" in {
     withLogging(Level.INFO) { (logger, appender) =>
       withFreshUtilities { loader =>
         val expectedVersion = packagedVersion(loader)
+        val expectedSdkVersion = packagedSdkVersion(loader)
         Class.forName(moduleName, false, loader)
         appender.events shouldBe empty
 
         val utilities = initialize(loader)
         utilities.getClass.getMethod("Version").invoke(utilities) shouldBe expectedVersion
         appender.events.size() shouldBe 1
-        appender.events.peek() shouldBe ((Level.INFO, banner(expectedVersion)))
+        appender.events
+          .peek() shouldBe ((Level.INFO, banner(expectedVersion, expectedSdkVersion)))
+        appender.events
+          .peek()
+          ._2
+          .stripPrefix("KustoDataSourceUtils$: ")
+          .exists(_.isWhitespace) shouldBe false
 
         initialize(loader) should be theSameInstanceAs utilities
         utilities.getClass
@@ -105,12 +134,16 @@ class KustoConnectorVersionLoggingTest extends AnyFlatSpec with Matchers {
     withLogging(Level.INFO) { (_, appender) =>
       withFreshUtilities { loader =>
         initialize(loader)
-        appender.events.poll() shouldBe ((Level.INFO, banner(packagedVersion(loader))))
+        appender.events.poll() shouldBe ((
+          Level.INFO,
+          banner(packagedVersion(loader), packagedSdkVersion(loader))))
         appender.events shouldBe empty
       }
       withFreshUtilities { loader =>
         initialize(loader)
-        appender.events.poll() shouldBe ((Level.INFO, banner(packagedVersion(loader))))
+        appender.events.poll() shouldBe ((
+          Level.INFO,
+          banner(packagedVersion(loader), packagedSdkVersion(loader))))
         appender.events shouldBe empty
       }
     }
@@ -126,6 +159,20 @@ class KustoConnectorVersionLoggingTest extends AnyFlatSpec with Matchers {
         logger.setLevel(Level.INFO)
         initialize(loader) should be theSameInstanceAs utilities
         appender.events shouldBe empty
+      }
+    }
+  }
+
+  it should "retain the connector version when SDK metadata is unavailable" in {
+    withLogging(Level.INFO) { (_, appender) =>
+      withFreshUtilities(hideSdkMetadata = true) { loader =>
+        val utilities = initialize(loader)
+
+        appender.events.size() shouldBe 1
+        appender.events.peek() shouldBe ((Level.INFO, banner(packagedVersion(loader), "unknown")))
+        utilities.getClass
+          .getMethod("getDedupTagsPrefix", classOf[String], classOf[String])
+          .invoke(utilities, "request", "batch") shouldBe "request_batch"
       }
     }
   }
