@@ -39,6 +39,29 @@ Main logs are found on driver log4j logs. Workers data serialization logs and in
 To set driver logs verbosity use com.microsoft.kusto.spark.utils.KustoDataSourceUtils.setLoggingLevel("debug")
 * Note - open debug to see polling job process report - otherwise nothing is printed throughout this job.
 
+#### Connector version
+
+**Availability:** This initialization message is currently unreleased; see the [changelog](../CHANGELOG.md).
+
+The `KustoConnector` logger emits an INFO message when the shared connector utilities initialize:
+`KustoDataSourceUtils$: Kusto.Spark.Connector:<connector-version>|Kusto.Java.Client:<sdk-version>`.
+The compact identifiers contain no spaces and can be searched directly. The connector version comes
+from its packaged build properties; the Kusto Java data SDK version comes from the SDK's own
+version metadata (`unknown` when unavailable). Spark runtime and Fabric/Synapse wrapper versions
+are separate; collect those when relevant.
+
+Look near the first connector use in the Spark driver logs and in executor logs where the utilities
+initialize. The message is emitted once per class loader, not once per operation, partition, or retry.
+It applies to reads, batch ingestion, and Structured Streaming ingestion.
+
+Enable INFO for `KustoConnector` **before the first connector use**. With legacy Log4j properties,
+use `log4j.logger.KustoConnector=INFO`; with Log4j 2, configure `logger.kusto.name = KustoConnector`
+and `logger.kusto.level = info`. Runtime filters and appenders must also allow INFO messages.
+If initialization happened while INFO was disabled, changing the level later does not replay the
+message; collect startup logs from a new application run. For older connectors, collect the installed
+connector artifact version instead. Use DEBUG for more detailed operation diagnostics, and review
+and redact sensitive values before sharing logs.
+
 ### Supported Options
 
 All the options that can be used in the Kusto Sink can be found in KustoSinkOptions.
