@@ -53,7 +53,7 @@ private[kusto] object KustoTestUtils {
       database: String,
       expectedNumberOfRows: Int, // Set a negative value to skip validation
       timeoutMs: Int,
-      cleanupAllTables: Boolean = true,
+      cleanupAllTables: Boolean = false,
       tableCleanupPrefix: String = ""): Unit = {
 
     var rowCount = 0
@@ -70,6 +70,7 @@ private[kusto] object KustoTestUtils {
       timeElapsedMs += sleepPeriodMs
     }
 
+    // Concurrent test runs share prefixes; bulk cleanup must be explicitly requested.
     if (cleanupAllTables) {
       if (tableCleanupPrefix.isEmpty) {
         throw new InvalidParameterException(
