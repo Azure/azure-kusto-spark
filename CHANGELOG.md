@@ -12,7 +12,7 @@ Tags are created as `v4.0_{version}` (Spark 4 / master) and `v3.0_{version}` (Sp
 - None
 
 ### Added
-- None
+- Log the OSS connector and Kusto Java SDK versions as searchable `Kusto.Spark.Connector:<version>|Kusto.Java.Client:<version>` identifiers at INFO once per class loader, with troubleshooting guidance
 
 ### Fixed
 - None
