@@ -257,6 +257,11 @@ class IngestV2UnitTests extends AnyFlatSpec with Matchers {
     location.rawFolder shouldBe "item/Files/my%20folder"
     location.blobPath("a.csv.gz") shouldBe "item/Files/my folder/a.csv.gz"
     LakeFolderLocation.parse("https://h.blob.x.com/ws").blobPath("a") shouldBe "a"
+    location.blobUrl("a b+c.csv.gz") shouldBe
+      "https://ws1.z6.blob.fabric.microsoft.com/workspace-id/item/Files/my%20folder/a%20b%2Bc.csv.gz"
+    LakeFolderLocation
+      .parse("https://h.blob.x.com/ws")
+      .blobUrl("a") shouldBe "https://h.blob.x.com/ws/a"
     an[IllegalArgumentException] should be thrownBy LakeFolderLocation.parse(
       "http://h.dfs.x.com/ws/f")
     an[IllegalArgumentException] should be thrownBy LakeFolderLocation.parse(

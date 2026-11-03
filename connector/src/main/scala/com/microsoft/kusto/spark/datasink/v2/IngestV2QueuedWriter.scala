@@ -4,6 +4,7 @@
 package com.microsoft.kusto.spark.datasink.v2
 
 import com.azure.storage.blob.{BlobContainerClient, BlobContainerClientBuilder}
+import com.azure.storage.common.Utility
 import com.microsoft.azure.kusto.ingest.v2.client.QueuedIngestClient
 import com.microsoft.azure.kusto.ingest.v2.models.{Format, IngestRequestProperties}
 import com.microsoft.azure.kusto.ingest.v2.source.{BlobSource, CompressionType}
@@ -208,7 +209,7 @@ object IngestV2QueuedWriter {
     override def newBlob(name: String): V2BlobWriteResource = {
       val blobClient = containerClient.getBlobClient(location.blobPath(name))
       val stream = blobClient.getBlockBlobClient.getBlobOutputStream(true)
-      V2BlobWriteResource(stream, blobClient.getBlobUrl)
+      V2BlobWriteResource(stream, location.blobUrl(name))
     }
   }
 }
@@ -226,6 +227,15 @@ private[v2] final case class LakeFolderLocation(
 
   /** Blob name inside the container, for the storage SDK (not URL encoded). */
   def blobPath(name: String): String = if (folder.isEmpty) name else s"$folder/$name"
+
+  /**
+   * URL of a blob in this folder, sent to the service. The folder keeps its '/' separators, like
+   * the .NET client's `BlobClient.Uri`; the Java SDK's `getBlobUrl` encodes them as "%2F", which
+   * the service cannot parse as a OneLake path.
+   */
+  def blobUrl(name: String): String =
+    (Seq(containerUrl) ++ Seq(rawFolder).filter(_.nonEmpty) :+ Utility.urlEncode(name))
+      .mkString("/")
 }
 
 private[v2] object LakeFolderLocation {
