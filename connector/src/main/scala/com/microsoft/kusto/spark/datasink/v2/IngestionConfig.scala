@@ -82,7 +82,9 @@ object IngestionConfig {
 
   val RestIngestionMethod = "Rest"
   val LakeUploadMethod = "Lake"
-  val DefaultMaxBlobsPerBatch = 70
+  // The service accepts at most 20 blobs per queued REST request (the .NET SDK sends the same).
+  val MaxBlobsPerRequest = 20
+  val DefaultMaxBlobsPerBatch: Int = MaxBlobsPerRequest
   // 4 GiB, matches the previous connector default.
   val DefaultMaxDataSizeBytes: Long = 4L * 1024 * 1024 * 1024
 
@@ -105,7 +107,7 @@ object IngestionConfig {
         .flatMap(s => Option(s.getMaxBlobsPerBatch))
         .map(_.longValue())
         .filter(v => v > 0 && v <= Int.MaxValue)
-        .map(_.toInt)
+        .map(v => math.min(v, MaxBlobsPerRequest.toLong).toInt)
         .getOrElse(DefaultMaxBlobsPerBatch)
 
       val maxDataSize = ingestionSettings

@@ -29,6 +29,8 @@ class IngestV2UnitTests extends AnyFlatSpec with Matchers {
   private val storage = s"https://acct.blob.core.windows.net/c1?$sas"
   private val lake =
     "https://ws1.z6.dfs.fabric.microsoft.com/11111111-2222-3333-4444-555555555555/item/Files/ingest"
+  private val workspaceLake =
+    "https://87e63f193aeb40a99407b9cdb8315ea9.z87.dfs.fabric.microsoft.com/87e63f19-3aeb-40a9-9407-b9cdb8315ea9/item/Ingestions"
   private val coordinates = KustoCoordinates(
     "https://trd-abc.z6.kusto.fabric.microsoft.com",
     "trd-abc",
@@ -133,6 +135,19 @@ class IngestV2UnitTests extends AnyFlatSpec with Matchers {
     IngestionConfig.fromConfigurationResponse(null) shouldBe None
   }
 
+  it should "never put more blobs in one request than the service accepts" in {
+    def parsed(maxBlobs: Long) =
+      IngestionConfig
+        .fromConfigurationResponse(
+          new ConfigurationResponse(
+            new ContainerSettings(List(new ContainerInfo(storage)).asJava, null, null, null),
+            new IngestionSettings(maxBlobs, 1L, null)))
+        .get
+        .maxBlobsPerBatch
+    parsed(100) shouldBe IngestionConfig.MaxBlobsPerRequest
+    parsed(5) shouldBe 5
+  }
+
   "UploadTargets.pathFor" should "spread partitions, including negative ids" in {
     val targets = UploadTargets(Seq("a", "b"), isLake = false)
     Seq(0, 1, 2, -1).map(targets.pathFor) shouldBe Seq("a", "b", "a", "b")
@@ -144,7 +159,9 @@ class IngestV2UnitTests extends AnyFlatSpec with Matchers {
     parseTimeSpan("1.02:00:00.5") shouldBe Some(Duration.ofHours(26))
     parseTimeSpan("PT1H") shouldBe None
     parseTimeSpan(null) shouldBe None
-    cacheTtl(Some(Duration.ofSeconds(5))) shouldBe MinCacheTtl
+    cacheTtl(Some(Duration.ofSeconds(5))) shouldBe Duration.ofSeconds(5)
+    cacheTtl(Some(Duration.ZERO)) shouldBe MaxCacheTtl
+    cacheTtl(Some(Duration.ofSeconds(-1))) shouldBe MaxCacheTtl
     cacheTtl(Some(Duration.ofMinutes(10))) shouldBe Duration.ofMinutes(10)
     cacheTtl(Some(Duration.ofDays(1))) shouldBe MaxCacheTtl
     cacheTtl(None) shouldBe MaxCacheTtl
@@ -332,6 +349,9 @@ class IngestV2UnitTests extends AnyFlatSpec with Matchers {
     IngestV2RequestProperties
       .build(None, IngestionFormat.CSV, forceSkipBatching = true)
       .getSkipBatching shouldBe true
+    IngestV2RequestProperties
+      .build(None, IngestionFormat.CSV, enableTracking = false)
+      .getEnableTracking shouldBe false
   }
 
   "IngestV2StatusTracker" should "succeed only when every blob succeeded" in {
@@ -360,7 +380,8 @@ class IngestV2UnitTests extends AnyFlatSpec with Matchers {
   it should "keep the existing path for settings ingest-v2 does not support" in {
     def plan(o: WriteOptions, c: IngestionConfig = config(ingestionMethod = Some("Rest"))) =
       IngestV2WriterOrchestrator.plan(coordinates, auth, o, c)
-    val lakeConfig = config(uploadMethod = Some("Lake"), blobs = Seq.empty, lakes = Seq(lake))
+    val lakeConfig =
+      config(uploadMethod = Some("Lake"), blobs = Seq.empty, lakes = Seq(workspaceLake))
     val userStorage = Some(Array(new IngestionStorageParameters("https://s", "c", "", "sas")))
 
     plan(options(writeMode = WriteMode.KustoStreaming)).isLeft shouldBe true
@@ -399,5 +420,267 @@ class IngestV2UnitTests extends AnyFlatSpec with Matchers {
     new java.io.ObjectOutputStream(bytes).writeObject(op)
     new java.io.ObjectInputStream(new java.io.ByteArrayInputStream(bytes.toByteArray))
       .readObject() shouldBe op
+  }
+
+  private val privateLinkLake =
+    "https://0a1b.z87.daily-onelake.fabric.microsoft.com/0a1b/item/Ingestions/20261103-lakedata"
+
+  it should "send storage tokens only to OneLake hosts" in {
+    import IngestV2WriterOrchestrator.isTrustedLakeFolder
+    Seq(
+      privateLinkLake,
+      workspaceLake,
+      workspaceLake.replace(".dfs.", ".blob."),
+      "https://87e63f193aeb40a99407b9cdb8315ea9.z87.daily-dfs.fabric.microsoft.com/ws/item",
+      "https://onelake.dfs.fabric.microsoft.com/ws/item/Files",
+      "https://onelake.blob.fabric.microsoft.com/ws/item/Files",
+      "https://daily-api.onelake.fabric.microsoft.com/ws/item/Ingestions").foreach { url =>
+      withClue(url)(isTrustedLakeFolder(url) shouldBe true)
+    }
+    Seq(
+      "http://onelake.dfs.fabric.microsoft.com/ws/item",
+      "https://onelake.dfs.fabric.microsoft.com.evil.com/ws/item",
+      "https://evil.com/onelake.dfs.fabric.microsoft.com/ws",
+      "https://acct.blob.core.windows.net/c",
+      "https://ws1.z6.dfs.fabric.microsoft.com/ws/item",
+      "https://87e63f193aeb40a99407b9cdb8315ea9.z87.dfs.fabric.microsoft.com.evil.com/ws",
+      "not a url").foreach { url =>
+      withClue(url)(isTrustedLakeFolder(url) shouldBe false)
+    }
+    val untrusted = config(uploadMethod = Some("Lake"), lakes = Seq("https://evil.com/ws/item"))
+    IngestV2WriterOrchestrator
+      .plan(coordinates, auth, options(tokenProvider = Some(new TestTokenProvider)), untrusted)
+      .left
+      .get should include("evil.com")
+    IngestV2WriterOrchestrator
+      .plan(
+        coordinates,
+        auth,
+        options(tokenProvider = Some(new TestTokenProvider)),
+        config(uploadMethod = Some("Lake"), lakes = Seq(privateLinkLake)))
+      .isRight shouldBe true
+  }
+
+  "IngestV2ParquetWriter.tooLarge" should "reject a file above the service limit before submitting" in {
+    IngestV2ParquetWriter.tooLarge(Seq("a" -> 10L, "b" -> 100L), 100L) shouldBe None
+    IngestV2ParquetWriter.tooLarge(Seq("a" -> 10L, "b" -> 101L), 100L).get should
+      (include("'b'") and include("repartition"))
+  }
+
+  "IngestV2QueuedWriter" should "resubmit only when the service cannot have accepted the request" in {
+    import com.microsoft.azure.kusto.ingest.v2.common.exceptions.IngestException
+    import IngestV2QueuedWriter.isSafeToResubmit
+    def ingest(message: String, code: Integer = null) =
+      new IngestException(message, null, code, null, null)
+    isSafeToResubmit(ingest("Failed. Status: 429, Body: {}")) shouldBe true
+    isSafeToResubmit(ingest("Failed. Status: 503, Body: {}")) shouldBe true
+    isSafeToResubmit(ingest("x", 503)) shouldBe true
+    isSafeToResubmit(ingest("Failed. Status: 503, Body: x. OperationId N/A")) shouldBe true
+    // The service answered with an operation id, so it may have accepted the blobs.
+    isSafeToResubmit(ingest("Failed. Status: 503, Body: x. OperationId 0f1e-77")) shouldBe false
+    isSafeToResubmit(ingest("Failed. Status: 429, Body: x. OperationId 0f1e-77")) shouldBe false
+    isSafeToResubmit(ingest("Failed. Status: 500, Body: {}")) shouldBe false
+    isSafeToResubmit(ingest("Failed. Status: 504, Body: {}")) shouldBe false
+    isSafeToResubmit(ingest("no status")) shouldBe false
+    // The SDK reports 404 with a ConnectException cause; it must not be retried as a connect error.
+    isSafeToResubmit(
+      new IngestException("not found", new java.net.ConnectException(), 404, null, false)) shouldBe
+      false
+    isSafeToResubmit(new RuntimeException(new java.net.ConnectException("refused"))) shouldBe true
+    isSafeToResubmit(new java.net.UnknownHostException("dm")) shouldBe true
+    isSafeToResubmit(new java.net.SocketTimeoutException("read")) shouldBe false
+    isSafeToResubmit(new java.util.concurrent.TimeoutException()) shouldBe false
+  }
+
+  it should "retry within one deadline and a bounded number of attempts" in {
+    import IngestV2QueuedWriter.{withSubmitRetries, MaxSubmitAttempts}
+    val retryable = new java.net.ConnectException("refused")
+    def deadline(seconds: Long) = System.nanoTime() + Duration.ofSeconds(seconds).toNanos
+
+    var calls = 0
+    val sleeps = scala.collection.mutable.ArrayBuffer[Long]()
+    withSubmitRetries(deadline(600), "t", sleeps += _) { _ =>
+      calls += 1
+      if (calls < 3) throw retryable else "ok"
+    } shouldBe "ok"
+    calls shouldBe 3
+    sleeps should have size 2
+    sleeps.head should (be >= 1000L and be <= 2000L)
+    sleeps(1) should (be >= 2000L and be <= 4000L)
+
+    calls = 0
+    the[java.net.ConnectException] thrownBy withSubmitRetries(deadline(600), "t", _ => ()) { _ =>
+      calls += 1
+      throw retryable
+    }
+    calls shouldBe MaxSubmitAttempts
+
+    calls = 0
+    an[IllegalStateException] should be thrownBy withSubmitRetries(deadline(600), "t", _ => ()) {
+      _ =>
+        calls += 1
+        throw new IllegalStateException("bad request")
+    }
+    calls shouldBe 1
+
+    calls = 0
+    a[java.net.ConnectException] should be thrownBy withSubmitRetries(deadline(1), "t", _ => ()) {
+      _ =>
+        calls += 1
+        throw retryable
+    }
+    calls shouldBe 1
+  }
+
+  "IngestV2StatusTracker.waitForCompletion" should "poll until every blob succeeded" in {
+    val ops = (1 to 70).map(i => IngestV2SubmittedOperation(s"op$i", "db", "t", "QUEUED", 2))
+    val reads = new java.util.concurrent.atomic.AtomicInteger()
+    var sleeps = 0
+    IngestV2StatusTracker.waitForCompletion(
+      ops,
+      Duration.ofMinutes(5),
+      "req",
+      _ => {
+        val round = reads.incrementAndGet() > ops.size
+        completed(if (round) status(2, 0, 0, 0) else status(1, 0, 1, 0))
+      },
+      _ => sleeps += 1)
+    reads.get shouldBe 140
+    sleeps shouldBe 1
+  }
+
+  it should "fail at once when a blob failed, was canceled or went missing" in {
+    def run(s: Status) = {
+      var sleeps = 0
+      val e = the[IllegalStateException] thrownBy IngestV2StatusTracker.waitForCompletion(
+        Seq(IngestV2SubmittedOperation("op", "db", "t", "QUEUED", 3)),
+        Duration.ofMinutes(5),
+        "req",
+        _ => completed(s),
+        _ => sleeps += 1)
+      sleeps shouldBe 0
+      e.getMessage should include(".show ingestion failures")
+    }
+    run(status(2, 1, 0, 0))
+    run(status(2, 0, 0, 1))
+
+    // A failure in the first group is reported before the next group is read.
+    val ops = (1 to IngestV2StatusTracker.MaxParallelStatusCalls + 1)
+      .map(i => IngestV2SubmittedOperation(s"op$i", "db", "t", "QUEUED", 1))
+    var reads = 0
+    an[IllegalStateException] should be thrownBy IngestV2StatusTracker.waitForCompletion(
+      ops,
+      Duration.ofMinutes(5),
+      "req",
+      _ => { reads += 1; completed(status(0, 1, 0, 0)) },
+      _ => ())
+    reads shouldBe IngestV2StatusTracker.MaxParallelStatusCalls
+    run(status(2, 0, 0, 0))
+    run(status(1, 1, 1, 0))
+  }
+
+  it should "stop on permanent status errors and retry other errors" in {
+    import com.microsoft.azure.kusto.ingest.v2.common.exceptions.IngestException
+    val op = Seq(IngestV2SubmittedOperation("op", "db", "t", "QUEUED", 1))
+    val forbidden = new IngestException("forbidden", null, 403, null, null)
+    the[IngestException] thrownBy IngestV2StatusTracker.waitForCompletion(
+      op,
+      Duration.ofMinutes(5),
+      "req",
+      _ => failed(forbidden),
+      _ => ()) shouldBe forbidden
+
+    var reads = 0
+    IngestV2StatusTracker.waitForCompletion(
+      op,
+      Duration.ofMinutes(5),
+      "req",
+      _ => {
+        reads += 1
+        reads match {
+          case 1 => failed(new IngestException("busy", null, 503, null, null))
+          case 2 => failed(new IngestException("not found", null, 404, null, null))
+          case 3 => completed(status(0, 0, 0, 0))
+          case _ => completed(status(1, 0, 0, 0))
+        }
+      },
+      _ => ())
+    reads shouldBe 4
+  }
+
+  it should "give up at the deadline with the last error" in {
+    val op = Seq(IngestV2SubmittedOperation("op", "db", "t", "QUEUED", 1))
+    a[java.util.concurrent.TimeoutException] should be thrownBy IngestV2StatusTracker
+      .waitForCompletion(
+        op,
+        Duration.ofMillis(200),
+        "req",
+        _ => completed(status(0, 0, 1, 0)),
+        ms => Thread.sleep(ms))
+    val busy = new RuntimeException("busy")
+    the[RuntimeException] thrownBy IngestV2StatusTracker.waitForCompletion(
+      op,
+      Duration.ofMillis(200),
+      "req",
+      _ => failed(busy),
+      ms => Thread.sleep(ms)) shouldBe busy
+  }
+
+  "IngestV2ConfigurationProvider.withRetries" should "retry transient errors only" in {
+    import scala.util.{Failure, Success}
+    var calls = 0
+    IngestV2ConfigurationProvider.withRetries(3, Duration.ZERO) {
+      calls += 1
+      if (calls < 3) Failure(new RuntimeException("503")) else Success("ok")
+    } shouldBe Success("ok")
+    calls = 0
+    IngestV2ConfigurationProvider
+      .withRetries(3, Duration.ZERO) {
+        calls += 1
+        Failure(new RuntimeException("503"))
+      }
+      .isFailure shouldBe true
+    calls shouldBe 3
+    calls = 0
+    IngestV2ConfigurationProvider
+      .withRetries(3, Duration.ZERO) {
+        calls += 1
+        Failure(new java.util.concurrent.TimeoutException())
+      }
+      .isFailure shouldBe true
+    calls shouldBe 1
+  }
+
+  "IngestV2ConfigurationCache" should "give the SDK the connector's cached configuration" in {
+    val dm = "https://ingest-cache-test.kusto.windows.net"
+    val response = new ConfigurationResponse(
+      new ContainerSettings(List(new ContainerInfo(storage)).asJava, null, null, null),
+      new IngestionSettings(5L, 1L, "Rest"))
+    IngestV2ConfigurationProvider.seed(
+      dm,
+      auth,
+      response,
+      IngestionConfig.fromConfigurationResponse(response).get)
+    try {
+      val cache = new IngestV2ConfigurationCache(dm, auth)
+      val data = cache
+        .getConfiguration(null)
+        .asInstanceOf[com.microsoft.azure.kusto.ingest.v2.common.CachedConfigurationData]
+      data.getResponse shouldBe response
+      IngestV2ConfigurationProvider.getConfiguration(dm, auth).get.maxBlobsPerBatch shouldBe 5
+    } finally IngestV2ConfigurationProvider.clearCache()
+  }
+
+  private def status(succeeded: Long, failed: Long, inProgress: Long, canceled: Long) =
+    new Status(succeeded, failed, inProgress, canceled)
+  private def completed(s: Status) = java.util.concurrent.CompletableFuture.completedFuture(s)
+  private def failed(e: Throwable) = {
+    val f = new java.util.concurrent.CompletableFuture[Status]()
+    f.completeExceptionally(e)
+    f
+  }
+
+  private class TestTokenProvider extends StorageTokenProvider {
+    override def getToken: String = "token"
   }
 }

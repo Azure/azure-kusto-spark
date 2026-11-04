@@ -98,28 +98,48 @@ object KustoWriter {
           "")
       } catch {
         case fallback: v2.IngestV2FallbackException =>
-          KDSU.logWarn(
-            className,
-            s"${fallback.getMessage}. Retrying with the existing ingestion path, " +
-              s"requestId: ${writeOptions.requestId}")
-          // A staging table used by ingest-v2 may still receive late ingestions; never reuse it.
-          val tmpTableSuffix = if (fallback.stagingTableUsed) IngestV2RetryTableSuffix else ""
-          try {
-            writeImpl(
-              batchId,
-              data,
-              tableCoordinates,
-              authentication,
-              writeOptions,
-              crp,
-              None,
-              tmpTableSuffix)
-          } catch {
-            case retryFailure: Throwable =>
-              retryFailure.addSuppressed(fallback)
-              throw retryFailure
-          }
+          writeWithExistingPath(
+            fallback,
+            batchId,
+            data,
+            tableCoordinates,
+            authentication,
+            writeOptions,
+            crp)
       }
+    }
+  }
+
+  /** Repeats a write on the existing path after ingest-v2 failed before any data could land. */
+  private def writeWithExistingPath(
+      fallback: v2.IngestV2FallbackException,
+      batchId: Option[Long],
+      data: DataFrame,
+      tableCoordinates: KustoCoordinates,
+      authentication: KustoAuthentication,
+      writeOptions: WriteOptions,
+      crp: ClientRequestProperties): Unit = {
+    if (v2.IngestV2TestHooks.failInsteadOfFallback) throw fallback
+    KDSU.logWarn(
+      className,
+      s"${fallback.getMessage}. Retrying with the existing ingestion path, " +
+        s"requestId: ${writeOptions.requestId}")
+    // A staging table used by ingest-v2 may still receive late ingestions; never reuse it.
+    val tmpTableSuffix = if (fallback.stagingTableUsed) IngestV2RetryTableSuffix else ""
+    try {
+      writeImpl(
+        batchId,
+        data,
+        tableCoordinates,
+        authentication,
+        writeOptions,
+        crp,
+        None,
+        tmpTableSuffix)
+    } catch {
+      case retryFailure: Throwable =>
+        retryFailure.addSuppressed(fallback)
+        throw retryFailure
     }
   }
 
@@ -157,6 +177,8 @@ object KustoWriter {
 
       decision match {
         case Right(plan) => Some(plan)
+        case Left(reason) if v2.IngestV2TestHooks.failInsteadOfFallback =>
+          throw new IllegalStateException(s"ingest-v2 was not used: $reason")
         case Left(reason) =>
           KDSU.logInfo(
             className,
@@ -287,7 +309,16 @@ object KustoWriter {
             tableExists = tableExists,
             kustoClient = kustoClient,
             sinkStartTime = getCreationTime(stagingTableIngestionProperties),
-            batchIdIfExists = batchIdIfExists))
+            batchIdIfExists = batchIdIfExists),
+          onAsyncFallback = fallback =>
+            writeWithExistingPath(
+              fallback,
+              batchId,
+              data,
+              tableCoordinates,
+              authentication,
+              writeOptions,
+              crp))
         return
       }
       val rdd = data.queryExecution.toRdd

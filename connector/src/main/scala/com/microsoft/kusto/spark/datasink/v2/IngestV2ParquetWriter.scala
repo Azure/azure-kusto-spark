@@ -6,7 +6,7 @@ package com.microsoft.kusto.spark.datasink.v2
 import com.microsoft.azure.kusto.ingest.v2.client.QueuedIngestClient
 import com.microsoft.azure.kusto.ingest.v2.models.Format
 import com.microsoft.azure.kusto.ingest.v2.source.CompressionType
-import com.microsoft.kusto.spark.datasink.{IngestionFormat, WriteOptions}
+import com.microsoft.kusto.spark.datasink.{IngestionFormat, WriteMode, WriteOptions}
 import com.microsoft.kusto.spark.utils.{KustoQueryUtils, KustoDataSourceUtils => KDSU}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -59,6 +59,13 @@ object IngestV2ParquetWriter {
     }
   }
 
+  /** Why the files cannot be ingested: the service rejects files above its size limit. */
+  private[v2] def tooLarge(files: Seq[(String, Long)], maxFileSizeBytes: Long): Option[String] =
+    files.find(_._2 > maxFileSizeBytes).map { case (name, size) =>
+      s"The Parquet file '$name' is $size bytes, more than the $maxFileSizeBytes bytes the " +
+        "ingestion service accepts per file; repartition the DataFrame into more partitions"
+    }
+
   /**
    * Writes the files, then submits them in batches. `onSubmit` is called before the first batch
    * is sent, so the caller knows from then on that data may reach the table.
@@ -70,6 +77,7 @@ object IngestV2ParquetWriter {
       queuedClient: QueuedIngestClient,
       lakeFolder: String,
       maxBlobsPerBatch: Int,
+      maxFileSizeBytes: Long,
       writeOptions: WriteOptions,
       onSubmit: () => Unit): List[IngestV2SubmittedOperation] = {
 
@@ -89,14 +97,25 @@ object IngestV2ParquetWriter {
     val conf = new Configuration(baseConf)
     options.foreach { case (k, v) => conf.set(k, v) }
     val dir = new Path(staging.abfssDir)
-    val files = FileSystem
-      .get(dir.toUri, conf)
+    val fs = FileSystem.get(dir.toUri, conf)
+    val written = fs
       .listStatus(dir)
       .filter(_.isFile)
-      .map(_.getPath.getName)
-      .filter(n => n.endsWith(".parquet") && !n.startsWith("_") && !n.startsWith("."))
-      .sorted
+      .filter { f =>
+        val n = f.getPath.getName
+        n.endsWith(".parquet") && !n.startsWith("_") && !n.startsWith(".")
+      }
       .toList
+    tooLarge(written.map(f => f.getPath.getName -> f.getLen), maxFileSizeBytes).foreach {
+      message =>
+        try fs.delete(dir, true)
+        catch {
+          case e: Exception =>
+            KDSU.logWarn(myName, s"Could not delete the Parquet files of a rejected write: $e")
+        }
+        throw new IllegalStateException(message)
+    }
+    val files = written.map(_.getPath.getName).sorted
 
     if (files.isEmpty) {
       KDSU.logWarn(myName, s"No Parquet files were written, requestId: ${writeOptions.requestId}")
@@ -106,7 +125,8 @@ object IngestV2ParquetWriter {
     val props =
       IngestV2RequestProperties.build(
         writeOptions.maybeSparkIngestionProperties,
-        IngestionFormat.Parquet)
+        IngestionFormat.Parquet,
+        enableTracking = writeOptions.writeMode == WriteMode.Transactional)
     val urls = files.map(name => s"${staging.blobDirUrl}/$name")
     onSubmit()
     val operations = urls

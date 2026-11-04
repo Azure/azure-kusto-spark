@@ -79,14 +79,18 @@ private[v2] object IngestV2RequestProperties {
    * @param forceSkipBatching
    *   skip batching even if the user did not ask for it; the existing path does this for blobs
    *   sealed because they reached the size limit
+   * @param enableTracking
+   *   ask the service to keep per-blob status; only writes that wait for the result need it,
+   *   like the existing path which tracks transactional writes only
    */
   def build(
       properties: Option[SparkIngestionProperties],
       format: IngestionFormat,
-      forceSkipBatching: Boolean = false): IngestRequestProperties = {
+      forceSkipBatching: Boolean = false,
+      enableTracking: Boolean = true): IngestRequestProperties = {
     unsupportedReason(properties, format).foreach(r => throw new IllegalArgumentException(r))
 
-    val builder = IngestRequestPropertiesBuilder.create().withEnableTracking(true)
+    val builder = IngestRequestPropertiesBuilder.create().withEnableTracking(enableTracking)
     if (forceSkipBatching || properties.exists(_.flushImmediately)) builder.withSkipBatching(true)
     properties.foreach { p =>
       nonEmpty(p.dropByTags).foreach(builder.withDropByTags)

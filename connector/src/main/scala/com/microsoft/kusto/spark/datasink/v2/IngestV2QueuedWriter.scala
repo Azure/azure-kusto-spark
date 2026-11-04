@@ -4,8 +4,10 @@
 package com.microsoft.kusto.spark.datasink.v2
 
 import com.azure.storage.blob.{BlobContainerClient, BlobContainerClientBuilder}
+import com.azure.storage.blob.models.ParallelTransferOptions
 import com.azure.storage.common.Utility
 import com.microsoft.azure.kusto.ingest.v2.client.QueuedIngestClient
+import com.microsoft.azure.kusto.ingest.v2.common.exceptions.IngestException
 import com.microsoft.azure.kusto.ingest.v2.models.{Format, IngestRequestProperties}
 import com.microsoft.azure.kusto.ingest.v2.source.{BlobSource, CompressionType}
 import com.microsoft.azure.storage.blob.{BlobRequestOptions, CloudBlockBlob}
@@ -14,6 +16,7 @@ import com.microsoft.kusto.spark.datasink.{
   IngestionFormat,
   RowCSVWriterUtils,
   StorageTokenProvider,
+  WriteMode,
   WriteOptions
 }
 import com.microsoft.kusto.spark.utils.{
@@ -63,12 +66,18 @@ object IngestV2QueuedWriter {
     val blobNamePrefix =
       KustoQueryUtils.simplifyName(s"${database}_${table}_${writeOptions.requestId}")
     val sparkProps = writeOptions.maybeSparkIngestionProperties
-    val props = IngestV2RequestProperties.build(sparkProps, IngestionFormat.CSV)
+    val tracked = writeOptions.writeMode == WriteMode.Transactional
+    val props =
+      IngestV2RequestProperties.build(sparkProps, IngestionFormat.CSV, enableTracking = tracked)
     // Like the existing path, blobs sealed because they are full skip batching unless disabled.
     val fullBlobProps =
       if (writeOptions.kustoCustomDebugWriteOptions.disableFlushImmediately) props
       else
-        IngestV2RequestProperties.build(sparkProps, IngestionFormat.CSV, forceSkipBatching = true)
+        IngestV2RequestProperties.build(
+          sparkProps,
+          IngestionFormat.CSV,
+          forceSkipBatching = true,
+          enableTracking = tracked)
     val target = BlobTarget(targets.pathFor(partitionId), targets.isLake, writeOptions)
 
     val pendingFull = ListBuffer[String]()
@@ -123,6 +132,15 @@ object IngestV2QueuedWriter {
     operations.toList
   }
 
+  /**
+   * Submits blobs that are already uploaded. The SDK does not retry, so a submission is resent
+   * (with the same blobs and source ids) only when the service certainly did not take it:
+   * throttling (429), service unavailable (503) or a connection that could not be opened. Other
+   * failures, including timeouts, are not resent because the service may already have queued the
+   * blobs and the REST API is not idempotent.
+   *
+   * The operation id is required only when the operation is going to be awaited (tracking on).
+   */
   private[v2] def submit(
       queuedClient: QueuedIngestClient,
       database: String,
@@ -134,23 +152,91 @@ object IngestV2QueuedWriter {
     val sources: java.util.List[BlobSource] = blobUrls.map { url =>
       new BlobSource(url, format, UUID.randomUUID(), compression)
     }.asJava
-    val response = awaitSubmit(queuedClient.ingestAsyncJava(database, table, sources, props))
+    val deadline = System.nanoTime() + TimeUnit.MINUTES.toNanos(SubmitTimeoutMinutes)
+    val response = withSubmitRetries(deadline, s"$database.$table") { left =>
+      awaitSubmit(queuedClient.ingestAsyncJava(database, table, sources, props), left)
+    }
     val operationId = Option(response.getIngestResponse)
       .flatMap(r => Option(r.getIngestionOperationId))
-      .filter(_.trim.nonEmpty)
-      .getOrElse(throw new IllegalStateException(
-        "The ingestion service accepted the blobs but returned no operation id"))
+      .map(_.trim)
+      .filter(_.nonEmpty)
+    if (operationId.isEmpty && Option(props.getEnableTracking).exists(_.booleanValue())) {
+      throw new IllegalStateException(
+        "The ingestion service accepted the blobs but returned no operation id")
+    }
     IngestV2SubmittedOperation(
-      operationId,
+      operationId.getOrElse(""),
       database,
       table,
       response.getIngestionType.name(),
       blobUrls.size)
   }
 
+  private[v2] val MaxSubmitAttempts = 5
+  private[v2] val SubmitRetryBaseMillis = 2000L
+  private[v2] val SubmitRetryMaxMillis = 30000L
+  private val StatusInMessage = """Status: (\d{3})""".r.unanchored
+  private val OperationIdInMessage = """OperationId (\S+)\s*$""".r.unanchored
+
+  private[v2] def withSubmitRetries[T](
+      deadlineNanos: Long,
+      target: String,
+      sleep: Long => Unit = Thread.sleep)(call: Long => T): T = {
+    var attempt = 1
+    while (true) {
+      val left = TimeUnit.NANOSECONDS.toMillis(deadlineNanos - System.nanoTime())
+      try return call(math.max(1L, left))
+      catch {
+        case e: Exception if attempt < MaxSubmitAttempts && isSafeToResubmit(e) =>
+          val cap = math.min(SubmitRetryMaxMillis, SubmitRetryBaseMillis << (attempt - 1))
+          val wait = java.util.concurrent.ThreadLocalRandom.current().nextLong(cap / 2, cap + 1)
+          val remaining = TimeUnit.NANOSECONDS.toMillis(deadlineNanos - System.nanoTime())
+          if (wait >= remaining) throw e
+          KDSU.logWarn(
+            myName,
+            s"Submitting blobs to '$target' failed (attempt $attempt of $MaxSubmitAttempts), " +
+              s"retrying in ${wait}ms: $e")
+          sleep(wait)
+          attempt += 1
+      }
+    }
+    throw new IllegalStateException("unreachable")
+  }
+
+  /**
+   * True only when the service cannot have accepted the request: it was throttled or unavailable
+   * and returned no operation id, or the connection could not be made.
+   */
+  private[v2] def isSafeToResubmit(e: Throwable): Boolean = e match {
+    case ie: IngestException =>
+      httpStatus(ie).exists(s => s == 429 || s == 503) && !hasOperationId(ie)
+    case _ =>
+      Iterator
+        .iterate[Throwable](e)(_.getCause)
+        .takeWhile(_ != null)
+        .take(10)
+        .exists {
+          case _: java.net.ConnectException | _: java.net.UnknownHostException => true
+          case _ => false
+        }
+  }
+
+  /** The SDK adds "OperationId <id>" (or "N/A") to the message of a failed queued submission. */
+  private[v2] def hasOperationId(e: IngestException): Boolean =
+    Option(e.getMessage).exists {
+      case OperationIdInMessage(id) => !id.equalsIgnoreCase("N/A")
+      case _ => false
+    }
+
+  /** The SDK puts the HTTP status in `failureCode` or, for queued submissions, in the message. */
+  private[v2] def httpStatus(e: IngestException): Option[Int] =
+    Option(e.getFailureCode).map(_.intValue()).orElse(Option(e.getMessage).collect {
+      case StatusInMessage(code) => code.toInt
+    })
+
   /** Waits for a submission with a hard upper bound, unwrapping the SDK's error. */
-  private[v2] def awaitSubmit[T](future: CompletableFuture[T]): T = {
-    try future.get(SubmitTimeoutMinutes, TimeUnit.MINUTES)
+  private[v2] def awaitSubmit[T](future: CompletableFuture[T], timeoutMillis: Long): T = {
+    try future.get(timeoutMillis, TimeUnit.MILLISECONDS)
     catch {
       case _: TimeoutException =>
         future.cancel(true)
@@ -208,10 +294,19 @@ object IngestV2QueuedWriter {
 
     override def newBlob(name: String): V2BlobWriteResource = {
       val blobClient = containerClient.getBlobClient(location.blobPath(name))
-      val stream = blobClient.getBlockBlobClient.getBlobOutputStream(true)
+      // Null request conditions overwrite, like getBlobOutputStream(true).
+      val stream = blobClient.getBlockBlobClient
+        .getBlobOutputStream(LakeUpload.TransferOptions, null, null, null, null)
       V2BlobWriteResource(stream, location.blobUrl(name))
     }
   }
+}
+
+private[v2] object LakeUpload {
+  // Same memory per open blob as the storage-container path (4 blocks of 4 MiB in flight).
+  val TransferOptions: ParallelTransferOptions = new ParallelTransferOptions()
+    .setBlockSizeLong(4L * 1024 * 1024)
+    .setMaxConcurrency(4)
 }
 
 /**

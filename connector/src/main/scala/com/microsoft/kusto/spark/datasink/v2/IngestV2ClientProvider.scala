@@ -25,6 +25,7 @@ class IngestV2ClientProvider(
       .create(dmUrl)
       .withAuthentication(IngestV2Authentication.createTokenCredential(authentication, dmUrl))
       .withClientDetails(IngestV2ClientProvider.ApplicationName, connectorVersion, "")
+      .withConfiguration(new IngestV2ConfigurationCache(dmUrl, authentication))
       .build()
     queuedClientCreated = true
     client

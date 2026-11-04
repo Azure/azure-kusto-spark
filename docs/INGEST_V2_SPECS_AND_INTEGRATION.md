@@ -29,7 +29,11 @@ otherwise                                      -> ingest-v2
 
 `{dm}` is `ingestionUrl` when given, otherwise `https://ingest-<cluster host>`, the same URL the
 existing path uses. The configuration is cached per DM URL and credentials for the service's
-`refreshInterval`, bounded to 1 minute - 1 hour. Failures are not cached.
+`refreshInterval` (at most 1 hour). Only one call per key runs at a time; other writers wait for
+it. The first load is tried up to 3 times on transient errors and a failure is remembered for
+10 seconds. If a later refresh fails, the last good configuration keeps being used and the refresh
+is retried after 1 minute, so a short outage does not move writes back to the existing path.
+The SDK client reads its configuration from this same cache.
 
 Settings that keep the existing path:
 
@@ -38,6 +42,9 @@ Settings that keep the existing path:
 - the service returned lake folders but no `storageTokenProviderClasspath` is configured (CSV)
 - both an inline CSV mapping and a mapping reference
 - an inline CSV mapping not in the connector's JSON form (`columnName`, `columnType`, `properties`)
+- a lake folder that is not `https` on a known OneLake host: the hosts already trusted by the
+  read side (`ContainerProvider.isSupportedApiOneLakeHost`), or a Private Link workspace host `{workspaceid}.z{xy}.{dfs|blob|onelake}.fabric.microsoft.com`
+  (with an optional environment prefix such as `daily-`). Tokens are never sent to other hosts.
 - Parquet together with any CSV mapping, `GenerateDynamicCsvMapping` or `addSourceLocationTransform`
 
 ## 3. What ingest-v2 does
@@ -50,20 +57,30 @@ exactly as in the existing path. Only the "upload and ingest" step changes.
 2. **CSV.** Each Spark partition writes gzipped CSV blobs with the existing serializer.
    - Storage containers: written with the container SAS returned by the service.
    - OneLake: the lake folder URL is split like the .NET `LakeFolder` (`.dfs.` -> `.blob.`, first
-     path segment is the container) and written with the token from `StorageTokenProvider`.
+     path segment is the container) and written with the token from `StorageTokenProvider`,
+     in 4 MiB blocks with 4 parallel block uploads per blob.
    - A blob that reaches the size limit (`min(batchLimit MB, maxDataSize)`) is submitted with
      batching skipped, unless `disableFlushImmediately` is set; the last blob is batched normally.
      This matches the existing path.
-   - Blobs are submitted with `/v1/rest/ingestion/queued` in groups of at most `maxBlobsPerBatch`.
+   - Blobs are submitted with `/v1/rest/ingestion/queued` in groups of at most `maxBlobsPerBatch`
+     (capped at 20, the service limit per request).
+   - A submit is retried (up to 5 attempts, jittered backoff, one 10-minute deadline) only when
+     it cannot have been accepted: HTTP 429/503 without an operation id, or a connection failure.
+     Other errors fail the task, because the queued API is not idempotent.
 3. **Parquet (OneLake only).** Spark writes the DataFrame over `abfss` into a new folder
    `spark-ingest-v2/<requestId>/<uuid>` under the lake folder, then the files are submitted in
    groups. The shared Spark/Hadoop configuration is not changed.
 4. **Ingestion properties.** `skipBatching`, drop-by/ingest-by/additional tags,
    `ingestIfNotExists`, `creationTime`, the mapping reference and the inline mapping are sent.
-   Tracking is always on.
-5. **Queued mode** returns once all blobs are submitted, like the existing path.
+   Tracking is turned on only for transactional writes, which need the status; queued writes
+   do not ask for it, like the existing path.
+5. **Queued mode** returns once all blobs are submitted, like the existing path. Operations are
+   counted on the driver, not collected, so large writes do not grow driver memory.
 6. **Transactional mode** waits for every operation, using one deadline for all of them
-   (`timeout`). Any failed or canceled blob fails the write. Then, like `FinalizeHelper`, merge is
+   (`timeout`). Status is read in parallel groups of 32; the write fails as soon as a group shows
+   a failed or canceled blob or a permanent error (HTTP 400/401/403). An operation the service
+   does not know yet (404 or all counts zero) is retried, but fails after 15 minutes.
+   Then, like `FinalizeHelper`, merge is
    disabled on the staging table, extents are moved to the target and the staging table is dropped.
    The driver always polls; `pollingOnDriver` is not used by this path.
 7. **Async mode** (`isAsync`) runs the same steps in the background and only logs errors.
@@ -89,9 +106,9 @@ too, the ingest-v2 error is attached to it as a suppressed exception.
   SDK deletes them; folder retention should be managed on the Fabric side.
 - **Spark task retries** can submit a partition's data twice: blobs submitted by a failed task
   attempt may still be ingested. The existing path has the same behaviour.
-- **`ingestIfNotExists`** is cleared before ingestion and before the "already ingested" check,
-  on both paths (`KustoWriter.getSparkIngestionProperties`). This path keeps that behaviour; the
-  fix belongs to the existing path first.
+- **`ingestIfNotExists`** is cleared before the "already ingested" check on both paths
+  (`KustoWriter.getSparkIngestionProperties`), so it never skips. This path keeps that
+  behaviour; the fix for both paths is in #526.
 - **SDK logging.** `kusto-ingest-v2` 0.0.1-beta logs the full ingestion configuration, including
   container URLs with SAS, at DEBUG (`ConfigurationClient`). Do not enable DEBUG for
   `com.microsoft.azure.kusto.ingest.v2` until the SDK redacts it.

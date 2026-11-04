@@ -16,6 +16,7 @@ import com.microsoft.kusto.spark.datasink.{
 import com.microsoft.kusto.spark.utils.CslCommandsGenerator.generateTableAlterMergePolicyCommand
 import com.microsoft.kusto.spark.utils.KustoConstants.IngestSkippedTrace
 import com.microsoft.kusto.spark.utils.{
+  ContainerProvider,
   ExtendedKustoClient,
   KustoConstants => KCONST,
   KustoDataSourceUtils => KDSU
@@ -27,7 +28,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import java.net.URI
 import java.time.{Duration, Instant}
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.Future
+import scala.concurrent.{blocking, Future}
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
@@ -101,7 +102,13 @@ object IngestV2WriterOrchestrator {
           val generatesCsvMapping =
             writeOptions.adjustSchema == SchemaAdjustmentMode.GenerateDynamicCsvMapping ||
               debug.addSourceLocationTransform
-          if (format == IngestionFormat.CSV && targets.isLake && writeOptions.storageTokenProvider.isEmpty) {
+          val untrustedLakeFolder =
+            if (targets.isLake) targets.paths.find(p => !isTrustedLakeFolder(p)) else None
+          if (untrustedLakeFolder.isDefined) {
+            Left(
+              "the service returned a lake folder that is not on a known OneLake host: " +
+                Try(new URI(untrustedLakeFolder.get).getHost).getOrElse("<invalid URL>"))
+          } else if (format == IngestionFormat.CSV && targets.isLake && writeOptions.storageTokenProvider.isEmpty) {
             Left(
               "the service asks for OneLake uploads but no storage token provider " +
                 "(storageTokenProviderClasspath) is configured")
@@ -126,6 +133,27 @@ object IngestV2WriterOrchestrator {
     }
   }
 
+  /**
+   * Workspace hosts used with Private Link: `{workspaceid}.z{xy}.dfs|blob.fabric.microsoft.com`
+   * (https://learn.microsoft.com/fabric/onelake/onelake-manage-inbound-access), with an optional
+   * environment prefix such as "daily-".
+   */
+  private val WorkspaceOneLakeHost =
+    """(?i)^[0-9a-f]{32}\.z[0-9a-f]{2}\.(?:[a-z0-9]+-)?(?:dfs|blob|onelake)\.fabric\.microsoft\.com$""".r
+
+  /**
+   * Storage tokens are only ever sent to OneLake hosts. Lake folders may use the ".dfs." or the
+   * ".blob." form of a host; both are checked against the same OneLake host list.
+   */
+  private[v2] def isTrustedLakeFolder(path: String): Boolean =
+    Try(new URI(path.trim)).toOption.exists { uri =>
+      "https".equalsIgnoreCase(uri.getScheme) && Option(uri.getHost).exists { host =>
+        val dfsHost = host.toLowerCase(java.util.Locale.ROOT).replace(".blob.", ".dfs.")
+        WorkspaceOneLakeHost.pattern.matcher(host).matches() ||
+        ContainerProvider.isSupportedApiOneLakeHost(s"https://$dfsHost/")
+      }
+    }
+
   /** Parquet is written with Spark's writer over abfss, which only works for lake folders. */
   private[v2] def effectiveFormat(
       requested: IngestionFormat,
@@ -140,7 +168,15 @@ object IngestV2WriterOrchestrator {
       requested
     }
 
-  def write(plan: Plan, ctx: WriteContext): Unit = {
+  /**
+   * @param onAsyncFallback
+   *   called (inside the background task) when an asynchronous write must be repeated on the
+   *   existing path; synchronous writes throw the IngestV2FallbackException instead
+   */
+  def write(
+      plan: Plan,
+      ctx: WriteContext,
+      onAsyncFallback: IngestV2FallbackException => Unit): Unit = {
     val options = ctx.writeOptions
     KDSU.logInfo(
       myName,
@@ -148,7 +184,12 @@ object IngestV2WriterOrchestrator {
         s"(mode: ${options.writeMode}, format: ${plan.format}, upload: ${plan.targets}), " +
         s"requestId: ${options.requestId} ${ctx.batchIdIfExists}")
     if (options.isAsync) {
-      Future(run(plan, ctx, allowFallback = false)).onComplete {
+      Future {
+        blocking {
+          try run(plan, ctx, allowFallback = true)
+          catch { case fallback: IngestV2FallbackException => onAsyncFallback(fallback) }
+        }
+      }.onComplete {
         case Success(_) =>
         case Failure(e) =>
           KDSU.reportExceptionAndThrow(
@@ -180,13 +221,13 @@ object IngestV2WriterOrchestrator {
     var commitStarted = false
 
     try {
-      val operations = runJob(plan, ctx, () => dataMayBeSubmitted = true)
+      val submitted = runJob(plan, ctx, () => dataMayBeSubmitted = true)
       if (transactional) {
-        finalizeTransactional(plan, ctx, operations, () => commitStarted = true)
+        finalizeTransactional(plan, ctx, submitted.operations, () => commitStarted = true)
       } else {
         KDSU.logInfo(
           myName,
-          s"Queued ${operations.size} ingestion operation(s) for '${ctx.coordinates.table.get}', " +
+          s"Queued ${submitted.count} ingestion operation(s) for '${ctx.coordinates.table.get}', " +
             s"requestId: ${options.requestId} ${ctx.batchIdIfExists}")
       }
     } catch {
@@ -206,30 +247,31 @@ object IngestV2WriterOrchestrator {
     }
   }
 
-  private def runJob(
-      plan: Plan,
-      ctx: WriteContext,
-      markSubmitted: () => Unit): List[IngestV2SubmittedOperation] = {
+  /** Operations are only kept when they are awaited (transactional writes). */
+  private final case class Submitted(operations: List[IngestV2SubmittedOperation], count: Long)
+
+  private def runJob(plan: Plan, ctx: WriteContext, markSubmitted: () => Unit): Submitted = {
     val options = ctx.stagingWriteOptions
     val database = ctx.coordinates.database
-    val table =
-      if (options.writeMode == WriteMode.Transactional) ctx.tmpTableName
-      else ctx.coordinates.table.get
+    val transactional = options.writeMode == WriteMode.Transactional
+    val table = if (transactional) ctx.tmpTableName else ctx.coordinates.table.get
 
     if (plan.format == IngestionFormat.Parquet) {
       val client =
         IngestV2ClientCache
           .getClient(plan.dmUrl, ctx.authentication, ConnectorVersion)
           .queuedClient
-      IngestV2ParquetWriter.ingestDataFrame(
+      val operations = IngestV2ParquetWriter.ingestDataFrame(
         ctx.data,
         database,
         table,
         client,
         plan.targets.pathFor(0),
         plan.config.maxBlobsPerBatch,
+        plan.config.maxDataSizeBytes,
         options,
         markSubmitted)
+      Submitted(if (transactional) operations else Nil, operations.size.toLong)
     } else {
       val dmUrl = plan.dmUrl
       val authentication = ctx.authentication
@@ -241,12 +283,13 @@ object IngestV2WriterOrchestrator {
       val batchId = ctx.batchIdIfExists
       val rdd = ctx.data.queryExecution.toRdd
       val results = rdd.sparkContext.collectionAccumulator[IngestV2SubmittedOperation]
+      val submittedCount = rdd.sparkContext.longAccumulator
       markSubmitted()
       rdd.foreachPartition { rows: Iterator[InternalRow] =>
         if (rows.hasNext) {
           val client =
             IngestV2ClientCache.getClient(dmUrl, authentication, ConnectorVersion).queuedClient
-          IngestV2QueuedWriter
+          val operations = IngestV2QueuedWriter
             .ingestPartition(
               rows,
               schema,
@@ -258,10 +301,11 @@ object IngestV2WriterOrchestrator {
               maxBlobSize,
               options,
               batchId)
-            .foreach(results.add)
+          submittedCount.add(operations.size.toLong)
+          if (transactional) operations.foreach(results.add)
         }
       }
-      results.value.asScala.toList
+      Submitted(results.value.asScala.toList, submittedCount.value)
     }
   }
 
@@ -283,6 +327,7 @@ object IngestV2WriterOrchestrator {
         ctx.tableExists,
         ctx.crp)) {
       KDSU.logInfo(myName, s"$IngestSkippedTrace '${coordinates.table.get}'")
+      if (options.userTempTableName.isEmpty) dropStagingTable(ctx)
       return
     }
 
