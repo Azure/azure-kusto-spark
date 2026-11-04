@@ -15,7 +15,7 @@ Tags are created as `v4.0_{version}` (Spark 4 / master) and `v3.0_{version}` (Sp
 - Log the OSS connector and Kusto Java SDK versions as searchable `Kusto.Spark.Connector:<version>|Kusto.Java.Client:<version>` identifiers at INFO once per class loader, with troubleshooting guidance
 
 ### Fixed
-- None
+- `ingestIfNotExists` in `SparkIngestionProperties` now skips the write when the target table already has a matching `ingest-by` tag. Previously the connector cleared the tags on the caller's properties before the check, so duplicate data was ingested
 
 ## [7.1.5] - 2026-10-26
 
