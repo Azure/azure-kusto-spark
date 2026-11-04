@@ -10,11 +10,20 @@ import com.microsoft.kusto.spark.datasink.SchemaAdjustmentMode.{
 }
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
 import com.microsoft.kusto.spark.datasink.WriteMode.{Transactional, WriteMode}
+import com.microsoft.kusto.spark.datasink.IngestionFormat.IngestionFormat
 import com.microsoft.kusto.spark.utils.{KustoConstants, KustoCustomDebugWriteOptions}
 
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration.FiniteDuration
+
+/**
+ * A serializable function that returns a Bearer token for storage access. Used for OneLake
+ * uploads where SAS tokens are not available.
+ */
+trait StorageTokenProvider extends Serializable {
+  def getToken: String
+}
 
 object KustoSinkOptions extends KustoOptions {
 
@@ -87,6 +96,16 @@ object KustoSinkOptions extends KustoOptions {
 
   // The ingestion storage to use. This expects a serialized json of type Array[IngestionStorageParameters]
   val KUSTO_INGESTION_STORAGE: String = newOption("kustoIngestionStorageContainer")
+
+  // Classpath of a class implementing StorageTokenProvider, used to authenticate CSV uploads to
+  // OneLake lake folders. The class must have a constructor accepting the options map
+  // (CaseInsensitiveMap[String]). Only used when ingest-v2 is enabled.
+  val KUSTO_STORAGE_TOKEN_PROVIDER_CLASSPATH: String = newOption("storageTokenProviderClasspath")
+
+  // The ingestion format to use for V2 ingestion. Only used when ingest-v2 is enabled.
+  // Supported values: "csv" (default), "parquet".
+  // "parquet" uses Spark's native Parquet writer for vectorized, columnar ingestion.
+  val KUSTO_INGESTION_FORMAT: String = newOption("ingestionFormat")
 }
 
 object SinkTableCreationMode extends Enumeration {
@@ -102,6 +121,11 @@ object SchemaAdjustmentMode extends Enumeration {
 object WriteMode extends Enumeration {
   type WriteMode = Value
   val Transactional, Queued, KustoStreaming = Value
+}
+
+object IngestionFormat extends Enumeration {
+  type IngestionFormat = Value
+  val CSV, Parquet = Value
 }
 
 final case class WriteOptions(
@@ -123,4 +147,7 @@ final case class WriteOptions(
     userTempTableName: Option[String] = None,
     streamIngestUncompressedMaxSize: Int = KustoConstants.DefaultMaxStreamingBytesUncompressed,
     maybeIngestionBlobStorage: Option[Array[IngestionStorageParameters]] = None,
-    kustoCustomDebugWriteOptions: KustoCustomDebugWriteOptions)
+    kustoCustomDebugWriteOptions: KustoCustomDebugWriteOptions,
+    enableIngestV2: Boolean = false,
+    ingestionFormat: IngestionFormat = IngestionFormat.CSV,
+    storageTokenProvider: Option[StorageTokenProvider] = None)

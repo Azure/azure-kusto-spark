@@ -568,6 +568,35 @@ object KustoDataSourceUtils {
       addSourceLocationTransform,
       maybeSparkIngestionProperties)
 
+    val enableIngestV2 = parameters
+      .getOrElse(KustoDebugOptions.KUSTO_ENABLE_INGEST_V2, "false")
+      .trim
+      .toBoolean
+
+    // Loaded only when ingest-v2 is enabled, so the provider can never affect the default path.
+    val storageTokenProviderClasspath =
+      parameters.getOrElse(KustoSinkOptions.KUSTO_STORAGE_TOKEN_PROVIDER_CLASSPATH, "").trim
+    val storageTokenProvider: Option[StorageTokenProvider] =
+      if (enableIngestV2 && storageTokenProviderClasspath.nonEmpty) {
+        val classLoader = Thread.currentThread().getContextClassLoader
+        val provider = classLoader
+          .loadClass(storageTokenProviderClasspath)
+          .getConstructor(parameters.getClass)
+          .newInstance(parameters)
+          .asInstanceOf[StorageTokenProvider]
+        Some(provider)
+      } else {
+        None
+      }
+
+    val ingestionFormat = parameters
+      .getOrElse(KustoSinkOptions.KUSTO_INGESTION_FORMAT, "csv")
+      .trim
+      .toLowerCase match {
+      case "parquet" => IngestionFormat.Parquet
+      case _ => IngestionFormat.CSV
+    }
+
     val writeOptions = WriteOptions(
       pollingOnDriver,
       tableCreation,
@@ -584,7 +613,10 @@ object KustoDataSourceUtils {
       userTempTableName,
       streamIngestMaxSize,
       maybeIngestionStorageParameters,
-      kustoCustomDebugOptions)
+      kustoCustomDebugOptions,
+      enableIngestV2,
+      ingestionFormat,
+      storageTokenProvider)
 
     if (sourceParameters.kustoCoordinates.table.isEmpty) {
       throw new InvalidParameterException(

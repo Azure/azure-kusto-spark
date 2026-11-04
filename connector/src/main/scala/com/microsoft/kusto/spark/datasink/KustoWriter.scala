@@ -54,6 +54,7 @@ import java.util.zip.GZIPOutputStream
 import java.util.{TimeZone, UUID}
 import scala.jdk.CollectionConverters._
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -62,6 +63,7 @@ import java.util.concurrent.ConcurrentHashMap
 object KustoWriter {
   private val className = this.getClass.getSimpleName
   val TempIngestionTablePrefix = "sparkTempTable_"
+  private[kusto] val IngestV2RetryTableSuffix = "_retry"
   val DelayPeriodBetweenCalls: Int = KCONST.DefaultPeriodicSamplePeriod.toMillis.toInt
   private val GzipBufferSize: Int = 1000 * KCONST.DefaultBufferSize
   private val retryConfig = RetryConfig.custom
@@ -79,6 +81,123 @@ object KustoWriter {
       authentication: KustoAuthentication,
       writeOptions: WriteOptions,
       crp: ClientRequestProperties): Unit = {
+
+    val ingestV2Plan = planIngestV2(tableCoordinates, authentication, writeOptions)
+    if (ingestV2Plan.isEmpty) {
+      writeImpl(batchId, data, tableCoordinates, authentication, writeOptions, crp, None, "")
+    } else {
+      try {
+        writeImpl(
+          batchId,
+          data,
+          tableCoordinates,
+          authentication,
+          writeOptions,
+          crp,
+          ingestV2Plan,
+          "")
+      } catch {
+        case fallback: v2.IngestV2FallbackException =>
+          writeWithExistingPath(
+            fallback,
+            batchId,
+            data,
+            tableCoordinates,
+            authentication,
+            writeOptions,
+            crp)
+      }
+    }
+  }
+
+  /** Repeats a write on the existing path after ingest-v2 failed before any data could land. */
+  private def writeWithExistingPath(
+      fallback: v2.IngestV2FallbackException,
+      batchId: Option[Long],
+      data: DataFrame,
+      tableCoordinates: KustoCoordinates,
+      authentication: KustoAuthentication,
+      writeOptions: WriteOptions,
+      crp: ClientRequestProperties): Unit = {
+    if (v2.IngestV2TestHooks.failInsteadOfFallback) throw fallback
+    KDSU.logWarn(
+      className,
+      s"${fallback.getMessage}. Retrying with the existing ingestion path, " +
+        s"requestId: ${writeOptions.requestId}")
+    // A staging table used by ingest-v2 may still receive late ingestions; never reuse it.
+    val tmpTableSuffix = if (fallback.stagingTableUsed) IngestV2RetryTableSuffix else ""
+    try {
+      writeImpl(
+        batchId,
+        data,
+        tableCoordinates,
+        authentication,
+        writeOptions,
+        crp,
+        None,
+        tmpTableSuffix)
+    } catch {
+      case retryFailure: Throwable =>
+        retryFailure.addSuppressed(fallback)
+        throw retryFailure
+    }
+  }
+
+  /**
+   * Decides whether this write uses ingest-v2. Only when the hidden `enableIngestV2` option is
+   * set (by the Fabric connector), the write is queued or transactional, and the service's
+   * ingestion configuration asks for REST ingestion or OneLake uploads. Any problem here selects
+   * the existing path; nothing has been changed yet.
+   */
+  private[kusto] def planIngestV2(
+      tableCoordinates: KustoCoordinates,
+      authentication: KustoAuthentication,
+      writeOptions: WriteOptions): Option[v2.IngestV2WriterOrchestrator.Plan] = {
+    if (!writeOptions.enableIngestV2) {
+      None
+    } else if (writeOptions.writeMode == WriteMode.KustoStreaming) {
+      KDSU.logInfo(className, "Streaming writes use the existing ingestion path")
+      None
+    } else {
+      val dmUrl = v2.IngestV2WriterOrchestrator.dmUrl(tableCoordinates)
+      val decision = Try {
+        v2.IngestV2ConfigurationProvider.getConfiguration(dmUrl, authentication) match {
+          case Failure(e) =>
+            Left(s"the ingestion configuration could not be read: $e")
+          case Success(config) if !config.isV2Preferred =>
+            Left(s"the service does not ask for REST ingestion or OneLake uploads ($config)")
+          case Success(config) =>
+            v2.IngestV2WriterOrchestrator.plan(
+              tableCoordinates,
+              authentication,
+              writeOptions,
+              config)
+        }
+      }.recover { case NonFatal(e) => Left(s"unexpected error while planning: $e") }.get
+
+      decision match {
+        case Right(plan) => Some(plan)
+        case Left(reason) if v2.IngestV2TestHooks.failInsteadOfFallback =>
+          throw new IllegalStateException(s"ingest-v2 was not used: $reason")
+        case Left(reason) =>
+          KDSU.logInfo(
+            className,
+            s"Using the existing ingestion path for '${tableCoordinates.table.get}': $reason, " +
+              s"requestId: ${writeOptions.requestId}")
+          None
+      }
+    }
+  }
+
+  private def writeImpl(
+      batchId: Option[Long],
+      data: DataFrame,
+      tableCoordinates: KustoCoordinates,
+      authentication: KustoAuthentication,
+      writeOptions: WriteOptions,
+      crp: ClientRequestProperties,
+      ingestV2Plan: Option[v2.IngestV2WriterOrchestrator.Plan],
+      tmpTableSuffix: String): Unit = {
     val batchIdIfExists = batchId.map(b => s"${b.toString}").getOrElse("")
     val kustoClient = KustoClientCache.getClient(
       tableCoordinates.clusterUrl,
@@ -92,7 +211,7 @@ object KustoWriter {
       data.sparkSession.sparkContext.appName,
       table,
       writeOptions.requestId,
-      batchIdIfExists,
+      batchIdIfExists + tmpTableSuffix,
       writeOptions.userTempTableName)
 
     val stagingTableIngestionProperties = getSparkIngestionProperties(writeOptions)
@@ -175,6 +294,32 @@ object KustoWriter {
         KDSU.logWarn(
           className,
           "It's not recommended to set flushImmediately to true on production")
+      }
+      if (ingestV2Plan.isDefined) {
+        v2.IngestV2WriterOrchestrator.write(
+          ingestV2Plan.get,
+          v2.IngestV2WriterOrchestrator.WriteContext(
+            data = data,
+            coordinates = tableCoordinates,
+            authentication = authentication,
+            writeOptions = writeOptions,
+            stagingWriteOptions = rebuiltOptions,
+            tmpTableName = tmpTableName,
+            crp = crp,
+            tableExists = tableExists,
+            kustoClient = kustoClient,
+            sinkStartTime = getCreationTime(stagingTableIngestionProperties),
+            batchIdIfExists = batchIdIfExists),
+          onAsyncFallback = fallback =>
+            writeWithExistingPath(
+              fallback,
+              batchId,
+              data,
+              tableCoordinates,
+              authentication,
+              writeOptions,
+              crp))
+        return
       }
       val rdd = data.queryExecution.toRdd
       val partitionsResults = rdd.sparkContext.collectionAccumulator[PartitionResult]
