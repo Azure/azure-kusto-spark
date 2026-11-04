@@ -49,6 +49,7 @@ import java.time.{Duration, Instant, OffsetDateTime}
 import java.util.{Objects, StringJoiner, UUID}
 import scala.jdk.CollectionConverters._
 import scala.concurrent.duration.FiniteDuration
+import scala.util.Try
 
 class ExtendedKustoClient(
     val engineKcsb: ConnectionStringBuilder,
@@ -400,9 +401,9 @@ class ExtendedKustoClient(
         // The issue is not with syntax or non-existing tables, it can only be transient
         // issues that might be solved in retries even if engine reports them as permanent
         case ex: FailedOperationException =>
-          if (ex.getResult.isDefined) {
-            error = ex.getResult.get.getString("Status")
-          }
+          error = ex.getResult
+            .flatMap(table => Try(table.getString("Status")).toOption.flatMap(Option(_)))
+            .getOrElse(ex.getMessage)
           failed = true
         case ex: KustoDataExceptionBase =>
           error = ExceptionUtils.getRootCauseStackTrace(ex)
