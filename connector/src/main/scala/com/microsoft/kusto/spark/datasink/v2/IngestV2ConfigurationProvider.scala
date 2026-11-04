@@ -232,7 +232,8 @@ private[v2] final class IngestV2ConfigurationCache(
   // A suspend function may return its value directly instead of suspending.
   override def getConfiguration(
       continuation: kotlin.coroutines.Continuation[_ >: CachedConfigurationData]): AnyRef =
-    new CachedConfigurationData(IngestV2ConfigurationProvider.getResponse(dmUrl, authentication).get)
+    new CachedConfigurationData(
+      IngestV2ConfigurationProvider.getResponse(dmUrl, authentication).get)
 
   override def close(): Unit = {}
 }

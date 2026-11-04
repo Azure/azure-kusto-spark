@@ -80,8 +80,8 @@ private[v2] object IngestV2RequestProperties {
    *   skip batching even if the user did not ask for it; the existing path does this for blobs
    *   sealed because they reached the size limit
    * @param enableTracking
-   *   ask the service to keep per-blob status; only writes that wait for the result need it,
-   *   like the existing path which tracks transactional writes only
+   *   ask the service to keep per-blob status; only writes that wait for the result need it, like
+   *   the existing path which tracks transactional writes only
    */
   def build(
       properties: Option[SparkIngestionProperties],

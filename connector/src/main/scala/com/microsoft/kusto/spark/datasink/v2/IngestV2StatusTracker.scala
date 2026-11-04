@@ -58,7 +58,7 @@ object IngestV2StatusTracker {
   private[v2] def hasFailed(counts: Counts, blobCount: Int): Boolean = {
     val known = counts.succeeded + counts.failed + counts.canceled
     counts.failed > 0 || counts.canceled > 0 ||
-      (counts.inProgress == 0 && known > 0 && known < blobCount)
+    (counts.inProgress == 0 && known > 0 && known < blobCount)
   }
 
   /** The service reports nothing about the operation (all counts zero, or not found). */
@@ -79,7 +79,11 @@ object IngestV2StatusTracker {
 
   private final class Tracked(val op: IngestV2SubmittedOperation) {
     val operation =
-      new IngestionOperation(op.operationId, op.database, op.table, IngestKind.valueOf(op.ingestKind))
+      new IngestionOperation(
+        op.operationId,
+        op.database,
+        op.table,
+        IngestKind.valueOf(op.ingestKind))
     var counts: Counts = Counts(0, 0, 0, 0)
     var lastError: Option[Throwable] = None
     var unknownSinceNanos: Option[Long] = None
@@ -149,18 +153,23 @@ object IngestV2StatusTracker {
       group: Seq[Tracked],
       readStatus: IngestionOperation => CompletableFuture[Status],
       deadline: Long): Unit = {
-    val bound = math.max(1000L, math.min(remaining(deadline).toMillis, MaxStatusCallDuration.toMillis))
+    val bound =
+      math.max(1000L, math.min(remaining(deadline).toMillis, MaxStatusCallDuration.toMillis))
     val callDeadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(bound)
     val futures = group.map(t => t -> Try(readStatus(t.operation)))
     try {
       futures.foreach { case (t, started) =>
         val result = started.flatMap { future =>
-          Try(future.get(math.max(1L, TimeUnit.NANOSECONDS.toMillis(callDeadline - System.nanoTime())), TimeUnit.MILLISECONDS))
+          Try(
+            future.get(
+              math.max(1L, TimeUnit.NANOSECONDS.toMillis(callDeadline - System.nanoTime())),
+              TimeUnit.MILLISECONDS))
             .recoverWith {
               case _: TimeoutException =>
                 future.cancel(true)
-                Failure(new TimeoutException(
-                  s"Reading the status of ingestion operation ${t.op.operationId} timed out"))
+                Failure(
+                  new TimeoutException(
+                    s"Reading the status of ingestion operation ${t.op.operationId} timed out"))
               case e: ExecutionException if e.getCause != null => Failure(e.getCause)
             }
         }
@@ -177,7 +186,9 @@ object IngestV2StatusTracker {
     }
   }
 
-  /** Throws when the operation can no longer succeed; otherwise records how long it is unknown. */
+  /**
+   * Throws when the operation can no longer succeed; otherwise records how long it is unknown.
+   */
   private def check(t: Tracked, requestId: String): Unit = {
     val op = t.op
     t.lastError match {

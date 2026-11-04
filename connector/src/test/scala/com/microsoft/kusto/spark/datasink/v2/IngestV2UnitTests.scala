@@ -484,7 +484,12 @@ class IngestV2UnitTests extends AnyFlatSpec with Matchers {
     isSafeToResubmit(ingest("no status")) shouldBe false
     // The SDK reports 404 with a ConnectException cause; it must not be retried as a connect error.
     isSafeToResubmit(
-      new IngestException("not found", new java.net.ConnectException(), 404, null, false)) shouldBe
+      new IngestException(
+        "not found",
+        new java.net.ConnectException(),
+        404,
+        null,
+        false)) shouldBe
       false
     isSafeToResubmit(new RuntimeException(new java.net.ConnectException("refused"))) shouldBe true
     isSafeToResubmit(new java.net.UnknownHostException("dm")) shouldBe true

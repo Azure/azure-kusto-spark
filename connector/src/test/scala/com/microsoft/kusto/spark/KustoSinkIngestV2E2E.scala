@@ -57,7 +57,8 @@ class KustoSinkIngestV2E2E extends AnyFlatSpec with BeforeAndAfterAll {
 
   private lazy val conn = getSystemTestOptions
   private lazy val adminClient: Client = ClientFactory.createClient(
-    ConnectionStringBuilder.createWithAadAccessTokenAuthentication(conn.cluster, conn.accessToken))
+    ConnectionStringBuilder
+      .createWithAadAccessTokenAuthentication(conn.cluster, conn.accessToken))
   private val createdTables = mutable.Set[String]()
 
   override def beforeAll(): Unit = {
@@ -75,8 +76,8 @@ class KustoSinkIngestV2E2E extends AnyFlatSpec with BeforeAndAfterAll {
     try {
       IngestV2TestHooks.reset()
       createdTables.synchronized(createdTables.toList).grouped(20).foreach { tables =>
-        scala.util.Try(
-          adminClient.executeMgmt(conn.database, s".drop tables (${tables.mkString(",")}) ifexists"))
+        scala.util.Try(adminClient
+          .executeMgmt(conn.database, s".drop tables (${tables.mkString(",")}) ifexists"))
       }
     } finally {
       super.afterAll()
@@ -196,7 +197,9 @@ class KustoSinkIngestV2E2E extends AnyFlatSpec with BeforeAndAfterAll {
         "struct",
         StructType(Seq(StructField("a", IntegerType), StructField("b", StringType))))))
 
-  /** Values that are easy to get wrong in CSV: separators, quotes, line breaks, nulls, unicode. */
+  /**
+   * Values that are easy to get wrong in CSV: separators, quotes, line breaks, nulls, unicode.
+   */
   private lazy val allTypes: DataFrame = {
     val texts = Seq(
       "plain",
@@ -218,7 +221,8 @@ class KustoSinkIngestV2E2E extends AnyFlatSpec with BeforeAndAfterAll {
         if (nullable) null else i.toLong * 1000000007L,
         if (nullable) null else i / 7.0 - 100,
         if (nullable) null else i % 2 == 0,
-        if (nullable) null else Timestamp.from(Instant.parse("2024-02-29T23:59:59.123Z").plusSeconds(i)),
+        if (nullable) null
+        else Timestamp.from(Instant.parse("2024-02-29T23:59:59.123Z").plusSeconds(i)),
         if (nullable) null else Date.valueOf("2020-01-01"),
         if (nullable) null else new JBigDecimal(s"$i.12345"),
         if (nullable) null else Seq(i, i + 1),
@@ -235,7 +239,8 @@ class KustoSinkIngestV2E2E extends AnyFlatSpec with BeforeAndAfterAll {
     table
   }
 
-  private def ingestionProperties(build: SparkIngestionProperties => Unit): Map[String, String] = {
+  private def ingestionProperties(
+      build: SparkIngestionProperties => Unit): Map[String, String] = {
     val props = new SparkIngestionProperties()
     build(props)
     Map(KustoSinkOptions.KUSTO_SPARK_INGESTION_PROPERTIES_JSON -> props.toString)
@@ -269,7 +274,11 @@ class KustoSinkIngestV2E2E extends AnyFlatSpec with BeforeAndAfterAll {
     val df = spark
       .range(0, 400000, 1, 4)
       .select(col("id"), concat(lit("x" * 60), col("id")).as("name"))
-    write(df, table, WriteMode.Transactional, extra = Map(KustoSinkOptions.KUSTO_CLIENT_BATCHING_LIMIT -> "1"))
+    write(
+      df,
+      table,
+      WriteMode.Transactional,
+      extra = Map(KustoSinkOptions.KUSTO_CLIENT_BATCHING_LIMIT -> "1"))
     assertIds(table, 0, 400000)
   }
 
@@ -343,7 +352,8 @@ class KustoSinkIngestV2E2E extends AnyFlatSpec with BeforeAndAfterAll {
         p.additionalTags = List("extra-tag").asJava
       })
     assert(count(table) == 1000)
-    val tags = mgmtStrings(s".show table ['$table'] extents | project tostring(Tags)").mkString(" ")
+    val tags =
+      mgmtStrings(s".show table ['$table'] extents | project tostring(Tags)").mkString(" ")
     assert(tags.contains(s"ingest-by:$tag"), tags)
     assert(tags.contains("extra-tag"), tags)
   }
@@ -371,7 +381,9 @@ class KustoSinkIngestV2E2E extends AnyFlatSpec with BeforeAndAfterAll {
       WriteMode.Transactional,
       extra = Map(
         KustoSinkOptions.KUSTO_ADJUST_SCHEMA -> SchemaAdjustmentMode.GenerateDynamicCsvMapping.toString))
-    assert(queryLong(s"['$table'] | where name == strcat('value-', id) and isempty(other) | count") == 1000)
+    assert(
+      queryLong(
+        s"['$table'] | where name == strcat('value-', id) and isempty(other) | count") == 1000)
   }
 
   it should "use a named CSV mapping" taggedAs KustoE2E in {
@@ -436,8 +448,8 @@ class KustoSinkIngestV2E2E extends AnyFlatSpec with BeforeAndAfterAll {
   it should "fall back to the existing path when ingest-v2 cannot be used" taggedAs KustoE2E in {
     val table = newTable("fallback")
     IngestV2TestHooks.failInsteadOfFallback = false
-    IngestV2TestHooks.configOverride = Some(
-      _.copy(preferredIngestionMethod = Some("Rest"), blobPaths = Nil, oneLakePaths = Nil))
+    IngestV2TestHooks.configOverride =
+      Some(_.copy(preferredIngestionMethod = Some("Rest"), blobPaths = Nil, oneLakePaths = Nil))
     try write(ids(0, 1000, 4), table, WriteMode.Transactional)
     finally forceIngestV2()
     assertIds(table, 0, 1000)

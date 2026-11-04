@@ -230,9 +230,11 @@ object IngestV2QueuedWriter {
 
   /** The SDK puts the HTTP status in `failureCode` or, for queued submissions, in the message. */
   private[v2] def httpStatus(e: IngestException): Option[Int] =
-    Option(e.getFailureCode).map(_.intValue()).orElse(Option(e.getMessage).collect {
-      case StatusInMessage(code) => code.toInt
-    })
+    Option(e.getFailureCode)
+      .map(_.intValue())
+      .orElse(Option(e.getMessage).collect { case StatusInMessage(code) =>
+        code.toInt
+      })
 
   /** Waits for a submission with a hard upper bound, unwrapping the SDK's error. */
   private[v2] def awaitSubmit[T](future: CompletableFuture[T], timeoutMillis: Long): T = {
