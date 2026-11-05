@@ -86,6 +86,26 @@ All the options that can be used in the Kusto Sink can be found in KustoSinkOpti
   > **Note** : Do not use KustoStreaming mode for the sake of streaming as ADX streaming has additional cost and may not be what you need. Spark structured streaming goes well with Queued mode when developing continuous integration.
   If a request exceeds this size, it will be broken into multiple appropriately sized chunks.
 
+* **KUSTO_OVERWRITE_TAG_NAME**:
+  'overwriteTagName' - Selects a logical overwrite scope when using `SaveMode.Overwrite`.
+  The value is a tag suffix such as `orders`; do not include the `drop-by:` prefix.
+  The connector tags the new extents with `drop-by:orders` and atomically replaces only existing
+  destination extents carrying that tag. Untagged extents and extents with other tags are preserved.
+
+  Tagged overwrite is analogous to Delta Lake `replaceWhere`: the connector-specific option narrows
+  Spark overwrite to an explicit persistent-data scope. The option is supported only in Transactional
+  batch writes. Use a stable, coarse-grained flow or dataset name rather than a unique tag per file or
+  batch, because drop-by tags affect Kusto extent merging.
+
+* **KUSTO_OVERWRITE_FULL_TABLE**:
+  'overwriteFullTable' - Set to `true` with `SaveMode.Overwrite` to atomically replace all extents in
+  the destination table. This may delete data that was not written by this connector and can cause data
+  loss if used incorrectly.
+
+  Every overwrite must set exactly one of `overwriteTagName` or `overwriteFullTable=true`. Both scopes
+  require Transactional batch mode; overwrite is not supported for Queued mode, KustoStreaming mode, or
+  Spark structured streaming. An overwrite whose DataFrame contains no rows is a no-op.
+
 * **KUSTO_POLLING_ON_DRIVER**:
   'pollingOnDriver' - If set to false (default) Kusto Spark will create a new job for the final two ingestion steps done after processing the data, so that the write operation doesn't seem to 'hang' on the Spark UI.
   It's recommended to set this flag to true in production scenarios, so that the worker node doesn't occupy a core while completing the final ingestion steps.
@@ -203,6 +223,32 @@ df.write
   .mode(SaveMode.Append)
   .save()
 ``` 
+
+Replace only the extents owned by a logical ingestion flow:
+```scala
+df.write
+  .format("com.microsoft.kusto.spark.datasource")
+  .option(KustoSinkOptions.KUSTO_CLUSTER, "MyCluster.RegionName")
+  .option(KustoSinkOptions.KUSTO_DATABASE, "MyDatabase")
+  .option(KustoSinkOptions.KUSTO_TABLE, "MyTable")
+  .option(KustoSinkOptions.KUSTO_WRITE_MODE, WriteMode.Transactional.toString)
+  .option(KustoSinkOptions.KUSTO_OVERWRITE_TAG_NAME, "orders")
+  .mode(SaveMode.Overwrite)
+  .save()
+```
+
+Replace every extent in the destination table:
+```scala
+df.write
+  .format("com.microsoft.kusto.spark.datasource")
+  .option(KustoSinkOptions.KUSTO_CLUSTER, "MyCluster.RegionName")
+  .option(KustoSinkOptions.KUSTO_DATABASE, "MyDatabase")
+  .option(KustoSinkOptions.KUSTO_TABLE, "MyTable")
+  .option(KustoSinkOptions.KUSTO_WRITE_MODE, WriteMode.Transactional.toString)
+  .option(KustoSinkOptions.KUSTO_OVERWRITE_FULL_TABLE, true)
+  .mode(SaveMode.Overwrite)
+  .save()
+```
 
 IngestionProperties and short scala usage:
 ```scala

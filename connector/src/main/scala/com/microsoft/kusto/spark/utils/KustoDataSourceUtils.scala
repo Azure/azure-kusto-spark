@@ -37,7 +37,6 @@ import com.microsoft.kusto.spark.utils.KustoConstants.{
   DefaultMaxStreamingBytesUncompressed,
   OneMegaByte
 }
-import com.microsoft.kusto.spark.utils.KustoCustomDebugWriteOptions.ReplaceSaveModeDataLossWarning
 import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
 import io.github.resilience4j.retry.{Retry, RetryConfig}
 import io.vavr.CheckedFunction0
@@ -53,6 +52,7 @@ import java.util
 import java.util.concurrent.{Callable, CountDownLatch, TimeUnit}
 import java.util.{
   NoSuchElementException,
+  Locale,
   Objects,
   Properties,
   StringJoiner,
@@ -539,19 +539,59 @@ object KustoDataSourceUtils {
     val disableFlushImmediately =
       parameters.getOrElse(KustoDebugOptions.KUSTO_DISABLE_FLUSH_IMMEDIATELY, "false").toBoolean
 
-    val replaceSaveMode =
-      parameters.getOrElse(KustoDebugOptions.KUSTO_REPLACE_SAVE_MODE, "false").toBoolean
+    val overwriteTagOptionSupplied =
+      parameters.contains(KustoSinkOptions.KUSTO_OVERWRITE_TAG_NAME)
+    val overwriteFullTableOptionSupplied =
+      parameters.contains(KustoSinkOptions.KUSTO_OVERWRITE_FULL_TABLE)
+    val overwriteTagName =
+      parameters.get(KustoSinkOptions.KUSTO_OVERWRITE_TAG_NAME).map(_.trim)
+    val overwriteFullTable = parameters
+      .getOrElse(KustoSinkOptions.KUSTO_OVERWRITE_FULL_TABLE, "false")
+      .trim
+      .toBoolean
+
+    if (mode != SaveMode.Overwrite &&
+      (overwriteTagOptionSupplied || overwriteFullTableOptionSupplied)) {
+      throw new InvalidParameterException(s"${KustoSinkOptions.KUSTO_OVERWRITE_TAG_NAME} and " +
+        s"${KustoSinkOptions.KUSTO_OVERWRITE_FULL_TABLE} can only be used with SaveMode.Overwrite.")
+    }
+
+    overwriteTagName.foreach { tag =>
+      if (tag.isEmpty) {
+        throw new InvalidParameterException(
+          s"${KustoSinkOptions.KUSTO_OVERWRITE_TAG_NAME} cannot be blank.")
+      }
+      if (tag.toLowerCase(Locale.ROOT).startsWith("drop-by:")) {
+        throw new InvalidParameterException(
+          s"${KustoSinkOptions.KUSTO_OVERWRITE_TAG_NAME} must be a tag suffix without the 'drop-by:' prefix.")
+      }
+    }
 
     if (mode == SaveMode.Overwrite) {
-      if (!replaceSaveMode) {
+      if (overwriteTagName.isEmpty && !overwriteFullTable) {
         throw new InvalidParameterException(
-          s"$ReplaceSaveModeDataLossWarning Set the internal 'replaceSaveMode' option to true to enable it.")
+          s"SaveMode.Overwrite requires exactly one overwrite scope: set " +
+            s"${KustoSinkOptions.KUSTO_OVERWRITE_TAG_NAME} or set " +
+            s"${KustoSinkOptions.KUSTO_OVERWRITE_FULL_TABLE}=true.")
+      }
+      if (overwriteTagName.isDefined && overwriteFullTable) {
+        throw new InvalidParameterException(
+          s"${KustoSinkOptions.KUSTO_OVERWRITE_TAG_NAME} and " +
+            s"${KustoSinkOptions.KUSTO_OVERWRITE_FULL_TABLE}=true cannot be used together.")
       }
       if (writeMode != WriteMode.Transactional) {
         throw new InvalidParameterException(
-          s"SaveMode.Overwrite with replace is supported only with Transactional write mode. '$writeMode' is not supported.")
+          s"SaveMode.Overwrite is supported only with Transactional write mode. '$writeMode' is not supported.")
       }
-      logWarn("parseSinkParameters", ReplaceSaveModeDataLossWarning)
+      overwriteTagName match {
+        case Some(tag) =>
+          logWarn(
+            "parseSinkParameters",
+            s"Overwrite will replace destination extents tagged 'drop-by:$tag'. " +
+              "Extents outside this tag scope will be preserved.")
+        case None =>
+          logWarn("parseSinkParameters", KustoSinkOptions.OverwriteFullTableDataLossWarning)
+      }
     }
 
     val ensureNoDupBlobs =
@@ -577,8 +617,7 @@ object KustoDataSourceUtils {
       disableFlushImmediately,
       ensureNoDupBlobs,
       addSourceLocationTransform,
-      maybeSparkIngestionProperties,
-      replaceSaveMode)
+      maybeSparkIngestionProperties)
 
     val writeOptions = WriteOptions(
       pollingOnDriver,
@@ -597,7 +636,9 @@ object KustoDataSourceUtils {
       streamIngestMaxSize,
       maybeIngestionStorageParameters,
       kustoCustomDebugOptions,
-      mode)
+      mode,
+      overwriteTagName,
+      overwriteFullTable)
 
     if (sourceParameters.kustoCoordinates.table.isEmpty) {
       throw new InvalidParameterException(
@@ -630,8 +671,8 @@ object KustoDataSourceUtils {
       disableFlushImmediately: Boolean,
       ensureNoDupBlobs: Boolean,
       addSourceLocationTransform: Boolean,
-      maybeSparkIngestionProperties: Option[SparkIngestionProperties],
-      replaceSaveMode: Boolean = false): KustoCustomDebugWriteOptions = {
+      maybeSparkIngestionProperties: Option[SparkIngestionProperties])
+      : KustoCustomDebugWriteOptions = {
 
     val isMappingAlreadyPresent = maybeSparkIngestionProperties match {
       case Some(sparkIngestionProperties) =>
@@ -654,7 +695,6 @@ object KustoDataSourceUtils {
       minimalExtentsCountForSplitMergePerNode = minimalExtentsCountForSplitMergePerNode,
       maxRetriesOnMoveExtents = maxRetriesOnMoveExtents,
       disableFlushImmediately = disableFlushImmediately,
-      replaceSaveMode = replaceSaveMode,
       ensureNoDuplicatedBlobs = ensureNoDupBlobs,
       addSourceLocationTransform = addSourceLocationTransform)
   }

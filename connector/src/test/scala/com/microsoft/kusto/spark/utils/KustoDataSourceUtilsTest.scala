@@ -129,38 +129,96 @@ class KustoDataSourceUtilsTest extends AnyFlatSpec with MockFactory {
     }
   }
 
-  it should "reject overwrite unless the replace flag is enabled" in {
+  it should "reject overwrite without an explicit scope" in {
     val exception = intercept[InvalidParameterException] {
       KustoDataSourceUtils.parseSinkParameters(validSinkParameters, SaveMode.Overwrite)
     }
 
-    assert(exception.getMessage ==
-      s"${KustoCustomDebugWriteOptions.ReplaceSaveModeDataLossWarning} Set the internal 'replaceSaveMode' option to true to enable it.")
+    assert(
+      exception.getMessage ==
+        "SaveMode.Overwrite requires exactly one overwrite scope: set overwriteTagName or set overwriteFullTable=true.")
   }
 
   it should "reject overwrite with queued write mode" in {
     val exception = intercept[InvalidParameterException] {
       KustoDataSourceUtils.parseSinkParameters(
         validSinkParameters ++ Map(
-          KustoDebugOptions.KUSTO_REPLACE_SAVE_MODE -> "true",
+          KustoSinkOptions.KUSTO_OVERWRITE_TAG_NAME -> "orders",
           KustoSinkOptions.KUSTO_WRITE_MODE -> "Queued"),
         SaveMode.Overwrite)
     }
 
     assert(
       exception.getMessage ==
-        "SaveMode.Overwrite with replace is supported only with Transactional write mode. 'Queued' is not supported.")
+        "SaveMode.Overwrite is supported only with Transactional write mode. 'Queued' is not supported.")
   }
 
-  it should "accept overwrite with the replace flag and transactional write mode" in {
+  it should "accept tagged overwrite with transactional write mode" in {
     val result = KustoDataSourceUtils.parseSinkParameters(
       validSinkParameters ++ Map(
-        KustoDebugOptions.KUSTO_REPLACE_SAVE_MODE -> "true",
+        KustoSinkOptions.KUSTO_OVERWRITE_TAG_NAME -> " orders ",
         KustoSinkOptions.KUSTO_WRITE_MODE -> "Transactional"),
       SaveMode.Overwrite)
 
     assert(result.writeOptions.saveMode == SaveMode.Overwrite)
-    assert(result.writeOptions.kustoCustomDebugWriteOptions.replaceSaveMode)
+    assert(result.writeOptions.overwriteTagName.contains("orders"))
+    assert(!result.writeOptions.overwriteFullTable)
+  }
+
+  it should "accept explicitly guarded full-table overwrite" in {
+    val result = KustoDataSourceUtils.parseSinkParameters(
+      validSinkParameters + (KustoSinkOptions.KUSTO_OVERWRITE_FULL_TABLE -> "true"),
+      SaveMode.Overwrite)
+
+    assert(result.writeOptions.saveMode == SaveMode.Overwrite)
+    assert(result.writeOptions.overwriteTagName.isEmpty)
+    assert(result.writeOptions.overwriteFullTable)
+  }
+
+  it should "reject conflicting overwrite scopes" in {
+    val exception = intercept[InvalidParameterException] {
+      KustoDataSourceUtils.parseSinkParameters(
+        validSinkParameters ++ Map(
+          KustoSinkOptions.KUSTO_OVERWRITE_TAG_NAME -> "orders",
+          KustoSinkOptions.KUSTO_OVERWRITE_FULL_TABLE -> "true"),
+        SaveMode.Overwrite)
+    }
+
+    assert(
+      exception.getMessage ==
+        "overwriteTagName and overwriteFullTable=true cannot be used together.")
+  }
+
+  it should "reject blank or prefixed overwrite tags" in {
+    Seq(
+      " " -> "overwriteTagName cannot be blank.",
+      "drop-by:orders" ->
+        "overwriteTagName must be a tag suffix without the 'drop-by:' prefix.").foreach {
+      case (tag, expectedMessage) =>
+        val exception = intercept[InvalidParameterException] {
+          KustoDataSourceUtils.parseSinkParameters(
+            validSinkParameters + (KustoSinkOptions.KUSTO_OVERWRITE_TAG_NAME -> tag),
+            SaveMode.Overwrite)
+        }
+
+        assert(exception.getMessage == expectedMessage)
+    }
+  }
+
+  it should "reject overwrite options with append mode" in {
+    Seq(
+      KustoSinkOptions.KUSTO_OVERWRITE_TAG_NAME -> "orders",
+      KustoSinkOptions.KUSTO_OVERWRITE_FULL_TABLE -> "true").foreach { overwriteOption =>
+      val exception = intercept[InvalidParameterException] {
+        KustoDataSourceUtils.parseSinkParameters(
+          validSinkParameters + overwriteOption,
+          SaveMode.Append)
+      }
+
+      assert(
+        exception.getMessage ==
+          "overwriteTagName and overwriteFullTable can only be used with SaveMode.Overwrite.")
+    }
   }
 
   "WriteParameters" should "throw an exception streaming writeMode passes in unsupported AdjustmentMode" in {
@@ -266,7 +324,6 @@ class KustoDataSourceUtilsTest extends AnyFlatSpec with MockFactory {
         result.minimalExtentsCountForSplitMergePerNode == minimalExtentsCountForSplitMergePerNode)
       assert(result.maxRetriesOnMoveExtents == 3)
       assert(!result.disableFlushImmediately)
-      assert(!result.replaceSaveMode)
       assert(!result.ensureNoDuplicatedBlobs)
       assert(!result.addSourceLocationTransform)
     }

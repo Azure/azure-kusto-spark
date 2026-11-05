@@ -360,7 +360,8 @@ class ExtendedKustoClient(
           generateTableReplaceExtentsAsyncCommand(
             tmpTableName,
             targetTable,
-            useMaterializedViewFlag))
+            useMaterializedViewFlag,
+            writeOptions.overwriteTagName))
       } else {
         None
       }

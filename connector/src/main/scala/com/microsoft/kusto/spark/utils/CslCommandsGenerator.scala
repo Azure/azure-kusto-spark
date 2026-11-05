@@ -140,16 +140,21 @@ private[kusto] object CslCommandsGenerator {
   def generateTableReplaceExtentsAsyncCommand(
       sourceTableName: String,
       destinationTableName: String,
-      isDestinationTableMaterializedViewSource: Boolean = false): String = {
+      isDestinationTableMaterializedViewSource: Boolean = false,
+      overwriteTagName: Option[String] = None): String = {
     val setNewIngestionTime: String =
       if (isDestinationTableMaterializedViewSource) {
         "with(SetNewIngestionTime=true)"
       } else {
         ""
       }
+    val destinationFilter = overwriteTagName
+      .map(tag => s"""
+         | where Tags has "drop-by:${escapeStringLiteral(tag)}"""")
+      .getOrElse("")
     s""".replace async extents in table $destinationTableName $setNewIngestionTime <|
        {
-         .show table $destinationTableName extents
+         .show table $destinationTableName extents$destinationFilter
          | where toscalar($sourceTableName | take 1 | count) > 0
          | project ExtentId
        },
@@ -159,6 +164,16 @@ private[kusto] object CslCommandsGenerator {
        }
        """
   }
+
+  private def escapeStringLiteral(value: String): String =
+    value.flatMap {
+      case '\\' => "\\\\"
+      case '"' => "\\\""
+      case '\n' => "\\n"
+      case '\r' => "\\r"
+      case '\t' => "\\t"
+      case character => character.toString
+    }
 
   def generateShowOperationDetails(operataionId: String): String = {
     s".show operation $operataionId details"
