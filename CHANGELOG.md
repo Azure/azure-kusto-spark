@@ -15,7 +15,7 @@ Tags are created as `v4.0_{version}` (Spark 4 / master) and `v3.0_{version}` (Sp
 - Log the OSS connector and Kusto Java SDK versions as searchable `Kusto.Spark.Connector:<version>|Kusto.Java.Client:<version>` identifiers at INFO once per class loader, with troubleshooting guidance
 
 ### Fixed
-- None
+- Bundled dependencies upgraded to patched versions to address known critical and high vulnerabilities: Netty 4.1.118.Final → 4.1.140.Final, Jackson 2.19.2 → 2.21.8, Guava 27.0-jre → 33.8.0-jre
 
 ## [7.1.5] - 2026-10-26
 
