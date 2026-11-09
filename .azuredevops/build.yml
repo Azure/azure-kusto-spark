@@ -24,7 +24,7 @@ pool:
 variables:
 - name: javaVersions
   ${{ if or(eq(parameters.connectorSource, 'release/spark3'), and(eq(parameters.connectorSource, 'self'), or(eq(variables['Build.SourceBranch'], 'refs/heads/release/spark3'), eq(variables['System.PullRequest.TargetBranch'], 'refs/heads/release/spark3'), eq(variables['System.PullRequest.TargetBranch'], 'release/spark3')))) }}:
-    value: '8,11,17'
+    value: '8,11'
   ${{ else }}:
     value: '17,21'
 - name: requiredJavaVersion
