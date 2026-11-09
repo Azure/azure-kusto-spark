@@ -27,18 +27,12 @@ variables:
     value: '8,11'
   ${{ else }}:
     value: '17,21'
-- name: requiredJavaVersion
-  ${{ if contains(variables.javaVersions, '21') }}:
-    value: '21'
-  ${{ else }}:
-    value: '8'
 
 jobs:
 - ${{ each javaVersion in split(variables.javaVersions, ',') }}:
   - job: BuildJava${{ javaVersion }}
     displayName: Build - Java ${{ javaVersion }}
     timeoutInMinutes: 40
-    continueOnError: ${{ ne(javaVersion, variables.requiredJavaVersion) }}
     steps:
     - checkout: self
       clean: true
@@ -125,7 +119,6 @@ jobs:
     displayName: Test - Java ${{ javaVersion }}
     dependsOn: BuildJava${{ javaVersion }}
     timeoutInMinutes: 40
-    continueOnError: ${{ ne(javaVersion, variables.requiredJavaVersion) }}
     condition: and(succeeded(), eq(dependencies.BuildJava${{ javaVersion }}.result, 'Succeeded'), or(ne(variables['Build.Reason'], 'PullRequest'), eq(variables['System.PullRequest.IsFork'], 'False')))
     variables:
     - group: azure-kusto-spark-e2e
