@@ -13,7 +13,10 @@ pool:
 
 variables:
 - name: javaVersions
-  value: '8,11,17,21'
+  ${{ if or(eq(variables['System.PullRequest.TargetBranch'], 'refs/heads/release/spark3'), eq(variables['System.PullRequest.TargetBranch'], 'release/spark3'), and(ne(variables['Build.Reason'], 'PullRequest'), eq(variables['Build.SourceBranch'], 'refs/heads/release/spark3'))) }}:
+    value: '8,11'
+  ${{ else }}:
+    value: '17,21'
 
 jobs:
 - ${{ each javaVersion in split(variables.javaVersions, ',') }}:
@@ -24,22 +27,6 @@ jobs:
     - checkout: self
       clean: true
       persistCredentials: false
-
-    - bash: |
-        set -euo pipefail
-
-        git -c credential.helper= fetch --no-tags \
-          https://github.com/Azure/azure-kusto-spark.git \
-          "refs/heads/${CONNECTOR_SOURCE}"
-        git checkout --detach FETCH_HEAD
-        echo "Building ${CONNECTOR_SOURCE} on Java ${{ javaVersion }}"
-        git rev-parse HEAD
-      displayName: Select production connector source
-      env:
-        ${{ if or(eq(javaVersion, '8'), eq(javaVersion, '11')) }}:
-          CONNECTOR_SOURCE: release/spark3
-        ${{ else }}:
-          CONNECTOR_SOURCE: master
 
     - ${{ if eq(javaVersion, '8') }}:
       - bash: |
