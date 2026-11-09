@@ -23,7 +23,7 @@ Tags are created as `v4.0_{version}` (Spark 4 / master) and `v3.0_{version}` (Sp
 - None
 
 ### Added
-- Log the OSS connector and Kusto Java SDK versions as searchable `Kusto.Spark.Connector:<version>|Kusto.Java.Client:<version>` identifiers at INFO once per class loader, with troubleshooting guidance (#523)
+- None
 
 ### Fixed
 - Bundled dependencies upgraded to patched versions to address known critical and high vulnerabilities: Netty 4.1.118.Final → 4.1.140.Final, Jackson 2.19.2 → 2.21.8, Guava 27.0-jre → 33.8.0-jre (#527)
@@ -35,7 +35,7 @@ Tags are created as `v4.0_{version}` (Spark 4 / master) and `v3.0_{version}` (Sp
 - Unrecognized or unreadable asynchronous operation states report a monitoring error rather than triggering failed-operation retries in shared write callers (#520)
 
 ### Added
-- None
+- Log the OSS connector and Kusto Java SDK versions as searchable `Kusto.Spark.Connector:<version>|Kusto.Java.Client:<version>` identifiers at INFO once per class loader, with troubleshooting guidance (#523)
 
 ### Fixed
 - Retry explicitly throttled distributed-read exports up to four total attempts per partition, with jittered exponential backoff and a shared per-partition timeout budget (#520)
