@@ -62,12 +62,30 @@ jobs:
           BUILD_REASON: $(Build.Reason)
           CONNECTOR_SOURCE: ${{ parameters.connectorSource }}
 
+    - ${{ if eq(javaVersion, '8') }}:
+      - bash: |
+          set -euo pipefail
+
+          archive="$(Agent.TempDirectory)/temurin8.tar.gz"
+          curl --fail --location --retry 3 \
+            --output "${archive}" \
+            https://github.com/adoptium/temurin8-binaries/releases/download/jdk8u512-b09/OpenJDK8U-jdk_x64_linux_hotspot_8u512b09.tar.gz
+          printf '%s  %s\n' \
+            fb3bfa869012419b562bb4235d0d83ec4f8c1dda62ae432ba20c6c3a7e43f7e4 \
+            "${archive}" | sha256sum --check
+        displayName: Download and verify Temurin Java 8
+
     - task: JavaToolInstaller@0
       displayName: Use Java ${{ javaVersion }}
       inputs:
         versionSpec: '${{ javaVersion }}'
         jdkArchitectureOption: x64
-        jdkSourceOption: PreInstalled
+        ${{ if eq(javaVersion, '8') }}:
+          jdkSourceOption: LocalDirectory
+          jdkFile: $(Agent.TempDirectory)/temurin8.tar.gz
+          jdkDestinationDirectory: $(Agent.TempDirectory)/temurin8
+        ${{ else }}:
+          jdkSourceOption: PreInstalled
 
     - task: Cache@2
       displayName: Cache Maven dependencies
@@ -114,12 +132,30 @@ jobs:
     steps:
     - checkout: none
 
+    - ${{ if eq(javaVersion, '8') }}:
+      - bash: |
+          set -euo pipefail
+
+          archive="$(Agent.TempDirectory)/temurin8.tar.gz"
+          curl --fail --location --retry 3 \
+            --output "${archive}" \
+            https://github.com/adoptium/temurin8-binaries/releases/download/jdk8u512-b09/OpenJDK8U-jdk_x64_linux_hotspot_8u512b09.tar.gz
+          printf '%s  %s\n' \
+            fb3bfa869012419b562bb4235d0d83ec4f8c1dda62ae432ba20c6c3a7e43f7e4 \
+            "${archive}" | sha256sum --check
+        displayName: Download and verify Temurin Java 8
+
     - task: JavaToolInstaller@0
       displayName: Use Java ${{ javaVersion }}
       inputs:
         versionSpec: '${{ javaVersion }}'
         jdkArchitectureOption: x64
-        jdkSourceOption: PreInstalled
+        ${{ if eq(javaVersion, '8') }}:
+          jdkSourceOption: LocalDirectory
+          jdkFile: $(Agent.TempDirectory)/temurin8.tar.gz
+          jdkDestinationDirectory: $(Agent.TempDirectory)/temurin8
+        ${{ else }}:
+          jdkSourceOption: PreInstalled
 
     - task: DownloadPipelineArtifact@2
       displayName: Download Java ${{ javaVersion }} build
