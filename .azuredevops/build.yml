@@ -8,25 +8,12 @@ pr:
     include:
       - '*'
 
-parameters:
-- name: connectorSource
-  displayName: Connector source (production branch overrides are for manual trials)
-  type: string
-  default: self
-  values:
-  - self
-  - master
-  - release/spark3
-
 pool:
   vmImage: ubuntu-latest
 
 variables:
 - name: javaVersions
-  ${{ if or(eq(parameters.connectorSource, 'release/spark3'), and(eq(parameters.connectorSource, 'self'), or(eq(variables['Build.SourceBranch'], 'refs/heads/release/spark3'), eq(variables['System.PullRequest.TargetBranch'], 'refs/heads/release/spark3'), eq(variables['System.PullRequest.TargetBranch'], 'release/spark3')))) }}:
-    value: '8,11'
-  ${{ else }}:
-    value: '17,21'
+  value: '8,11,17,21'
 
 jobs:
 - ${{ each javaVersion in split(variables.javaVersions, ',') }}:
@@ -38,23 +25,21 @@ jobs:
       clean: true
       persistCredentials: false
 
-    - ${{ if ne(parameters.connectorSource, 'self') }}:
-      - bash: |
-          set -euo pipefail
+    - bash: |
+        set -euo pipefail
 
-          if [[ "${BUILD_REASON}" != "Manual" ]]; then
-            echo "Production source overrides are only allowed for manual trials." >&2
-            exit 1
-          fi
-
-          git -c credential.helper= fetch --no-tags \
-            https://github.com/Azure/azure-kusto-spark.git \
-            "refs/heads/${CONNECTOR_SOURCE}"
-          git checkout --detach FETCH_HEAD
-        displayName: Select production connector source
-        env:
-          BUILD_REASON: $(Build.Reason)
-          CONNECTOR_SOURCE: ${{ parameters.connectorSource }}
+        git -c credential.helper= fetch --no-tags \
+          https://github.com/Azure/azure-kusto-spark.git \
+          "refs/heads/${CONNECTOR_SOURCE}"
+        git checkout --detach FETCH_HEAD
+        echo "Building ${CONNECTOR_SOURCE} on Java ${{ javaVersion }}"
+        git rev-parse HEAD
+      displayName: Select production connector source
+      env:
+        ${{ if or(eq(javaVersion, '8'), eq(javaVersion, '11')) }}:
+          CONNECTOR_SOURCE: release/spark3
+        ${{ else }}:
+          CONNECTOR_SOURCE: master
 
     - ${{ if eq(javaVersion, '8') }}:
       - bash: |
