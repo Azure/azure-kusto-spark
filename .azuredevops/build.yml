@@ -1,0 +1,220 @@
+trigger:
+  branches:
+    include:
+      - '*'
+
+pr:
+  branches:
+    include:
+      - '*'
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+# To validate Spark 3, create a feature branch from release/spark3, copy this
+# YAML into it, commit and push, then open a PR targeting release/spark3.
+# PR validation builds the proposed changes with Java 8/11 in separate
+# build/test jobs. Push or manual runs on a feature branch use Java 17/21;
+# only the exact release/spark3 branch selects Java 8/11 without a PR.
+# Selection uses branch names/PR targets, not branch ancestry or the POM.
+# Generate all job pairs; runtime conditions select the matching versions
+# because the PR target is unavailable during template expansion.
+- name: javaVersions
+  value: '8,11,17,21'
+- name: isSpark3
+  value: $[or(eq(variables['System.PullRequest.TargetBranch'], 'refs/heads/release/spark3'), eq(variables['System.PullRequest.TargetBranch'], 'release/spark3'), and(ne(variables['Build.Reason'], 'PullRequest'), eq(variables['Build.SourceBranch'], 'refs/heads/release/spark3')))]
+
+jobs:
+- ${{ each javaVersion in split(variables.javaVersions, ',') }}:
+  - job: BuildJava${{ javaVersion }}
+    displayName: Build - Java ${{ javaVersion }}
+    timeoutInMinutes: 40
+    ${{ if or(eq(javaVersion, '8'), eq(javaVersion, '11')) }}:
+      condition: and(succeeded(), eq(variables['isSpark3'], 'True'))
+    ${{ else }}:
+      condition: and(succeeded(), eq(variables['isSpark3'], 'False'))
+    steps:
+    - checkout: self
+      clean: true
+      persistCredentials: false
+
+    - ${{ if eq(javaVersion, '8') }}:
+      - bash: |
+          set -euo pipefail
+
+          archive="$(Agent.TempDirectory)/temurin8.tar.gz"
+          curl --fail --location --retry 3 \
+            --output "${archive}" \
+            https://github.com/adoptium/temurin8-binaries/releases/download/jdk8u512-b09/OpenJDK8U-jdk_x64_linux_hotspot_8u512b09.tar.gz
+          printf '%s  %s\n' \
+            fb3bfa869012419b562bb4235d0d83ec4f8c1dda62ae432ba20c6c3a7e43f7e4 \
+            "${archive}" | sha256sum --check
+        displayName: Download and verify Temurin Java 8
+
+    - task: JavaToolInstaller@0
+      displayName: Use Java ${{ javaVersion }}
+      inputs:
+        versionSpec: '${{ javaVersion }}'
+        jdkArchitectureOption: x64
+        ${{ if eq(javaVersion, '8') }}:
+          jdkSourceOption: LocalDirectory
+          jdkFile: $(Agent.TempDirectory)/temurin8.tar.gz
+          jdkDestinationDirectory: $(Agent.TempDirectory)/temurin8
+        ${{ else }}:
+          jdkSourceOption: PreInstalled
+
+    - task: Cache@2
+      displayName: Cache Maven dependencies
+      inputs:
+        key: 'maven | "$(Agent.OS)" | "${{ javaVersion }}" | pom.xml | connector/pom.xml | samples/pom.xml'
+        restoreKeys: |
+          maven | "$(Agent.OS)" | "${{ javaVersion }}"
+          maven | "$(Agent.OS)"
+        path: $(Pipeline.Workspace)/.m2/repository
+
+    - bash: |
+        set -euo pipefail
+
+        mvn clean verify -B -ntp -DskipTests
+      displayName: Compile and package without running tests
+      env:
+        MAVEN_OPTS: -Dmaven.repo.local=$(Pipeline.Workspace)/.m2/repository
+
+    - bash: |
+        set -euo pipefail
+
+        git rev-parse HEAD > "$(Build.ArtifactStagingDirectory)/source-commit.txt"
+        git archive --format=tar \
+          --output="$(Build.ArtifactStagingDirectory)/build.tar" HEAD
+        tar --append --file="$(Build.ArtifactStagingDirectory)/build.tar" \
+          connector/target samples/target
+        gzip "$(Build.ArtifactStagingDirectory)/build.tar"
+      displayName: Bundle source and compiled build outputs
+
+    - task: PublishPipelineArtifact@1
+      displayName: Publish Java ${{ javaVersion }} build
+      inputs:
+        targetPath: $(Build.ArtifactStagingDirectory)
+        artifact: build-java-${{ javaVersion }}
+
+  - job: TestJava${{ javaVersion }}
+    displayName: Test - Java ${{ javaVersion }}
+    dependsOn: BuildJava${{ javaVersion }}
+    timeoutInMinutes: 40
+    condition: and(succeeded(), eq(dependencies.BuildJava${{ javaVersion }}.result, 'Succeeded'), or(ne(variables['Build.Reason'], 'PullRequest'), eq(variables['System.PullRequest.IsFork'], 'False')))
+    variables:
+    - group: azure-kusto-spark-e2e
+    steps:
+    - checkout: none
+
+    - ${{ if eq(javaVersion, '8') }}:
+      - bash: |
+          set -euo pipefail
+
+          archive="$(Agent.TempDirectory)/temurin8.tar.gz"
+          curl --fail --location --retry 3 \
+            --output "${archive}" \
+            https://github.com/adoptium/temurin8-binaries/releases/download/jdk8u512-b09/OpenJDK8U-jdk_x64_linux_hotspot_8u512b09.tar.gz
+          printf '%s  %s\n' \
+            fb3bfa869012419b562bb4235d0d83ec4f8c1dda62ae432ba20c6c3a7e43f7e4 \
+            "${archive}" | sha256sum --check
+        displayName: Download and verify Temurin Java 8
+
+    - task: JavaToolInstaller@0
+      displayName: Use Java ${{ javaVersion }}
+      inputs:
+        versionSpec: '${{ javaVersion }}'
+        jdkArchitectureOption: x64
+        ${{ if eq(javaVersion, '8') }}:
+          jdkSourceOption: LocalDirectory
+          jdkFile: $(Agent.TempDirectory)/temurin8.tar.gz
+          jdkDestinationDirectory: $(Agent.TempDirectory)/temurin8
+        ${{ else }}:
+          jdkSourceOption: PreInstalled
+
+    - task: DownloadPipelineArtifact@2
+      displayName: Download Java ${{ javaVersion }} build
+      inputs:
+        buildType: current
+        artifactName: build-java-${{ javaVersion }}
+        targetPath: $(Pipeline.Workspace)/build-java-${{ javaVersion }}
+
+    - bash: |
+        set -euo pipefail
+
+        mkdir -p "$(Pipeline.Workspace)/connector"
+        tar --extract --gzip \
+          --file="$(Pipeline.Workspace)/build-java-${{ javaVersion }}/build.tar.gz" \
+          --directory="$(Pipeline.Workspace)/connector"
+        cat "$(Pipeline.Workspace)/build-java-${{ javaVersion }}/source-commit.txt"
+        test -d "$(Pipeline.Workspace)/connector/connector/target/test-classes"
+      displayName: Restore exact source and compiled tests
+
+    - task: Cache@2
+      displayName: Restore Maven dependencies
+      inputs:
+        key: 'maven | "$(Agent.OS)" | "${{ javaVersion }}" | $(Pipeline.Workspace)/connector/pom.xml | $(Pipeline.Workspace)/connector/connector/pom.xml | $(Pipeline.Workspace)/connector/samples/pom.xml'
+        restoreKeys: |
+          maven | "$(Agent.OS)" | "${{ javaVersion }}"
+          maven | "$(Agent.OS)"
+        path: $(Pipeline.Workspace)/.m2/repository
+
+    - bash: |
+        set -euo pipefail
+
+        mvn -B -ntp -pl connector scalatest:test -DskipTests
+      displayName: Resolve test dependencies without Azure authentication
+      workingDirectory: $(Pipeline.Workspace)/connector
+      env:
+        MAVEN_OPTS: -Dmaven.repo.local=$(Pipeline.Workspace)/.m2/repository
+
+    - task: AzureCLI@2
+      displayName: Run precompiled tests with Azure authentication
+      inputs:
+        azureSubscription: kusto-connectors-arm-sc
+        addSpnToEnvironment: true
+        scriptType: bash
+        scriptLocation: inlineScript
+        workingDirectory: $(Pipeline.Workspace)/connector
+        inlineScript: |
+          set -euo pipefail
+
+          access_token="$(
+            az account get-access-token \
+              --resource "$(KUSTO_CLUSTER)" \
+              --query accessToken \
+              --output tsv
+          )"
+          echo "##vso[task.setsecret]${access_token}"
+
+          export kustoAadAppId="${servicePrincipalId}"
+          export kustoAadAuthorityID="${tenantId}"
+          export kustoDatabase="$(KUSTO_DATABASE)"
+          export kustoCluster="$(KUSTO_CLUSTER)"
+          export accessToken="${access_token}"
+          export storageAccountUrl="$(STORAGE_CONTAINER_URL)"
+          export ingestStorageUrl="$(INGEST_STORAGE_URL)"
+          export ingestStorageContainer="$(INGEST_STORAGE_CONTAINER)"
+
+          mvn -o -B -ntp -pl connector scalatest:test \
+            -DkustoAadAppId="${kustoAadAppId}" \
+            -DkustoAadAuthorityID="${kustoAadAuthorityID}" \
+            -DkustoDatabase="${kustoDatabase}" \
+            -DkustoCluster="${kustoCluster}" \
+            -DaccessToken="${accessToken}" \
+            -DingestStorageUrl="${ingestStorageUrl}" \
+            -DingestStorageContainer="${ingestStorageContainer}"
+      env:
+        MAVEN_OPTS: -Dmaven.repo.local=$(Pipeline.Workspace)/.m2/repository
+
+    - task: PublishTestResults@2
+      displayName: Publish Java ${{ javaVersion }} test results
+      condition: always()
+      inputs:
+        testResultsFormat: JUnit
+        testResultsFiles: connector/target/surefire-reports/*.xml
+        searchFolder: $(Pipeline.Workspace)/connector
+        testRunTitle: azure-kusto-spark - Java ${{ javaVersion }}
+        failTaskOnFailedTests: true
+        failTaskOnMissingResultsFile: true
