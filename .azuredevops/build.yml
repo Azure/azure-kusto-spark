@@ -18,17 +18,22 @@ variables:
 # build/test jobs. Push or manual runs on a feature branch use Java 17/21;
 # only the exact release/spark3 branch selects Java 8/11 without a PR.
 # Selection uses branch names/PR targets, not branch ancestry or the POM.
+# Generate all job pairs; runtime conditions select the matching versions
+# because the PR target is unavailable during template expansion.
 - name: javaVersions
-  ${{ if or(eq(variables['System.PullRequest.TargetBranch'], 'refs/heads/release/spark3'), eq(variables['System.PullRequest.TargetBranch'], 'release/spark3'), and(ne(variables['Build.Reason'], 'PullRequest'), eq(variables['Build.SourceBranch'], 'refs/heads/release/spark3'))) }}:
-    value: '8,11'
-  ${{ else }}:
-    value: '17,21'
+  value: '8,11,17,21'
+- name: isSpark3
+  value: $[or(eq(variables['System.PullRequest.TargetBranch'], 'refs/heads/release/spark3'), eq(variables['System.PullRequest.TargetBranch'], 'release/spark3'), and(ne(variables['Build.Reason'], 'PullRequest'), eq(variables['Build.SourceBranch'], 'refs/heads/release/spark3')))]
 
 jobs:
 - ${{ each javaVersion in split(variables.javaVersions, ',') }}:
   - job: BuildJava${{ javaVersion }}
     displayName: Build - Java ${{ javaVersion }}
     timeoutInMinutes: 40
+    ${{ if or(eq(javaVersion, '8'), eq(javaVersion, '11')) }}:
+      condition: and(succeeded(), eq(variables['isSpark3'], 'True'))
+    ${{ else }}:
+      condition: and(succeeded(), eq(variables['isSpark3'], 'False'))
     steps:
     - checkout: self
       clean: true
