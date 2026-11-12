@@ -23,6 +23,7 @@ import com.microsoft.kusto.spark.datasource.{
   PartitionOptions,
   ReadMode
 }
+import org.apache.spark.sql.SaveMode
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.prop.TableDrivenPropertyChecks.forAll
@@ -32,6 +33,14 @@ import java.security.InvalidParameterException
 import scala.collection.mutable
 
 class KustoDataSourceUtilsTest extends AnyFlatSpec with MockFactory {
+  private val validSinkParameters = Map(
+    KUSTO_DATABASE -> "DB",
+    KUSTO_TABLE -> "Table",
+    KUSTO_CLUSTER -> "https://test-cluster.southeastasia.kusto.windows.net",
+    KustoSourceOptions.KUSTO_AAD_APP_ID -> "AppId",
+    KustoSourceOptions.KUSTO_AAD_APP_SECRET -> "AppKey",
+    KustoSourceOptions.KUSTO_AAD_AUTHORITY_ID -> "Tenant")
+
   "ReadParameters" should "KustoReadOptions with passed in options" in {
     val conf: Map[String, String] = Map(
       KustoSourceOptions.KUSTO_READ_MODE -> ReadMode.ForceDistributedMode.toString,
@@ -112,10 +121,117 @@ class KustoDataSourceUtilsTest extends AnyFlatSpec with MockFactory {
           intercept[InvalidParameterException](
             KustoDataSourceUtils.parseSinkParameters(conf.toMap))
         }
+
         assert(
           illegalArgumentException.getMessage == "Ingest by tags / Drop by tags / Additional tags / Creation Time are " +
             "not supported for streaming ingestion through SparkIngestionProperties")
       }
+    }
+  }
+
+  it should "reject overwrite without an explicit scope" in {
+    val exception = intercept[InvalidParameterException] {
+      KustoDataSourceUtils.parseSinkParameters(validSinkParameters, SaveMode.Overwrite)
+    }
+
+    assert(
+      exception.getMessage ==
+        "SaveMode.Overwrite requires exactly one overwrite scope: set overwriteTagName or set overwriteFullTable=true.")
+  }
+
+  it should "reject overwrite with queued write mode" in {
+    val exception = intercept[InvalidParameterException] {
+      KustoDataSourceUtils.parseSinkParameters(
+        validSinkParameters ++ Map(
+          KustoSinkOptions.KUSTO_OVERWRITE_TAG_NAME -> "orders",
+          KustoSinkOptions.KUSTO_WRITE_MODE -> "Queued"),
+        SaveMode.Overwrite)
+    }
+
+    assert(
+      exception.getMessage ==
+        "SaveMode.Overwrite is supported only with Transactional write mode. 'Queued' is not supported.")
+  }
+
+  it should "accept tagged overwrite with transactional write mode" in {
+    val result = KustoDataSourceUtils.parseSinkParameters(
+      validSinkParameters ++ Map(
+        KustoSinkOptions.KUSTO_OVERWRITE_TAG_NAME -> " orders ",
+        KustoSinkOptions.KUSTO_WRITE_MODE -> "Transactional"),
+      SaveMode.Overwrite)
+
+    assert(result.writeOptions.saveMode == SaveMode.Overwrite)
+    assert(result.writeOptions.overwriteTagName.contains("orders"))
+    assert(!result.writeOptions.overwriteFullTable)
+  }
+
+  it should "accept explicitly guarded full-table overwrite" in {
+    val result = KustoDataSourceUtils.parseSinkParameters(
+      validSinkParameters + (KustoSinkOptions.KUSTO_OVERWRITE_FULL_TABLE -> "true"),
+      SaveMode.Overwrite)
+
+    assert(result.writeOptions.saveMode == SaveMode.Overwrite)
+    assert(result.writeOptions.overwriteTagName.isEmpty)
+    assert(result.writeOptions.overwriteFullTable)
+  }
+
+  it should "reject conflicting overwrite scopes" in {
+    val exception = intercept[InvalidParameterException] {
+      KustoDataSourceUtils.parseSinkParameters(
+        validSinkParameters ++ Map(
+          KustoSinkOptions.KUSTO_OVERWRITE_TAG_NAME -> "orders",
+          KustoSinkOptions.KUSTO_OVERWRITE_FULL_TABLE -> "true"),
+        SaveMode.Overwrite)
+    }
+
+    assert(
+      exception.getMessage ==
+        "overwriteTagName and overwriteFullTable=true cannot be used together.")
+  }
+
+  it should "reject blank or prefixed overwrite tags" in {
+    Seq(
+      " " -> "overwriteTagName cannot be blank.",
+      "drop-by:orders" ->
+        "overwriteTagName must be a tag suffix without the 'drop-by:' prefix.").foreach {
+      case (tag, expectedMessage) =>
+        val exception = intercept[InvalidParameterException] {
+          KustoDataSourceUtils.parseSinkParameters(
+            validSinkParameters + (KustoSinkOptions.KUSTO_OVERWRITE_TAG_NAME -> tag),
+            SaveMode.Overwrite)
+        }
+
+        assert(exception.getMessage == expectedMessage)
+    }
+  }
+
+  it should "reject special characters in overwrite tags" in {
+    Seq("orders.daily", "orders west", "orders/west", "orders\"west").foreach { tag =>
+      val exception = intercept[InvalidParameterException] {
+        KustoDataSourceUtils.parseSinkParameters(
+          validSinkParameters + (KustoSinkOptions.KUSTO_OVERWRITE_TAG_NAME -> tag),
+          SaveMode.Overwrite)
+      }
+
+      assert(
+        exception.getMessage ==
+          "overwriteTagName may contain only letters, numbers, hyphens, and underscores.")
+    }
+  }
+
+  it should "reject overwrite options with append mode" in {
+    Seq(
+      KustoSinkOptions.KUSTO_OVERWRITE_TAG_NAME -> "orders",
+      KustoSinkOptions.KUSTO_OVERWRITE_FULL_TABLE -> "true").foreach { overwriteOption =>
+      val exception = intercept[InvalidParameterException] {
+        KustoDataSourceUtils.parseSinkParameters(
+          validSinkParameters + overwriteOption,
+          SaveMode.Append)
+      }
+
+      assert(
+        exception.getMessage ==
+          "overwriteTagName and overwriteFullTable can only be used with SaveMode.Overwrite.")
     }
   }
 

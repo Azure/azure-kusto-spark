@@ -10,7 +10,7 @@ import org.scalatest.prop.TableDrivenPropertyChecks.forAll
 import org.scalatest.prop.Tables.Table
 
 import java.time.{Clock, Instant}
-import java.util.Collections
+import java.util.{ArrayList, Collections}
 
 class SparkIngestionPropertiesTest extends AnyFlatSpec {
 
@@ -90,5 +90,43 @@ class SparkIngestionPropertiesTest extends AnyFlatSpec {
           assertThrows[IllegalArgumentException](sp.validateStreamingProperties())
         }
     }
+  }
+
+  "cloneWithDropByTag" should "preserve properties and add the tag without mutating the source" in {
+    val existingDropByTags = new ArrayList[String]()
+    existingDropByTags.add("existing")
+    val ingestByTags = Collections.singletonList("ingest")
+    val additionalTags = Collections.singletonList("additional")
+    val ingestIfNotExists = Collections.singletonList("dedup")
+    val source = new SparkIngestionProperties(
+      flushImmediately = true,
+      dropByTags = existingDropByTags,
+      ingestByTags = ingestByTags,
+      additionalTags = additionalTags,
+      ingestIfNotExists = ingestIfNotExists,
+      creationTime = Instant.now(Clock.systemUTC()),
+      csvMapping = "mapping",
+      csvMappingNameReference = "mappingReference")
+
+    val copy = SparkIngestionProperties.cloneWithDropByTag(source, Some("orders"))
+
+    assert(copy ne source)
+    assert(copy.dropByTags == java.util.Arrays.asList("existing", "orders"))
+    assert(copy.ingestByTags == ingestByTags)
+    assert(copy.additionalTags == additionalTags)
+    assert(copy.ingestIfNotExists == ingestIfNotExists)
+    assert(copy.creationTime == source.creationTime)
+    assert(copy.csvMapping == source.csvMapping)
+    assert(copy.csvMappingNameReference == source.csvMappingNameReference)
+    assert(source.dropByTags == Collections.singletonList("existing"))
+  }
+
+  it should "deduplicate an existing overwrite tag" in {
+    val source =
+      new SparkIngestionProperties(dropByTags = java.util.Arrays.asList("orders", "existing"))
+
+    val copy = SparkIngestionProperties.cloneWithDropByTag(source, Some("orders"))
+
+    assert(copy.dropByTags == java.util.Arrays.asList("orders", "existing"))
   }
 }

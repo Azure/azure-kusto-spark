@@ -423,6 +423,147 @@ class KustoSinkBatchE2E extends AnyFlatSpec with BeforeAndAfterAll {
     }
   }
 
+  "KustoBatchSinkReplace" should "replace all rows when full-table overwrite is explicitly enabled" in {
+    val prefix = "KustoBatchSinkE2E_Replace"
+    val table = KustoQueryUtils.simplifyName(s"${prefix}_${UUID.randomUUID()}")
+    val engineKcsb = ConnectionStringBuilder.createWithAadAccessTokenAuthentication(
+      kustoTestConnectionOptions.cluster,
+      kustoTestConnectionOptions.accessToken)
+    val kustoAdminClient = ClientFactory.createClient(engineKcsb)
+    kustoAdminClient.executeMgmt(
+      kustoTestConnectionOptions.database,
+      generateTableCreateCommand(table, columnsTypesAndNames = "name:string, value:int"))
+
+    val initialRows = Seq(("initial-1", 1), ("initial-2", 2), ("initial-3", 3))
+    val replacementRows = Seq(("replacement-1", 10), ("replacement-2", 20))
+
+    try {
+      initialRows
+        .toDF("name", "value")
+        .write
+        .format("com.microsoft.kusto.spark.datasource")
+        .option(KustoSinkOptions.KUSTO_CLUSTER, kustoTestConnectionOptions.cluster)
+        .option(KustoSinkOptions.KUSTO_DATABASE, kustoTestConnectionOptions.database)
+        .option(KustoSinkOptions.KUSTO_TABLE, table)
+        .option(KustoSinkOptions.KUSTO_ACCESS_TOKEN, kustoTestConnectionOptions.accessToken)
+        .option(KustoSinkOptions.KUSTO_WRITE_MODE, WriteMode.Transactional.toString)
+        .option(KustoSourceOptions.KUSTO_CUSTOM_DATAFRAME_COLUMN_TYPES, "name STRING, value INT")
+        .mode(SaveMode.Append)
+        .save()
+
+      replacementRows
+        .toDF("name", "value")
+        .write
+        .format("com.microsoft.kusto.spark.datasource")
+        .option(KustoSinkOptions.KUSTO_CLUSTER, kustoTestConnectionOptions.cluster)
+        .option(KustoSinkOptions.KUSTO_DATABASE, kustoTestConnectionOptions.database)
+        .option(KustoSinkOptions.KUSTO_TABLE, table)
+        .option(KustoSinkOptions.KUSTO_ACCESS_TOKEN, kustoTestConnectionOptions.accessToken)
+        .option(KustoSinkOptions.KUSTO_WRITE_MODE, WriteMode.Transactional.toString)
+        .option(KustoSinkOptions.KUSTO_OVERWRITE_FULL_TABLE, "true")
+        .option(KustoSourceOptions.KUSTO_CUSTOM_DATAFRAME_COLUMN_TYPES, "name STRING, value INT")
+        .mode(SaveMode.Overwrite)
+        .save()
+
+      val rowCount = Awaitility
+        .await()
+        .ignoreExceptions()
+        .atMost(timeoutMs, TimeUnit.MILLISECONDS)
+        .until(
+          () => {
+            val result = kustoAdminClient
+              .executeQuery(kustoTestConnectionOptions.database, s"$table | count")
+              .getPrimaryResults
+            result.next()
+            result.getLong(0)
+          },
+          (count: Long) => count == replacementRows.size)
+      assert(rowCount == replacementRows.size)
+    } finally {
+      KustoTestUtils.tryDropAllTablesByPrefix(
+        kustoAdminClient,
+        kustoTestConnectionOptions.database,
+        table)
+    }
+  }
+
+  it should "replace only rows in the selected overwrite tag scope" in {
+    val prefix = "KustoBatchSinkE2E_TaggedReplace"
+    val table = KustoQueryUtils.simplifyName(s"${prefix}_${UUID.randomUUID()}")
+    val engineKcsb = ConnectionStringBuilder.createWithAadAccessTokenAuthentication(
+      kustoTestConnectionOptions.cluster,
+      kustoTestConnectionOptions.accessToken)
+    val kustoAdminClient = ClientFactory.createClient(engineKcsb)
+    kustoAdminClient.executeMgmt(
+      kustoTestConnectionOptions.database,
+      generateTableCreateCommand(table, columnsTypesAndNames = "name:string, value:int"))
+
+    val unrelatedRows = Seq(("unrelated", 1))
+    val firstTaggedRows = Seq(("old-1", 10), ("old-2", 20))
+    val replacementTaggedRows = Seq(("new-1", 100), ("new-2", 200), ("new-3", 300))
+    val commonOptions = Map(
+      KustoSinkOptions.KUSTO_CLUSTER -> kustoTestConnectionOptions.cluster,
+      KustoSinkOptions.KUSTO_DATABASE -> kustoTestConnectionOptions.database,
+      KustoSinkOptions.KUSTO_TABLE -> table,
+      KustoSinkOptions.KUSTO_ACCESS_TOKEN -> kustoTestConnectionOptions.accessToken,
+      KustoSinkOptions.KUSTO_WRITE_MODE -> WriteMode.Transactional.toString,
+      KustoSourceOptions.KUSTO_CUSTOM_DATAFRAME_COLUMN_TYPES -> "name STRING, value INT")
+
+    try {
+      unrelatedRows
+        .toDF("name", "value")
+        .write
+        .format("com.microsoft.kusto.spark.datasource")
+        .options(commonOptions)
+        .mode(SaveMode.Append)
+        .save()
+
+      firstTaggedRows
+        .toDF("name", "value")
+        .write
+        .format("com.microsoft.kusto.spark.datasource")
+        .options(commonOptions)
+        .option(KustoSinkOptions.KUSTO_OVERWRITE_TAG_NAME, "orders")
+        .mode(SaveMode.Overwrite)
+        .save()
+
+      replacementTaggedRows
+        .toDF("name", "value")
+        .write
+        .format("com.microsoft.kusto.spark.datasource")
+        .options(commonOptions)
+        .option(KustoSinkOptions.KUSTO_OVERWRITE_TAG_NAME, "orders")
+        .mode(SaveMode.Overwrite)
+        .save()
+
+      val expectedCounts = s"0,${replacementTaggedRows.size},${unrelatedRows.size}"
+      val counts = Awaitility
+        .await()
+        .ignoreExceptions()
+        .atMost(timeoutMs, TimeUnit.MILLISECONDS)
+        .until(
+          () => {
+            val result = kustoAdminClient
+              .executeQuery(
+                kustoTestConnectionOptions.database,
+                s"""$table
+                   || summarize Old=countif(name startswith "old-"),
+                   |  New=countif(name startswith "new-"),
+                   |  Unrelated=countif(name == "unrelated")""".stripMargin)
+              .getPrimaryResults
+            result.next()
+            s"${result.getLong(0)},${result.getLong(1)},${result.getLong(2)}"
+          },
+          (actualCounts: String) => actualCounts == expectedCounts)
+      assert(counts == expectedCounts)
+    } finally {
+      KustoTestUtils.tryDropAllTablesByPrefix(
+        kustoAdminClient,
+        kustoTestConnectionOptions.database,
+        table)
+    }
+  }
+
   "KustoBatchSinkAsync" should "ingest structured data to a Kusto cluster in async mode" taggedAs KustoE2E in {
     val df = rows.toDF("name", "value")
     val prefix = "KustoBatchSinkE2EIngestAsync"

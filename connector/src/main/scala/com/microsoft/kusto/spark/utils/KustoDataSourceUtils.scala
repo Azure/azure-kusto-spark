@@ -53,6 +53,7 @@ import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.{Callable, CountDownLatch, TimeUnit}
 import java.util.{
   NoSuchElementException,
+  Locale,
   Objects,
   Properties,
   StringJoiner,
@@ -447,9 +448,9 @@ object KustoDataSourceUtils {
   def parseSinkParameters(
       parameters: Map[String, String],
       mode: SaveMode = SaveMode.Append): SinkParameters = {
-    if (mode != SaveMode.Append) {
+    if (mode != SaveMode.Append && mode != SaveMode.Overwrite) {
       throw new InvalidParameterException(
-        s"Kusto data source supports only 'Append' mode, '$mode' directive is invalid. Please use df.write.mode(SaveMode.Append)..")
+        s"Kusto data source supports only 'Append' and 'Overwrite' modes, '$mode' directive is invalid.")
     }
 
     // TODO get defaults from KustoWriter()
@@ -543,6 +544,65 @@ object KustoDataSourceUtils {
     val disableFlushImmediately =
       parameters.getOrElse(KustoDebugOptions.KUSTO_DISABLE_FLUSH_IMMEDIATELY, "false").toBoolean
 
+    val overwriteTagOptionSupplied =
+      parameters.contains(KustoSinkOptions.KUSTO_OVERWRITE_TAG_NAME)
+    val overwriteFullTableOptionSupplied =
+      parameters.contains(KustoSinkOptions.KUSTO_OVERWRITE_FULL_TABLE)
+    val overwriteTagName =
+      parameters.get(KustoSinkOptions.KUSTO_OVERWRITE_TAG_NAME).map(_.trim)
+    val overwriteFullTable = parameters
+      .getOrElse(KustoSinkOptions.KUSTO_OVERWRITE_FULL_TABLE, "false")
+      .trim
+      .toBoolean
+
+    if (mode != SaveMode.Overwrite &&
+      (overwriteTagOptionSupplied || overwriteFullTableOptionSupplied)) {
+      throw new InvalidParameterException(s"${KustoSinkOptions.KUSTO_OVERWRITE_TAG_NAME} and " +
+        s"${KustoSinkOptions.KUSTO_OVERWRITE_FULL_TABLE} can only be used with SaveMode.Overwrite.")
+    }
+
+    overwriteTagName.foreach { tag =>
+      if (tag.isEmpty) {
+        throw new InvalidParameterException(
+          s"${KustoSinkOptions.KUSTO_OVERWRITE_TAG_NAME} cannot be blank.")
+      }
+      if (tag.toLowerCase(Locale.ROOT).startsWith("drop-by:")) {
+        throw new InvalidParameterException(
+          s"${KustoSinkOptions.KUSTO_OVERWRITE_TAG_NAME} must be a tag suffix without the 'drop-by:' prefix.")
+      }
+      if (!tag.matches("[A-Za-z0-9_-]+")) {
+        throw new InvalidParameterException(
+          s"${KustoSinkOptions.KUSTO_OVERWRITE_TAG_NAME} may contain only letters, numbers, hyphens, and underscores.")
+      }
+    }
+
+    if (mode == SaveMode.Overwrite) {
+      if (overwriteTagName.isEmpty && !overwriteFullTable) {
+        throw new InvalidParameterException(
+          s"SaveMode.Overwrite requires exactly one overwrite scope: set " +
+            s"${KustoSinkOptions.KUSTO_OVERWRITE_TAG_NAME} or set " +
+            s"${KustoSinkOptions.KUSTO_OVERWRITE_FULL_TABLE}=true.")
+      }
+      if (overwriteTagName.isDefined && overwriteFullTable) {
+        throw new InvalidParameterException(
+          s"${KustoSinkOptions.KUSTO_OVERWRITE_TAG_NAME} and " +
+            s"${KustoSinkOptions.KUSTO_OVERWRITE_FULL_TABLE}=true cannot be used together.")
+      }
+      if (writeMode != WriteMode.Transactional) {
+        throw new InvalidParameterException(
+          s"SaveMode.Overwrite is supported only with Transactional write mode. '$writeMode' is not supported.")
+      }
+      overwriteTagName match {
+        case Some(tag) =>
+          logWarn(
+            "parseSinkParameters",
+            s"Overwrite will replace destination extents tagged 'drop-by:$tag'. " +
+              "Extents outside this tag scope will be preserved.")
+        case None =>
+          logWarn("parseSinkParameters", KustoSinkOptions.OverwriteFullTableDataLossWarning)
+      }
+    }
+
     val ensureNoDupBlobs =
       parameters.getOrElse(KustoDebugOptions.KUSTO_ENSURE_NO_DUPLICATED_BLOBS, "false").toBoolean
 
@@ -584,7 +644,10 @@ object KustoDataSourceUtils {
       userTempTableName,
       streamIngestMaxSize,
       maybeIngestionStorageParameters,
-      kustoCustomDebugOptions)
+      kustoCustomDebugOptions,
+      mode,
+      overwriteTagName,
+      overwriteFullTable)
 
     if (sourceParameters.kustoCoordinates.table.isEmpty) {
       throw new InvalidParameterException(
@@ -594,7 +657,8 @@ object KustoDataSourceUtils {
     logInfo(
       "parseSinkParameters",
       s"Parsed write options for sink: {'table': '${sourceParameters.kustoCoordinates.table}', " +
-        s"'timeout': '${writeOptions.timeout}, 'async': ${writeOptions.isAsync}, 'writeMode': ${writeOptions.writeMode}, " +
+        s"'timeout': '${writeOptions.timeout}, 'async': ${writeOptions.isAsync}, 'saveMode': ${writeOptions.saveMode}, " +
+        s"'writeMode': ${writeOptions.writeMode}, " +
         s"'tableCreationMode': ${writeOptions.tableCreateOptions}, 'writeLimit': ${writeOptions.writeResultLimit}, " +
         s"'batchLimit': ${writeOptions.batchLimit}" +
         s", 'timeout': ${writeOptions.timeout}, 'timezone': ${writeOptions.timeZone}, " +
