@@ -177,15 +177,6 @@ class CslCommandsGeneratorTest extends AnyFlatSpec {
     assert(command.indexOf("where Tags has") < command.indexOf("where toscalar"))
   }
 
-  it should "escape the overwrite tag in the destination extent query" in {
-    val command = CslCommandsGenerator.generateTableReplaceExtentsAsyncCommand(
-      "sourceTable",
-      "destinationTable",
-      overwriteTagName = Some("orders\\west\"daily"))
-
-    assert(command.contains("""| where Tags has "drop-by:orders\\west\"daily""""))
-  }
-
   it should "not let a trailing single-line comment swallow the count operator (issue #267)" in {
     val query = "range _ from 1 to 500001 step 1 // this comment causes issue"
 

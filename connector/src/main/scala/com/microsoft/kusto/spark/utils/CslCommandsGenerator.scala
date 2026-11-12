@@ -150,7 +150,7 @@ private[kusto] object CslCommandsGenerator {
       }
     val destinationFilter = overwriteTagName
       .map(tag => s"""
-         | where Tags has "drop-by:${escapeStringLiteral(tag)}"""")
+         | where Tags has "drop-by:$tag"""")
       .getOrElse("")
     s""".replace async extents in table $destinationTableName $setNewIngestionTime <|
        {
@@ -164,16 +164,6 @@ private[kusto] object CslCommandsGenerator {
        }
        """
   }
-
-  private def escapeStringLiteral(value: String): String =
-    value.flatMap {
-      case '\\' => "\\\\"
-      case '"' => "\\\""
-      case '\n' => "\\n"
-      case '\r' => "\\r"
-      case '\t' => "\\t"
-      case character => character.toString
-    }
 
   def generateShowOperationDetails(operataionId: String): String = {
     s".show operation $operataionId details"

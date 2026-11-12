@@ -205,6 +205,20 @@ class KustoDataSourceUtilsTest extends AnyFlatSpec with MockFactory {
     }
   }
 
+  it should "reject special characters in overwrite tags" in {
+    Seq("orders.daily", "orders west", "orders/west", "orders\"west").foreach { tag =>
+      val exception = intercept[InvalidParameterException] {
+        KustoDataSourceUtils.parseSinkParameters(
+          validSinkParameters + (KustoSinkOptions.KUSTO_OVERWRITE_TAG_NAME -> tag),
+          SaveMode.Overwrite)
+      }
+
+      assert(
+        exception.getMessage ==
+          "overwriteTagName may contain only letters, numbers, hyphens, and underscores.")
+    }
+  }
+
   it should "reject overwrite options with append mode" in {
     Seq(
       KustoSinkOptions.KUSTO_OVERWRITE_TAG_NAME -> "orders",

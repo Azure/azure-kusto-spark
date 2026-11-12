@@ -89,6 +89,7 @@ All the options that can be used in the Kusto Sink can be found in KustoSinkOpti
 * **KUSTO_OVERWRITE_TAG_NAME**:
   'overwriteTagName' - Selects a logical overwrite scope when using `SaveMode.Overwrite`.
   The value is a tag suffix such as `orders`; do not include the `drop-by:` prefix.
+  It may contain only letters, numbers, hyphens, and underscores.
   The connector tags the new extents with `drop-by:orders` and atomically replaces only existing
   destination extents carrying that tag. Untagged extents and extents with other tags are preserved.
 

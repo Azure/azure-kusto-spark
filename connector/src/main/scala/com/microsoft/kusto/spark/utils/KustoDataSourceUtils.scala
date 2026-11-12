@@ -565,6 +565,10 @@ object KustoDataSourceUtils {
         throw new InvalidParameterException(
           s"${KustoSinkOptions.KUSTO_OVERWRITE_TAG_NAME} must be a tag suffix without the 'drop-by:' prefix.")
       }
+      if (!tag.matches("[A-Za-z0-9_-]+")) {
+        throw new InvalidParameterException(
+          s"${KustoSinkOptions.KUSTO_OVERWRITE_TAG_NAME} may contain only letters, numbers, hyphens, and underscores.")
+      }
     }
 
     if (mode == SaveMode.Overwrite) {
