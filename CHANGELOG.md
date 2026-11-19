@@ -9,7 +9,7 @@ Tags are created as `v4.0_{version}` (Spark 4 / master) and `v3.0_{version}` (Sp
 ## [Unreleased]
 
 ### Changed
-- None
+- Restore the Spark 4.0/4.1 maintenance line to the 7.1.5 dependency baseline. Published 7.1.6 artifacts and release history are unchanged.
 
 ### Added
 - None
