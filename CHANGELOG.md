@@ -27,7 +27,7 @@ Tags are created as `v4.2_{version}` (Spark 4.2 / release/spark42), `v4.0_{versi
 - None
 
 ### Fixed
-- None
+- Default distributed blob reads to ABFSS for Hadoop 3.5, reject unsupported WASB options, and support account-scoped SAS and SharedKey readback without changing unrelated storage accounts.
 
 ## [7.1.6] - 2026-11-09
 

@@ -295,7 +295,7 @@ object KustoReader {
       params: TransientStorageCredentials,
       directory: String,
       endpointSuffix: String,
-      storageProtocol: String = KCONST.storageProtocolWasbs): Boolean = {
+      storageProtocol: String = KCONST.storageProtocolAbfss): Boolean = {
     if (params.isOneLake) {
       // OneLake: probe via Hadoop FileSystem over abfss using ambient AAD (Fabric Spark).
       val base = params.oneLakeAbfssBase
@@ -355,7 +355,7 @@ object KustoReader {
     val anyOneLake = storage.storageCredentials.exists(_.isOneLake)
     val protocol =
       if (anyOneLake) KCONST.storageProtocolAbfss
-      else options.storageProtocol.getOrElse(KCONST.storageProtocolWasbs)
+      else KDSU.resolveStorageProtocol(options.storageProtocol)
     // ABFS resolves SAS tokens per storage account (never per container), so two containers
     // of the same account carrying different SAS tokens cannot both be configured. Keep a
     // single credential per account in that case, retaining containers that share it.
@@ -415,7 +415,7 @@ object KustoReader {
   private[kusto] def setupBlobAccess(
       request: KustoReadRequest,
       storageParameters: TransientStorageParameters,
-      storageProtocol: String = KCONST.storageProtocolWasbs,
+      storageProtocol: String = KCONST.storageProtocolAbfss,
       forceRefresh: Boolean = false): Unit = {
     val config = request.sparkSession.sparkContext.hadoopConfiguration
     val sparkConf = request.sparkSession.conf
@@ -499,7 +499,6 @@ object KustoReader {
             sparkConf,
             now,
             useAbfs,
-            storageProtocol,
             forceRefresh)
         case AuthMethod.Sas =>
           handleSasAuth(storage, storageParameters, config, sparkConf, now, useAbfs, forceRefresh)
@@ -517,25 +516,24 @@ object KustoReader {
       sparkConf: RuntimeConfig,
       now: Instant,
       useAbfs: Boolean,
-      storageProtocol: String,
       forceRefresh: Boolean): Unit = {
-    val wasCached = !forceRefresh && KustoAzureFsSetupCache.updateAndGetPrevStorageAccountAccess(
-      storage.storageAccountName,
-      storage.storageAccountKey,
-      now)
+    val wasCached = !forceRefresh && !useAbfs &&
+      KustoAzureFsSetupCache.updateAndGetPrevStorageAccountAccess(
+        storage.storageAccountName,
+        storage.storageAccountKey,
+        now)
 
     if (!wasCached) {
+      val accountHost = storageAccountHost(storage, storageParameters)
       if (useAbfs) {
-        throw new InvalidParameterException(
-          s"Storage protocol '$storageProtocol' with Account Key authentication is not supported yet. " +
-            "Please use SAS based authentication or switch to 'wasbs' protocol.")
-      } else {
-        setHadoopConf(
-          config,
-          sparkConf,
-          s"fs.azure.account.key.${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}",
-          storage.storageAccountKey)
+        setHadoopConf(config, sparkConf, s"fs.azure.account.auth.type.$accountHost", "SharedKey")
+        setHadoopConf(config, sparkConf, s"fs.azure.account.hns.enabled.$accountHost", "false")
       }
+      setHadoopConf(
+        config,
+        sparkConf,
+        s"fs.azure.account.key.$accountHost",
+        storage.storageAccountKey)
     }
   }
 
@@ -636,18 +634,19 @@ object KustoReader {
 
   private def credentialFingerprint(
       credential: TransientStorageCredentials): (AuthMethod.AuthMethod, String) =
-    (credential.authMethod, normalizeSasToken(credential.sasKey))
+    (
+      credential.authMethod,
+      if (credential.authMethod == AuthMethod.Key) credential.storageAccountKey
+      else normalizeSasToken(credential.sasKey))
 
   /**
    * ABFS auth settings (auth type and SAS token alike) are configured per storage account, so
-   * several containers of the same account cannot be served when they carry different SAS tokens,
-   * or when they mix SAS with impersonation. Elect one credential per account and drop the
-   * conflicting siblings, so the export only targets locations that can be read back afterwards.
-   * A self contained SAS token always wins over impersonation, which depends on the ambient
-   * identity of the runtime and would otherwise make the readback depend on the order in which
-   * the credentials were returned; between credentials of the same auth method the first one
-   * wins. OneLake credentials (which have no storage account) and accounts whose containers agree
-   * on one credential are left untouched.
+   * several containers of the same account cannot be served when they carry different
+   * credentials. Elect one credential per account and drop the conflicting siblings, so the
+   * export only targets locations that can be read back afterwards. SAS takes precedence over
+   * account keys, and both take precedence over ambient impersonation; between credentials of the
+   * same auth method the first one wins. OneLake credentials (which have no storage account) and
+   * accounts whose containers agree on one credential are left untouched.
    */
   private[kusto] def dedupeConflictingCredentials(
       storageParameters: TransientStorageParameters): TransientStorageParameters = {
@@ -662,7 +661,8 @@ object KustoReader {
           val fingerprint = credentialFingerprint(credential)
           val elected = electedCredentialByAccount.get(host)
           if (elected.isEmpty ||
-            (elected.get._1 != AuthMethod.Sas && fingerprint._1 == AuthMethod.Sas)) {
+            (elected.get._1 != AuthMethod.Sas && fingerprint._1 == AuthMethod.Sas) ||
+            (elected.get._1 == AuthMethod.Impersonation && fingerprint._1 == AuthMethod.Key)) {
             electedCredentialByAccount.put(host, fingerprint)
           }
         }
