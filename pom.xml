@@ -9,7 +9,7 @@
     <version>${revision}</version>
     <properties>
         <!-- Compile-scoped dependency versions -->
-        <revision>7.1.6</revision>
+        <revision>7.1.7</revision>
         <maven.deploy.skip>true</maven.deploy.skip>
         <kusto.shade.prefix>kusto_connector_shaded</kusto.shade.prefix>
         <azure.bom.version>1.3.6</azure.bom.version>
@@ -17,7 +17,7 @@
         <fasterxml.jackson.version>2.21.8</fasterxml.jackson.version>
         <!-- Since Jackson 2.20, jackson-annotations is versioned as major.minor only -->
         <fasterxml.jackson.annotations.version>2.21</fasterxml.jackson.annotations.version>
-        <netty.version>4.1.140.Final</netty.version>
+        <netty.version>4.2.13.Final</netty.version>
         <guava.version>33.8.0-jre</guava.version>
         <java.source.version>21</java.source.version>
         <kusto.sdk.version>8.0.1</kusto.sdk.version>
@@ -27,10 +27,10 @@
 
         <!-- Provided-scoped dependency versions (provided by runtime/Spark/Hadoop) -->
         <scala.version.major>2.13</scala.version.major>
-        <scala.version.minor>16</scala.version.minor>
-        <spark.version.major>4.0</spark.version.major>
-        <spark.version.minor>0</spark.version.minor>
-        <hadoop.version>3.4.2</hadoop.version>
+        <scala.version.minor>18</scala.version.minor>
+        <spark.version.major>4.2</spark.version.major>
+        <spark.version.minor>1</spark.version.minor>
+        <hadoop.version>3.5.0</hadoop.version>
 
         <!-- Test-scoped dependency versions -->
         <awaitility.version>4.3.0</awaitility.version>

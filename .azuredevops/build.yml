@@ -6,63 +6,31 @@ trigger:
 pr:
   branches:
     include:
-      - '*'
+      - release/spark42
 
 pool:
   vmImage: ubuntu-latest
 
 variables:
-# To validate Spark 3, create a feature branch from release/spark3, copy this
-# YAML into it, commit and push, then open a PR targeting release/spark3.
-# PR validation builds the proposed changes with Java 8/11 in separate
-# build/test jobs. Push or manual runs on a feature branch use Java 17/21;
-# only the exact release/spark3 branch selects Java 8/11 without a PR.
-# Selection uses branch names/PR targets, not branch ancestry or the POM.
-# Generate all job pairs; runtime conditions select the matching versions
-# because the PR target is unavailable during template expansion.
 - name: javaVersions
-  value: '8,11,17,21'
-- name: isSpark3
-  value: $[or(eq(variables['System.PullRequest.TargetBranch'], 'refs/heads/release/spark3'), eq(variables['System.PullRequest.TargetBranch'], 'release/spark3'), and(ne(variables['Build.Reason'], 'PullRequest'), eq(variables['Build.SourceBranch'], 'refs/heads/release/spark3')))]
+  value: '17,21'
 
 jobs:
 - ${{ each javaVersion in split(variables.javaVersions, ',') }}:
   - job: BuildJava${{ javaVersion }}
     displayName: Build - Java ${{ javaVersion }}
     timeoutInMinutes: 40
-    ${{ if or(eq(javaVersion, '8'), eq(javaVersion, '11')) }}:
-      condition: and(succeeded(), eq(variables['isSpark3'], 'True'))
-    ${{ else }}:
-      condition: and(succeeded(), eq(variables['isSpark3'], 'False'))
     steps:
     - checkout: self
       clean: true
       persistCredentials: false
-
-    - ${{ if eq(javaVersion, '8') }}:
-      - bash: |
-          set -euo pipefail
-
-          archive="$(Agent.TempDirectory)/temurin8.tar.gz"
-          curl --fail --location --retry 3 \
-            --output "${archive}" \
-            https://github.com/adoptium/temurin8-binaries/releases/download/jdk8u512-b09/OpenJDK8U-jdk_x64_linux_hotspot_8u512b09.tar.gz
-          printf '%s  %s\n' \
-            fb3bfa869012419b562bb4235d0d83ec4f8c1dda62ae432ba20c6c3a7e43f7e4 \
-            "${archive}" | sha256sum --check
-        displayName: Download and verify Temurin Java 8
 
     - task: JavaToolInstaller@0
       displayName: Use Java ${{ javaVersion }}
       inputs:
         versionSpec: '${{ javaVersion }}'
         jdkArchitectureOption: x64
-        ${{ if eq(javaVersion, '8') }}:
-          jdkSourceOption: LocalDirectory
-          jdkFile: $(Agent.TempDirectory)/temurin8.tar.gz
-          jdkDestinationDirectory: $(Agent.TempDirectory)/temurin8
-        ${{ else }}:
-          jdkSourceOption: PreInstalled
+        jdkSourceOption: PreInstalled
 
     - task: Cache@2
       displayName: Cache Maven dependencies
@@ -108,30 +76,12 @@ jobs:
     steps:
     - checkout: none
 
-    - ${{ if eq(javaVersion, '8') }}:
-      - bash: |
-          set -euo pipefail
-
-          archive="$(Agent.TempDirectory)/temurin8.tar.gz"
-          curl --fail --location --retry 3 \
-            --output "${archive}" \
-            https://github.com/adoptium/temurin8-binaries/releases/download/jdk8u512-b09/OpenJDK8U-jdk_x64_linux_hotspot_8u512b09.tar.gz
-          printf '%s  %s\n' \
-            fb3bfa869012419b562bb4235d0d83ec4f8c1dda62ae432ba20c6c3a7e43f7e4 \
-            "${archive}" | sha256sum --check
-        displayName: Download and verify Temurin Java 8
-
     - task: JavaToolInstaller@0
       displayName: Use Java ${{ javaVersion }}
       inputs:
         versionSpec: '${{ javaVersion }}'
         jdkArchitectureOption: x64
-        ${{ if eq(javaVersion, '8') }}:
-          jdkSourceOption: LocalDirectory
-          jdkFile: $(Agent.TempDirectory)/temurin8.tar.gz
-          jdkDestinationDirectory: $(Agent.TempDirectory)/temurin8
-        ${{ else }}:
-          jdkSourceOption: PreInstalled
+        jdkSourceOption: PreInstalled
 
     - task: DownloadPipelineArtifact@2
       displayName: Download Java ${{ javaVersion }} build

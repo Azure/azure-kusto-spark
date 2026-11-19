@@ -3,8 +3,9 @@
 </p>
 
 # Azure Data Explorer Connector for Apache Spark
-  
-master: [![Build](https://github.com/Azure/azure-kusto-spark/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/Azure/azure-kusto-spark/actions/workflows/build.yml)
+
+This branch, `release/spark42`, maintains the Spark 4.2 connector. Version 7.1.7 is
+prepared for release and has not been published from this branch.
 
 This library contains the source code for Azure Data Explorer Data Source and Data Sink Connector for Apache Spark.
 
@@ -31,6 +32,16 @@ From versions 5.2.0 and up, the connector is packaged as an uber jar to avoid co
 ## Usage
 
 ### Linking 
+
+| Source branch | Spark line | Maven artifact (`com.microsoft.azure.kusto`) |
+|---|---|---|
+| `release/spark42` | 4.2 | `kusto-spark_4.2_2.13` |
+| `master` | Existing 4.0/4.1 line | `kusto-spark_4.0_2.13` |
+| `release/spark3` | Existing 3.x line | `kusto-spark_3.0_2.12` |
+
+New Spark 4.2 releases use their own artifact and `v4.2_{version}` tags. They do
+not update the existing Spark 3 or Spark 4.0/4.1 artifacts. Backports to those
+branches require separate approval and validation. See [the release process](SKILL.md).
 
 Starting version 2.3.0, we introduce new artifact Ids: `kusto-spark_3.x_2.12` targeting Spark 3.x and Scala 2.12 
 and `kusto-spark_2.4_2.11` targeting Spark 2.4.x and scala 2.11. The latter is built from branch "2.4".
@@ -62,11 +73,11 @@ use the following artifact:
 
 ## Build Prerequisites
 
-To use the connector, you need:
+To build this Spark 4.2 branch, you need:
 
-- Java 1.8+ SDK installed
+- JDK 21 installed (CI also validates Java 17)
 - [Maven 3.x](https://maven.apache.org/download.cgi) installed
-- Spark - with the version aligned with the artifact ID (either 2.4 or 3.0)
+- Spark 4.2.1 and Scala 2.13.18, as configured in the POM
 
 > Note: when working with Spark version 2.3 or lower, build the jar locally from branch "2.4" and 
 simply change the spark version in the pom file. 

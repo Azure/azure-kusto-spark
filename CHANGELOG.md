@@ -4,12 +4,24 @@ All notable changes to the Azure Kusto Spark Connector will be documented in thi
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Version numbers follow the `{major}.{minor}.{patch}` scheme (e.g., `7.0.5`).
-Tags are created as `v4.0_{version}` (Spark 4 / master) and `v3.0_{version}` (Spark 3 / release/spark3).
+Tags are created as `v4.2_{version}` (Spark 4.2 / release/spark42), `v4.0_{version}` (existing Spark 4 / master), and `v3.0_{version}` (Spark 3 / release/spark3).
 
 ## [Unreleased]
 
 ### Changed
 - None
+
+### Added
+- None
+
+### Fixed
+- None
+
+## [7.1.7] - Unreleased
+
+### Changed
+- Isolate Spark 4.2 development on `release/spark42`, with the `kusto-spark_4.2_2.13` artifact and manual, opt-in release publication.
+- Build against Spark 4.2.1, Scala 2.13.18, Hadoop 3.5.0 and Netty 4.2.13.Final; retain Kusto Java SDK 8.0.1.
 
 ### Added
 - None
