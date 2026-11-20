@@ -4,7 +4,8 @@ All notable changes to the Azure Kusto Spark Connector will be documented in thi
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Version numbers follow the `{major}.{minor}.{patch}` scheme (e.g., `7.0.5`).
-Tags are created as `v4.0_{version}` (Spark 4 / master) and `v3.0_{version}` (Spark 3 / release/spark3).
+This branch (`release/spark40`) is the Spark 4.0/4.1 maintenance line: artifact `kusto-spark_4.0_2.13`, tags `v4.0_{version}`.
+Spark 4.2 is developed on `master` (`v4.2_{version}`) and Spark 3 on `release/spark3` (`v3.0_{version}`).
 
 ## [Unreleased]
 
