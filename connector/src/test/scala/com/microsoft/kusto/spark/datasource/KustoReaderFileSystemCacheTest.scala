@@ -11,12 +11,13 @@ import org.apache.parquet.example.data.simple.SimpleGroupFactory
 import org.apache.parquet.hadoop.example.ExampleParquetWriter
 import org.apache.parquet.io.LocalOutputFile
 import org.apache.parquet.schema.MessageTypeParser
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.{SparkConf, SparkContext, TaskContext}
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.util.SerializableConfiguration
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
-import java.io.FileNotFoundException
+import java.io.{FileNotFoundException, IOException}
 import java.net.URI
 import java.nio.file.Files
 import java.util.UUID
@@ -29,12 +30,15 @@ class CredentialReadbackFileSystem extends KustoReadbackFileSystem {
   private var auth: AbfsAuthType = _
   private var credential: String = _
   @volatile var closed = false
+  var taskAttempt: Option[Long] = None
+  var openStreams = 0
 
   override def getUri: URI = Option(uri).getOrElse(URI.create("abfss:///"))
 
   override def initialize(name: URI, config: Configuration): Unit = {
     uri = new URI(name.getScheme, name.getAuthority, "/", null, null)
     super.initialize(name, config)
+    taskAttempt = Option(TaskContext.get()).map(_.taskAttemptId())
     val account = name.getHost
     val abfs = new AbfsConfiguration(config, account)
     auth = abfs.getAuthType(account)
@@ -50,12 +54,26 @@ class CredentialReadbackFileSystem extends KustoReadbackFileSystem {
   override def open(path: HadoopPath, bufferSize: Int): FSDataInputStream = {
     require(!closed, "An active read's filesystem was closed")
     CredentialReadbackFileSystem.reads.add((uri.toString, auth, credential))
-    super.open(path, bufferSize)
+    val stream = super.open(path, bufferSize)
+    openStreams += 1
+    new FSDataInputStream(stream) {
+      private var streamClosed = false
+      override def close(): Unit = synchronized {
+        if (!streamClosed) {
+          streamClosed = true
+          try super.close()
+          finally openStreams -= 1
+        }
+      }
+    }
   }
 
   override def close(): Unit = {
     closed = true
     super.close()
+    if (getConf != null && getConf.getBoolean("kusto.test.fail.close", false)) {
+      throw new IOException("test close failure")
+    }
   }
 }
 
@@ -346,6 +364,61 @@ class KustoReaderFileSystemCacheTest extends AnyFlatSpec with Matchers {
     }
   }
 
+  it should "reuse one delegate for driver metadata across multiple files" in {
+    withReadback { (spark, account, path, _) =>
+      val root = new HadoopPath(path).toUri.getPath
+      val file = new java.io.File(root, "part.parquet").toPath
+      (1 to 4).foreach(index => Files.copy(file, file.resolveSibling(s"part-$index.parquet")))
+      KustoReader
+        .readParquet(spark, Seq(path), storage(account, "sig=metadata"), "abfss")
+        .collect()
+        .map(_.getLong(0))
+        .toSeq shouldBe Seq.fill(5)(42L)
+      val instances = CredentialReadbackFileSystem.instances
+        .iterator()
+        .asScala
+        .toVector
+        .filter(_.getUri.getHost == URI.create(path).getHost)
+      instances.count(_.taskAttempt.isEmpty) shouldBe 1
+      all(instances.map(_.closed)) shouldBe true
+    }
+  }
+
+  it should "reuse one delegate within a task and release it at task completion" in {
+    withReadback { (spark, account, path, conf) =>
+      val options = KustoReader.blobReadOptions(spark, storage(account, "sig=task"), "abfss")
+      val taskConf = new Configuration(conf)
+      options.foreach { case (key, value) => taskConf.set(key, value) }
+      val serialized = new SerializableConfiguration(taskConf)
+      val file = new HadoopPath(new HadoopPath(path), "part.parquet").toString
+      val magic = spark.sparkContext
+        .parallelize(Seq(file), 1)
+        .map { name =>
+          val filePath = new HadoopPath(name)
+          val first = filePath.getFileSystem(serialized.value)
+          first.getFileStatus(filePath)
+          first.listStatus(filePath.getParent)
+          val second = filePath.getFileSystem(serialized.value)
+          val input = second.open(filePath)
+          try input.read()
+          finally {
+            input.close()
+            first.close()
+            second.close()
+          }
+        }
+        .collect()
+      magic.toSeq shouldBe Seq('P'.toInt)
+      val instances = CredentialReadbackFileSystem.instances
+        .iterator()
+        .asScala
+        .toVector
+        .filter(_.getUri.getHost == URI.create(path).getHost)
+      instances.size shouldBe 1
+      all(instances.map(_.closed)) shouldBe true
+    }
+  }
+
   "Cached exports" should "only be reused with matching storage credentials and protocol" in {
     val initial = storage("account", "sig=first")
     val cached = DistributedReadModeTransientCacheEntry(
@@ -373,5 +446,134 @@ class KustoReaderFileSystemCacheTest extends AnyFlatSpec with Matchers {
     val rotated = new TransientStorageParameters(
       Array(new TransientStorageCredentials("account", "cm90YXRlZC1rZXk=", "container")))
     KustoReader.cachedExportMatches(keyCache, rotated, "abfss") shouldBe false
+  }
+
+  it should "retain an export-time snapshot after caller storage mutation" in {
+    val source = storage("account", "sig=original")
+    val snapshot = KustoReader.snapshotStorage(source)
+    val cached = DistributedReadModeTransientCacheEntry(Seq("export"), snapshot, "abfss")
+    source.storageCredentials.head.sasKey = "sig=changed"
+    source.storageCredentials.head.blobContainer = "changed"
+    source.endpointSuffix = "core.chinacloudapi.cn"
+    source.storageCredentials(0) = new TransientStorageCredentials("other", "dGVzdA==", "other")
+    snapshot.storageCredentials.head.sasKey shouldBe "?sig=original"
+    snapshot.storageCredentials.head.blobContainer shouldBe "container"
+    snapshot.endpointSuffix shouldBe "core.windows.net"
+    KustoReader.cachedExportMatches(
+      cached,
+      storage("account", "sig=original"),
+      "abfss") shouldBe true
+    KustoReader.cachedExportMatches(cached, source, "abfss") shouldBe false
+  }
+
+  "Read lifecycle cleanup" should "close abandoned streams on driver failure" in {
+    withReadback { (spark, account, path, conf) =>
+      val options = KustoReader.blobReadOptions(spark, storage(account, "sig=failed"), "abfss")
+      val local = new Configuration(conf)
+      options.foreach { case (key, value) => local.set(key, value) }
+      val expected = new IOException("test planning failure")
+      val error = intercept[IOException] {
+        KustoBlobReadFileSystem.withReadScope(options(KustoBlobReadFileSystem.ReadId)) {
+          val file = new HadoopPath(new HadoopPath(path), "part.parquet")
+          file.getFileSystem(local).open(file)
+          throw expected
+        }
+      }
+      error should be theSameInstanceAs expected
+      val created = CredentialReadbackFileSystem.instances
+        .iterator()
+        .asScala
+        .toVector
+        .filter(_.getUri.getHost == URI.create(path).getHost)
+      created.size shouldBe 1
+      all(created.map(_.closed)) shouldBe true
+      all(created.map(_.openStreams)) shouldBe 0
+    }
+  }
+
+  it should "preserve open failures when delegate cleanup also fails" in {
+    withReadback { (spark, account, path, conf) =>
+      val options = KustoReader.blobReadOptions(spark, storage(account, "sig=failed"), "abfss")
+      val local = new Configuration(conf)
+      options.foreach { case (key, value) => local.set(key, value) }
+      local.setBoolean("kusto.test.fail.close", true)
+      val missing = new HadoopPath(new HadoopPath(path), "missing.parquet")
+      val fs = missing.getFileSystem(local)
+      try {
+        val error = intercept[FileNotFoundException](fs.open(missing))
+        error.getSuppressed.map(_.getMessage).toSeq shouldBe Seq("test close failure")
+      } finally {
+        fs.close()
+        CredentialReadbackFileSystem.instances
+          .iterator()
+          .asScala
+          .filter(_.getUri.getHost == URI.create(path).getHost)
+          .foreach(_.getConf.unset("kusto.test.fail.close"))
+      }
+    }
+  }
+
+  it should "close abandoned streams and delegates after a failed Spark task" in {
+    withReadback { (spark, account, path, conf) =>
+      val local = new Configuration(conf)
+      KustoReader
+        .blobReadOptions(spark, storage(account, "sig=task-failure"), "abfss")
+        .foreach { case (key, value) => local.set(key, value) }
+      val serialized = new SerializableConfiguration(local)
+      val file = new HadoopPath(new HadoopPath(path), "part.parquet").toString
+      intercept[org.apache.spark.SparkException] {
+        spark.sparkContext
+          .parallelize(Seq(file), 1)
+          .map[Int] { name =>
+            val filePath = new HadoopPath(name)
+            filePath.getFileSystem(serialized.value).open(filePath)
+            throw new IOException("test task failure")
+          }
+          .collect()
+      }
+      val created = CredentialReadbackFileSystem.instances
+        .iterator()
+        .asScala
+        .toVector
+        .filter(_.getUri.getHost == URI.create(path).getHost)
+      created should not be empty
+      all(created.map(_.closed)) shouldBe true
+      all(created.map(_.openStreams)) shouldBe 0
+    }
+  }
+
+  it should "allow first filesystem access from a task completion listener" in {
+    withReadback { (spark, account, path, conf) =>
+      val local = new Configuration(conf)
+      KustoReader
+        .blobReadOptions(spark, storage(account, "sig=completion"), "abfss")
+        .foreach { case (key, value) => local.set(key, value) }
+      val serialized = new SerializableConfiguration(local)
+      val file = new HadoopPath(new HadoopPath(path), "part.parquet").toString
+      spark.sparkContext
+        .parallelize(Seq(file), 1)
+        .map { name =>
+          TaskContext.get().addTaskCompletionListener[Unit] { _ =>
+            val filePath = new HadoopPath(name)
+            val fs = filePath.getFileSystem(serialized.value)
+            try {
+              val input = fs.open(filePath)
+              try input.read()
+              finally input.close()
+            } finally fs.close()
+          }
+          1
+        }
+        .collect()
+        .toSeq shouldBe Seq(1)
+      val created = CredentialReadbackFileSystem.instances
+        .iterator()
+        .asScala
+        .toVector
+        .filter(_.getUri.getHost == URI.create(path).getHost)
+      created should not be empty
+      all(created.map(_.closed)) shouldBe true
+      all(created.map(_.openStreams)) shouldBe 0
+    }
   }
 }

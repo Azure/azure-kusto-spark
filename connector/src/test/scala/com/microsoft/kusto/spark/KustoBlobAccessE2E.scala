@@ -180,7 +180,8 @@ class KustoBlobAccessE2E extends AnyFlatSpec with BeforeAndAfterAll {
       directory,
       credential.blobContainer,
       secret,
-      !useKeyNotSas)
+      !useKeyNotSas,
+      storage.endpointSuffix)
   }
 
   private def getBlobCoordinates(
