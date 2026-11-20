@@ -227,12 +227,13 @@ object KustoReader {
       storage: TransientStorageParameters,
       options: KustoReadOptions,
       filtering: KustoFiltering): RDD[Row] = {
+    val readStorage = snapshotStorage(storage)
     // OneLake transient storage always reads back over abfss.
     val protocol =
-      if (storage.storageCredentials.exists(_.isOneLake)) KCONST.storageProtocolAbfss
+      if (readStorage.storageCredentials.exists(_.isOneLake)) KCONST.storageProtocolAbfss
       else KDSU.resolveStorageProtocol(options.storageProtocol)
     val exportStorage =
-      if (isAbfsProtocol(protocol)) dedupeConflictingCredentials(storage) else storage
+      if (isAbfsProtocol(protocol)) dedupeConflictingCredentials(readStorage) else readStorage
     // if distributedReadModeTransientCacheEnabled is set to true, then check if path is cached and use it
     // if not export and cache the path for reuse
     val exported = if (options.distributedReadModeTransientCacheEnabled) {
@@ -305,8 +306,19 @@ object KustoReader {
       spark: SparkSession,
       paths: Seq[String],
       storage: TransientStorageParameters,
-      storageProtocol: String): DataFrame =
-    spark.read.options(blobReadOptions(spark, storage, storageProtocol)).parquet(paths: _*)
+      storageProtocol: String): DataFrame = {
+    val options = blobReadOptions(spark, storage, storageProtocol)
+    def plan(): DataFrame = {
+      val frame = spark.read.options(options).parquet(paths: _*)
+      // Complete file-index/physical-plan construction while driver delegates are owned.
+      frame.rdd
+      frame
+    }
+    options.get(KustoBlobReadFileSystem.ReadId) match {
+      case Some(id) => KustoBlobReadFileSystem.withReadScope(id)(plan())
+      case None => spark.read.options(options).parquet(paths: _*)
+    }
+  }
 
   private[kusto] def blobReadOptions(
       spark: SparkSession,
@@ -342,11 +354,31 @@ object KustoReader {
         .map(entry => entry.getKey -> entry.getValue)
         .toMap
       ambient ++ credentials ++ Map(
+        KustoBlobReadFileSystem.ReadId -> UUID.randomUUID().toString,
         KustoBlobReadFileSystem.DelegateImplementation -> implementation,
         s"fs.$protocol.impl" -> classOf[KustoBlobReadFileSystem].getName,
         s"fs.$protocol.impl.disable.cache" -> "true")
     }
   }
+
+  private[kusto] def snapshotStorage(
+      storage: TransientStorageParameters): TransientStorageParameters =
+    new TransientStorageParameters(
+      storage.storageCredentials.map { source =>
+        val copy = new TransientStorageCredentials()
+        copy.blobContainer = source.blobContainer
+        copy.storageAccountName = source.storageAccountName
+        copy.storageAccountKey = source.storageAccountKey
+        copy.sasKey = source.sasKey
+        copy.sasUrl = source.sasUrl
+        copy.domainSuffix = source.domainSuffix
+        copy.oneLakeUrl = source.oneLakeUrl
+        copy.oneLakeWorkspace = source.oneLakeWorkspace
+        copy.oneLakeEndpoint = source.oneLakeEndpoint
+        copy.oneLakeArtifactPath = source.oneLakeArtifactPath
+        copy
+      },
+      storage.endpointSuffix)
 
   private[kusto] def cachedExportMatches(
       cached: DistributedReadModeTransientCacheEntry,
