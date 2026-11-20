@@ -125,13 +125,15 @@ If information is missing, the agent should ask for:
 | Item | Value |
 |---|---|
 | Repository | `Azure/azure-kusto-spark` |
-| Spark 4 branch | `master` |
-| Spark 3 branch | `release/spark3` |
-| Spark 4 tag format | `v4.0_{version}` (e.g., `v4.0_7.0.5`) |
+| Spark 4.2 branch | `master` (artifact `kusto-spark_4.2_2.13`) |
+| Spark 4.0/4.1 branch | `release/spark41` (artifact `kusto-spark_4.0_2.13`) |
+| Spark 3 branch | `release/spark3` (artifact `kusto-spark_3.0_2.12`) |
+| Spark 4.2 tag format | `v4.2_{version}` (e.g., `v4.2_7.1.7`) |
+| Spark 4.0/4.1 tag format | `v4.0_{version}` (e.g., `v4.0_7.1.6`) |
 | Spark 3 tag format | `v3.0_{version}` (e.g., `v3.0_7.0.5`) |
 | Version property | `<revision>` in root `pom.xml` |
 | CI pipeline | `.azuredevops/build.yml` — Azure Pipelines build, runs on pushes and PRs |
-| Release pipeline | `.azuredevops/release.yml` — Azure Pipelines release, triggers on tags matching `v3.0_*.*.*` / `v4.0_*.*.*` or via manual run |
+| Release pipeline | `.azuredevops/release.yml` — Azure Pipelines release, triggers on tags matching `v3.0_*.*.*` / `v4.0_*.*.*` / `v4.2_*.*.*` or via manual run |
 | Merge strategy | **Squash merge** for all PRs |
 | Changelog | `CHANGELOG.md` in repo root |
 
@@ -561,9 +563,15 @@ git tag -l "v3.0_${NEW_VERSION}"
 ### Create and Push Tags
 
 ```bash
-# Tag master (Spark 4)
+# Tag master (Spark 4.2)
 git checkout master
 git pull origin master
+git tag "v4.2_${NEW_VERSION}"
+git push origin "v4.2_${NEW_VERSION}"
+
+# Tag release/spark41 (Spark 4.0/4.1), only when this line is being released
+git checkout release/spark41
+git pull origin release/spark41
 git tag "v4.0_${NEW_VERSION}"
 git push origin "v4.0_${NEW_VERSION}"
 
@@ -576,20 +584,20 @@ git push origin "v3.0_${NEW_VERSION}"
 
 ### Trigger Release
 
-After pushing tags, the Azure release pipeline (`.azuredevops/release.yml`) runs automatically for tags matching `v3.0_*.*.*` / `v4.0_*.*.*`. To run it manually (for example to publish with the optional steps enabled):
+After pushing tags, the Azure release pipeline (`.azuredevops/release.yml`) runs automatically for tags matching `v3.0_*.*.*` / `v4.0_*.*.*` / `v4.2_*.*.*`. To run it manually (for example to publish with the optional steps enabled):
 
 1. Go to **Azure DevOps → Pipelines → the azure-kusto-spark release pipeline**
 2. Click **Run pipeline**
-3. For Spark 4: set `sourceTag` to `v4.0_{NEW_VERSION}`, enable `createGitHubRelease` and `uploadToAzure`
+3. For Spark 4.2: set `sourceTag` to `v4.2_{NEW_VERSION}`; for Spark 4.0/4.1: `v4.0_{NEW_VERSION}`, enable `createGitHubRelease` and `uploadToAzure`
 4. For Spark 3: set `sourceTag` to `v3.0_{NEW_VERSION}`, enable `createGitHubRelease` and `uploadToAzure`
 
 Alternatively, via Azure CLI (requires the `azure-devops` extension):
 
 ```bash
-# Trigger release for Spark 4
+# Trigger release for Spark 4.2 (use v4.0_ for release/spark41)
 az pipelines run --name "<release-pipeline-name>" \
-  --branch "refs/tags/v4.0_${NEW_VERSION}" \
-  --parameters sourceTag="v4.0_${NEW_VERSION}" createGitHubRelease=true uploadToAzure=true
+  --branch "refs/tags/v4.2_${NEW_VERSION}" \
+  --parameters sourceTag="v4.2_${NEW_VERSION}" createGitHubRelease=true uploadToAzure=true
 
 # Trigger release for Spark 3
 az pipelines run --name "<release-pipeline-name>" \
@@ -602,7 +610,7 @@ az pipelines run --name "<release-pipeline-name>" \
 ```bash
 # Verify tags exist on remote
 git ls-remote --tags origin | grep "${NEW_VERSION}"
-# Should show both v4.0_{NEW_VERSION} and v3.0_{NEW_VERSION}
+# Should show v4.2_{NEW_VERSION} plus any v4.0_/v3.0_ tags you created
 
 # Check release pipeline status (via Azure CLI)
 PIPELINE_ID="$(az pipelines show --name "<release-pipeline-name>" --query id --output tsv)"
@@ -617,7 +625,7 @@ az pipelines runs list --pipeline-ids "${PIPELINE_ID}" --top 4
 | # | Phase | Key Input | Key Output |
 |---|---|---|---|
 | 1 | Feature/Fix PR → master | Code changes | Squash merge commit SHA |
-| 2 | Cherry-pick to release/spark3 | Commit SHA from Phase 1 | Merged to release/spark3 |
+| 2 | Cherry-pick to release/spark41 and/or release/spark3 (same steps as Phase 2) | Commit SHA from Phase 1 | Merged to the maintenance branch |
 
 ### Release Workflow (once per release)
 
@@ -631,7 +639,7 @@ az pipelines runs list --pipeline-ids "${PIPELINE_ID}" --top 4
 
 ### Cherry-pick conflict
 - Most common in `pom.xml` due to different Spark/Scala version properties
-- Keep the `release/spark3` values for Spark/Scala-specific properties
+- Keep the maintenance branch's values (`release/spark41` or `release/spark3`) for Spark/Scala/Netty-specific properties
 - Keep the functional code changes from the cherry-picked commit
 - If unsure, ask the user to resolve manually
 
@@ -651,7 +659,7 @@ az pipelines runs list --pipeline-ids "${PIPELINE_ID}" --top 4
 ## Rules
 
 - Always use **squash merge** for PRs — never regular merge or rebase merge
-- Never push directly to `master` or `release/spark3` — always go through PRs
+- Never push directly to `master`, `release/spark41` or `release/spark3` — always go through PRs
 - Always verify CI passes before merging
 - Always confirm the version in `pom.xml` matches the tag being created
 - When in doubt about any step, ask the user before proceeding

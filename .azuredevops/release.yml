@@ -6,6 +6,7 @@ trigger:
     include:
       - 'v3.0_*.*.*'
       - 'v4.0_*.*.*'
+      - 'v4.2_*.*.*'
 
 pr: none
 
@@ -54,8 +55,8 @@ jobs:
       fi
 
       release_tag="${source_ref#refs/tags/}"
-      if [[ ! "${release_tag}" =~ ^v[34]\.0_[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-        echo "Release tag '${release_tag}' must match v3.0_x.y.z or v4.0_x.y.z." >&2
+      if [[ ! "${release_tag}" =~ ^v(3\.0|4\.0|4\.2)_[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        echo "Release tag '${release_tag}' must match v3.0_x.y.z, v4.0_x.y.z or v4.2_x.y.z." >&2
         exit 1
       fi
 
