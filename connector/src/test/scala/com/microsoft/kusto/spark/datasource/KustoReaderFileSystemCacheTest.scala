@@ -77,6 +77,18 @@ class CredentialReadbackFileSystem extends KustoReadbackFileSystem {
   }
 }
 
+class ConflictingSasTokenProvider
+    extends org.apache.hadoop.fs.azurebfs.extensions.SASTokenProvider {
+  override def initialize(configuration: Configuration, accountName: String): Unit = ()
+  override def getSASToken(account: String, fs: String, path: String, op: String): String =
+    "sig=provider"
+}
+
+class ConflictingKeyProvider extends org.apache.hadoop.fs.azurebfs.services.KeyProvider {
+  override def getStorageAccountKey(accountName: String, conf: Configuration): String =
+    "cHJvdmlkZXI="
+}
+
 object CredentialReadbackFileSystem {
   val instances = new ConcurrentLinkedQueue[CredentialReadbackFileSystem]()
   val reads = new ConcurrentLinkedQueue[(String, AbfsAuthType, String)]()
@@ -220,6 +232,76 @@ class KustoReaderFileSystemCacheTest extends AnyFlatSpec with Matchers {
         spark.conf.getOption("spark.hadoop.fs.abfss.impl.disable.cache") shouldBe empty
         assertDelegatesClosed(cached)
       }
+    }
+  }
+
+  it should "override ambient providers for explicit credentials and keep them for impersonation" in {
+    withReadback { (spark, account, path, conf) =>
+      val host = URI.create(path).getHost
+      val providers = Map(
+        s"fs.azure.sas.token.provider.type.$host" -> classOf[ConflictingSasTokenProvider].getName,
+        s"fs.azure.account.keyprovider.$host" -> classOf[ConflictingKeyProvider].getName)
+      providers.foreach { case (key, value) => conf.set(key, value) }
+      try {
+        val key = "dGVzdC1rZXk="
+        val keyStorage = new TransientStorageParameters(
+          Array(new TransientStorageCredentials(account, key, "container")))
+        val impersonation = new TransientStorageParameters(
+          Array(new TransientStorageCredentials(s"https://$host/container;impersonate")))
+        Seq(
+          (storage(account, "sig=explicit"), AbfsAuthType.SAS, "sig=explicit"),
+          (keyStorage, AbfsAuthType.SharedKey, key),
+          (impersonation, AbfsAuthType.SAS, "sig=provider")).foreach {
+          case (credentials, auth, secret) =>
+            CredentialReadbackFileSystem.reads.clear()
+            KustoReader
+              .readParquet(spark, Seq(path), credentials, "abfss")
+              .collect()
+              .map(_.getLong(0))
+              .toSeq shouldBe Seq(42L)
+            val reads = CredentialReadbackFileSystem.reads.iterator().asScala.toVector
+            reads should not be empty
+            all(reads.map { case (_, kind, value) => (kind, value) }) shouldBe ((auth, secret))
+        }
+      } finally providers.keys.foreach(conf.unset)
+    }
+  }
+
+  it should "not reuse explicit credentials for a later impersonation read of the account" in {
+    withReadback { (spark, account, path, conf) =>
+      val host = URI.create(path).getHost
+      val impersonation = new TransientStorageParameters(
+        Array(new TransientStorageCredentials(s"https://$host/container;impersonate")))
+      Seq(
+        new TransientStorageParameters(
+          Array(new TransientStorageCredentials(account, "dGVzdC1rZXk=", "container"))),
+        impersonation).foreach { credentials =>
+        KustoReader.setHadoopAuth(
+          credentials,
+          "abfss",
+          conf,
+          spark.conf,
+          java.time.Instant.now(),
+          useAbfs = true)
+      }
+      conf.get(s"fs.azure.account.auth.type.$host") shouldBe "SAS"
+      conf.get(s"fs.azure.sas.fixed.token.$host") shouldBe "sig=previous"
+      conf.get(s"fs.azure.account.key.$host") shouldBe null
+      spark.conf.getOption(s"spark.hadoop.fs.azure.account.auth.type.$host") shouldBe empty
+      CredentialReadbackFileSystem.reads.clear()
+      KustoReader
+        .readParquet(spark, Seq(path), impersonation, "abfss")
+        .collect()
+        .map(_.getLong(0))
+        .toSeq shouldBe Seq(42L)
+      all(
+        CredentialReadbackFileSystem.reads
+          .iterator()
+          .asScala
+          .toVector
+          .map { case (_, kind, value) => (kind, value) }) shouldBe ((
+        AbfsAuthType.SAS,
+        "sig=previous"))
     }
   }
 

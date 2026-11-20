@@ -179,6 +179,57 @@ object KustoReader {
     }
   }
 
+  private case class InstalledAccountSetting(
+      previousHadoop: Option[String],
+      previousSpark: Option[String],
+      value: String)
+
+  // Account-scoped auth settings the connector wrote into session-wide configuration, with the
+  // values they replaced, so a later impersonation read of that account does not inherit them.
+  private val installedAccountAuth = new concurrent.TrieMap[String, InstalledAccountSetting]()
+
+  private def installAccountAuth(
+      config: Configuration,
+      sparkConf: RuntimeConfig,
+      key: String,
+      value: String): Unit = installedAccountAuth.synchronized {
+    val hadoopValue = Option(config.get(key))
+    val previous = installedAccountAuth.get(key) match {
+      case Some(installed) if hadoopValue.contains(installed.value) => installed
+      case _ =>
+        InstalledAccountSetting(
+          hadoopValue,
+          sparkConf.getOption(s"$sparkHadoopConfigPrefix$key"),
+          value)
+    }
+    installedAccountAuth.put(key, previous.copy(value = value))
+    setHadoopConf(config, sparkConf, key, value)
+  }
+
+  /** Restores settings the connector installed for `host` unless something replaced them. */
+  private[kusto] def releaseAccountAuth(
+      host: String,
+      config: Configuration,
+      sparkConf: RuntimeConfig): Unit = installedAccountAuth.synchronized {
+    installedAccountAuth.keys.filter(_.endsWith(s".$host")).toVector.foreach { key =>
+      installedAccountAuth.remove(key).foreach { installed =>
+        if (Option(config.get(key)).contains(installed.value)) {
+          installed.previousHadoop match {
+            case Some(value) => config.set(key, value)
+            case None => config.unset(key)
+          }
+        }
+        val sparkKey = s"$sparkHadoopConfigPrefix$key"
+        if (sparkConf.getOption(sparkKey).contains(installed.value)) {
+          installed.previousSpark match {
+            case Some(value) => sparkConf.set(sparkKey, value)
+            case None => sparkConf.unset(sparkKey)
+          }
+        }
+      }
+    }
+  }
+
   private val distributedReadModeTransientCache: concurrent.Map[
     DistributedReadModeTransientCacheKey,
     DistributedReadModeTransientCacheEntry] =
@@ -339,8 +390,14 @@ object KustoReader {
       val credentials = storage.storageCredentials.iterator.flatMap { credential =>
         val host = storageAccountHost(credential, storage)
         credential.authMethod match {
-          case AuthMethod.Key => abfsAccountKeyOptions(credential, host)
-          case AuthMethod.Sas => abfsSasOptions(credential, host)
+          case AuthMethod.Key =>
+            abfsAccountKeyOptions(credential, host) ++ Map(
+              s"fs.azure.account.keyprovider.$host" ->
+                classOf[org.apache.hadoop.fs.azurebfs.services.SimpleKeyProvider].getName)
+          case AuthMethod.Sas =>
+            abfsSasOptions(credential, host) ++ Map(
+              s"fs.azure.sas.token.provider.type.$host" ->
+                classOf[KustoFixedSasTokenProvider].getName)
           case _ => Map.empty[String, String]
         }
       }.toMap
@@ -588,6 +645,16 @@ object KustoReader {
     // Ensure storage endpoint domain is in the valid ABFS endpoints list
     if (useAbfs) {
       whitelistExportContainers(storageParameters, config, sparkConf)
+      val explicitHosts = storageParameters.storageCredentials
+        .filter(c => c.authMethod == AuthMethod.Key || c.authMethod == AuthMethod.Sas)
+        .map(storageAccountHost(_, storageParameters))
+        .toSet
+      storageParameters.storageCredentials
+        .filter(c => c.authMethod == AuthMethod.Impersonation && !c.isOneLake)
+        .map(storageAccountHost(_, storageParameters))
+        .filterNot(explicitHosts.contains)
+        .distinct
+        .foreach(releaseAccountAuth(_, config, sparkConf))
     }
     for (storage <- storageParameters.storageCredentials) {
       storage.authMethod match {
@@ -604,7 +671,7 @@ object KustoReader {
           handleSasAuth(storage, storageParameters, config, sparkConf, now, useAbfs, forceRefresh)
         case _ =>
         // Impersonation (including OneLake) relies on ambient AAD configured by the
-        // Spark runtime (e.g. Fabric notebooks). Nothing to install here.
+        // Spark runtime (e.g. Fabric notebooks); explicit settings were released above.
       }
     }
   }
@@ -627,7 +694,7 @@ object KustoReader {
       val accountHost = storageAccountHost(storage, storageParameters)
       if (useAbfs) {
         abfsAccountKeyOptions(storage, accountHost).foreach { case (key, value) =>
-          setHadoopConf(config, sparkConf, key, value)
+          installAccountAuth(config, sparkConf, key, value)
         }
       } else {
         setHadoopConf(
@@ -694,7 +761,7 @@ object KustoReader {
     // (OneLake / lakehouse / customer storage) into SAS auth, which then fails with
     // "At least one of fs.azure.sas.token.provider.type and fs.azure.sas.fixed.token must be set".
     abfsSasOptions(storage, accountHost).foreach { case (key, value) =>
-      setHadoopConf(config, sparkConf, key, value)
+      installAccountAuth(config, sparkConf, key, value)
     }
     KDSU.logInfo(className, s"Set ABFS SAS config: $sasConfigKey")
   }
