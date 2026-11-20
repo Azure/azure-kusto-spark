@@ -471,7 +471,12 @@ grep '<revision>' pom.xml
 ```bash
 # Get the line's previous version tag
 PREV_TAG=$(git tag -l "${TAG_PREFIX}*" --sort=-version:refname | head -1)
-echo "Previous tag: $PREV_TAG"
+echo "Previous tag: ${PREV_TAG:-none}"
+# First release on a line (no tag with this prefix yet): ask the user for the baseline,
+# e.g. the predecessor line's last tag (v4.0_7.1.6 for the first v4.2_ release) or a commit SHA.
+if [[ -z "$PREV_TAG" ]]; then
+  read -r -p "No ${TAG_PREFIX} tag yet. Baseline tag/commit: " PREV_TAG
+fi
 
 # List commits since that tag on the line's branch
 git --no-pager log --oneline ${PREV_TAG}..origin/${LINE_BRANCH}
@@ -575,7 +580,7 @@ git push origin "${TAG_PREFIX}${NEW_VERSION}"
     --parameters sourceTag="${TAG_PREFIX}${NEW_VERSION}" createGitHubRelease=true uploadToAzure=true
   ```
 
-- **Spark 3 (`v3.0_`)**: `release/spark3` has no Azure Pipelines release definition. Pushing the tag triggers the GitHub Actions workflow `.github/workflows/release.yml` on that branch; it can also be run manually from **GitHub → Actions → release** with the `tag` input.
+- **Spark 3 (`v3.0_`)**: `release/spark3` has no Azure Pipelines release definition. Pushing the tag triggers the GitHub Actions workflow `.github/workflows/release.yml` from the tagged commit. It cannot be started manually from the Actions tab (the workflow is not on the default branch); to re-run, use **Re-run jobs** on the tag's existing run.
 
 ### Validation
 
