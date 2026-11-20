@@ -23,9 +23,6 @@ import com.microsoft.kusto.spark.datasource.{
   PartitionOptions,
   ReadMode
 }
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.FileSystem
-import org.apache.hadoop.fs.azurebfs.SecureAzureBlobFileSystem
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.prop.TableDrivenPropertyChecks.forAll
@@ -71,37 +68,6 @@ class KustoDataSourceUtilsTest extends AnyFlatSpec with MockFactory {
       null)
 
     assert(!actualReadOptions.enableExportStorageApi)
-  }
-
-  it should "default distributed storage reads to the supported secure ABFS driver" in {
-    val options = KustoDataSourceUtils.getReadParameters(Map.empty, null)
-
-    assert(options.storageProtocol.contains("abfss"))
-    assert(
-      FileSystem.getFileSystemClass(options.storageProtocol.get, new Configuration()) ==
-        classOf[SecureAzureBlobFileSystem])
-  }
-
-  it should "normalize explicit ABFS protocols" in {
-    Seq(" AbFs " -> "abfs", " ABFSS " -> "abfss").foreach { case (input, expected) =>
-      val options = KustoDataSourceUtils.getReadParameters(
-        Map(KustoSourceOptions.STORAGE_PROTOCOL -> input),
-        null)
-
-      assert(options.storageProtocol.contains(expected))
-    }
-  }
-
-  it should "reject legacy WASB protocols and unsupported schemes" in {
-    Seq("wasbs", " WASBS ", "wasb", "https", "").foreach { protocol =>
-      val error = intercept[IllegalArgumentException] {
-        KustoDataSourceUtils.getReadParameters(
-          Map(KustoSourceOptions.STORAGE_PROTOCOL -> protocol),
-          null)
-      }
-
-      assert(error.getMessage.contains("abfss"))
-    }
   }
 
   "ReadParameters" should "throw an exception when an invalid export options is passed" in {

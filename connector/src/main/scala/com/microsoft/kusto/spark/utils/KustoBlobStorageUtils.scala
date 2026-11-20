@@ -13,47 +13,28 @@ object KustoBlobStorageUtils {
       directory: String,
       container: String,
       secret: String,
-      keyIsSas: Boolean = false): Unit =
-    deleteFromBlob(
-      account,
-      directory,
-      container,
-      secret,
-      keyIsSas,
-      KustoDataSourceUtils.DefaultDomainPostfix)
+      keyIsSas: Boolean = false): Unit = {
+    val storageConnectionString = if (keyIsSas) {
+      "DefaultEndpointsProtocol=https;" +
+        s"AccountName=$account;" +
+        s"SharedAccessSignature=$secret"
+    } else {
+      "DefaultEndpointsProtocol=https;" +
+        s"AccountName=$account;" +
+        s"AccountKey=$secret"
+    }
 
-  def deleteFromBlob(
-      account: String,
-      directory: String,
-      container: String,
-      secret: String,
-      keyIsSas: Boolean,
-      endpointSuffix: String): Unit =
-    performBlobDelete(
-      directory,
-      container,
-      storageConnectionString(account, secret, keyIsSas, endpointSuffix))
-
-  private[kusto] def storageConnectionString(
-      account: String,
-      secret: String,
-      keyIsSas: Boolean,
-      endpointSuffix: String): String = {
-    val credential =
-      if (keyIsSas) s"SharedAccessSignature=${secret.stripPrefix("?")}"
-      else s"AccountKey=$secret"
-    s"DefaultEndpointsProtocol=https;AccountName=$account;EndpointSuffix=$endpointSuffix;$credential"
+    performBlobDelete(directory, container, storageConnectionString)
   }
 
   def deleteFromBlob(directory: String, sasKeyFullUrl: String): Unit = {
     val storageParams = new TransientStorageCredentials(sasKeyFullUrl)
-    deleteFromBlob(
-      storageParams.storageAccountName,
-      directory,
-      storageParams.blobContainer,
-      storageParams.sasKey,
-      keyIsSas = true,
-      storageParams.domainSuffix)
+    val storageConnectionString =
+      "DefaultEndpointsProtocol=https;" +
+        s"AccountName=${storageParams.storageAccountName};" +
+        s"SharedAccessSignature=${storageParams.sasKey}"
+
+    performBlobDelete(directory, storageParams.blobContainer, storageConnectionString)
   }
 
   private[kusto] def performBlobDelete(

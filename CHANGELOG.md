@@ -20,15 +20,14 @@ Tags are created as `v4.2_{version}` (Spark 4.2 / release/spark42), `v4.0_{versi
 ## [7.1.7] - Unreleased
 
 ### Changed
-- Isolate Spark 4.2 development on `release/spark42`, with the `kusto-spark_4.2_2.13` artifact and manual, opt-in release publication.
-- Build against Spark 4.2.1, Scala 2.13.18, Hadoop 3.5.0 and Netty 4.2.13.Final; retain Kusto Java SDK 8.0.1.
+- Isolate Spark 4.2 maintenance on `release/spark42`, with the `kusto-spark_4.2_2.13` artifact and `v4.2_*.*.*` tag-triggered releases.
+- Preserve the 7.1.6 implementation and dependency baseline, including patched Netty, Jackson and Guava. Validate Spark 4.2 compatibility separately in CI without changing release-package dependencies.
 
 ### Added
 - None
 
 ### Fixed
-- Default distributed blob reads to ABFSS for Hadoop 3.5, reject unsupported WASB options, and support account-scoped SAS and SharedKey readback without changing unrelated storage accounts.
-- Isolate blob readback from cached filesystem credentials, close read-owned clients, and re-export when cached storage credentials change. Migrate the tagged blob readback test to ABFSS.
+- None
 
 ## [7.1.6] - 2026-11-09
 

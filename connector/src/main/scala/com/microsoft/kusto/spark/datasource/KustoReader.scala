@@ -31,7 +31,7 @@ import org.apache.hadoop.util.ComparableVersion
 import org.apache.spark.Partition
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.sources.Filter
-import org.apache.spark.sql.{DataFrame, Row, RuntimeConfig, SparkSession}
+import org.apache.spark.sql.{Row, RuntimeConfig, SparkSession}
 
 import java.net.URI
 import java.security.InvalidParameterException
@@ -40,7 +40,6 @@ import java.util.UUID
 import scala.annotation.tailrec
 import scala.collection.{concurrent, mutable}
 import scala.concurrent.duration._
-import scala.jdk.CollectionConverters._
 import scala.util.Try
 
 private[kusto] case class KustoPartition(predicate: Option[String], idx: Int) extends Partition {
@@ -82,8 +81,8 @@ private[kusto] case class DistributedReadModeTransientCacheKey(
     enableExportStorageApi: Boolean)
 
 /**
- * Cached export paths and storage settings. Reuse requires matching storage credentials; Parquet
- * reads carry their own configuration rather than reusing cached ABFS clients.
+ * Cached export paths and storage settings. ABFS cache hits reinstall credentials because
+ * account-scoped Hadoop/Spark configuration may have changed since the export.
  */
 private[kusto] case class DistributedReadModeTransientCacheEntry(
     paths: Seq[String],
@@ -227,34 +226,25 @@ object KustoReader {
       storage: TransientStorageParameters,
       options: KustoReadOptions,
       filtering: KustoFiltering): RDD[Row] = {
-    val readStorage = snapshotStorage(storage)
-    // OneLake transient storage always reads back over abfss.
-    val protocol =
-      if (readStorage.storageCredentials.exists(_.isOneLake)) KCONST.storageProtocolAbfss
-      else KDSU.resolveStorageProtocol(options.storageProtocol)
-    val exportStorage =
-      if (isAbfsProtocol(protocol)) dedupeConflictingCredentials(readStorage) else readStorage
+    var paths: Seq[String] = Seq()
     // if distributedReadModeTransientCacheEnabled is set to true, then check if path is cached and use it
     // if not export and cache the path for reuse
-    val exported = if (options.distributedReadModeTransientCacheEnabled) {
+    if (options.distributedReadModeTransientCacheEnabled) {
       val key = DistributedReadModeTransientCacheKey(
         request.query,
         request.kustoCoordinates,
         request.authentication,
         options.enableExportStorageApi)
-      val cachedExport = distributedReadModeTransientCache
-        .get(key)
-        .filter(cachedExportMatches(_, exportStorage, protocol))
-      if (cachedExport.isDefined) {
+      if (distributedReadModeTransientCache.contains(key)) {
         KDSU.logInfo(
           className,
           "Fetching from distributedReadModeTransientCache: hit, reusing cached export paths")
-        val cached = cachedExport.get
+        val cached = distributedReadModeTransientCache(key)
         // Reinstall account-scoped ABFS credentials before reusing cached paths.
         if (isAbfsProtocol(cached.storageProtocol)) {
           setupBlobAccess(request, cached.storage, cached.storageProtocol, forceRefresh = true)
         }
-        cached
+        paths = cached.paths
       } else {
         KDSU.logInfo(
           className,
@@ -263,23 +253,21 @@ object KustoReader {
           options.queryFilterPushDown,
           queryFilterPushDownDefault = false,
           filtering)
-        val exported =
-          exportToStorage(kustoClient, request, exportStorage, options, filter, protocol)
+        val exported = exportToStorage(kustoClient, request, storage, options, filter)
+        paths = exported.paths
         distributedReadModeTransientCache(key) = exported
-        exported
       }
     } else {
       val filter = determineFilterPushDown(
         options.queryFilterPushDown,
         queryFilterPushDownDefault = true,
         filtering)
-      exportToStorage(kustoClient, request, exportStorage, options, filter, protocol)
+      paths = exportToStorage(kustoClient, request, storage, options, filter).paths
     }
-    val paths = exported.paths
 
     val rdd =
       try {
-        readParquet(request.sparkSession, paths, exported.storage, exported.storageProtocol).rdd
+        request.sparkSession.read.parquet(paths: _*).rdd
       } catch {
         case ex: Exception =>
           // Check whether the result is empty, causing an IO exception on reading empty parquet file
@@ -302,105 +290,12 @@ object KustoReader {
     rdd
   }
 
-  private[kusto] def readParquet(
-      spark: SparkSession,
-      paths: Seq[String],
-      storage: TransientStorageParameters,
-      storageProtocol: String): DataFrame = {
-    val options = blobReadOptions(spark, storage, storageProtocol)
-    def plan(): DataFrame = {
-      val frame = spark.read.options(options).parquet(paths: _*)
-      // Complete file-index/physical-plan construction while driver delegates are owned.
-      frame.rdd
-      frame
-    }
-    options.get(KustoBlobReadFileSystem.ReadId) match {
-      case Some(id) => KustoBlobReadFileSystem.withReadScope(id)(plan())
-      case None => spark.read.options(options).parquet(paths: _*)
-    }
-  }
-
-  private[kusto] def blobReadOptions(
-      spark: SparkSession,
-      storage: TransientStorageParameters,
-      storageProtocol: String): Map[String, String] = {
-    if (!isAbfsProtocol(storageProtocol) || storage.storageCredentials.exists(_.isOneLake)) {
-      Map.empty
-    } else {
-      val config = new Configuration(spark.sparkContext.hadoopConfiguration)
-      val sessionOptions = spark.conf.getAll
-      sessionOptions.filter(_._1.startsWith("fs.")).foreach { case (key, value) =>
-        config.set(key, value)
-      }
-      sessionOptions.filter(_._1.startsWith(sparkHadoopConfigPrefix)).foreach {
-        case (key, value) =>
-          config.set(key.stripPrefix(sparkHadoopConfigPrefix), value)
-      }
-      val credentials = storage.storageCredentials.iterator.flatMap { credential =>
-        val host = storageAccountHost(credential, storage)
-        credential.authMethod match {
-          case AuthMethod.Key => abfsAccountKeyOptions(credential, host)
-          case AuthMethod.Sas => abfsSasOptions(credential, host)
-          case _ => Map.empty[String, String]
-        }
-      }.toMap
-      val protocol = storageProtocol.toLowerCase(java.util.Locale.ROOT)
-      val implementation = FileSystem.getFileSystemClass(protocol, config).getName
-      val hosts = storage.storageCredentials.map(storageAccountHost(_, storage))
-      val ambient = config
-        .iterator()
-        .asScala
-        .filter(entry => hosts.exists(host => entry.getKey.endsWith(s".$host")))
-        .map(entry => entry.getKey -> entry.getValue)
-        .toMap
-      ambient ++ credentials ++ Map(
-        KustoBlobReadFileSystem.ReadId -> UUID.randomUUID().toString,
-        KustoBlobReadFileSystem.DelegateImplementation -> implementation,
-        s"fs.$protocol.impl" -> classOf[KustoBlobReadFileSystem].getName,
-        s"fs.$protocol.impl.disable.cache" -> "true")
-    }
-  }
-
-  private[kusto] def snapshotStorage(
-      storage: TransientStorageParameters): TransientStorageParameters =
-    new TransientStorageParameters(
-      storage.storageCredentials.map { source =>
-        val copy = new TransientStorageCredentials()
-        copy.blobContainer = source.blobContainer
-        copy.storageAccountName = source.storageAccountName
-        copy.storageAccountKey = source.storageAccountKey
-        copy.sasKey = source.sasKey
-        copy.sasUrl = source.sasUrl
-        copy.domainSuffix = source.domainSuffix
-        copy.oneLakeUrl = source.oneLakeUrl
-        copy.oneLakeWorkspace = source.oneLakeWorkspace
-        copy.oneLakeEndpoint = source.oneLakeEndpoint
-        copy.oneLakeArtifactPath = source.oneLakeArtifactPath
-        copy
-      },
-      storage.endpointSuffix)
-
-  private[kusto] def cachedExportMatches(
-      cached: DistributedReadModeTransientCacheEntry,
-      storage: TransientStorageParameters,
-      protocol: String): Boolean = {
-    def identities(parameters: TransientStorageParameters) =
-      parameters.storageCredentials.toSeq.map(credential =>
-        (
-          credential.oneLakeAbfssBase,
-          credential.storageAccountName,
-          credential.blobContainer,
-          credentialFingerprint(credential)))
-    cached.storageProtocol == protocol && cached.storage.endpointSuffix == storage.endpointSuffix &&
-    identities(cached.storage) == identities(storage)
-  }
-
-  private[kusto] def dirExist(
+  private def dirExist(
       spark: SparkSession,
       params: TransientStorageCredentials,
       directory: String,
       endpointSuffix: String,
-      storageProtocol: String = KCONST.storageProtocolAbfss): Boolean = {
+      storageProtocol: String = KCONST.storageProtocolWasbs): Boolean = {
     if (params.isOneLake) {
       // OneLake: probe via Hadoop FileSystem over abfss using ambient AAD (Fabric Spark).
       val base = params.oneLakeAbfssBase
@@ -411,16 +306,11 @@ object KustoReader {
     } else if (params.authMethod == AuthMethod.Impersonation) {
       val url =
         s"$storageProtocol://${params.blobContainer}@${params.storageAccountName}.blob.$endpointSuffix"
-      val hadoopConf = new Configuration(spark.sparkContext.hadoopConfiguration)
-      blobReadOptions(
-        spark,
-        new TransientStorageParameters(Array(params), endpointSuffix),
-        storageProtocol)
-        .foreach { case (key, value) => hadoopConf.set(key, value) }
-      val fs = FileSystem.newInstance(new URI(url), hadoopConf)
+      val hadoopConf = spark.sparkContext.hadoopConfiguration
+      val fs = FileSystem.get(new URI(url), hadoopConf)
+
       val path = new Path(url + s"/$directory")
-      try fs.exists(path)
-      finally fs.close()
+      fs.exists(path)
     } else {
       val endpoint = s"https://${params.storageAccountName}.blob.$endpointSuffix"
       val container = params.authMethod match {
@@ -452,15 +342,25 @@ object KustoReader {
   private def exportToStorage(
       kustoClient: ExtendedKustoClient,
       request: KustoReadRequest,
-      exportStorage: TransientStorageParameters,
+      storage: TransientStorageParameters,
       options: KustoReadOptions,
-      filtering: KustoFiltering,
-      protocol: String): DistributedReadModeTransientCacheEntry = {
+      filtering: KustoFiltering): DistributedReadModeTransientCacheEntry = {
 
     KDSU.logInfo(
       className,
       s"Starting exporting data from Kusto to blob storage in Distributed mode. requestId: ${request.requestId}")
 
+    // OneLake transient storage always reads back over abfss; force the protocol when any
+    // credential is a OneLake URL so the rest of the read path uses the correct scheme.
+    val anyOneLake = storage.storageCredentials.exists(_.isOneLake)
+    val protocol =
+      if (anyOneLake) KCONST.storageProtocolAbfss
+      else options.storageProtocol.getOrElse(KCONST.storageProtocolWasbs)
+    // ABFS resolves SAS tokens per storage account (never per container), so two containers
+    // of the same account carrying different SAS tokens cannot both be configured. Keep a
+    // single credential per account in that case, retaining containers that share it.
+    val exportStorage =
+      if (isAbfsProtocol(protocol)) dedupeConflictingCredentials(storage) else storage
     setupBlobAccess(request, exportStorage, protocol)
     val partitions = calculatePartitions(options.partitionOptions)
     val reader = new KustoReader(kustoClient)
@@ -515,7 +415,7 @@ object KustoReader {
   private[kusto] def setupBlobAccess(
       request: KustoReadRequest,
       storageParameters: TransientStorageParameters,
-      storageProtocol: String = KCONST.storageProtocolAbfss,
+      storageProtocol: String = KCONST.storageProtocolWasbs,
       forceRefresh: Boolean = false): Unit = {
     val config = request.sparkSession.sparkContext.hadoopConfiguration
     val sparkConf = request.sparkSession.conf
@@ -599,6 +499,7 @@ object KustoReader {
             sparkConf,
             now,
             useAbfs,
+            storageProtocol,
             forceRefresh)
         case AuthMethod.Sas =>
           handleSasAuth(storage, storageParameters, config, sparkConf, now, useAbfs, forceRefresh)
@@ -616,24 +517,23 @@ object KustoReader {
       sparkConf: RuntimeConfig,
       now: Instant,
       useAbfs: Boolean,
+      storageProtocol: String,
       forceRefresh: Boolean): Unit = {
-    val wasCached = !forceRefresh && !useAbfs &&
-      KustoAzureFsSetupCache.updateAndGetPrevStorageAccountAccess(
-        storage.storageAccountName,
-        storage.storageAccountKey,
-        now)
+    val wasCached = !forceRefresh && KustoAzureFsSetupCache.updateAndGetPrevStorageAccountAccess(
+      storage.storageAccountName,
+      storage.storageAccountKey,
+      now)
 
     if (!wasCached) {
-      val accountHost = storageAccountHost(storage, storageParameters)
       if (useAbfs) {
-        abfsAccountKeyOptions(storage, accountHost).foreach { case (key, value) =>
-          setHadoopConf(config, sparkConf, key, value)
-        }
+        throw new InvalidParameterException(
+          s"Storage protocol '$storageProtocol' with Account Key authentication is not supported yet. " +
+            "Please use SAS based authentication or switch to 'wasbs' protocol.")
       } else {
         setHadoopConf(
           config,
           sparkConf,
-          s"fs.azure.account.key.$accountHost",
+          s"fs.azure.account.key.${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}",
           storage.storageAccountKey)
       }
     }
@@ -693,30 +593,18 @@ object KustoReader {
     // 'fs.azure.account.auth.type' forces *every* other ABFS account used by the session
     // (OneLake / lakehouse / customer storage) into SAS auth, which then fails with
     // "At least one of fs.azure.sas.token.provider.type and fs.azure.sas.fixed.token must be set".
-    abfsSasOptions(storage, accountHost).foreach { case (key, value) =>
-      setHadoopConf(config, sparkConf, key, value)
-    }
+    setHadoopConf(config, sparkConf, s"fs.azure.account.auth.type.$accountHost", "SAS")
+    setHadoopConf(config, sparkConf, s"fs.azure.account.hns.enabled.$accountHost", "false")
+    setHadoopConf(config, sparkConf, sasConfigKey, normalizeSasToken(storage.sasKey))
+    // Back-compat: keep publishing the container qualified key that older connector versions
+    // wrote, for runtimes that were adapted to look it up.
+    setHadoopConf(
+      config,
+      sparkConf,
+      s"fs.azure.sas.fixed.token.${storage.blobContainer}.$accountHost",
+      normalizeSasToken(storage.sasKey))
     KDSU.logInfo(className, s"Set ABFS SAS config: $sasConfigKey")
   }
-
-  private def abfsAccountKeyOptions(
-      storage: TransientStorageCredentials,
-      host: String): Map[String, String] =
-    Map(
-      s"fs.azure.account.auth.type.$host" -> "SharedKey",
-      s"fs.azure.account.hns.enabled.$host" -> "false",
-      s"fs.azure.account.key.$host" -> storage.storageAccountKey)
-
-  private def abfsSasOptions(
-      storage: TransientStorageCredentials,
-      host: String): Map[String, String] =
-    Map(
-      s"fs.azure.account.auth.type.$host" -> "SAS",
-      s"fs.azure.account.hns.enabled.$host" -> "false",
-      s"fs.azure.sas.fixed.token.$host" -> normalizeSasToken(storage.sasKey),
-      // Back-compat for runtimes adapted to the older container-qualified key.
-      s"fs.azure.sas.fixed.token.${storage.blobContainer}.$host" -> normalizeSasToken(
-        storage.sasKey))
 
   private def setWasbsSasConfig(
       storage: TransientStorageCredentials,
@@ -748,19 +636,18 @@ object KustoReader {
 
   private def credentialFingerprint(
       credential: TransientStorageCredentials): (AuthMethod.AuthMethod, String) =
-    (
-      credential.authMethod,
-      if (credential.authMethod == AuthMethod.Key) credential.storageAccountKey
-      else normalizeSasToken(credential.sasKey))
+    (credential.authMethod, normalizeSasToken(credential.sasKey))
 
   /**
    * ABFS auth settings (auth type and SAS token alike) are configured per storage account, so
-   * several containers of the same account cannot be served when they carry different
-   * credentials. Elect one credential per account and drop the conflicting siblings, so the
-   * export only targets locations that can be read back afterwards. SAS takes precedence over
-   * account keys, and both take precedence over ambient impersonation; between credentials of the
-   * same auth method the first one wins. OneLake credentials (which have no storage account) and
-   * accounts whose containers agree on one credential are left untouched.
+   * several containers of the same account cannot be served when they carry different SAS tokens,
+   * or when they mix SAS with impersonation. Elect one credential per account and drop the
+   * conflicting siblings, so the export only targets locations that can be read back afterwards.
+   * A self contained SAS token always wins over impersonation, which depends on the ambient
+   * identity of the runtime and would otherwise make the readback depend on the order in which
+   * the credentials were returned; between credentials of the same auth method the first one
+   * wins. OneLake credentials (which have no storage account) and accounts whose containers agree
+   * on one credential are left untouched.
    */
   private[kusto] def dedupeConflictingCredentials(
       storageParameters: TransientStorageParameters): TransientStorageParameters = {
@@ -775,8 +662,7 @@ object KustoReader {
           val fingerprint = credentialFingerprint(credential)
           val elected = electedCredentialByAccount.get(host)
           if (elected.isEmpty ||
-            (elected.get._1 != AuthMethod.Sas && fingerprint._1 == AuthMethod.Sas) ||
-            (elected.get._1 == AuthMethod.Impersonation && fingerprint._1 == AuthMethod.Key)) {
+            (elected.get._1 != AuthMethod.Sas && fingerprint._1 == AuthMethod.Sas)) {
             electedCredentialByAccount.put(host, fingerprint)
           }
         }

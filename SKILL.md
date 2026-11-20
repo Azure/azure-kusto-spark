@@ -22,15 +22,16 @@ release on the user's behalf. Preserve unrelated work and existing releases.
 | Spark 4.2 artifact | `kusto-spark_4.2_2.13` |
 | Spark 4.2 tag | `v4.2_{version}` |
 | Version property | `<revision>` in [pom.xml](pom.xml) |
-| CI | [.azuredevops/build.yml](.azuredevops/build.yml), Java 17 and 21 |
-| Release | [.azuredevops/release.yml](.azuredevops/release.yml), manual only |
+| CI | [.azuredevops/build.yml](.azuredevops/build.yml), Java 17/21 baseline and Spark 4.2 compatibility |
+| Release | [.azuredevops/release.yml](.azuredevops/release.yml), tag-triggered with manual fallback |
 | Release staging prefix | `kusto/spark/4.2_{version}` |
 | Merge strategy | Reviewed PR, squash merge |
 
-The artifact ID derives from `spark.version.major` and `scala.version.major`,
-following the existing Spark 3 and Spark 4 naming convention. Do not reuse the
-`kusto-spark_4.0_2.13` coordinate for Spark 4.2-only changes. Keep the connector
-revision separate from the Kusto Java SDK version.
+The artifact ID derives from `spark.artifact.version` and `scala.version.major`,
+following the existing naming convention without coupling the release identity
+to the compilation baseline. Preserve the 7.1.6 source and patched dependencies;
+Spark 4.2 compatibility overrides belong in CI, not the release package. Keep the
+connector revision separate from the Kusto Java SDK version.
 
 ## Development
 
@@ -45,8 +46,11 @@ revision separate from the Kusto Java SDK version.
    out of public commits.
 4. Use conventional commit/PR titles such as `fix: ...`, `feat: ...`, `ci: ...`
    or `chore: ...`. Open feature PRs against `release/spark42`, not `master`.
-5. Require CI and human review before merge. A local build or skipped live test
-   is not target-runtime validation. Never weaken a failed required check.
+5. Require CI and human review before merge. A repository administrator must give
+   `release/spark42` the same approval, bypass and required-check protection as the
+   active Spark 4 maintenance line; a new branch does not inherit it automatically.
+   A local build or skipped live test is not target-runtime validation. Never weaken
+   a failed required check.
 6. Do not automatically cherry-pick or bump another release line. An approved
    backport gets its own branch, version decision, tests and PR.
 
@@ -73,10 +77,12 @@ duplicate publishers before enabling publication. This file does not create
 pipeline definitions, service connections or permissions.
 
 After the reviewed commit is available on the official branch, the operator
-creates an immutable `v4.2_{version}` tag on that commit. Tag creation does not
-automatically publish from this branch.
+creates and pushes an immutable `v4.2_{version}` tag on that commit. A matching
+tag triggers release verification and, on success, GitHub release creation and
+Azure blob upload, as on the existing release lines. Normal branch pushes do
+not trigger this release pipeline. Do not push tags on the user's behalf.
 
-The manual release parameters are:
+Manual release runs retain the existing opt-in parameters:
 
 | Parameter | Meaning | Default |
 |---|---|---|
@@ -84,7 +90,7 @@ The manual release parameters are:
 | `createGitHubRelease` | Explicitly create the GitHub release | `false` |
 | `uploadToAzure` | Explicitly upload the staged bundle | `false` |
 
-The pipeline verifies tag ancestry on `release/spark42`, the Spark/Scala artifact
+The pipeline verifies tag ancestry on `release/spark42`, the release-line/Scala artifact
 identity, and tag/POM version agreement before Azure-authenticated verification.
 It stages the shaded main, sources, Javadoc, original JAR and flattened POM.
 Uploads must not overwrite an existing blob. GitHub publication, storage upload,

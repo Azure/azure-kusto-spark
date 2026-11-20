@@ -52,7 +52,6 @@ import java.util
 import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.{Callable, CountDownLatch, TimeUnit}
 import java.util.{
-  Locale,
   NoSuchElementException,
   Objects,
   Properties,
@@ -137,8 +136,23 @@ object KustoDataSourceUtils {
         "User cannot specify namePrefix for additionalExportOptions as it can lead to unexpected behavior in reading output")
     }
 
-    val storageProtocol = Some(
-      resolveStorageProtocol(parameters.get(KustoSourceOptions.STORAGE_PROTOCOL)))
+    // Validate storageProtocol option
+    val storageProtocol = parameters.get(KustoSourceOptions.STORAGE_PROTOCOL) match {
+      case Some(protocol) =>
+        val normalizedProtocol = protocol.trim
+        if (!KCONST.storageProtocolWasbs.equalsIgnoreCase(
+            normalizedProtocol) && !KCONST.storageProtocolAbfs.equalsIgnoreCase(
+            normalizedProtocol) && !KCONST.storageProtocolAbfss.equalsIgnoreCase(
+            normalizedProtocol)) {
+          val errorMessage =
+            s"Invalid value for ${KustoSourceOptions.STORAGE_PROTOCOL}: '$protocol'. " +
+              s"Must be either '${KCONST.storageProtocolWasbs}', '${KCONST.storageProtocolAbfs}', or '${KCONST.storageProtocolAbfss}'."
+          logError(className, errorMessage)
+          throw new IllegalArgumentException(errorMessage)
+        }
+        Some(normalizedProtocol)
+      case None => Some(KCONST.storageProtocolWasbs)
+    }
 
     KustoReadOptions(
       readMode,
@@ -148,18 +162,6 @@ object KustoDataSourceUtils {
       additionalExportOptions,
       storageProtocol,
       enableExportStorageApi)
-  }
-
-  private[kusto] def resolveStorageProtocol(protocol: Option[String]): String = {
-    val normalized = protocol
-      .map(_.trim.toLowerCase(Locale.ROOT))
-      .getOrElse(KCONST.storageProtocolAbfss)
-    if (normalized != KCONST.storageProtocolAbfs && normalized != KCONST.storageProtocolAbfss) {
-      throw new IllegalArgumentException(
-        s"Invalid value for ${KustoSourceOptions.STORAGE_PROTOCOL}: '$normalized'. " +
-          "Use 'abfs' or 'abfss'; WASB is not supported by Hadoop 3.5.")
-    }
-    normalized
   }
 
   private def setNumPartitions(

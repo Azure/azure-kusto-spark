@@ -77,7 +77,13 @@ To build this Spark 4.2 branch, you need:
 
 - JDK 21 installed (CI also validates Java 17)
 - [Maven 3.x](https://maven.apache.org/download.cgi) installed
-- Spark 4.2.1 and Scala 2.13.18, as configured in the POM
+- Release builds retain the 7.1.6 baseline: Spark 4.0.0, Scala 2.13.16 and Hadoop 3.4.2
+
+The `4.2` artifact name identifies the independently maintained release line, not a
+requirement to upgrade the compilation baseline. CI also compiles and tests with
+Spark 4.2.1, Scala 2.13.18 and that runtime's Netty version. Those compatibility
+overrides do not change the release package's patched Netty 4.1.140.Final,
+Jackson 2.21.8 or Guava 33.8.0-jre dependencies.
 
 > Note: when working with Spark version 2.3 or lower, build the jar locally from branch "2.4" and 
 simply change the spark version in the pom file. 

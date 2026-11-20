@@ -8,7 +8,6 @@ import com.microsoft.azure.kusto.data.auth.ConnectionStringBuilder
 import com.microsoft.kusto.spark.KustoTestUtils.getSystemTestOptions
 import com.microsoft.kusto.spark.datasink.KustoSinkOptions
 import com.microsoft.kusto.spark.datasource.{
-  KustoReader,
   KustoResponseDeserializer,
   KustoSourceOptions,
   TransientStorageCredentials,
@@ -117,37 +116,27 @@ class KustoBlobAccessE2E extends AnyFlatSpec with BeforeAndAfterAll {
             s"database ${kustoTestConnectionOptions.database}")
       }
 
-    val useKeyNotSas = blobSas == null
-    val credential = if (useKeyNotSas) {
-      new TransientStorageCredentials(storageAccount, blobKey, container)
+    val secret = if (blobSas != null) {
+      val storageParams = new datasource.TransientStorageCredentials(blobSas)
+      storageParams.sasKey
     } else {
-      if (blobSas.isEmpty) {
-        throw new InvalidParameterException(
-          "Please provide a complete SAS URL when accessing blob storage with a SAS token")
-      }
-      new TransientStorageCredentials(blobSas)
+      if (blobSas != null) blobSas else blobKey
     }
-    val storage = new TransientStorageParameters(
-      Array(credential),
-      Option(credential.domainSuffix).getOrElse(KDSU.DefaultDomainPostfix))
-    val secret = if (useKeyNotSas) credential.storageAccountKey else credential.sasKey
 
     val numberOfPartitions = 10
     val partitionId = 0
     val partitionPredicate = s" hash($firstColumn, $numberOfPartitions) == $partitionId"
+    val useKeyNotSas = blobSas == null
 
     val (_, directory: String, _) =
-      getBlobCoordinates(
-        credential.storageAccountName,
-        credential.blobContainer,
-        secret,
-        useKeyNotSas)
+      getBlobCoordinates(storageAccount, container, secret, useKeyNotSas)
 
     val exportCommand = CslCommandsGenerator.generateExportDataCommand(
       myTable,
       directory,
       partitionId,
-      storage,
+      new TransientStorageParameters(
+        Array(new TransientStorageCredentials(storageAccount, secret, container))),
       Some(partitionPredicate))
 
     val blobs = kustoAdminClient
@@ -158,10 +147,19 @@ class KustoBlobAccessE2E extends AnyFlatSpec with BeforeAndAfterAll {
       .map(row => row.get(0))
 
     blobs.foreach(blob => KDSU.logInfo(myName, s"Exported to blob: $blob"))
+    if (useKeyNotSas) {
+      spark.conf.set(s"fs.azure.account.key.$storageAccount.blob.core.windows.net", s"$secret")
+    } else {
+      if (blobSas.isEmpty) {
+        throw new InvalidParameterException(
+          "Please provide a complete query string of your SaS as a container when accessing blob storage with SaS key")
+      }
+      spark.conf.set(s"fs.azure.sas.$container.$storageAccount.blob.core.windows.net", s"$secret")
+    }
+    spark.conf.set("fs.azure", "org.apache.hadoop.fs.azure.NativeAzureFileSystem")
 
-    val path =
-      s"abfss://${credential.blobContainer}@${credential.storageAccountName}.blob.${storage.endpointSuffix}/$directory"
-    val df = KustoReader.readParquet(spark, Seq(path), storage, "abfss")
+    val df =
+      spark.read.parquet(s"wasbs://$container@$storageAccount.blob.core.windows.net/$directory")
 
     var rowAsString: String = ""
     var rowsProcessed = 0
@@ -176,12 +174,11 @@ class KustoBlobAccessE2E extends AnyFlatSpec with BeforeAndAfterAll {
       })
 
     KustoBlobStorageUtils.deleteFromBlob(
-      credential.storageAccountName,
+      storageAccount,
       directory,
-      credential.blobContainer,
+      container,
       secret,
-      !useKeyNotSas,
-      storage.endpointSuffix)
+      !useKeyNotSas)
   }
 
   private def getBlobCoordinates(

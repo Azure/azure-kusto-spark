@@ -25,7 +25,7 @@
         </dependency>
         <dependency>
             <groupId>com.microsoft.azure.kusto</groupId>
-            <artifactId>kusto-spark_${spark.version.major}_${scala.version.major}</artifactId>
+            <artifactId>kusto-spark_${spark.artifact.version}_${scala.version.major}</artifactId>
             <!--suppress MavenPropertyInParent -->
             <version>${revision}</version>
         </dependency>

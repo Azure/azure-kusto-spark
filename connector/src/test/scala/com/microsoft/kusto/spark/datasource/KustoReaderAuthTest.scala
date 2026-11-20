@@ -5,8 +5,6 @@ package com.microsoft.kusto.spark.datasource
 
 import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.azurebfs.AbfsConfiguration
-import org.apache.hadoop.fs.azurebfs.services.{AuthType => AbfsAuthType}
 import org.apache.spark.sql.{RuntimeConfig, SparkSession}
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.flatspec.AnyFlatSpec
@@ -90,29 +88,26 @@ class KustoReaderAuthTest extends AnyFlatSpec with Matchers with BeforeAndAfterE
       useAbfs = true)
   }
 
-  it should "configure an account key that the ABFS driver can resolve" in {
+  it should "throw exception for ABFS with Account Key" in {
     val config = new Configuration()
     // Use an expired timestamp to force cache refresh
     val now = Instant.now().minus(3 * KCONST.SparkSettingsRefreshMinutes, ChronoUnit.MINUTES)
 
-    val account = "testaccount3.blob.core.windows.net"
-    val key = "dGVzdC1hY2NvdW50LWtleQ=="
     val storageParams = new TransientStorageParameters(
-      Array(new TransientStorageCredentials("testaccount3", key, "testcontainer3")),
+      Array(new TransientStorageCredentials("testaccount3", "testkey123", "testcontainer3")),
       "core.windows.net")
 
-    KustoReader.setHadoopAuth(
-      storageParams,
-      KCONST.storageProtocolAbfss,
-      config,
-      sparkConf,
-      now,
-      useAbfs = true)
+    val exception = intercept[java.security.InvalidParameterException] {
+      KustoReader.setHadoopAuth(
+        storageParams,
+        KCONST.storageProtocolAbfs,
+        config,
+        sparkConf,
+        now,
+        useAbfs = true)
+    }
 
-    val abfs = new AbfsConfiguration(config, account)
-    abfs.getAuthType(account) shouldBe AbfsAuthType.SharedKey
-    abfs.getStorageAccountKey shouldBe key
-    abfs.getIsNamespaceEnabledAccount.toBoolean shouldBe false
+    exception.getMessage should include("not supported")
   }
 
   it should "whitelist storage domain for ABFS" in {

@@ -30,10 +30,8 @@ that native engines such as Gluten/Velox see it):
 
 | Protocol | Config keys | Notes |
 |---|---|---|
-| `abfss` (default) / `abfs`, SAS | `fs.azure.account.auth.type.<account>.blob.<suffix>`, `fs.azure.sas.fixed.token.<account>.blob.<suffix>`, `fs.azure.account.hns.enabled.<account>.blob.<suffix>` | Auth type `SAS`; token stripped of leading `?`; flat namespace. |
-| `abfss` / `abfs`, Account Key | `fs.azure.account.auth.type.<account>.blob.<suffix>`, `fs.azure.account.key.<account>.blob.<suffix>`, `fs.azure.account.hns.enabled.<account>.blob.<suffix>` | Auth type `SharedKey`; flat namespace. |
-
-Hadoop 3.5 no longer supports WASB. The Spark 4.2 connector rejects explicit `wasb`/`wasbs` options.
+| `wasbs` (default) | `fs.azure.sas.<container>.<account>.blob.<suffix>` | SAS token stripped of leading `?` |
+| `abfss` / `abfs` | `fs.azure.account.auth.type.<account>.blob.<suffix>`, `fs.azure.sas.fixed.token.<account>.blob.<suffix>`, `fs.azure.account.hns.enabled.<account>.blob.<suffix>` | Account Key **not supported** — use SAS. SAS token stripped of leading `?` |
 
 ABFS resolves these settings **per storage account** — Hadoop's `AbfsConfiguration` and the
 Velox native reader both look up `<key>.<account>.<suffix>` only, never a container-qualified
@@ -44,9 +42,8 @@ key. Two consequences:
   auth and break it with *"At least one of the fs.azure.sas.token.provider.type and
   fs.azure.sas.fixed.token must be set"*.
 * When the transient storage returned by Kusto contains several containers of the *same* storage
-    account with different credentials, SAS takes precedence over Account Key, then impersonation.
-    Containers matching the first credential of the selected type are retained; conflicting
-    containers are excluded from export with a warning.
+  account with different credentials, only the first is used for the export — the others are
+  dropped with a warning, since their tokens could not be configured simultaneously.
 
 ---
 
@@ -130,6 +127,7 @@ If stream fails after 3 retries → fallback to queued blob ingestion
 | `FailedOperationException` with State ≠ `Completed` | `.export` or async admin command failed on ADX side | Check `OperationId` in the error message via `.show operations <id>` on the cluster. |
 | `IngestionServiceException` / repeated retries | Transient service error on ingestion endpoint | Connector retries up to 2× with exponential backoff. If persistent: check ADX ingestion endpoint health and network connectivity. |
 | `NoStorageContainersException` — "Failed to allocate temporary storage" | `.get ingestion resources` returned empty | ADX ingest service has no temp storage provisioned or the principal lacks permissions. Verify the app has **ingestor** role and the cluster's managed storage is healthy. |
+| `InvalidParameterException` — "Account Key authentication is not supported" | Using `abfss` protocol with account key | Switch to SAS-based storage credentials or use `wasbs` protocol. |
 | Temp table `sparkTempTable_*` left behind | Transactional write failed mid-way; user supplied `tempTableName` | Inspect the temp table for partial data. Drop it manually or set an [auto-delete policy](https://docs.microsoft.com/azure/data-explorer/kusto/management/auto-delete-policy). |
 | `Ingestion to Kusto failed on timeout failure` (Pending status) | Polling on partition ingestion result timed out | The partition's blob was queued but ADX didn't confirm completion in time. Check ADX ingestion latency and batching policy (`MaximumBatchingTimeSpan`). |
 | Ingestion status `Skipped` | `ingestIfNotExists` tags already exist in destination | Expected when dedup is active. If unexpected, check `ingestIfNotExists` tags on the table's extents. |
@@ -147,7 +145,7 @@ If stream fails after 3 retries → fallback to queued blob ingestion
 | `TimeoutAwaitingPendingOperationException` during export | Export took longer than `timeoutLimit` | Increase timeout. Reduce query scope. Check cluster compute capacity. |
 | Parquet read failure after export (Spark < 3.3.0) | New ADX Parquet encoding (delta byte array) unsupported by older Spark | Upgrade to Spark ≥ 3.3.0. The connector sets `useNativeParquetWriter=false` as a workaround but newer versions are recommended. |
 | ABFS/ABFSS `SAS config key NOT found` warning | SAS token not propagated to SparkConf | Verify `storageProtocol` matches actual storage endpoint. Ensure `fs.azure.abfs.valid.endpoints` includes your storage domain. |
-| `WASB Driver using wasb(s) schema is no longer supported` | A legacy connector or configuration selects WASBS on Hadoop 3.5 | Use the Spark 4.2 connector's default ABFSS path and account-scoped ABFS readback credentials. |
+| `Storage protocol 'abfss' with Account Key authentication is not supported yet` | ABFS + account key combination | Use SAS auth with ABFS, or switch to `wasbs` protocol. |
 
 ### Authentication Errors
 

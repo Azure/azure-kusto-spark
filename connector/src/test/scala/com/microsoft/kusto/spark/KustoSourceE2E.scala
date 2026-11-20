@@ -199,16 +199,14 @@ class KustoSourceE2E extends AnyFlatSpec with BeforeAndAfterAll {
     val sas = KustoTestUtils.generateSasDelegationWithAzCli(
       kustoConnectionOptions.storageContainerUrl.get)
     kustoConnectionOptions.storageContainerUrl.get match {
-      case TransientStorageCredentials.SasPattern(storageAccountName, _, domainSuffix, _, _) =>
-        val accountHost = s"$storageAccountName.blob.$domainSuffix"
-        Map(
-          s"fs.azure.account.auth.type.$accountHost" -> "SAS",
-          s"fs.azure.account.hns.enabled.$accountHost" -> "false",
-          s"fs.azure.sas.fixed.token.$accountHost" -> sas.stripPrefix("?")).foreach {
-          case (key, value) =>
-            spark.sparkContext.hadoopConfiguration.set(key, value)
-            spark.conf.set(s"spark.hadoop.$key", value)
-        }
+      case TransientStorageCredentials.SasPattern(
+            storageAccountName,
+            _,
+            domainSuffix,
+            container,
+            _) =>
+        spark.sparkContext.hadoopConfiguration
+          .set(s"fs.azure.sas.$container.$storageAccountName.blob.$domainSuffix", sas)
       case _ => throw new InvalidParameterException("Storage url is invalid")
     }
 

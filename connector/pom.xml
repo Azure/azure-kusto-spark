@@ -2,7 +2,7 @@
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
     <modelVersion>4.0.0</modelVersion>
-    <artifactId>kusto-spark_${spark.version.major}_${scala.version.major}</artifactId>
+    <artifactId>kusto-spark_${spark.artifact.version}_${scala.version.major}</artifactId>
     <name>Spark Kusto connector</name>
     <description>Kusto connector for Spark to query and ingest data</description>
     <parent>

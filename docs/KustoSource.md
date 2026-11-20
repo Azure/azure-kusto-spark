@@ -182,20 +182,19 @@ If set to 'true', query executed on kusto cluster will include the filters.
 * **STORAGE_PROTOCOL**:
   'storageProtocol' - Specifies the storage protocol to use when reading from blob storage in distributed mode. 
   Valid values are:
+  - 'wasbs' (Windows Azure Storage Blob Service) - default
   - 'abfs' (Azure Blob File System over HTTP)
-  - 'abfss' (Azure Blob File System over HTTPS) - default
+  - 'abfss' (Azure Blob File System over HTTPS - recommended for secure connections)
   
-  The Spark 4.2 connector defaults to 'abfss'. Hadoop 3.5 no longer supports WASB;
-  explicit 'wasb'/'wasbs' values are rejected. Remove that option or use 'abfss'.
+  Defaults to 'wasbs' if not specified. The default should work in most cases.
   This option applies whenever a distributed read occurs, including automatic selection and fallback from Single mode.
   It has no effect on direct Single-mode reads.
   Example: .option("storageProtocol", "abfss")
   
   **Important**: 
-  - This branch targets Hadoop 3.5.0 and uses ABFS over the blob endpoint for flat-namespace export storage.
-  - SAS and Account Key authentication are configured per storage account in both Hadoop and Spark settings.
-  - Impersonation requires compatible ambient ABFS readback credentials; the export's `;impersonate` suffix does not configure Spark authentication.
-  - Containers sharing an account must share credentials. When they conflict, SAS takes precedence over Account Key, then impersonation; the first credential of the selected type is used and conflicting containers are excluded from export.
+  - ABFS/ABFSS protocols require the platform to support Azure Hadoop libraries version >= 3.4.2
+  - If your platform does not support WASB (legacy blob storage), migrating to ABFS is recommended
+  - ABFS with Account Key authentication is not currently supported; use SAS authentication instead
  
 #### Transient Storage Parameters
 An uncached distributed read exports data from Kusto to temporary storage. A transient read-cache hit reuses the successful exported paths instead of exporting again.
