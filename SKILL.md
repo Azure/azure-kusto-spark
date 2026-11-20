@@ -125,9 +125,11 @@ If information is missing, the agent should ask for:
 | Item | Value |
 |---|---|
 | Repository | `Azure/azure-kusto-spark` |
-| Spark 4 branch | `master` |
+| Spark 4.2 branch | `master` (artifact `kusto-spark_4.2_2.13`) |
+| Spark 4.0/4.1 branch | `release/spark41` (artifact `kusto-spark_4.0_2.13`) — this branch |
 | Spark 3 branch | `release/spark3` |
-| Spark 4 tag format | `v4.0_{version}` (e.g., `v4.0_7.0.5`) |
+| Spark 4.2 tag format | `v4.2_{version}` (e.g., `v4.2_7.1.7`) |
+| Spark 4.0/4.1 tag format | `v4.0_{version}` (e.g., `v4.0_7.1.6`), created from `release/spark41` |
 | Spark 3 tag format | `v3.0_{version}` (e.g., `v3.0_7.0.5`) |
 | Version property | `<revision>` in root `pom.xml` |
 | CI pipeline | `.azuredevops/build.yml` — Azure Pipelines build, runs on pushes and PRs |
@@ -651,7 +653,7 @@ az pipelines runs list --pipeline-ids "${PIPELINE_ID}" --top 4
 ## Rules
 
 - Always use **squash merge** for PRs — never regular merge or rebase merge
-- Never push directly to `master` or `release/spark3` — always go through PRs
+- Never push directly to `master`, `release/spark41` or `release/spark3` — always go through PRs
 - Always verify CI passes before merging
 - Always confirm the version in `pom.xml` matches the tag being created
 - When in doubt about any step, ask the user before proceeding
