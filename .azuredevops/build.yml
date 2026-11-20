@@ -1,3 +1,45 @@
+# Each entry produces a Build/Test job pair. spark3 selects the release/spark3
+# (true) or master (false) jobs. mavenArgs is added to every Maven command.
+# The SparkNN entries compile and test master against newer Spark releases,
+# so changes that break Spark 4.1/4.2 are caught on the PR. The published jar
+# is still built against Spark 4.0 by the Java entries. Netty and the Scala
+# patch level are set to the Spark release's own versions; the shaded jar
+# keeps the default Netty.
+parameters:
+- name: buildConfigs
+  type: object
+  default:
+  - id: Java8
+    displayName: Java 8
+    java: '8'
+    spark3: 'true'
+    mavenArgs: ''
+  - id: Java11
+    displayName: Java 11
+    java: '11'
+    spark3: 'true'
+    mavenArgs: ''
+  - id: Java17
+    displayName: Java 17
+    java: '17'
+    spark3: 'false'
+    mavenArgs: ''
+  - id: Java21
+    displayName: Java 21
+    java: '21'
+    spark3: 'false'
+    mavenArgs: ''
+  - id: Spark41Java17
+    displayName: Spark 4.1.4 - Java 17
+    java: '17'
+    spark3: 'false'
+    mavenArgs: -Dspark.version.major=4.1 -Dspark.version.minor=4 -Dscala.version.minor=17 -Dnetty.version=4.2.7.Final
+  - id: Spark42Java17
+    displayName: Spark 4.2.1 - Java 17
+    java: '17'
+    spark3: 'false'
+    mavenArgs: -Dspark.version.major=4.2 -Dspark.version.minor=1 -Dscala.version.minor=18 -Dnetty.version=4.2.13.Final
+
 trigger:
   branches:
     include:
@@ -15,22 +57,21 @@ variables:
 # To validate Spark 3, create a feature branch from release/spark3, copy this
 # YAML into it, commit and push, then open a PR targeting release/spark3.
 # PR validation builds the proposed changes with Java 8/11 in separate
-# build/test jobs. Push or manual runs on a feature branch use Java 17/21;
+# build/test jobs. Push or manual runs on a feature branch use the master
+# jobs (Java 17/21 and Spark 4.1/4.2);
 # only the exact release/spark3 branch selects Java 8/11 without a PR.
 # Selection uses branch names/PR targets, not branch ancestry or the POM.
 # Generate all job pairs; runtime conditions select the matching versions
 # because the PR target is unavailable during template expansion.
-- name: javaVersions
-  value: '8,11,17,21'
 - name: isSpark3
   value: $[or(eq(variables['System.PullRequest.TargetBranch'], 'refs/heads/release/spark3'), eq(variables['System.PullRequest.TargetBranch'], 'release/spark3'), and(ne(variables['Build.Reason'], 'PullRequest'), eq(variables['Build.SourceBranch'], 'refs/heads/release/spark3')))]
 
 jobs:
-- ${{ each javaVersion in split(variables.javaVersions, ',') }}:
-  - job: BuildJava${{ javaVersion }}
-    displayName: Build - Java ${{ javaVersion }}
+- ${{ each config in parameters.buildConfigs }}:
+  - job: Build${{ config.id }}
+    displayName: Build - ${{ config.displayName }}
     timeoutInMinutes: 40
-    ${{ if or(eq(javaVersion, '8'), eq(javaVersion, '11')) }}:
+    ${{ if eq(config.spark3, 'true') }}:
       condition: and(succeeded(), eq(variables['isSpark3'], 'True'))
     ${{ else }}:
       condition: and(succeeded(), eq(variables['isSpark3'], 'False'))
@@ -39,7 +80,7 @@ jobs:
       clean: true
       persistCredentials: false
 
-    - ${{ if eq(javaVersion, '8') }}:
+    - ${{ if eq(config.java, '8') }}:
       - bash: |
           set -euo pipefail
 
@@ -53,11 +94,11 @@ jobs:
         displayName: Download and verify Temurin Java 8
 
     - task: JavaToolInstaller@0
-      displayName: Use Java ${{ javaVersion }}
+      displayName: Use Java ${{ config.java }}
       inputs:
-        versionSpec: '${{ javaVersion }}'
+        versionSpec: '${{ config.java }}'
         jdkArchitectureOption: x64
-        ${{ if eq(javaVersion, '8') }}:
+        ${{ if eq(config.java, '8') }}:
           jdkSourceOption: LocalDirectory
           jdkFile: $(Agent.TempDirectory)/temurin8.tar.gz
           jdkDestinationDirectory: $(Agent.TempDirectory)/temurin8
@@ -67,16 +108,16 @@ jobs:
     - task: Cache@2
       displayName: Cache Maven dependencies
       inputs:
-        key: 'maven | "$(Agent.OS)" | "${{ javaVersion }}" | pom.xml | connector/pom.xml | samples/pom.xml'
+        key: 'maven | "$(Agent.OS)" | "${{ config.id }}" | pom.xml | connector/pom.xml | samples/pom.xml'
         restoreKeys: |
-          maven | "$(Agent.OS)" | "${{ javaVersion }}"
+          maven | "$(Agent.OS)" | "${{ config.id }}"
           maven | "$(Agent.OS)"
         path: $(Pipeline.Workspace)/.m2/repository
 
     - bash: |
         set -euo pipefail
 
-        mvn clean verify -B -ntp -DskipTests
+        mvn clean verify -B -ntp -DskipTests ${{ config.mavenArgs }}
       displayName: Compile and package without running tests
       env:
         MAVEN_OPTS: -Dmaven.repo.local=$(Pipeline.Workspace)/.m2/repository
@@ -93,22 +134,22 @@ jobs:
       displayName: Bundle source and compiled build outputs
 
     - task: PublishPipelineArtifact@1
-      displayName: Publish Java ${{ javaVersion }} build
+      displayName: Publish ${{ config.displayName }} build
       inputs:
         targetPath: $(Build.ArtifactStagingDirectory)
-        artifact: build-java-${{ javaVersion }}
+        artifact: build-${{ config.id }}
 
-  - job: TestJava${{ javaVersion }}
-    displayName: Test - Java ${{ javaVersion }}
-    dependsOn: BuildJava${{ javaVersion }}
+  - job: Test${{ config.id }}
+    displayName: Test - ${{ config.displayName }}
+    dependsOn: Build${{ config.id }}
     timeoutInMinutes: 40
-    condition: and(succeeded(), eq(dependencies.BuildJava${{ javaVersion }}.result, 'Succeeded'), or(ne(variables['Build.Reason'], 'PullRequest'), eq(variables['System.PullRequest.IsFork'], 'False')))
+    condition: and(succeeded(), eq(dependencies.Build${{ config.id }}.result, 'Succeeded'), or(ne(variables['Build.Reason'], 'PullRequest'), eq(variables['System.PullRequest.IsFork'], 'False')))
     variables:
     - group: azure-kusto-spark-e2e
     steps:
     - checkout: none
 
-    - ${{ if eq(javaVersion, '8') }}:
+    - ${{ if eq(config.java, '8') }}:
       - bash: |
           set -euo pipefail
 
@@ -122,11 +163,11 @@ jobs:
         displayName: Download and verify Temurin Java 8
 
     - task: JavaToolInstaller@0
-      displayName: Use Java ${{ javaVersion }}
+      displayName: Use Java ${{ config.java }}
       inputs:
-        versionSpec: '${{ javaVersion }}'
+        versionSpec: '${{ config.java }}'
         jdkArchitectureOption: x64
-        ${{ if eq(javaVersion, '8') }}:
+        ${{ if eq(config.java, '8') }}:
           jdkSourceOption: LocalDirectory
           jdkFile: $(Agent.TempDirectory)/temurin8.tar.gz
           jdkDestinationDirectory: $(Agent.TempDirectory)/temurin8
@@ -134,36 +175,36 @@ jobs:
           jdkSourceOption: PreInstalled
 
     - task: DownloadPipelineArtifact@2
-      displayName: Download Java ${{ javaVersion }} build
+      displayName: Download ${{ config.displayName }} build
       inputs:
         buildType: current
-        artifactName: build-java-${{ javaVersion }}
-        targetPath: $(Pipeline.Workspace)/build-java-${{ javaVersion }}
+        artifactName: build-${{ config.id }}
+        targetPath: $(Pipeline.Workspace)/build-${{ config.id }}
 
     - bash: |
         set -euo pipefail
 
         mkdir -p "$(Pipeline.Workspace)/connector"
         tar --extract --gzip \
-          --file="$(Pipeline.Workspace)/build-java-${{ javaVersion }}/build.tar.gz" \
+          --file="$(Pipeline.Workspace)/build-${{ config.id }}/build.tar.gz" \
           --directory="$(Pipeline.Workspace)/connector"
-        cat "$(Pipeline.Workspace)/build-java-${{ javaVersion }}/source-commit.txt"
+        cat "$(Pipeline.Workspace)/build-${{ config.id }}/source-commit.txt"
         test -d "$(Pipeline.Workspace)/connector/connector/target/test-classes"
       displayName: Restore exact source and compiled tests
 
     - task: Cache@2
       displayName: Restore Maven dependencies
       inputs:
-        key: 'maven | "$(Agent.OS)" | "${{ javaVersion }}" | $(Pipeline.Workspace)/connector/pom.xml | $(Pipeline.Workspace)/connector/connector/pom.xml | $(Pipeline.Workspace)/connector/samples/pom.xml'
+        key: 'maven | "$(Agent.OS)" | "${{ config.id }}" | $(Pipeline.Workspace)/connector/pom.xml | $(Pipeline.Workspace)/connector/connector/pom.xml | $(Pipeline.Workspace)/connector/samples/pom.xml'
         restoreKeys: |
-          maven | "$(Agent.OS)" | "${{ javaVersion }}"
+          maven | "$(Agent.OS)" | "${{ config.id }}"
           maven | "$(Agent.OS)"
         path: $(Pipeline.Workspace)/.m2/repository
 
     - bash: |
         set -euo pipefail
 
-        mvn -B -ntp -pl connector scalatest:test -DskipTests
+        mvn -B -ntp -pl connector scalatest:test -DskipTests ${{ config.mavenArgs }}
       displayName: Resolve test dependencies without Azure authentication
       workingDirectory: $(Pipeline.Workspace)/connector
       env:
@@ -197,7 +238,7 @@ jobs:
           export ingestStorageUrl="$(INGEST_STORAGE_URL)"
           export ingestStorageContainer="$(INGEST_STORAGE_CONTAINER)"
 
-          mvn -o -B -ntp -pl connector scalatest:test \
+          mvn -o -B -ntp -pl connector scalatest:test ${{ config.mavenArgs }} \
             -DkustoAadAppId="${kustoAadAppId}" \
             -DkustoAadAuthorityID="${kustoAadAuthorityID}" \
             -DkustoDatabase="${kustoDatabase}" \
@@ -209,12 +250,12 @@ jobs:
         MAVEN_OPTS: -Dmaven.repo.local=$(Pipeline.Workspace)/.m2/repository
 
     - task: PublishTestResults@2
-      displayName: Publish Java ${{ javaVersion }} test results
+      displayName: Publish ${{ config.displayName }} test results
       condition: always()
       inputs:
         testResultsFormat: JUnit
         testResultsFiles: connector/target/surefire-reports/*.xml
         searchFolder: $(Pipeline.Workspace)/connector
-        testRunTitle: azure-kusto-spark - Java ${{ javaVersion }}
+        testRunTitle: azure-kusto-spark - ${{ config.displayName }}
         failTaskOnFailedTests: true
         failTaskOnMissingResultsFile: true
