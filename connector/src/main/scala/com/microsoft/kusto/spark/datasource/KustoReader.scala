@@ -219,7 +219,7 @@ object KustoReader {
    * storage credentials; settings changed since installation are kept.
    */
   private def ambientReadConfiguration(
-      spark: SparkSession): (Configuration, Map[String, String], Set[String]) =
+      spark: SparkSession): (Configuration, Map[String, String]) =
     installedHadoopAuth.synchronized {
       val shared = spark.sparkContext.hadoopConfiguration
       val config = new Configuration(shared)
@@ -238,11 +238,7 @@ object KustoReader {
           else installed.previous.fold(options - sparkKey)(value => options + (sparkKey -> value))
         })
         .getOrElse(spark.conf.getAll)
-      val recorded = Seq(installedHadoopAuth.get(shared), installedSparkAuth.get(spark.conf))
-        .flatMap(Option(_))
-        .flatMap(_.keys)
-        .toSet
-      (config, sessionOptions, recorded)
+      (config, sessionOptions)
     }
 
   private val distributedReadModeTransientCache: concurrent.Map[
@@ -393,7 +389,7 @@ object KustoReader {
     if (!isAbfsProtocol(storageProtocol) || storage.storageCredentials.exists(_.isOneLake)) {
       Map.empty
     } else {
-      val (config, sessionOptions, recorded) = ambientReadConfiguration(spark)
+      val (config, sessionOptions) = ambientReadConfiguration(spark)
       sessionOptions.filter(_._1.startsWith("fs.")).foreach { case (key, value) =>
         config.set(key, value)
       }
@@ -424,13 +420,13 @@ object KustoReader {
         .filter(entry => hosts.exists(host => entry.getKey.endsWith(s".$host")))
         .map(entry => entry.getKey -> entry.getValue)
         .toMap
-      // Read options cannot remove session settings, so the readback filesystem drops
-      // connector-installed credentials that have no ambient value of their own.
-      val removed = recorded
-        .filter(key => hosts.exists(host => key.endsWith(s".$host")))
-        .filter(key => config.get(key) == null && !credentials.contains(key))
-      ambient ++ credentials ++ Map(
-        KustoBlobReadFileSystem.UnsetKeys -> removed.toSeq.sorted.mkString(","),
+      // Read options cannot remove session settings, and Spark rebuilds the Hadoop configuration
+      // from the live session when it plans the files. The readback filesystem therefore keeps
+      // only the account settings captured here and drops any others for these accounts.
+      val accountOptions = ambient ++ credentials
+      accountOptions ++ Map(
+        KustoBlobReadFileSystem.AccountHosts -> hosts.distinct.sorted.mkString(","),
+        KustoBlobReadFileSystem.AccountKeys -> accountOptions.keys.toSeq.sorted.mkString(","),
         KustoBlobReadFileSystem.ReadId -> UUID.randomUUID().toString,
         KustoBlobReadFileSystem.DelegateImplementation -> implementation,
         s"fs.$protocol.impl" -> classOf[KustoBlobReadFileSystem].getName,

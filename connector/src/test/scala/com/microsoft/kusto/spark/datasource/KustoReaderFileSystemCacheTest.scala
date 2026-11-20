@@ -354,8 +354,8 @@ class KustoReaderFileSystemCacheTest extends AnyFlatSpec with Matchers {
         conf.get(s"fs.azure.account.key.$host") shouldBe "dGVzdC1rZXk="
         KustoReader
           .blobReadOptions(spark, impersonationOf(host), "abfss")(
-            KustoBlobReadFileSystem.UnsetKeys)
-          .split(',') should contain(s"fs.azure.account.key.$host")
+            KustoBlobReadFileSystem.AccountKeys)
+          .split(',') should not contain s"fs.azure.account.key.$host"
         CredentialReadbackFileSystem.instances.clear()
         all(readsOf(spark, path, impersonationOf(host))) shouldBe ((
           AbfsAuthType.Custom,
@@ -367,6 +367,44 @@ class KustoReaderFileSystemCacheTest extends AnyFlatSpec with Matchers {
         spark.conf.getAll.keys
           .filter(_.endsWith(s".$host"))
           .foreach(spark.conf.unset)
+    }
+  }
+
+  it should "ignore explicit credentials installed after an impersonation read captured its settings" in {
+    withReadback { (spark, account, path, conf) =>
+      val host = URI.create(path).getHost
+      val keys = Seq(
+        "fs.azure.account.auth.type",
+        s"fs.azure.account.auth.type.$host",
+        s"fs.azure.sas.fixed.token.$host")
+      val previous = keys.map(key => key -> Option(conf.get(key)))
+      conf.set(keys.head, "Custom")
+      keys.tail.foreach(conf.unset)
+      try {
+        val options = KustoReader.blobReadOptions(spark, impersonationOf(host), "abfss")
+        // First explicit install for this account lands before Spark plans the files.
+        installExplicit(spark, conf, storage(account, "sig=late"))
+        conf.get(s"fs.azure.account.auth.type.$host") shouldBe "SAS"
+        CredentialReadbackFileSystem.reads.clear()
+        val rows =
+          KustoBlobReadFileSystem.withReadScope(options(KustoBlobReadFileSystem.ReadId)) {
+            spark.read.options(options).parquet(path).rdd
+          }
+        rows.collect().map(_.getLong(0)).toSeq shouldBe Seq(42L)
+        val reads = CredentialReadbackFileSystem.reads.iterator().asScala.toVector
+        reads should not be empty
+        all(reads.map { case (_, kind, value) => (kind, value) }) shouldBe ((
+          AbfsAuthType.Custom,
+          "ambient"))
+      } finally {
+        previous.foreach {
+          case (key, Some(value)) => conf.set(key, value)
+          case (key, None) => conf.unset(key)
+        }
+        spark.conf.getAll.keys
+          .filter(_.endsWith(s".$host"))
+          .foreach(spark.conf.unset)
+      }
     }
   }
 

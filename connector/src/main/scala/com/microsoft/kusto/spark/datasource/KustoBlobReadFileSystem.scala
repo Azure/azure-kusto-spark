@@ -20,6 +20,7 @@ import org.apache.spark.TaskContext
 import java.net.URI
 import java.io.Closeable
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.util.{Using, control}
 
 /**
@@ -37,9 +38,14 @@ private[kusto] class KustoBlobReadFileSystem extends FileSystem {
     workingDirectory = new Path(uri)
     setConf(new Configuration(conf))
     delegateConf = new Configuration(conf)
-    conf
-      .getTrimmedStringCollection(KustoBlobReadFileSystem.UnsetKeys)
-      .forEach(key => delegateConf.unset(key))
+    val hosts = conf.getTrimmedStringCollection(KustoBlobReadFileSystem.AccountHosts).asScala
+    val captured =
+      conf.getTrimmedStringCollection(KustoBlobReadFileSystem.AccountKeys).asScala.toSet
+    conf.iterator.asScala
+      .map(_.getKey)
+      .filter(key => hosts.exists(host => key.endsWith(s".$host")) && !captured.contains(key))
+      .toVector
+      .foreach(delegateConf.unset)
     val implementation = conf.get(KustoBlobReadFileSystem.DelegateImplementation)
     require(
       implementation != null && implementation != getClass.getName,
@@ -130,7 +136,8 @@ private[kusto] class KustoBlobReadFileSystem extends FileSystem {
 private[kusto] object KustoBlobReadFileSystem {
   val DelegateImplementation = "kusto.blob.readback.fs.impl"
   val ReadId = "kusto.blob.readback.id"
-  val UnsetKeys = "kusto.blob.readback.unset"
+  val AccountHosts = "kusto.blob.readback.hosts"
+  val AccountKeys = "kusto.blob.readback.keys"
   private val driverScopes = mutable.Map.empty[String, Scope]
   private val taskScopes = mutable.Map.empty[TaskContext, Scope]
 
