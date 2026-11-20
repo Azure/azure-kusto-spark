@@ -129,7 +129,7 @@ flowchart TD
     R3d -->|"≥ 3.3.0"| R3f["Check export output\nRun .show operations ‹id›"]
 
     R3 -->|"SAS config key NOT found"| R3g["Verify storageProtocol matches endpoint\nCheck fs.azure.abfs.valid.endpoints"]
-    R3 -->|"Account Key not supported with abfss"| R3h["Switch to SAS auth or wasbs protocol"]
+    R3 -->|"WASB is not supported by Hadoop 3.5"| R3h["Use storageProtocol abfss (default) or abfs\nAccount key and SAS both work over ABFS"]
 
     AUTH[Authentication Error] --> AUTH1{Endpoint?}
     AUTH1 -->|"Engine 401/403"| AUTH2[Grant viewer/admin role]

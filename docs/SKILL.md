@@ -114,7 +114,7 @@ Provide the specific fix from the patterns above. If the issue is ambiguous, ask
 | `isAsync` | `false` | `true` hides worker errors from driver |
 | `adjustSchema` | `NoAdjustment` | Set to `GenerateDynamicCsvMapping` for schema flexibility |
 | `readMode` | auto | `ForceSingleMode`, `ForceDistributedMode` |
-| `storageProtocol` | `wasbs` | `wasbs`, `abfss`, `abfs` — must match storage endpoint |
+| `storageProtocol` | `abfss` | Spark 4.2: `abfss` or `abfs`; Hadoop 3.5 does not support WASB |
 
 ## Rules
 - Always start with Step 1.

@@ -5,6 +5,8 @@ package com.microsoft.kusto.spark.datasource
 
 import com.microsoft.kusto.spark.utils.{KustoConstants => KCONST}
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.azurebfs.AbfsConfiguration
+import org.apache.hadoop.fs.azurebfs.services.{AuthType => AbfsAuthType}
 import org.apache.spark.sql.{RuntimeConfig, SparkSession}
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.flatspec.AnyFlatSpec
@@ -245,28 +247,33 @@ class KustoReaderHadoopConfTest extends AnyFlatSpec with Matchers with BeforeAnd
   }
 
   // ---------------------------------------------------------------------------
-  // ABFS + Account Key  —  should throw
+  // ABFS + Account Key  —  account-scoped auth and dual-write
   // ---------------------------------------------------------------------------
-  "setHadoopAuth (ABFS + Key)" should "throw InvalidParameterException" in {
+  "setHadoopAuth (ABFS + Key)" should "scope shared-key auth and FNS settings to the storage account" in {
     val now = freshTimestamp()
     val storageParams = keyStorageParams("abfkey1", "somekey", "ckeyabf1")
+    val account = "abfkey1.blob.core.windows.net"
 
-    val ex = intercept[java.security.InvalidParameterException] {
-      KustoReader.setHadoopAuth(
-        storageParams,
-        KCONST.storageProtocolAbfs,
-        hadoopConfig,
-        sparkConf,
-        now,
-        useAbfs = true)
+    KustoReader.setHadoopAuth(
+      storageParams,
+      KCONST.storageProtocolAbfs,
+      hadoopConfig,
+      sparkConf,
+      now,
+      useAbfs = true)
+
+    Map(
+      s"fs.azure.account.auth.type.$account" -> "SharedKey",
+      s"fs.azure.account.hns.enabled.$account" -> "false",
+      s"fs.azure.account.key.$account" -> "somekey").foreach { case (key, value) =>
+      hadoopConfig.get(key) shouldBe value
+      sparkConf.get(s"$sparkHadoopPrefix$key") shouldBe value
     }
-    ex.getMessage should include("not supported")
+    hadoopConfig.get("fs.azure.account.auth.type") shouldBe null
+    sparkConf.getOption(s"${sparkHadoopPrefix}fs.azure.account.auth.type") shouldBe empty
   }
 
-  it should "preserve the pre-existing cache suppression when the same account was configured for WASBS" in {
-    // Behaviour inherited from before the account-scoped change: the shared setup cache
-    // suppresses the second call for the same account/secret, so no exception is raised.
-    // Asserted explicitly so that the account-scoped rework cannot silently alter it.
+  it should "install ABFS settings even when WASBS previously cached the same account key" in {
     val now = Instant.now()
     val storageParams = keyStorageParams("abfkey2", "samekey", "ckeyabf2")
 
@@ -278,29 +285,79 @@ class KustoReaderHadoopConfTest extends AnyFlatSpec with Matchers with BeforeAnd
       now,
       useAbfs = false)
 
-    noException should be thrownBy KustoReader.setHadoopAuth(
+    KustoReader.setHadoopAuth(
       storageParams,
       KCONST.storageProtocolAbfss,
       hadoopConfig,
       sparkConf,
       now,
       useAbfs = true)
+
+    hadoopConfig.get(
+      "fs.azure.account.auth.type.abfkey2.blob.core.windows.net") shouldBe "SharedKey"
+    sparkConf.get(
+      s"${sparkHadoopPrefix}fs.azure.account.auth.type.abfkey2.blob.core.windows.net") shouldBe "SharedKey"
   }
 
-  it should "throw when the account was not configured before, regardless of protocol casing" in {
-    val now = freshTimestamp()
+  it should "reinstall shared-key settings into a fresh configuration without a forced refresh" in {
+    val now = Instant.now()
     val storageParams = keyStorageParams("abfkey3", "somekey", "ckeyabf3")
 
-    val ex = intercept[java.security.InvalidParameterException] {
+    KustoReader.setHadoopAuth(
+      storageParams,
+      KCONST.storageProtocolAbfss,
+      hadoopConfig,
+      sparkConf,
+      now,
+      useAbfs = true)
+
+    val freshConfig = new Configuration()
+    KustoReader.setHadoopAuth(
+      storageParams,
+      KCONST.storageProtocolAbfss,
+      freshConfig,
+      sparkConf,
+      now,
+      useAbfs = true)
+
+    freshConfig.get("fs.azure.account.key.abfkey3.blob.core.windows.net") shouldBe "somekey"
+    freshConfig.get(
+      "fs.azure.account.auth.type.abfkey3.blob.core.windows.net") shouldBe "SharedKey"
+  }
+
+  it should "switch between SAS and shared key without changing other storage accounts" in {
+    val now = Instant.now()
+    val account = "abfswitch.blob.core.windows.net"
+    val sas = sasStorageParams("abfswitch", "c1", "sv=2021-01-01&sig=token")
+    val key = keyStorageParams("abfswitch", "dGVzdC1rZXk=", "c2")
+    val unrelated = "fs.azure.account.auth.type.other.dfs.core.windows.net"
+    hadoopConfig.set(unrelated, "OAuth")
+    sparkConf.set(s"$sparkHadoopPrefix$unrelated", "OAuth")
+
+    Seq(sas, key, sas).foreach { params =>
       KustoReader.setHadoopAuth(
-        storageParams,
+        params,
         KCONST.storageProtocolAbfss,
         hadoopConfig,
         sparkConf,
         now,
         useAbfs = true)
+
+      val abfs = new AbfsConfiguration(hadoopConfig, account)
+      if (params eq key) {
+        abfs.getAuthType(account) shouldBe AbfsAuthType.SharedKey
+        abfs.getStorageAccountKey shouldBe "dGVzdC1rZXk="
+      } else {
+        abfs.getAuthType(account) shouldBe AbfsAuthType.SAS
+        abfs.getSASTokenProvider.getSASToken(
+          "abfswitch",
+          "c1",
+          "file",
+          "read") shouldBe "sv=2021-01-01&sig=token"
+      }
+      hadoopConfig.get(unrelated) shouldBe "OAuth"
+      sparkConf.get(s"$sparkHadoopPrefix$unrelated") shouldBe "OAuth"
     }
-    ex.getMessage should include("not supported")
   }
 
   // ---------------------------------------------------------------------------
@@ -507,7 +564,7 @@ class KustoReaderHadoopConfTest extends AnyFlatSpec with Matchers with BeforeAnd
     result should be theSameInstanceAs params
   }
 
-  it should "leave non-SAS credentials untouched" in {
+  it should "drop sibling containers that require a different account key" in {
     val params = new TransientStorageParameters(
       Array(
         new TransientStorageCredentials("keyacct", "key1", "c1"),
@@ -515,7 +572,35 @@ class KustoReaderHadoopConfTest extends AnyFlatSpec with Matchers with BeforeAnd
       "core.windows.net")
 
     val result = KustoReader.dedupeConflictingCredentials(params)
-    result.storageCredentials should have length 2
+    result.storageCredentials.map(_.blobContainer).toSeq shouldBe Seq("c1")
+  }
+
+  it should "retain containers sharing an account key and keys belonging to other accounts" in {
+    val params = new TransientStorageParameters(
+      Array(
+        new TransientStorageCredentials("sharedkey", "key1", "c1"),
+        new TransientStorageCredentials("sharedkey", "key1", "c2"),
+        new TransientStorageCredentials("otherkey", "key2", "c3")),
+      "core.windows.net")
+
+    KustoReader.dedupeConflictingCredentials(params) should be theSameInstanceAs params
+  }
+
+  it should "prefer explicit credentials over impersonation while retaining SAS precedence" in {
+    val params = new TransientStorageParameters(
+      Array(
+        new TransientStorageCredentials(
+          "https://keypriority.blob.core.windows.net/c1;impersonate"),
+        new TransientStorageCredentials("keypriority", "key1", "c2"),
+        new TransientStorageCredentials("saspriority", "key2", "c3"),
+        new TransientStorageCredentials("https://saspriority.blob.core.windows.net/c4?sig=one")),
+      "core.windows.net")
+
+    KustoReader
+      .dedupeConflictingCredentials(params)
+      .storageCredentials
+      .map(_.blobContainer)
+      .toSeq shouldBe Seq("c2", "c4")
   }
 
   it should "drop an impersonation container that shares an account with a SAS container" in {

@@ -49,7 +49,7 @@
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-annotations</artifactId>
-            <version>${fasterxml.jackson.version}</version>
+            <version>${fasterxml.jackson.annotations.version}</version>
         </dependency>
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
@@ -532,6 +532,10 @@
                                 <relocation>
                                     <pattern>org.checkerframework</pattern>
                                     <shadedPattern>${kusto.shade.prefix}.org.checkerframework</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>org.jspecify</pattern>
+                                    <shadedPattern>${kusto.shade.prefix}.org.jspecify</shadedPattern>
                                 </relocation>
                                 <relocation>
                                     <pattern>org.intellij</pattern>
