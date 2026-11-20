@@ -9,11 +9,22 @@ Tags are created as `v4.2_{version}` (Spark 4.2 / master), `v4.0_{version}` (Spa
 ## [Unreleased]
 
 ### Changed
-- master now targets Spark 4.2 and publishes `kusto-spark_4.2_2.13` (tags `v4.2_{version}`), built against Spark 4.2.1, Scala 2.13.18, Hadoop 3.5.0 and Netty 4.2.13.Final. Spark 4.0/4.1 maintenance continues on `release/spark40` with `kusto-spark_4.0_2.13` and `v4.0_{version}` tags
-- Keep the patched Jackson 2.21.8 and Guava 33.8.0-jre versions from 7.1.6 (#527) on the Spark 4.2 line
+- None
 
 ### Added
 - None
+
+### Fixed
+- None
+
+## [7.1.7] - 2026-11-20
+
+### Changed
+- master now targets Spark 4.2 and publishes `kusto-spark_4.2_2.13` (tags `v4.2_{version}`), built against Spark 4.2.1, Scala 2.13.18, Hadoop 3.5.0 and Netty 4.2.13.Final. Spark 4.0/4.1 maintenance continues on `release/spark40` with `kusto-spark_4.0_2.13` and `v4.0_{version}` tags (#534)
+- Keep the patched Jackson 2.21.8 and Guava 33.8.0-jre versions from 7.1.6 (#527) on the Spark 4.2 line (#534)
+
+### Added
+- Spark 4.2 support (#534)
 
 ### Fixed
 - Default distributed blob reads to ABFSS for Hadoop 3.5, reject unsupported WASB options, and support account-scoped SAS and SharedKey readback without changing unrelated storage accounts.

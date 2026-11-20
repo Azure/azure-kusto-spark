@@ -72,9 +72,11 @@ use the following artifact:
 
 To use the connector, you need:
 
-- Java 1.8+ SDK installed
+- A Java SDK supported by your Spark line:
+  - Spark 4.2 (`master`) and Spark 4.0/4.1 (`release/spark40`): Java 17 or 21 (CI builds and tests with both)
+  - Spark 3.x (`release/spark3`): Java 8 or 11
 - [Maven 3.x](https://maven.apache.org/download.cgi) installed
-- Spark - with the version aligned with the artifact ID (either 2.4 or 3.0)
+- Spark - with the version aligned with the artifact ID (see the table above)
 
 > Note: when working with Spark version 2.3 or lower, build the jar locally from branch "2.4" and 
 simply change the spark version in the pom file. 
