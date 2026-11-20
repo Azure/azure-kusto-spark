@@ -47,7 +47,7 @@ The Spark 4 libraries are published per Spark line:
 | Spark version | Artifact | Source branch |
 |---|---|---|
 | 4.2 | `kusto-spark_4.2_2.13` | `master` |
-| 4.0 / 4.1 | `kusto-spark_4.0_2.13` | `release/spark41` |
+| 4.0 / 4.1 | `kusto-spark_4.0_2.13` | `release/spark40` |
 | 3.x | `kusto-spark_3.0_2.12` | `release/spark3` |
 
 Or clone this repository and build it locally to add it to your local maven repository,.
