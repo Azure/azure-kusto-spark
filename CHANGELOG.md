@@ -29,7 +29,7 @@ Tags are created as `v4.2_{version}` (Spark 4.2 / master), `v4.0_{version}` (Spa
 ### Fixed
 - Default distributed blob reads to ABFSS for Hadoop 3.5, reject unsupported WASB options, and support account-scoped SAS and SharedKey readback without changing unrelated storage accounts.
 - Isolate blob readback from cached filesystem credentials, close read-owned clients, and re-export when cached storage credentials change. Migrate the tagged blob readback test to ABFSS.
-- Restore storage settings replaced by explicit SAS/account-key reads when the same account is later read with `;impersonate`, and make explicit credentials take precedence over SAS token or key providers configured for that account.
+- Impersonation (`;impersonate`) readback of a storage account now ignores explicit SAS/account-key settings the connector installed for that account in an earlier read (the shared settings stay in place for native readers), and explicit credentials take precedence over SAS token or key providers configured for that account.
 
 ## [7.1.6] - 2026-11-09
 

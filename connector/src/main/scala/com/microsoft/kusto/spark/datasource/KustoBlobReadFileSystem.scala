@@ -37,6 +37,9 @@ private[kusto] class KustoBlobReadFileSystem extends FileSystem {
     workingDirectory = new Path(uri)
     setConf(new Configuration(conf))
     delegateConf = new Configuration(conf)
+    conf
+      .getTrimmedStringCollection(KustoBlobReadFileSystem.UnsetKeys)
+      .forEach(key => delegateConf.unset(key))
     val implementation = conf.get(KustoBlobReadFileSystem.DelegateImplementation)
     require(
       implementation != null && implementation != getClass.getName,
@@ -127,6 +130,7 @@ private[kusto] class KustoBlobReadFileSystem extends FileSystem {
 private[kusto] object KustoBlobReadFileSystem {
   val DelegateImplementation = "kusto.blob.readback.fs.impl"
   val ReadId = "kusto.blob.readback.id"
+  val UnsetKeys = "kusto.blob.readback.unset"
   private val driverScopes = mutable.Map.empty[String, Scope]
   private val taskScopes = mutable.Map.empty[TaskContext, Scope]
 

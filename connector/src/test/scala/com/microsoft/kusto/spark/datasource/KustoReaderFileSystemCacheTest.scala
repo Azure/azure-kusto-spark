@@ -267,41 +267,123 @@ class KustoReaderFileSystemCacheTest extends AnyFlatSpec with Matchers {
     }
   }
 
-  it should "not reuse explicit credentials for a later impersonation read of the account" in {
+  private def impersonationOf(host: String): TransientStorageParameters =
+    new TransientStorageParameters(
+      Array(new TransientStorageCredentials(s"https://$host/container;impersonate")))
+
+  private def installExplicit(
+      spark: SparkSession,
+      conf: Configuration,
+      credentials: TransientStorageParameters): Unit =
+    KustoReader.setHadoopAuth(
+      credentials,
+      "abfss",
+      conf,
+      spark.conf,
+      java.time.Instant.now(),
+      useAbfs = true)
+
+  private def readsOf(
+      spark: SparkSession,
+      path: String,
+      credentials: TransientStorageParameters): Vector[(AbfsAuthType, String)] = {
+    CredentialReadbackFileSystem.reads.clear()
+    KustoReader
+      .readParquet(spark, Seq(path), credentials, "abfss")
+      .collect()
+      .map(_.getLong(0))
+      .toSeq shouldBe Seq(42L)
+    val reads = CredentialReadbackFileSystem.reads.iterator().asScala.toVector
+    reads should not be empty
+    reads.map { case (_, kind, value) => (kind, value) }
+  }
+
+  it should "read impersonation with ambient settings after explicit credentials were installed" in {
     withReadback { (spark, account, path, conf) =>
       val host = URI.create(path).getHost
-      val impersonation = new TransientStorageParameters(
-        Array(new TransientStorageCredentials(s"https://$host/container;impersonate")))
-      Seq(
+      installExplicit(
+        spark,
+        conf,
         new TransientStorageParameters(
-          Array(new TransientStorageCredentials(account, "dGVzdC1rZXk=", "container"))),
-        impersonation).foreach { credentials =>
-        KustoReader.setHadoopAuth(
-          credentials,
-          "abfss",
-          conf,
-          spark.conf,
-          java.time.Instant.now(),
-          useAbfs = true)
-      }
-      conf.get(s"fs.azure.account.auth.type.$host") shouldBe "SAS"
-      conf.get(s"fs.azure.sas.fixed.token.$host") shouldBe "sig=previous"
-      conf.get(s"fs.azure.account.key.$host") shouldBe null
-      spark.conf.getOption(s"spark.hadoop.fs.azure.account.auth.type.$host") shouldBe empty
-      CredentialReadbackFileSystem.reads.clear()
-      KustoReader
-        .readParquet(spark, Seq(path), impersonation, "abfss")
-        .collect()
-        .map(_.getLong(0))
-        .toSeq shouldBe Seq(42L)
-      all(
-        CredentialReadbackFileSystem.reads
-          .iterator()
-          .asScala
-          .toVector
-          .map { case (_, kind, value) => (kind, value) }) shouldBe ((
+          Array(new TransientStorageCredentials(account, "dGVzdC1rZXk=", "container"))))
+      // Session-wide settings keep the explicit credential for native readers.
+      conf.get(s"fs.azure.account.auth.type.$host") shouldBe "SharedKey"
+      all(readsOf(spark, path, impersonationOf(host))) shouldBe ((
         AbfsAuthType.SAS,
         "sig=previous"))
+      installExplicit(spark, conf, storage(account, "sig=explicit"))
+      all(readsOf(spark, path, impersonationOf(host))) shouldBe ((
+        AbfsAuthType.SAS,
+        "sig=previous"))
+    }
+  }
+
+  it should "keep a planned impersonation read on ambient settings when explicit ones change" in {
+    withReadback { (spark, account, path, conf) =>
+      val host = URI.create(path).getHost
+      val planned = KustoReader.readParquet(spark, Seq(path), impersonationOf(host), "abfss").rdd
+      installExplicit(spark, conf, storage(account, "sig=concurrent"))
+      CredentialReadbackFileSystem.reads.clear()
+      planned.collect().map(_.getLong(0)).toSeq shouldBe Seq(42L)
+      all(CredentialReadbackFileSystem.reads.iterator().asScala.toVector.map(_._3)) shouldBe
+        "sig=previous"
+    }
+  }
+
+  it should "use settings changed after the connector installed explicit credentials" in {
+    withReadback { (spark, account, path, conf) =>
+      val host = URI.create(path).getHost
+      installExplicit(spark, conf, storage(account, "sig=explicit"))
+      conf.set(s"fs.azure.sas.fixed.token.$host", "sig=user")
+      all(readsOf(spark, path, impersonationOf(host))) shouldBe ((AbfsAuthType.SAS, "sig=user"))
+    }
+  }
+
+  it should "drop installed credentials that had no ambient value" in {
+    withReadback { (spark, account, path, conf) =>
+      val host = URI.create(path).getHost
+      val keys = Seq(s"fs.azure.account.auth.type.$host", s"fs.azure.sas.fixed.token.$host")
+      conf.set(keys.head, "Custom")
+      conf.unset(keys(1))
+      try {
+        installExplicit(
+          spark,
+          conf,
+          new TransientStorageParameters(
+            Array(new TransientStorageCredentials(account, "dGVzdC1rZXk=", "container"))))
+        conf.get(s"fs.azure.account.key.$host") shouldBe "dGVzdC1rZXk="
+        KustoReader
+          .blobReadOptions(spark, impersonationOf(host), "abfss")(
+            KustoBlobReadFileSystem.UnsetKeys)
+          .split(',') should contain(s"fs.azure.account.key.$host")
+        CredentialReadbackFileSystem.instances.clear()
+        all(readsOf(spark, path, impersonationOf(host))) shouldBe ((
+          AbfsAuthType.Custom,
+          "ambient"))
+        val delegates = CredentialReadbackFileSystem.instances.iterator().asScala.toVector
+        delegates should not be empty
+        all(delegates.map(_.getConf.get(s"fs.azure.account.key.$host"))) shouldBe null
+      } finally
+        spark.conf.getAll.keys
+          .filter(_.endsWith(s".$host"))
+          .foreach(spark.conf.unset)
+    }
+  }
+
+  it should "track explicit credentials per Spark session" in {
+    withReadback { (spark, account, path, conf) =>
+      val host = URI.create(path).getHost
+      val other = spark.newSession()
+      other.conf.set(s"spark.hadoop.fs.azure.sas.fixed.token.$host", "sig=other-ambient")
+      installExplicit(spark, conf, storage(account, "sig=first"))
+      installExplicit(other, conf, storage(account, "sig=second"))
+      all(readsOf(spark, path, impersonationOf(host))) shouldBe ((
+        AbfsAuthType.SAS,
+        "sig=previous"))
+      all(readsOf(other, path, impersonationOf(host))) shouldBe
+        ((AbfsAuthType.SAS, "sig=other-ambient"))
+      all(readsOf(spark, path, storage(account, "sig=explicit"))) shouldBe
+        ((AbfsAuthType.SAS, "sig=explicit"))
     }
   }
 

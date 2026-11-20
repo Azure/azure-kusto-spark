@@ -179,56 +179,71 @@ object KustoReader {
     }
   }
 
-  private case class InstalledAccountSetting(
-      previousHadoop: Option[String],
-      previousSpark: Option[String],
-      value: String)
+  private case class InstalledAccountSetting(previous: Option[String], value: String)
 
-  // Account-scoped auth settings the connector wrote into session-wide configuration, with the
-  // values they replaced, so a later impersonation read of that account does not inherit them.
-  private val installedAccountAuth = new concurrent.TrieMap[String, InstalledAccountSetting]()
+  // Account-scoped auth settings the connector wrote into session-wide configuration (kept there
+  // for native readers), with the values they replaced. Tracked per configuration object, and
+  // dropped with it, so impersonation readback can exclude them from its private view.
+  private val installedHadoopAuth =
+    new java.util.WeakHashMap[Configuration, mutable.Map[String, InstalledAccountSetting]]()
+  private val installedSparkAuth =
+    new java.util.WeakHashMap[RuntimeConfig, mutable.Map[String, InstalledAccountSetting]]()
+
+  private def recordInstall[K](
+      registry: java.util.WeakHashMap[K, mutable.Map[String, InstalledAccountSetting]],
+      owner: K,
+      key: String,
+      current: Option[String],
+      value: String): Unit = {
+    val records = registry.computeIfAbsent(owner, _ => mutable.Map.empty)
+    val previous = records.get(key) match {
+      case Some(installed) if current.contains(installed.value) => installed.previous
+      case _ => current
+    }
+    records.put(key, InstalledAccountSetting(previous, value))
+  }
 
   private def installAccountAuth(
       config: Configuration,
       sparkConf: RuntimeConfig,
       key: String,
-      value: String): Unit = installedAccountAuth.synchronized {
-    val hadoopValue = Option(config.get(key))
-    val previous = installedAccountAuth.get(key) match {
-      case Some(installed) if hadoopValue.contains(installed.value) => installed
-      case _ =>
-        InstalledAccountSetting(
-          hadoopValue,
-          sparkConf.getOption(s"$sparkHadoopConfigPrefix$key"),
-          value)
-    }
-    installedAccountAuth.put(key, previous.copy(value = value))
+      value: String): Unit = installedHadoopAuth.synchronized {
+    recordInstall(installedHadoopAuth, config, key, Option(config.get(key)), value)
+    val sparkKey = s"$sparkHadoopConfigPrefix$key"
+    recordInstall(installedSparkAuth, sparkConf, key, sparkConf.getOption(sparkKey), value)
     setHadoopConf(config, sparkConf, key, value)
   }
 
-  /** Restores settings the connector installed for `host` unless something replaced them. */
-  private[kusto] def releaseAccountAuth(
-      host: String,
-      config: Configuration,
-      sparkConf: RuntimeConfig): Unit = installedAccountAuth.synchronized {
-    installedAccountAuth.keys.filter(_.endsWith(s".$host")).toVector.foreach { key =>
-      installedAccountAuth.remove(key).foreach { installed =>
+  /**
+   * Session Hadoop configuration and options as they were before the connector installed explicit
+   * storage credentials; settings changed since installation are kept.
+   */
+  private def ambientReadConfiguration(
+      spark: SparkSession): (Configuration, Map[String, String], Set[String]) =
+    installedHadoopAuth.synchronized {
+      val shared = spark.sparkContext.hadoopConfiguration
+      val config = new Configuration(shared)
+      Option(installedHadoopAuth.get(shared)).foreach(_.foreach { case (key, installed) =>
         if (Option(config.get(key)).contains(installed.value)) {
-          installed.previousHadoop match {
+          installed.previous match {
             case Some(value) => config.set(key, value)
             case None => config.unset(key)
           }
         }
-        val sparkKey = s"$sparkHadoopConfigPrefix$key"
-        if (sparkConf.getOption(sparkKey).contains(installed.value)) {
-          installed.previousSpark match {
-            case Some(value) => sparkConf.set(sparkKey, value)
-            case None => sparkConf.unset(sparkKey)
-          }
-        }
-      }
+      })
+      val sessionOptions = Option(installedSparkAuth.get(spark.conf))
+        .map(_.foldLeft(spark.conf.getAll) { case (options, (key, installed)) =>
+          val sparkKey = s"$sparkHadoopConfigPrefix$key"
+          if (!options.get(sparkKey).contains(installed.value)) options
+          else installed.previous.fold(options - sparkKey)(value => options + (sparkKey -> value))
+        })
+        .getOrElse(spark.conf.getAll)
+      val recorded = Seq(installedHadoopAuth.get(shared), installedSparkAuth.get(spark.conf))
+        .flatMap(Option(_))
+        .flatMap(_.keys)
+        .toSet
+      (config, sessionOptions, recorded)
     }
-  }
 
   private val distributedReadModeTransientCache: concurrent.Map[
     DistributedReadModeTransientCacheKey,
@@ -378,8 +393,7 @@ object KustoReader {
     if (!isAbfsProtocol(storageProtocol) || storage.storageCredentials.exists(_.isOneLake)) {
       Map.empty
     } else {
-      val config = new Configuration(spark.sparkContext.hadoopConfiguration)
-      val sessionOptions = spark.conf.getAll
+      val (config, sessionOptions, recorded) = ambientReadConfiguration(spark)
       sessionOptions.filter(_._1.startsWith("fs.")).foreach { case (key, value) =>
         config.set(key, value)
       }
@@ -410,7 +424,13 @@ object KustoReader {
         .filter(entry => hosts.exists(host => entry.getKey.endsWith(s".$host")))
         .map(entry => entry.getKey -> entry.getValue)
         .toMap
+      // Read options cannot remove session settings, so the readback filesystem drops
+      // connector-installed credentials that have no ambient value of their own.
+      val removed = recorded
+        .filter(key => hosts.exists(host => key.endsWith(s".$host")))
+        .filter(key => config.get(key) == null && !credentials.contains(key))
       ambient ++ credentials ++ Map(
+        KustoBlobReadFileSystem.UnsetKeys -> removed.toSeq.sorted.mkString(","),
         KustoBlobReadFileSystem.ReadId -> UUID.randomUUID().toString,
         KustoBlobReadFileSystem.DelegateImplementation -> implementation,
         s"fs.$protocol.impl" -> classOf[KustoBlobReadFileSystem].getName,
@@ -645,16 +665,6 @@ object KustoReader {
     // Ensure storage endpoint domain is in the valid ABFS endpoints list
     if (useAbfs) {
       whitelistExportContainers(storageParameters, config, sparkConf)
-      val explicitHosts = storageParameters.storageCredentials
-        .filter(c => c.authMethod == AuthMethod.Key || c.authMethod == AuthMethod.Sas)
-        .map(storageAccountHost(_, storageParameters))
-        .toSet
-      storageParameters.storageCredentials
-        .filter(c => c.authMethod == AuthMethod.Impersonation && !c.isOneLake)
-        .map(storageAccountHost(_, storageParameters))
-        .filterNot(explicitHosts.contains)
-        .distinct
-        .foreach(releaseAccountAuth(_, config, sparkConf))
     }
     for (storage <- storageParameters.storageCredentials) {
       storage.authMethod match {
@@ -671,7 +681,8 @@ object KustoReader {
           handleSasAuth(storage, storageParameters, config, sparkConf, now, useAbfs, forceRefresh)
         case _ =>
         // Impersonation (including OneLake) relies on ambient AAD configured by the
-        // Spark runtime (e.g. Fabric notebooks); explicit settings were released above.
+        // Spark runtime (e.g. Fabric notebooks). Nothing to install here; JVM readback
+        // excludes connector-installed explicit credentials (see ambientReadConfiguration).
       }
     }
   }
