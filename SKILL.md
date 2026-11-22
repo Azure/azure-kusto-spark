@@ -150,7 +150,9 @@ If information is missing, the agent should ask for:
 Rules:
 
 - New work lands on `master` first, then is cherry-picked to each maintenance line that needs it.
-- Lines are released **independently** and may have different versions and changelogs. Never create a tag on a branch that belongs to another line: the release pipeline requires the tag to equal `v{spark.version.major}_{revision}` of the tagged commit.
+- Lines are released **independently** and may have different versions and changelogs. Never create a tag on a branch that belongs to another line. The tag must equal `v{spark.version.major}_{revision}` of the tagged commit.
+  - Spark 4 lines: the Azure release pipeline (`.azuredevops/release.yml`) enforces this and fails on a mismatch.
+  - Spark 3: the GitHub Actions workflow does **not** check it. It accepts any `v3.0_*` tag and takes the published version from the POM, so a wrong tag can still publish. Always run the tag/POM check in [Preconditions](#preconditions) before tagging.
 - Never release a version that is already published for the same artifact. Different lines may share a version number (e.g. `kusto-spark_4.2_2.13:7.1.7` and `kusto-spark_4.0_2.13:7.1.7`) because the artifacts differ.
 - Set the line once and use these variables in every Release Workflow command:
 
@@ -544,9 +546,15 @@ Then on GitHub: open PR → squash merge to `$LINE_BRANCH`.
 git fetch --tags origin
 git checkout "$LINE_BRANCH" && git pull origin "$LINE_BRANCH"
 
-# The pom revision must equal the version being tagged
-grep '<revision>' pom.xml
-# Must show: <revision>{NEW_VERSION}</revision>
+# The tag must equal v{spark.version.major}_{revision} of this commit.
+# Required for Spark 3: its GitHub Actions release workflow does not check this.
+SPARK_MAJOR=$(sed -n 's|.*<spark.version.major>\(.*\)</spark.version.major>.*|\1|p' pom.xml)
+POM_REVISION=$(sed -n 's|.*<revision>\(.*\)</revision>.*|\1|p' pom.xml)
+if [ "v${SPARK_MAJOR}_${POM_REVISION}" = "${TAG_PREFIX}${NEW_VERSION}" ]; then
+  echo "OK: tag matches POM"
+else
+  echo "STOP: tag ${TAG_PREFIX}${NEW_VERSION} does not match POM v${SPARK_MAJOR}_${POM_REVISION}"
+fi
 
 # The tag must not exist yet (locally or on the remote)
 git tag -l "${TAG_PREFIX}${NEW_VERSION}"
