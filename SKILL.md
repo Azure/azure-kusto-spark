@@ -135,7 +135,8 @@ If information is missing, the agent should ask for:
 | Spark 3 tag format | `v3.0_{version}` (e.g., `v3.0_7.0.5`) |
 | Version property | `<revision>` in root `pom.xml` |
 | CI pipeline | `.azuredevops/build.yml` — Azure Pipelines build, runs on pushes and PRs |
-| Release pipeline | `.azuredevops/release.yml` — Azure Pipelines release, triggers on tags matching `v3.0_*.*.*` / `v4.0_*.*.*` / `v4.2_*.*.*` or via manual run |
+| Release pipeline (Spark 4) | `.azuredevops/release.yml` — Azure Pipelines release for `v4.2_*.*.*` (`master`) and `v4.0_*.*.*` (`release/spark40`) tags, or via manual run. Checks that the tag matches the POM |
+| Release workflow (Spark 3) | `.github/workflows/release.yml` on `release/spark3` — GitHub Actions, runs on `v3.0_*.*.*` tags. Does **not** check that the tag matches the POM |
 | Merge strategy | **Squash merge** for all PRs |
 | Changelog | `CHANGELOG.md` in repo root (each branch keeps its own) |
 
@@ -542,35 +543,51 @@ Then on GitHub: open PR → squash merge to `$LINE_BRANCH`.
 
 ### Preconditions
 
+Run this block from the repository root. It stops at the first failed check and prints `PRECONDITIONS OK` only when every check passes.
+
 ```bash
-git fetch --tags origin
-git checkout "$LINE_BRANCH" && git pull origin "$LINE_BRANCH"
+(
+  set -euo pipefail
+  git fetch --tags origin
+  git checkout "$LINE_BRANCH"
+  git pull --ff-only origin "$LINE_BRANCH"
 
-# The tag must equal v{spark.version.major}_{revision} of this commit.
-# Required for Spark 3: its GitHub Actions release workflow does not check this.
-SPARK_MAJOR=$(sed -n 's|.*<spark.version.major>\(.*\)</spark.version.major>.*|\1|p' pom.xml)
-POM_REVISION=$(sed -n 's|.*<revision>\(.*\)</revision>.*|\1|p' pom.xml)
-if [ "v${SPARK_MAJOR}_${POM_REVISION}" = "${TAG_PREFIX}${NEW_VERSION}" ]; then
-  echo "OK: tag matches POM"
-else
-  echo "STOP: tag ${TAG_PREFIX}${NEW_VERSION} does not match POM v${SPARK_MAJOR}_${POM_REVISION}"
-fi
+  # The tag must equal v{spark.version.major}_{revision} of this commit.
+  # Required for Spark 3: its GitHub Actions release workflow does not check this.
+  SPARK_MAJOR=$(sed -n 's|.*<spark.version.major>\(.*\)</spark.version.major>.*|\1|p' pom.xml)
+  POM_REVISION=$(sed -n 's|.*<revision>\(.*\)</revision>.*|\1|p' pom.xml)
+  if [ "v${SPARK_MAJOR}_${POM_REVISION}" != "${TAG_PREFIX}${NEW_VERSION}" ]; then
+    echo "STOP: tag ${TAG_PREFIX}${NEW_VERSION} does not match POM v${SPARK_MAJOR}_${POM_REVISION}" >&2
+    exit 1
+  fi
 
-# The tag must not exist yet (locally or on the remote)
-git tag -l "${TAG_PREFIX}${NEW_VERSION}"
-git ls-remote --tags origin "refs/tags/${TAG_PREFIX}${NEW_VERSION}"
-# Both should return empty
+  # The tag must not exist yet (locally or on the remote)
+  # Standalone assignments, so set -e stops on a failed lookup instead of treating it as "absent"
+  LOCAL_TAG=$(git tag -l "${TAG_PREFIX}${NEW_VERSION}")
+  REMOTE_TAG=$(git ls-remote --tags origin "refs/tags/${TAG_PREFIX}${NEW_VERSION}")
+  if [ -n "$LOCAL_TAG" ] || [ -n "$REMOTE_TAG" ]; then
+    echo "STOP: tag ${TAG_PREFIX}${NEW_VERSION} already exists" >&2
+    exit 1
+  fi
 
-# CHANGELOG.md must contain the dated section the release pipeline publishes
-grep -n "^## \[${NEW_VERSION}\]" CHANGELOG.md
+  # CHANGELOG.md must contain the dated section the release pipeline publishes
+  grep -q "^## \[${NEW_VERSION}\] - " CHANGELOG.md || { echo "STOP: no dated CHANGELOG section for ${NEW_VERSION}" >&2; exit 1; }
+
+  echo "PRECONDITIONS OK"
+)
 ```
 
 ### Create and Push the Tag
 
+Run on `$LINE_BRANCH` only, and only after `PRECONDITIONS OK`. The tag command repeats the tag/POM check, so a mismatch never creates a tag:
+
 ```bash
-# Run on $LINE_BRANCH only — never tag one line's branch with another line's prefix
-git tag "${TAG_PREFIX}${NEW_VERSION}"
-git push origin "${TAG_PREFIX}${NEW_VERSION}"
+EXPECTED_TAG="v$(sed -n 's|.*<spark.version.major>\(.*\)</spark.version.major>.*|\1|p' pom.xml)_$(sed -n 's|.*<revision>\(.*\)</revision>.*|\1|p' pom.xml)"
+if [ "$EXPECTED_TAG" = "${TAG_PREFIX}${NEW_VERSION}" ]; then
+  git tag "${TAG_PREFIX}${NEW_VERSION}" && git push origin "${TAG_PREFIX}${NEW_VERSION}"
+else
+  echo "STOP: tag ${TAG_PREFIX}${NEW_VERSION} does not match POM ${EXPECTED_TAG}" >&2
+fi
 ```
 
 ### Trigger Release
