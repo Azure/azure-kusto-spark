@@ -42,6 +42,14 @@ link your application with the artifact below to use the Azure Data Explorer Con
 
 The Spark 3.x library is published at the following location [kusto-spark_3.0_2.12](https://mvnrepository.com/artifact/com.microsoft.azure.kusto/kusto-spark_3.0).
 
+The Spark 4 libraries are published per Spark line:
+
+| Spark version | Artifact | Source branch |
+|---|---|---|
+| 4.2 | `kusto-spark_4.2_2.13` | `master` |
+| 4.0 / 4.1 | `kusto-spark_4.0_2.13` | `release/spark40` |
+| 3.x | `kusto-spark_3.0_2.12` | `release/spark3` |
+
 Or clone this repository and build it locally to add it to your local maven repository,.
 The jar can also be found under the [released package](https://github.com/Azure/azure-kusto-spark/releases)
 
@@ -64,9 +72,11 @@ use the following artifact:
 
 To use the connector, you need:
 
-- Java 1.8+ SDK installed
+- A Java SDK supported by your Spark line:
+  - Spark 4.2 (`master`) and Spark 4.0/4.1 (`release/spark40`): Java 17 or 21 (CI builds and tests with both)
+  - Spark 3.x (`release/spark3`): Java 8 or 11
 - [Maven 3.x](https://maven.apache.org/download.cgi) installed
-- Spark - with the version aligned with the artifact ID (either 2.4 or 3.0)
+- Spark - with the version aligned with the artifact ID (see the table above)
 
 > Note: when working with Spark version 2.3 or lower, build the jar locally from branch "2.4" and 
 simply change the spark version in the pom file. 
