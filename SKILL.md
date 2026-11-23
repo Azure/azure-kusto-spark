@@ -14,7 +14,7 @@ Use the `@` prefix to include this file in your prompt:
 
 **Development Workflow:**
 ```
-@SKILL.md I have a branch with changes ready. Take over and get it merged to both branches.
+@SKILL.md I have a branch with changes ready. Take over and get it merged to master and the maintenance lines that need it.
 ```
 
 ```
@@ -27,11 +27,11 @@ Use the `@` prefix to include this file in your prompt:
 ```
 
 ```
-@SKILL.md Bump the version and release. Both branches already have the latest changes merged.
+@SKILL.md Bump the version and release the Spark 4.2 line. master already has the latest changes merged.
 ```
 
 ```
-@SKILL.md Just tag and release version 7.0.6 on both branches.
+@SKILL.md Just tag and release version 7.1.8 on the Spark 4.2 line (master).
 ```
 
 ### VS Code — GitHub Copilot Chat
@@ -49,7 +49,7 @@ Use `#file:SKILL.md` to reference this file, or `@workspace` to let Copilot find
 
 **Release Workflow:**
 ```
-#file:SKILL.md Bump version to 7.0.6 and update the changelog on both branches.
+#file:SKILL.md Bump the Spark 4.0 line (release/spark40) to 7.1.7 and update its changelog.
 ```
 
 ### JetBrains — AI Assistant
@@ -61,7 +61,7 @@ Look at SKILL.md in the project root. My PR #485 was merged to master. Cherry-pi
 ```
 
 ```
-Follow the instructions in SKILL.md to do a release — bump version, update changelog, and tag both branches.
+Follow the instructions in SKILL.md to do a release — bump version, update changelog, and tag the selected release line(s).
 ```
 
 ### GitHub.com — Copilot in PR / Issues
@@ -85,29 +85,31 @@ Follow the development workflow in SKILL.md at the repo root. This PR is now mer
 
 This skill has **two independent workflows** that can be invoked separately:
 
-1. **Development Workflow** (Phases 1–2) — Repeat for each feature/fix. Gets changes onto both branches.
-2. **Release Workflow** (Phases 3–5) — Run once when ready to release. Bundles all changes since the last tag.
+1. **Development Workflow** (Phases 1–2) — Repeat for each feature/fix. Gets changes onto `master` and then onto each maintenance line that needs them.
+2. **Release Workflow** (Phases 3–5) — Run once per release line when ready to release. Bundles all changes on that line since its last tag.
+
+There are three independent release lines (see [Release Lines](#release-lines)). Always confirm with the user which line(s) a change or release targets.
 
 You can invoke either workflow at any point. Tell the agent where you are and it will pick up from there.
 
 ### Example Prompts — Development Workflow
 
 **"I have a branch with changes ready — take over from here"**
-> The agent will detect your current branch, push it if needed, help create a PR to master, and then cherry-pick to `release/spark3`.
+> The agent will detect your current branch, push it if needed, help create a PR to master, and then cherry-pick to each maintenance line the user selects (`release/spark40`, `release/spark3`).
 
-**"My PR was just merged to master. Cherry-pick it to Spark 3"**
-> Provide the merged PR number or the squash merge commit SHA. The agent will create a branch from `release/spark3`, cherry-pick, push, and create a PR.
+**"My PR was just merged to master. Cherry-pick it to Spark 4.0 and Spark 3"**
+> Provide the merged PR number or the squash merge commit SHA. For each target line, the agent will create a branch from that line's branch, cherry-pick, push, and create a PR.
 
 ### Example Prompts — Release Workflow
 
 **"All features are merged. Do a release"**
-> The agent will run Phases 3–5: bump the POM version on both branches, update the changelog with all changes since the last tag, create tags, and trigger the release pipeline.
+> The agent will ask which release line(s) to release, then run Phases 3–5 for each: bump the POM version, update the changelog with all changes since that line's last tag, create the tag, and trigger that line's release pipeline.
 
 **"Bump the version and update changelog for release"**
 > The agent will start at Phase 3 — bump the POM version, update the changelog, then ask for confirmation before tagging.
 
 **"Just tag and release version X.Y.Z"**
-> The agent will start at Phase 5 — verify the version in `pom.xml`, create tags on both branches, and trigger the release.
+> The agent will start at Phase 5 — for each selected line, verify the version in `pom.xml`, create that line's tag, and trigger the release.
 
 ### What the Agent May Ask You
 
@@ -125,15 +127,47 @@ If information is missing, the agent should ask for:
 | Item | Value |
 |---|---|
 | Repository | `Azure/azure-kusto-spark` |
-| Spark 4 branch | `master` |
-| Spark 3 branch | `release/spark3` |
-| Spark 4 tag format | `v4.0_{version}` (e.g., `v4.0_7.0.5`) |
+| Spark 4.2 branch | `master` (artifact `kusto-spark_4.2_2.13`) |
+| Spark 4.0/4.1 branch | `release/spark40` (artifact `kusto-spark_4.0_2.13`) |
+| Spark 3 branch | `release/spark3` (artifact `kusto-spark_3.0_2.12`) |
+| Spark 4.2 tag format | `v4.2_{version}` (e.g., `v4.2_7.1.7`) |
+| Spark 4.0/4.1 tag format | `v4.0_{version}` (e.g., `v4.0_7.1.6`) |
 | Spark 3 tag format | `v3.0_{version}` (e.g., `v3.0_7.0.5`) |
 | Version property | `<revision>` in root `pom.xml` |
 | CI pipeline | `.azuredevops/build.yml` — Azure Pipelines build, runs on pushes and PRs |
-| Release pipeline | `.azuredevops/release.yml` — Azure Pipelines release, triggers on tags matching `v3.0_*.*.*` / `v4.0_*.*.*` or via manual run |
+| Release pipeline (Spark 4) | `.azuredevops/release.yml` — Azure Pipelines release for `v4.2_` tags on `master` and `v4.0_` tags on `release/spark40`. Each branch has its own copy: on `release/spark40` the trigger lists `v3.0_*.*.*` and `v4.0_*.*.*` tags, and on `master` it also lists `v4.2_*.*.*`. A tag push runs the YAML from the tagged commit. A manual run uses the YAML from the branch you pick and only checks out and builds the tag given in `sourceTag`. Checks that the tag matches the POM |
+| Release workflow (Spark 3) | `.github/workflows/release.yml` on `release/spark3` — GitHub Actions, triggers on tags matching `v[34].0_[0-9]*.[0-9]*.[0-9]*`. This is the normal release path for `v3.0_` tags (`release/spark3` has no `.azuredevops/release.yml`). Does **not** check that the tag matches the POM |
 | Merge strategy | **Squash merge** for all PRs |
-| Changelog | `CHANGELOG.md` in repo root |
+| Changelog | `CHANGELOG.md` in repo root (each branch keeps its own) |
+
+## Release Lines
+
+| Line | Branch | Tag prefix | Maven artifact | Cherry-pick branch suffix | Release pipeline |
+|---|---|---|---|---|---|
+| Spark 4.2 | `master` | `v4.2_` | `kusto-spark_4.2_2.13` | — | Azure Pipelines `.azuredevops/release.yml` |
+| Spark 4.0 / 4.1 | `release/spark40` | `v4.0_` | `kusto-spark_4.0_2.13` | `_4.0` | Azure Pipelines `.azuredevops/release.yml` (from the tagged commit) |
+| Spark 3 | `release/spark3` | `v3.0_` | `kusto-spark_3.0_2.12` | `_3.0` | GitHub Actions `.github/workflows/release.yml` on `release/spark3` |
+
+Rules:
+
+- New work lands on `master` first, then is cherry-picked to each maintenance line that needs it.
+- Lines are released **independently** and may have different versions and changelogs. Never create a tag on a branch that belongs to another line. The tag must equal `v{spark.version.major}_{revision}` of the tagged commit.
+  - Spark 4 lines: the Azure release pipeline (`.azuredevops/release.yml`) enforces this and fails on a mismatch.
+  - Spark 3: the GitHub Actions workflow does **not** check it. It accepts any tag that matches its trigger pattern and takes the published version from the POM, so a wrong tag can still publish. Always run the tag/POM check in [Preconditions](#preconditions) before tagging.
+- Never release a version that is already published for the same artifact. Different lines may share a version number (e.g. `kusto-spark_4.2_2.13:7.1.7` and `kusto-spark_4.0_2.13:7.1.7`) because the artifacts differ.
+- Set the line once and use these variables in every Release Workflow command:
+
+```bash
+LINE=4.2   # one of: 4.2 | 4.0 | 3.0
+case "$LINE" in
+  4.2) LINE_BRANCH=master;          TAG_PREFIX=v4.2_; SUFFIX="" ;;
+  4.0) LINE_BRANCH=release/spark40; TAG_PREFIX=v4.0_; SUFFIX=_4.0 ;;
+  3.0) LINE_BRANCH=release/spark3;  TAG_PREFIX=v3.0_; SUFFIX=_3.0 ;;
+esac
+POM=$(git show "origin/${LINE_BRANCH}:pom.xml")
+ARTIFACT="kusto-spark_$(sed -n 's|.*<spark.version.major>\(.*\)</spark.version.major>.*|\1|p' <<<"$POM")_$(sed -n 's|.*<scala.version.major>\(.*\)</scala.version.major>.*|\1|p' <<<"$POM")"
+echo "Line ${LINE}: branch=${LINE_BRANCH} tag=${TAG_PREFIX}<version> artifact=${ARTIFACT}"
+```
 
 ## Prerequisites
 
@@ -166,14 +200,15 @@ echo "Current branch: $CURRENT_BRANCH"
 DIRTY=$(git status --porcelain)
 echo "Uncommitted changes: ${DIRTY:-none}"
 
-# What is the base branch? (master or release/spark3)
-BASE_BRANCH=""
-if git merge-base --is-ancestor origin/master HEAD 2>/dev/null; then
-  BASE_BRANCH="master"
-elif git merge-base --is-ancestor origin/release/spark3 HEAD 2>/dev/null; then
-  BASE_BRANCH="release/spark3"
-fi
-echo "Base branch: ${BASE_BRANCH:-unknown}"
+# What is the base branch? Pick the line branch whose merge-base is closest to HEAD.
+BASE_BRANCH=""; BEST=""; TIE=""
+for b in master release/spark40 release/spark3; do
+  mb=$(git merge-base "origin/$b" HEAD 2>/dev/null) || continue
+  n=$(git rev-list --count "${mb}..HEAD")
+  if [[ -z "$BEST" || "$n" -lt "$BEST" ]]; then BEST=$n; BASE_BRANCH=$b; TIE=""
+  elif [[ "$n" -eq "$BEST" ]]; then TIE="$TIE $b"; fi
+done
+echo "Base branch: ${BASE_BRANCH:-unknown}${TIE:+ (ambiguous with:$TIE — ask the user)}"
 
 # Are there unpushed commits?
 UNPUSHED=$(git --no-pager log origin/${CURRENT_BRANCH}..HEAD --oneline 2>/dev/null || echo "branch not on remote")
@@ -190,20 +225,14 @@ echo "Remote branch exists: ${REMOTE_EXISTS:+yes}"
 # Check for open PRs from this branch (requires gh CLI)
 gh pr list --head "$CURRENT_BRANCH" --state all --json number,state,title,mergeCommit 2>/dev/null || echo "gh CLI not available"
 
-# What is the latest version tag?
-LATEST_TAG=$(git tag -l 'v4.0_*' --sort=-version:refname | head -1)
-echo "Latest Spark 4 tag: $LATEST_TAG"
-
-LATEST_TAG_3=$(git tag -l 'v3.0_*' --sort=-version:refname | head -1)
-echo "Latest Spark 3 tag: $LATEST_TAG_3"
-
-# What version is in pom.xml on master?
-MASTER_VERSION=$(git show origin/master:pom.xml | grep '<revision>' | sed 's/.*<revision>\(.*\)<\/revision>.*/\1/')
-echo "master pom.xml version: $MASTER_VERSION"
-
-# What version is in pom.xml on release/spark3?
-SPARK3_VERSION=$(git show origin/release/spark3:pom.xml | grep '<revision>' | sed 's/.*<revision>\(.*\)<\/revision>.*/\1/')
-echo "release/spark3 pom.xml version: $SPARK3_VERSION"
+# Latest tag and pom version for every release line
+git fetch --tags origin
+for pair in master:v4.2_ release/spark40:v4.0_ release/spark3:v3.0_; do
+  b=${pair%%:*}; t=${pair#*:}
+  tag=$(git tag -l "${t}*" --sort=-version:refname | head -1)
+  rev=$(git show "origin/$b:pom.xml" | sed -n 's|.*<revision>\(.*\)</revision>.*|\1|p')
+  echo "$b: latest tag=${tag:-none}, pom revision=$rev"
+done
 ```
 
 ### Step 3 — Decision Table
@@ -217,24 +246,24 @@ Use the detected state to determine where to start:
 | On a feature/fix branch with uncommitted changes | Commit changes, then Phase 1 (push + PR to master) |
 | On a feature/fix branch with unpushed commits | Phase 1 (push branch + create PR to master) |
 | On a feature/fix branch, already pushed, no PR | Phase 1 (create PR to master) |
-| PR merged to master, no corresponding change on release/spark3 | Phase 2 (cherry-pick to release/spark3) |
+| PR merged to master, no corresponding change on a maintenance line that needs it | Phase 2 (cherry-pick to `release/spark40` and/or `release/spark3`) |
 
 **Release Workflow (once per release):**
 
 | Detected State | Start From |
 |---|---|
-| All changes merged to both branches, version not bumped | Phase 3 (version bump) |
-| Version bumped on both branches, changelog not updated | Phase 4 (changelog update) |
+| All changes merged to the line's branch, version not bumped | Phase 3 (version bump) |
+| Version bumped on the line's branch, changelog not updated | Phase 4 (changelog update) |
 | Version bumped + changelog updated, tags not created | Phase 5 (tag & release) |
-| Tags already exist for the version | Done — verify release pipeline ran successfully |
+| Tag `${TAG_PREFIX}{version}` already exists | Done — verify release pipeline ran successfully |
 
 ### Step 4 — Confirm with User
 
 After detecting the state, summarize what you found and confirm with the user before proceeding. Clarify which workflow (development or release) you are about to execute:
 
-> "I detected that you're on branch `asaharn/feat/new-feature` with 2 unpushed commits based on `master`. No PR exists yet. I'll run the **Development Workflow** — push the branch, create a PR to master, then cherry-pick to release/spark3. Does that sound right?"
+> "I detected that you're on branch `asaharn/feat/new-feature` with 2 unpushed commits based on `master`. No PR exists yet. I'll run the **Development Workflow** — push the branch, create a PR to master, then cherry-pick to the maintenance lines you choose (`release/spark40`, `release/spark3`). Does that sound right?"
 
-> "Both branches have all changes merged since the last tag. I'll run the **Release Workflow** — bump the version, update the changelog, and create tags. What version should I use (auto-detect suggests 7.0.6)?"
+> "`master` (Spark 4.2) has changes since `v4.2_7.1.7`. I'll run the **Release Workflow** for the Spark 4.2 line — bump the version, update the changelog, and create the `v4.2_` tag. Should `release/spark40` or `release/spark3` be released too, and what version should I use (auto-detect suggests 7.1.8)?"
 
 ---
 
@@ -303,20 +332,23 @@ git --no-pager log --oneline -1
 # Should show the squash merge commit
 ```
 
-## Phase 2 — Cherry-pick to Spark 3 (release/spark3)
+## Phase 2 — Cherry-pick to maintenance lines (release/spark40, release/spark3)
 
-**Goal**: Apply the same change to `release/spark3` via cherry-pick.
+**Goal**: Apply the same change to each maintenance line that needs it via cherry-pick. Repeat these steps per target line, with `TARGET` = `release/spark40` (suffix `_4.0`) or `release/spark3` (suffix `_3.0`).
 
-**Input required**: The squash merge commit SHA from Phase 1.
+**Input required**: The squash merge commit SHA from Phase 1, and the list of target lines (ask the user).
 
 ### Steps
 
 ```bash
-# 1. Create a branch from release/spark3
-git checkout release/spark3
-git pull origin release/spark3
-git checkout -b <username>/<type>/<short-description>_3.0
-# Example: asaharn/bugfix/cloud-info-fix_3.0
+TARGET=release/spark40   # or release/spark3
+SUFFIX=_4.0              # or _3.0
+
+# 1. Create a branch from the target line
+git checkout "$TARGET"
+git pull origin "$TARGET"
+git checkout -b <username>/<type>/<short-description>${SUFFIX}
+# Example: asaharn/bugfix/cloud-info-fix_4.0
 
 # 2. Cherry-pick the squash merge commit from master
 git cherry-pick <squash-merge-commit-sha>
@@ -332,7 +364,7 @@ git diff --name-only --diff-filter=U
 
 # 2. Open each conflicted file and resolve conflicts manually
 #    - Conflicts are typically in pom.xml due to version differences
-#    - Keep the release/spark3 version values (spark.version.major=3.5, scala versions, etc.)
+#    - Keep the target line's values (revision, spark/scala/hadoop/netty versions, etc.)
 #    - Keep the functional code changes from the cherry-picked commit
 
 # 3. After resolving all conflicts
@@ -349,34 +381,37 @@ git push origin <branch-name>
 
 Then on GitHub:
 
-1. Open a Pull Request targeting `release/spark3`
+1. Open a Pull Request targeting `$TARGET`
 2. Wait for CI checks to pass
-3. **Squash merge** the PR into `release/spark3`
+3. **Squash merge** the PR into `$TARGET`
 
 ### Validation
 
 ```bash
-git checkout release/spark3
-git pull origin release/spark3
+git checkout "$TARGET"
+git pull origin "$TARGET"
 git --no-pager log --oneline -1
-# Should show the squash merge commit on release/spark3
+# Should show the squash merge commit on $TARGET
 ```
 
 ---
 
 # Release Workflow
 
-> **Run Phases 3–5 once when ready to release.** This bundles all changes merged since the last tag into a single version bump, changelog entry, and release.
+> **Run Phases 3–5 once per release line.** Set `LINE`, `LINE_BRANCH`, `TAG_PREFIX` and `SUFFIX` as in [Release Lines](#release-lines) first. This bundles all changes merged to that line since its last tag into a single version bump, changelog entry, and release.
 
 ## Phase 3 — Version Bump
 
-**Goal**: Update the `<revision>` property in `pom.xml` to the new version on both branches.
+**Goal**: Update the `<revision>` property in `pom.xml` to the new version on the selected line's branch.
 
 ### Determine the New Version
 
 ```bash
-# Auto-detect current version from latest Spark 4 tag
-CURRENT_VERSION=$(git tag -l 'v4.0_*' --sort=-version:refname | head -1 | sed 's/v4.0_//')
+# Auto-detect the current version: highest of the line's latest tag and its pom revision
+git fetch --tags origin
+TAG_VERSION=$(git tag -l "${TAG_PREFIX}*" --sort=-version:refname | head -1 | sed "s/^${TAG_PREFIX}//")
+POM_VERSION=$(git show "origin/${LINE_BRANCH}:pom.xml" | sed -n 's|.*<revision>\(.*\)</revision>.*|\1|p')
+CURRENT_VERSION=$(printf '%s\n' ${TAG_VERSION} ${POM_VERSION} | sort -V | tail -1)
 echo "Current version: $CURRENT_VERSION"
 
 # Compute next patch version
@@ -390,12 +425,20 @@ echo "Next version: $NEW_VERSION"
 
 **Manual override**: If the user specifies a version, use that instead of auto-detection.
 
-### Bump on master
+Before continuing, make sure the version is not already published for this line's artifact (HTTP 404 expected):
 
 ```bash
-git checkout master
-git pull origin master
-git checkout -b <username>/chore/version-bump-${NEW_VERSION}
+curl -s -o /dev/null -w '%{http_code}\n' \
+  "https://repo1.maven.org/maven2/com/microsoft/azure/kusto/${ARTIFACT}/${NEW_VERSION}/${ARTIFACT}-${NEW_VERSION}.pom"
+git ls-remote --tags origin "refs/tags/${TAG_PREFIX}${NEW_VERSION}"   # expected: empty
+```
+
+### Bump on the line's branch
+
+```bash
+git checkout "$LINE_BRANCH"
+git pull origin "$LINE_BRANCH"
+git checkout -b <username>/chore/version-bump-${NEW_VERSION}${SUFFIX}
 
 # Update the revision property in pom.xml
 sed -i "s|<revision>.*</revision>|<revision>${NEW_VERSION}</revision>|" pom.xml
@@ -411,58 +454,35 @@ git push origin <branch-name>
 ```
 
 Then on GitHub:
-1. Open a PR targeting `master`
-2. Squash merge after CI passes
-
-### Bump on release/spark3
-
-```bash
-git checkout release/spark3
-git pull origin release/spark3
-git checkout -b <username>/chore/version-bump-${NEW_VERSION}_3.0
-
-# Update the revision property in pom.xml
-sed -i "s|<revision>.*</revision>|<revision>${NEW_VERSION}</revision>|" pom.xml
-
-# Also update kusto.sdk.version if it tracks the same version
-grep '<kusto.sdk.version>' pom.xml
-
-git add pom.xml
-git commit -m "chore: bump version to ${NEW_VERSION}"
-git push origin <branch-name>
-```
-
-Then on GitHub:
-1. Open a PR targeting `release/spark3`
+1. Open a PR targeting `$LINE_BRANCH`
 2. Squash merge after CI passes
 
 ### Validation
 
 ```bash
-# Verify on master
-git checkout master && git pull origin master
-grep '<revision>' pom.xml
-# Should show: <revision>{NEW_VERSION}</revision>
-
-# Verify on release/spark3
-git checkout release/spark3 && git pull origin release/spark3
+git checkout "$LINE_BRANCH" && git pull origin "$LINE_BRANCH"
 grep '<revision>' pom.xml
 # Should show: <revision>{NEW_VERSION}</revision>
 ```
 
 ## Phase 4 — Changelog Update
 
-**Goal**: Update `CHANGELOG.md` with the new version entry on both branches.
+**Goal**: Update `CHANGELOG.md` with the new version entry on the selected line's branch. Each line keeps its own changelog; the release pipeline publishes the `## [{NEW_VERSION}]` section of the tagged commit and fails if it is missing.
 
 ### Gather Changes
 
 ```bash
-# Get the previous version tag
-PREV_TAG=$(git tag -l 'v4.0_*' --sort=-version:refname | head -1)
-echo "Previous tag: $PREV_TAG"
+# Get the line's previous version tag
+PREV_TAG=$(git tag -l "${TAG_PREFIX}*" --sort=-version:refname | head -1)
+echo "Previous tag: ${PREV_TAG:-none}"
+# First release on a line (no tag with this prefix yet): ask the user for the baseline,
+# e.g. the predecessor line's last tag (v4.0_7.1.6 for the first v4.2_ release) or a commit SHA.
+if [[ -z "$PREV_TAG" ]]; then
+  read -r -p "No ${TAG_PREFIX} tag yet. Baseline tag/commit: " PREV_TAG
+fi
 
-# List commits since last tag on master
-git --no-pager log --oneline ${PREV_TAG}..origin/master
+# List commits since that tag on the line's branch
+git --no-pager log --oneline ${PREV_TAG}..origin/${LINE_BRANCH}
 ```
 
 ### Update CHANGELOG.md
@@ -501,12 +521,12 @@ The changelog entry should look like:
 - <items or "None">
 ```
 
-### Commit Changelog on master
+### Commit Changelog on the line's branch
 
 ```bash
-git checkout master
-git pull origin master
-git checkout -b <username>/chore/changelog-${NEW_VERSION}
+git checkout "$LINE_BRANCH"
+git pull origin "$LINE_BRANCH"
+git checkout -b <username>/chore/changelog-${NEW_VERSION}${SUFFIX}
 
 # Edit CHANGELOG.md as described above
 
@@ -515,99 +535,110 @@ git commit -m "chore: update changelog for ${NEW_VERSION}"
 git push origin <branch-name>
 ```
 
-Then on GitHub: open PR → squash merge to `master`.
-
-### Cherry-pick Changelog to release/spark3
-
-```bash
-# After the changelog PR is merged to master, get the merge commit SHA
-git checkout master && git pull origin master
-CHANGELOG_SHA=$(git --no-pager log --oneline -1 --format='%H')
-
-git checkout release/spark3
-git pull origin release/spark3
-git checkout -b <username>/chore/changelog-${NEW_VERSION}_3.0
-
-git cherry-pick $CHANGELOG_SHA
-# Resolve conflicts if any (unlikely for CHANGELOG.md)
-
-git push origin <branch-name>
-```
-
-Then on GitHub: open PR → squash merge to `release/spark3`.
+Then on GitHub: open PR → squash merge to `$LINE_BRANCH`.
 
 ## Phase 5 — Tagging & Release
 
-**Goal**: Create version tags on both branches to trigger the release pipeline.
+**Goal**: Create the selected line's version tag on that line's branch to trigger its release pipeline. Repeat per line being released.
 
 ### Preconditions
 
+Run this block from the repository root. It stops at the first failed check and prints `PRECONDITIONS OK` only when every check passes. Every check reads the committed files of the merged branch tip, not the working tree.
+
 ```bash
-# Verify both branches have the correct version in pom.xml
-git checkout master && git pull origin master
-grep '<revision>' pom.xml
-# Must show: <revision>{NEW_VERSION}</revision>
+(
+  set -euo pipefail
+  git fetch --tags origin
+  git checkout "$LINE_BRANCH"
+  git pull --ff-only origin "$LINE_BRANCH"
 
-git checkout release/spark3 && git pull origin release/spark3
-grep '<revision>' pom.xml
-# Must show: <revision>{NEW_VERSION}</revision>
+  # Release only what was merged: local HEAD must equal the remote branch tip
+  RELEASE_COMMIT=$(git rev-parse HEAD)
+  if [ "$RELEASE_COMMIT" != "$(git rev-parse "origin/$LINE_BRANCH")" ]; then
+    echo "STOP: local $LINE_BRANCH is not equal to origin/$LINE_BRANCH" >&2
+    exit 1
+  fi
 
-# Verify tags don't already exist
-git tag -l "v4.0_${NEW_VERSION}"
-git tag -l "v3.0_${NEW_VERSION}"
-# Both should return empty
+  # The tag must equal v{spark.version.major}_{revision} of this commit.
+  # Required for Spark 3: its GitHub Actions release workflow does not check this.
+  POM=$(git show "$RELEASE_COMMIT:pom.xml")
+  SPARK_MAJOR=$(sed -n 's|.*<spark.version.major>\(.*\)</spark.version.major>.*|\1|p' <<<"$POM")
+  POM_REVISION=$(sed -n 's|.*<revision>\(.*\)</revision>.*|\1|p' <<<"$POM")
+  if [ "v${SPARK_MAJOR}_${POM_REVISION}" != "${TAG_PREFIX}${NEW_VERSION}" ]; then
+    echo "STOP: tag ${TAG_PREFIX}${NEW_VERSION} does not match POM v${SPARK_MAJOR}_${POM_REVISION}" >&2
+    exit 1
+  fi
+
+  # The tag must not exist yet (locally or on the remote)
+  # Standalone assignments, so set -e stops on a failed lookup instead of treating it as "absent"
+  LOCAL_TAG=$(git tag -l "${TAG_PREFIX}${NEW_VERSION}")
+  REMOTE_TAG=$(git ls-remote --tags origin "refs/tags/${TAG_PREFIX}${NEW_VERSION}")
+  if [ -n "$LOCAL_TAG" ] || [ -n "$REMOTE_TAG" ]; then
+    echo "STOP: tag ${TAG_PREFIX}${NEW_VERSION} already exists" >&2
+    exit 1
+  fi
+
+  # CHANGELOG.md must contain the dated section the release pipeline publishes
+  CHANGELOG=$(git show "$RELEASE_COMMIT:CHANGELOG.md")
+  grep -q "^## \[${NEW_VERSION}\] - " <<<"$CHANGELOG" || { echo "STOP: no dated CHANGELOG section for ${NEW_VERSION}" >&2; exit 1; }
+
+  echo "PRECONDITIONS OK"
+)
 ```
 
-### Create and Push Tags
+### Create and Push the Tag
+
+Run on `$LINE_BRANCH` only, and only after `PRECONDITIONS OK`. This block repeats the branch-tip and tag/POM checks, then tags that exact commit. On any mismatch it exits with an error and creates no tag:
 
 ```bash
-# Tag master (Spark 4)
-git checkout master
-git pull origin master
-git tag "v4.0_${NEW_VERSION}"
-git push origin "v4.0_${NEW_VERSION}"
-
-# Tag release/spark3 (Spark 3)
-git checkout release/spark3
-git pull origin release/spark3
-git tag "v3.0_${NEW_VERSION}"
-git push origin "v3.0_${NEW_VERSION}"
+(
+  set -euo pipefail
+  RELEASE_COMMIT=$(git rev-parse HEAD)
+  REMOTE_TIP=$(git ls-remote origin "refs/heads/$LINE_BRANCH")
+  if [ "$RELEASE_COMMIT" != "${REMOTE_TIP%%[[:space:]]*}" ]; then
+    echo "STOP: HEAD is not the current tip of origin/$LINE_BRANCH" >&2
+    exit 1
+  fi
+  POM=$(git show "$RELEASE_COMMIT:pom.xml")
+  EXPECTED_TAG="v$(sed -n 's|.*<spark.version.major>\(.*\)</spark.version.major>.*|\1|p' <<<"$POM")_$(sed -n 's|.*<revision>\(.*\)</revision>.*|\1|p' <<<"$POM")"
+  if [ "$EXPECTED_TAG" != "${TAG_PREFIX}${NEW_VERSION}" ]; then
+    echo "STOP: tag ${TAG_PREFIX}${NEW_VERSION} does not match POM ${EXPECTED_TAG}" >&2
+    exit 1
+  fi
+  git tag "${TAG_PREFIX}${NEW_VERSION}" "$RELEASE_COMMIT"
+  git push origin "refs/tags/${TAG_PREFIX}${NEW_VERSION}"
+)
 ```
 
 ### Trigger Release
 
-After pushing tags, the Azure release pipeline (`.azuredevops/release.yml`) runs automatically for tags matching `v3.0_*.*.*` / `v4.0_*.*.*`. To run it manually (for example to publish with the optional steps enabled):
+- **Spark 4.2 (`v4.2_`) and Spark 4.0/4.1 (`v4.0_`)**: the Azure release pipeline (`.azuredevops/release.yml` at the tagged commit) runs automatically when the tag is pushed. To run it manually (for example to publish with the optional steps enabled):
+  1. Go to **Azure DevOps → Pipelines → the azure-kusto-spark release pipeline**
+  2. Click **Run pipeline**
+  3. Set `sourceTag` to `${TAG_PREFIX}{NEW_VERSION}` and enable `createGitHubRelease` and `uploadToAzure`
 
-1. Go to **Azure DevOps → Pipelines → the azure-kusto-spark release pipeline**
-2. Click **Run pipeline**
-3. For Spark 4: set `sourceTag` to `v4.0_{NEW_VERSION}`, enable `createGitHubRelease` and `uploadToAzure`
-4. For Spark 3: set `sourceTag` to `v3.0_{NEW_VERSION}`, enable `createGitHubRelease` and `uploadToAzure`
+  Or via Azure CLI (requires the `azure-devops` extension):
 
-Alternatively, via Azure CLI (requires the `azure-devops` extension):
+  ```bash
+  az pipelines run --name "<release-pipeline-name>" \
+    --branch "refs/tags/${TAG_PREFIX}${NEW_VERSION}" \
+    --parameters sourceTag="${TAG_PREFIX}${NEW_VERSION}" createGitHubRelease=true uploadToAzure=true
+  ```
 
-```bash
-# Trigger release for Spark 4
-az pipelines run --name "<release-pipeline-name>" \
-  --branch "refs/tags/v4.0_${NEW_VERSION}" \
-  --parameters sourceTag="v4.0_${NEW_VERSION}" createGitHubRelease=true uploadToAzure=true
-
-# Trigger release for Spark 3
-az pipelines run --name "<release-pipeline-name>" \
-  --branch "refs/tags/v3.0_${NEW_VERSION}" \
-  --parameters sourceTag="v3.0_${NEW_VERSION}" createGitHubRelease=true uploadToAzure=true
-```
+- **Spark 3 (`v3.0_`)**: `release/spark3` has no Azure Pipelines release definition. Pushing the tag triggers the GitHub Actions workflow `.github/workflows/release.yml` from the tagged commit. It cannot be started manually from the Actions tab (the workflow is not on the default branch); to re-run, use **Re-run jobs** on the tag's existing run.
 
 ### Validation
 
 ```bash
-# Verify tags exist on remote
-git ls-remote --tags origin | grep "${NEW_VERSION}"
-# Should show both v4.0_{NEW_VERSION} and v3.0_{NEW_VERSION}
+# Verify the tag exists on the remote
+git ls-remote --tags origin "refs/tags/${TAG_PREFIX}${NEW_VERSION}"
 
-# Check release pipeline status (via Azure CLI)
+# Spark 4 lines: check the Azure release pipeline run
 PIPELINE_ID="$(az pipelines show --name "<release-pipeline-name>" --query id --output tsv)"
-az pipelines runs list --pipeline-ids "${PIPELINE_ID}" --top 4
-# Should show two runs (one per tag) in progress or completed
+az pipelines runs list --pipeline-ids "${PIPELINE_ID}" --top 3
+
+# Spark 3: check the GitHub Actions run
+gh run list --workflow release.yml --limit 3
 ```
 
 ## Quick Reference
@@ -617,42 +648,42 @@ az pipelines runs list --pipeline-ids "${PIPELINE_ID}" --top 4
 | # | Phase | Key Input | Key Output |
 |---|---|---|---|
 | 1 | Feature/Fix PR → master | Code changes | Squash merge commit SHA |
-| 2 | Cherry-pick to release/spark3 | Commit SHA from Phase 1 | Merged to release/spark3 |
+| 2 | Cherry-pick to release/spark40 and/or release/spark3 (same steps as Phase 2) | Commit SHA from Phase 1 | Merged to the maintenance branch |
 
-### Release Workflow (once per release)
+### Release Workflow (once per release line)
 
 | # | Phase | Key Input | Key Output |
 |---|---|---|---|
-| 3 | Version bump on both branches | New version (auto or manual) | Updated pom.xml on both branches |
-| 4 | Changelog update on both branches | All PR descriptions since last tag | Updated CHANGELOG.md on both branches |
-| 5 | Tag & release | New version | Tags pushed, release pipeline triggered |
+| 3 | Version bump on the line's branch | Line + new version (auto or manual) | Updated pom.xml on `$LINE_BRANCH` |
+| 4 | Changelog update on the line's branch | All PR descriptions since the line's last tag | Updated CHANGELOG.md on `$LINE_BRANCH` |
+| 5 | Tag & release | Line + new version | `${TAG_PREFIX}{version}` pushed, line's release pipeline triggered |
 
 ## Error Handling
 
 ### Cherry-pick conflict
 - Most common in `pom.xml` due to different Spark/Scala version properties
-- Keep the `release/spark3` values for Spark/Scala-specific properties
+- Keep the maintenance branch's values (`release/spark40` or `release/spark3`) for Spark/Scala/Netty-specific properties
 - Keep the functional code changes from the cherry-picked commit
 - If unsure, ask the user to resolve manually
 
 ### CI failure after cherry-pick
-- The Spark 3 build may fail if the change relies on Spark 4-only APIs
-- Ask the user whether the change needs adaptation for Spark 3
+- A maintenance-line build may fail if the change relies on APIs only available in newer Spark/Hadoop versions (e.g. Spark 4.2 / Hadoop 3.5 on master)
+- Ask the user whether the change needs adaptation for that line
 
 ### Tag already exists
 - If a tag already exists, do NOT overwrite it
 - Ask the user whether to use a different version number or delete the existing tag
 
 ### Release workflow failure
-- Check the pipeline run logs in Azure DevOps (`az pipelines runs show --id <run-id>`)
+- Spark 4 lines: check the pipeline run logs in Azure DevOps (`az pipelines runs show --id <run-id>`); Spark 3: check the GitHub Actions run (`gh run view <run-id> --log-failed`)
 - Common issues: missing variable group values or service connection approval, Maven build failure, Azure storage upload failure
 - Re-run the pipeline after fixing the issue
 
 ## Rules
 
 - Always use **squash merge** for PRs — never regular merge or rebase merge
-- Never push directly to `master` or `release/spark3` — always go through PRs
+- Never push directly to `master`, `release/spark40` or `release/spark3` — always go through PRs
 - Always verify CI passes before merging
 - Always confirm the version in `pom.xml` matches the tag being created
 - When in doubt about any step, ask the user before proceeding
-- Keep `CHANGELOG.md` in sync on both branches
+- Keep each line's `CHANGELOG.md` accurate for that line; cherry-pick shared entries when a change lands on several lines
