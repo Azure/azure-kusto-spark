@@ -135,8 +135,8 @@ If information is missing, the agent should ask for:
 | Spark 3 tag format | `v3.0_{version}` (e.g., `v3.0_7.0.5`) |
 | Version property | `<revision>` in root `pom.xml` |
 | CI pipeline | `.azuredevops/build.yml` — Azure Pipelines build, runs on pushes and PRs |
-| Release pipeline (Spark 4) | `.azuredevops/release.yml` — Azure Pipelines release. Its trigger lists `v3.0_*.*.*`, `v4.0_*.*.*` and `v4.2_*.*.*` tags (or a manual run), and it runs the YAML from the tagged commit. Used for `v4.2_` tags on `master` and `v4.0_` tags on `release/spark40`. Checks that the tag matches the POM |
-| Release workflow (Spark 3) | `.github/workflows/release.yml` on `release/spark3` — GitHub Actions, triggers on tags matching `v[34].0_[0-9]*.[0-9]*.[0-9]*`. `release/spark3` has no `.azuredevops/release.yml`, so `v3.0_` tags are released only by this workflow. Does **not** check that the tag matches the POM |
+| Release pipeline (Spark 4) | `.azuredevops/release.yml` — Azure Pipelines release for `v4.2_` tags on `master` and `v4.0_` tags on `release/spark40`. Its trigger lists `v3.0_*.*.*`, `v4.0_*.*.*` and `v4.2_*.*.*` tags. A tag push runs the YAML from the tagged commit. A manual run uses the YAML from the branch you pick and only checks out and builds the tag given in `sourceTag`. Checks that the tag matches the POM |
+| Release workflow (Spark 3) | `.github/workflows/release.yml` on `release/spark3` — GitHub Actions, triggers on tags matching `v[34].0_[0-9]*.[0-9]*.[0-9]*`. This is the normal release path for `v3.0_` tags (`release/spark3` has no `.azuredevops/release.yml`). Does **not** check that the tag matches the POM |
 | Merge strategy | **Squash merge** for all PRs |
 | Changelog | `CHANGELOG.md` in repo root (each branch keeps its own) |
 
