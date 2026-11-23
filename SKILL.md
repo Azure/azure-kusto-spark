@@ -135,8 +135,8 @@ If information is missing, the agent should ask for:
 | Spark 3 tag format | `v3.0_{version}` (e.g., `v3.0_7.0.5`) |
 | Version property | `<revision>` in root `pom.xml` |
 | CI pipeline | `.azuredevops/build.yml` — Azure Pipelines build, runs on pushes and PRs |
-| Release pipeline (Spark 4) | `.azuredevops/release.yml` — Azure Pipelines release for `v4.2_*.*.*` (`master`) and `v4.0_*.*.*` (`release/spark40`) tags, or via manual run. Checks that the tag matches the POM |
-| Release workflow (Spark 3) | `.github/workflows/release.yml` on `release/spark3` — GitHub Actions, runs on `v3.0_*.*.*` tags. Does **not** check that the tag matches the POM |
+| Release pipeline (Spark 4) | `.azuredevops/release.yml` — Azure Pipelines release for `v4.2_` tags on `master` and `v4.0_` tags on `release/spark40`. Each branch has its own copy: on `release/spark40` the trigger lists `v3.0_*.*.*` and `v4.0_*.*.*` tags, and on `master` it also lists `v4.2_*.*.*`. A tag push runs the YAML from the tagged commit. A manual run uses the YAML from the branch you pick and only checks out and builds the tag given in `sourceTag`. Checks that the tag matches the POM |
+| Release workflow (Spark 3) | `.github/workflows/release.yml` on `release/spark3` — GitHub Actions, triggers on tags matching `v[34].0_[0-9]*.[0-9]*.[0-9]*`. This is the normal release path for `v3.0_` tags (`release/spark3` has no `.azuredevops/release.yml`). Does **not** check that the tag matches the POM |
 | Merge strategy | **Squash merge** for all PRs |
 | Changelog | `CHANGELOG.md` in repo root (each branch keeps its own) |
 
@@ -153,7 +153,7 @@ Rules:
 - New work lands on `master` first, then is cherry-picked to each maintenance line that needs it.
 - Lines are released **independently** and may have different versions and changelogs. Never create a tag on a branch that belongs to another line. The tag must equal `v{spark.version.major}_{revision}` of the tagged commit.
   - Spark 4 lines: the Azure release pipeline (`.azuredevops/release.yml`) enforces this and fails on a mismatch.
-  - Spark 3: the GitHub Actions workflow does **not** check it. It accepts any `v3.0_*` tag and takes the published version from the POM, so a wrong tag can still publish. Always run the tag/POM check in [Preconditions](#preconditions) before tagging.
+  - Spark 3: the GitHub Actions workflow does **not** check it. It accepts any tag that matches its trigger pattern and takes the published version from the POM, so a wrong tag can still publish. Always run the tag/POM check in [Preconditions](#preconditions) before tagging.
 - Never release a version that is already published for the same artifact. Different lines may share a version number (e.g. `kusto-spark_4.2_2.13:7.1.7` and `kusto-spark_4.0_2.13:7.1.7`) because the artifacts differ.
 - Set the line once and use these variables in every Release Workflow command:
 
@@ -543,7 +543,7 @@ Then on GitHub: open PR → squash merge to `$LINE_BRANCH`.
 
 ### Preconditions
 
-Run this block from the repository root. It stops at the first failed check and prints `PRECONDITIONS OK` only when every check passes.
+Run this block from the repository root. It stops at the first failed check and prints `PRECONDITIONS OK` only when every check passes. Every check reads the committed files of the merged branch tip, not the working tree.
 
 ```bash
 (
@@ -552,10 +552,18 @@ Run this block from the repository root. It stops at the first failed check and 
   git checkout "$LINE_BRANCH"
   git pull --ff-only origin "$LINE_BRANCH"
 
+  # Release only what was merged: local HEAD must equal the remote branch tip
+  RELEASE_COMMIT=$(git rev-parse HEAD)
+  if [ "$RELEASE_COMMIT" != "$(git rev-parse "origin/$LINE_BRANCH")" ]; then
+    echo "STOP: local $LINE_BRANCH is not equal to origin/$LINE_BRANCH" >&2
+    exit 1
+  fi
+
   # The tag must equal v{spark.version.major}_{revision} of this commit.
   # Required for Spark 3: its GitHub Actions release workflow does not check this.
-  SPARK_MAJOR=$(sed -n 's|.*<spark.version.major>\(.*\)</spark.version.major>.*|\1|p' pom.xml)
-  POM_REVISION=$(sed -n 's|.*<revision>\(.*\)</revision>.*|\1|p' pom.xml)
+  POM=$(git show "$RELEASE_COMMIT:pom.xml")
+  SPARK_MAJOR=$(sed -n 's|.*<spark.version.major>\(.*\)</spark.version.major>.*|\1|p' <<<"$POM")
+  POM_REVISION=$(sed -n 's|.*<revision>\(.*\)</revision>.*|\1|p' <<<"$POM")
   if [ "v${SPARK_MAJOR}_${POM_REVISION}" != "${TAG_PREFIX}${NEW_VERSION}" ]; then
     echo "STOP: tag ${TAG_PREFIX}${NEW_VERSION} does not match POM v${SPARK_MAJOR}_${POM_REVISION}" >&2
     exit 1
@@ -571,7 +579,8 @@ Run this block from the repository root. It stops at the first failed check and 
   fi
 
   # CHANGELOG.md must contain the dated section the release pipeline publishes
-  grep -q "^## \[${NEW_VERSION}\] - " CHANGELOG.md || { echo "STOP: no dated CHANGELOG section for ${NEW_VERSION}" >&2; exit 1; }
+  CHANGELOG=$(git show "$RELEASE_COMMIT:CHANGELOG.md")
+  grep -q "^## \[${NEW_VERSION}\] - " <<<"$CHANGELOG" || { echo "STOP: no dated CHANGELOG section for ${NEW_VERSION}" >&2; exit 1; }
 
   echo "PRECONDITIONS OK"
 )
@@ -579,15 +588,26 @@ Run this block from the repository root. It stops at the first failed check and 
 
 ### Create and Push the Tag
 
-Run on `$LINE_BRANCH` only, and only after `PRECONDITIONS OK`. The tag command repeats the tag/POM check, so a mismatch never creates a tag:
+Run on `$LINE_BRANCH` only, and only after `PRECONDITIONS OK`. This block repeats the branch-tip and tag/POM checks, then tags that exact commit. On any mismatch it exits with an error and creates no tag:
 
 ```bash
-EXPECTED_TAG="v$(sed -n 's|.*<spark.version.major>\(.*\)</spark.version.major>.*|\1|p' pom.xml)_$(sed -n 's|.*<revision>\(.*\)</revision>.*|\1|p' pom.xml)"
-if [ "$EXPECTED_TAG" = "${TAG_PREFIX}${NEW_VERSION}" ]; then
-  git tag "${TAG_PREFIX}${NEW_VERSION}" && git push origin "${TAG_PREFIX}${NEW_VERSION}"
-else
-  echo "STOP: tag ${TAG_PREFIX}${NEW_VERSION} does not match POM ${EXPECTED_TAG}" >&2
-fi
+(
+  set -euo pipefail
+  RELEASE_COMMIT=$(git rev-parse HEAD)
+  REMOTE_TIP=$(git ls-remote origin "refs/heads/$LINE_BRANCH")
+  if [ "$RELEASE_COMMIT" != "${REMOTE_TIP%%[[:space:]]*}" ]; then
+    echo "STOP: HEAD is not the current tip of origin/$LINE_BRANCH" >&2
+    exit 1
+  fi
+  POM=$(git show "$RELEASE_COMMIT:pom.xml")
+  EXPECTED_TAG="v$(sed -n 's|.*<spark.version.major>\(.*\)</spark.version.major>.*|\1|p' <<<"$POM")_$(sed -n 's|.*<revision>\(.*\)</revision>.*|\1|p' <<<"$POM")"
+  if [ "$EXPECTED_TAG" != "${TAG_PREFIX}${NEW_VERSION}" ]; then
+    echo "STOP: tag ${TAG_PREFIX}${NEW_VERSION} does not match POM ${EXPECTED_TAG}" >&2
+    exit 1
+  fi
+  git tag "${TAG_PREFIX}${NEW_VERSION}" "$RELEASE_COMMIT"
+  git push origin "refs/tags/${TAG_PREFIX}${NEW_VERSION}"
+)
 ```
 
 ### Trigger Release
