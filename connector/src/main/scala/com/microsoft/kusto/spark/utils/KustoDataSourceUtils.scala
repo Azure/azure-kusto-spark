@@ -54,7 +54,6 @@ import java.util.concurrent.{Callable, CountDownLatch, TimeUnit}
 import java.util.{
   Locale,
   NoSuchElementException,
-  Locale,
   Objects,
   Properties,
   StringJoiner,
