@@ -16,7 +16,7 @@ import com.microsoft.azure.kusto.ingest.{IngestionMapping, IngestionProperties}
 
 import java.security.InvalidParameterException
 import java.time.Instant
-import java.util.Objects
+import java.util.{ArrayList, Objects}
 
 class SparkIngestionProperties(
     var flushImmediately: Boolean = false,
@@ -104,6 +104,33 @@ class SparkIngestionProperties(
 }
 
 object SparkIngestionProperties {
+  private def copyList(values: util.List[String]): util.List[String] =
+    if (values == null) null else new ArrayList[String](values)
+
+  private[kusto] def cloneWithDropByTag(
+      source: SparkIngestionProperties,
+      dropByTag: Option[String]): SparkIngestionProperties = {
+    val copy = new SparkIngestionProperties(
+      flushImmediately = source.flushImmediately,
+      dropByTags = copyList(source.dropByTags),
+      ingestByTags = copyList(source.ingestByTags),
+      additionalTags = copyList(source.additionalTags),
+      ingestIfNotExists = copyList(source.ingestIfNotExists),
+      creationTime = source.creationTime,
+      csvMapping = source.csvMapping,
+      csvMappingNameReference = source.csvMappingNameReference)
+
+    dropByTag.foreach { tag =>
+      val tags =
+        if (copy.dropByTags == null) new ArrayList[String]() else copy.dropByTags
+      if (!tags.contains(tag)) {
+        tags.add(tag)
+      }
+      copy.dropByTags = tags
+    }
+    copy
+  }
+
   def cloneIngestionProperties(
       ingestionProperties: IngestionProperties,
       destinationTable: Option[String] = None): IngestionProperties = {

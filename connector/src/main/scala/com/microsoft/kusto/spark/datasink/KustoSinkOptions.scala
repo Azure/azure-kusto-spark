@@ -11,6 +11,7 @@ import com.microsoft.kusto.spark.datasink.SchemaAdjustmentMode.{
 import com.microsoft.kusto.spark.datasink.SinkTableCreationMode.SinkTableCreationMode
 import com.microsoft.kusto.spark.datasink.WriteMode.{Transactional, WriteMode}
 import com.microsoft.kusto.spark.utils.{KustoConstants, KustoCustomDebugWriteOptions}
+import org.apache.spark.sql.SaveMode
 
 import java.util.UUID
 import java.util.concurrent.TimeUnit
@@ -41,6 +42,17 @@ object KustoSinkOptions extends KustoOptions {
 
   // A json representation of the SparkIngestionProperties object used for writing to Kusto
   val KUSTO_SPARK_INGESTION_PROPERTIES_JSON: String = newOption("sparkIngestionPropertiesJson")
+
+  // Required with SaveMode.Overwrite unless overwriteFullTable is true. The connector adds this
+  // suffix as a drop-by tag and replaces only destination extents carrying the same tag.
+  val KUSTO_OVERWRITE_TAG_NAME: String = newOption("overwriteTagName")
+
+  // Explicitly allows SaveMode.Overwrite to replace all extents in the destination table.
+  val KUSTO_OVERWRITE_FULL_TABLE: String = newOption("overwriteFullTable")
+
+  private[kusto] val OverwriteFullTableDataLossWarning: String =
+    "Full-table overwrite is guarded by an extra flag because it may delete data currently in " +
+      "the table even if it was not written by this connector, and may cause data loss if not used correctly."
 
   val NONE_RESULT_LIMIT = "none"
 
@@ -123,4 +135,7 @@ final case class WriteOptions(
     userTempTableName: Option[String] = None,
     streamIngestUncompressedMaxSize: Int = KustoConstants.DefaultMaxStreamingBytesUncompressed,
     maybeIngestionBlobStorage: Option[Array[IngestionStorageParameters]] = None,
-    kustoCustomDebugWriteOptions: KustoCustomDebugWriteOptions)
+    kustoCustomDebugWriteOptions: KustoCustomDebugWriteOptions,
+    saveMode: SaveMode = SaveMode.Append,
+    overwriteTagName: Option[String] = None,
+    overwriteFullTable: Boolean = false)

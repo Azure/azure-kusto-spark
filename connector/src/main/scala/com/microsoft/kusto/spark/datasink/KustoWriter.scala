@@ -343,8 +343,9 @@ object KustoWriter {
 
   private def getSparkIngestionProperties(
       writeOptions: WriteOptions): SparkIngestionProperties = {
-    val sparkIngestionProperties =
-      writeOptions.maybeSparkIngestionProperties.getOrElse(new SparkIngestionProperties())
+    val sparkIngestionProperties = SparkIngestionProperties.cloneWithDropByTag(
+      writeOptions.maybeSparkIngestionProperties.getOrElse(new SparkIngestionProperties()),
+      writeOptions.overwriteTagName)
     sparkIngestionProperties.ingestIfNotExists = new util.ArrayList()
     sparkIngestionProperties
   }
