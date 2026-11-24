@@ -4,12 +4,18 @@
 package com.microsoft.kusto.spark.datasource
 
 import com.azure.core.credential.AzureSasCredential
-import com.azure.storage.blob.BlobContainerClientBuilder
+import com.azure.storage.blob.{BlobContainerClient, BlobContainerClientBuilder}
+import com.azure.storage.blob.models.ListBlobsOptions
 import com.azure.storage.common.StorageSharedKeyCredential
 import com.microsoft.azure.kusto.data.{ClientRequestProperties, KustoResultSetTable}
+import com.microsoft.azure.kusto.data.exceptions.ThrottleException
 import com.microsoft.kusto.spark.authentication.KustoAuthentication
 import com.microsoft.kusto.spark.common.KustoCoordinates
 import com.microsoft.kusto.spark.datasource.ReadMode.ReadMode
+import com.microsoft.kusto.spark.exceptions.{
+  FailedOperationException,
+  TimeoutAwaitingPendingOperationException
+}
 import com.microsoft.kusto.spark.utils.{
   CslCommandsGenerator,
   ExtendedKustoClient,
@@ -17,20 +23,25 @@ import com.microsoft.kusto.spark.utils.{
   KustoConstants => KCONST,
   KustoDataSourceUtils => KDSU
 }
+import io.github.resilience4j.core.IntervalFunction
+import io.github.resilience4j.retry.RetryConfig
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.util.ComparableVersion
 import org.apache.spark.Partition
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.sources.Filter
-import org.apache.spark.sql.{Row, RuntimeConfig, SparkSession}
+import org.apache.spark.sql.{DataFrame, Row, RuntimeConfig, SparkSession}
 
 import java.net.URI
 import java.security.InvalidParameterException
 import java.time.{Clock, Instant}
 import java.util.UUID
+import scala.annotation.tailrec
 import scala.collection.{concurrent, mutable}
-import scala.concurrent.duration.FiniteDuration
+import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
+import scala.util.Try
 
 private[kusto] case class KustoPartition(predicate: Option[String], idx: Int) extends Partition {
   override def index: Int = idx
@@ -71,10 +82,8 @@ private[kusto] case class DistributedReadModeTransientCacheKey(
     enableExportStorageApi: Boolean)
 
 /**
- * A previously exported result set: the parquet paths together with the storage credentials and
- * protocol they must be read with. The credentials are needed on every cache hit because the
- * Hadoop/Spark configuration they install is session global and may have been overwritten by
- * another read in the meantime.
+ * Cached export paths and storage settings. Reuse requires matching storage credentials; Parquet
+ * reads carry their own configuration rather than reusing cached ABFS clients.
  */
 private[kusto] case class DistributedReadModeTransientCacheEntry(
     paths: Seq[String],
@@ -84,6 +93,61 @@ private[kusto] case class DistributedReadModeTransientCacheEntry(
 object KustoReader {
   private val className = this.getClass.getSimpleName
   private val sparkHadoopConfigPrefix = "spark.hadoop."
+  private val exportCapacityOrigin =
+    """(?:^|,\s*)Origin:\s*'CapacityPolicy/Export'(?:[.,\s]|$)""".r
+  private[kusto] val MaxExportAttempts = 4
+  private val exportRetryInterval = IntervalFunction.ofExponentialRandomBackoff(
+    5000L,
+    2.0,
+    IntervalFunction.DEFAULT_RANDOMIZATION_FACTOR,
+    30000L)
+  // A lost submission response is not evidence that the export was rejected.
+  private val exportSubmissionRetryConfig = RetryConfig.custom.maxAttempts(1).build()
+
+  private def operationField(exception: FailedOperationException, name: String): Option[String] =
+    exception.getResult.flatMap(table => Try(table.getString(name)).toOption.flatMap(Option(_)))
+
+  private def withExportReadContext(
+      exception: Exception,
+      requestId: String,
+      retrySummary: String = ""): FailedOperationException = {
+    val result = exception match {
+      case failed: FailedOperationException => failed.getResult
+      case _ => None
+    }
+    // Read the current operation row without advancing the cursor or masking the original error.
+    def field(name: String): Option[String] =
+      result.flatMap(table => Try(table.getString(name)).toOption.flatMap(Option(_)))
+
+    val submissionThrottled = exception.isInstanceOf[ThrottleException]
+    val throttled = submissionThrottled || field("State").contains("Throttled")
+    val exportCapacityExceeded = throttled && field("Status").exists(status =>
+      exportCapacityOrigin.findFirstIn(status).isDefined)
+    val reason = if (submissionThrottled) {
+      "Kusto Spark read failed because its distributed export submission was throttled (HTTP 429)."
+    } else if (exportCapacityExceeded) {
+      "Kusto Spark read failed because the concurrent export capacity was exceeded."
+    } else if (throttled) {
+      "Kusto Spark read failed because its distributed export was throttled."
+    } else {
+      "Kusto Spark read failed during a distributed export."
+    }
+    val guidance = if (exportCapacityExceeded) {
+      " Reduce concurrent reads or exports against the same Kusto cluster or Eventhouse and retry after backoff." +
+        " If throttling persists, ask the service administrator to review export capacity."
+    } else if (throttled) {
+      " Retry the read after backoff. If throttling persists, ask the service administrator to review the applicable limit."
+    } else {
+      ""
+    }
+    val enriched = new FailedOperationException(
+      s"$reason Distributed reads export query results to temporary storage before Spark reads them." +
+        guidance + (if (retrySummary.isEmpty) "" else s" $retrySummary") +
+        s" Connector requestId: $requestId. Original error: ${exception.getMessage}",
+      result)
+    enriched.initCause(exception)
+    enriched
+  }
 
   /**
    * Sets a Hadoop configuration key on both the Hadoop Configuration object and the Spark session
@@ -100,12 +164,8 @@ object KustoReader {
   }
 
   /**
-   * Sets a Hadoop configuration key only when nothing is configured for it yet, so that
-   * session-wide settings owned by the hosting runtime are never overwritten by the connector.
-   * Only the Hadoop Configuration is probed and written here on purpose: this is used for
-   * filesystem implementation keys, which are resolved exclusively from the Hadoop Configuration
-   * (spark.hadoop.* is copied into it at session start, never read back), so mirroring an
-   * inherited value into the session conf would only pin a runtime owned implementation.
+   * Preserves an existing Hadoop configuration value. When absent, sets the default in both
+   * Hadoop and Spark session configuration without mirroring an inherited implementation.
    */
   private def setHadoopConfIfAbsent(
       config: Configuration,
@@ -119,15 +179,73 @@ object KustoReader {
     }
   }
 
+  private case class InstalledAccountSetting(previous: Option[String], value: String)
+
+  // Account-scoped auth settings the connector wrote into session-wide configuration (kept there
+  // for native readers), with the values they replaced. Tracked per configuration object, and
+  // dropped with it, so impersonation readback can exclude them from its private view.
+  private val installedHadoopAuth =
+    new java.util.WeakHashMap[Configuration, mutable.Map[String, InstalledAccountSetting]]()
+  private val installedSparkAuth =
+    new java.util.WeakHashMap[RuntimeConfig, mutable.Map[String, InstalledAccountSetting]]()
+
+  private def recordInstall[K](
+      registry: java.util.WeakHashMap[K, mutable.Map[String, InstalledAccountSetting]],
+      owner: K,
+      key: String,
+      current: Option[String],
+      value: String): Unit = {
+    val records = registry.computeIfAbsent(owner, _ => mutable.Map.empty)
+    val previous = records.get(key) match {
+      case Some(installed) if current.contains(installed.value) => installed.previous
+      case _ => current
+    }
+    records.put(key, InstalledAccountSetting(previous, value))
+  }
+
+  private def installAccountAuth(
+      config: Configuration,
+      sparkConf: RuntimeConfig,
+      key: String,
+      value: String): Unit = installedHadoopAuth.synchronized {
+    recordInstall(installedHadoopAuth, config, key, Option(config.get(key)), value)
+    val sparkKey = s"$sparkHadoopConfigPrefix$key"
+    recordInstall(installedSparkAuth, sparkConf, key, sparkConf.getOption(sparkKey), value)
+    setHadoopConf(config, sparkConf, key, value)
+  }
+
+  /**
+   * Session Hadoop configuration and options as they were before the connector installed explicit
+   * storage credentials; settings changed since installation are kept.
+   */
+  private def ambientReadConfiguration(
+      spark: SparkSession): (Configuration, Map[String, String]) =
+    installedHadoopAuth.synchronized {
+      val shared = spark.sparkContext.hadoopConfiguration
+      val config = new Configuration(shared)
+      Option(installedHadoopAuth.get(shared)).foreach(_.foreach { case (key, installed) =>
+        if (Option(config.get(key)).contains(installed.value)) {
+          installed.previous match {
+            case Some(value) => config.set(key, value)
+            case None => config.unset(key)
+          }
+        }
+      })
+      val sessionOptions = Option(installedSparkAuth.get(spark.conf))
+        .map(_.foldLeft(spark.conf.getAll) { case (options, (key, installed)) =>
+          val sparkKey = s"$sparkHadoopConfigPrefix$key"
+          if (!options.get(sparkKey).contains(installed.value)) options
+          else installed.previous.fold(options - sparkKey)(value => options + (sparkKey -> value))
+        })
+        .getOrElse(spark.conf.getAll)
+      (config, sessionOptions)
+    }
+
   private val distributedReadModeTransientCache: concurrent.Map[
     DistributedReadModeTransientCacheKey,
     DistributedReadModeTransientCacheEntry] =
     new concurrent.TrieMap()
-  /*
-  A new native implementation of Parquet writer that uses new encoding schemes was rolled out on the ADX side. This uses delta byte array for strings and other byte array-based Parquet types (default in Parquet V2 which most modern parquet readers support by default).
-  To avoid breaking changes for applications, if the runtime is on a lower version than 3.3.0 of spark runtime we explicitly set the ADX export to not use the useNativeIngestion
-  TODO - add test
-   */
+  // Unless explicitly overridden, disable the native Parquet writer at or below this version.
   private val minimalParquetWriterVersion = "3.3.0"
   private[kusto] def singleBuildScan(
       kustoClient: ExtendedKustoClient,
@@ -171,29 +289,34 @@ object KustoReader {
       storage: TransientStorageParameters,
       options: KustoReadOptions,
       filtering: KustoFiltering): RDD[Row] = {
-    var paths: Seq[String] = Seq()
+    val readStorage = snapshotStorage(storage)
+    // OneLake transient storage always reads back over abfss.
+    val protocol =
+      if (readStorage.storageCredentials.exists(_.isOneLake)) KCONST.storageProtocolAbfss
+      else KDSU.resolveStorageProtocol(options.storageProtocol)
+    val exportStorage =
+      if (isAbfsProtocol(protocol)) dedupeConflictingCredentials(readStorage) else readStorage
     // if distributedReadModeTransientCacheEnabled is set to true, then check if path is cached and use it
     // if not export and cache the path for reuse
-    if (options.distributedReadModeTransientCacheEnabled) {
+    val exported = if (options.distributedReadModeTransientCacheEnabled) {
       val key = DistributedReadModeTransientCacheKey(
         request.query,
         request.kustoCoordinates,
         request.authentication,
         options.enableExportStorageApi)
-      if (distributedReadModeTransientCache.contains(key)) {
+      val cachedExport = distributedReadModeTransientCache
+        .get(key)
+        .filter(cachedExportMatches(_, exportStorage, protocol))
+      if (cachedExport.isDefined) {
         KDSU.logInfo(
           className,
           "Fetching from distributedReadModeTransientCache: hit, reusing cached export paths")
-        val cached = distributedReadModeTransientCache(key)
-        // ABFS resolves credentials per storage account, so another read of the same account,
-        // another Spark session or a fresh Hadoop Configuration may have left the account
-        // scoped keys holding a different token since this entry was created - reinstall them.
-        // WASBS keys are container scoped and were never clobbered, so nothing is done there,
-        // exactly as before.
+        val cached = cachedExport.get
+        // Reinstall account-scoped ABFS credentials before reusing cached paths.
         if (isAbfsProtocol(cached.storageProtocol)) {
           setupBlobAccess(request, cached.storage, cached.storageProtocol, forceRefresh = true)
         }
-        paths = cached.paths
+        cached
       } else {
         KDSU.logInfo(
           className,
@@ -202,21 +325,23 @@ object KustoReader {
           options.queryFilterPushDown,
           queryFilterPushDownDefault = false,
           filtering)
-        val exported = exportToStorage(kustoClient, request, storage, options, filter)
-        paths = exported.paths
+        val exported =
+          exportToStorage(kustoClient, request, exportStorage, options, filter, protocol)
         distributedReadModeTransientCache(key) = exported
+        exported
       }
     } else {
       val filter = determineFilterPushDown(
         options.queryFilterPushDown,
         queryFilterPushDownDefault = true,
         filtering)
-      paths = exportToStorage(kustoClient, request, storage, options, filter).paths
+      exportToStorage(kustoClient, request, exportStorage, options, filter, protocol)
     }
+    val paths = exported.paths
 
     val rdd =
       try {
-        request.sparkSession.read.parquet(paths: _*).rdd
+        readParquet(request.sparkSession, paths, exported.storage, exported.storageProtocol).rdd
       } catch {
         case ex: Exception =>
           // Check whether the result is empty, causing an IO exception on reading empty parquet file
@@ -239,12 +364,116 @@ object KustoReader {
     rdd
   }
 
-  private def dirExist(
+  private[kusto] def readParquet(
+      spark: SparkSession,
+      paths: Seq[String],
+      storage: TransientStorageParameters,
+      storageProtocol: String): DataFrame = {
+    val options = blobReadOptions(spark, storage, storageProtocol)
+    def plan(): DataFrame = {
+      val frame = spark.read.options(options).parquet(paths: _*)
+      // Complete file-index/physical-plan construction while driver delegates are owned.
+      frame.rdd
+      frame
+    }
+    options.get(KustoBlobReadFileSystem.ReadId) match {
+      case Some(id) => KustoBlobReadFileSystem.withReadScope(id)(plan())
+      case None => spark.read.options(options).parquet(paths: _*)
+    }
+  }
+
+  private[kusto] def blobReadOptions(
+      spark: SparkSession,
+      storage: TransientStorageParameters,
+      storageProtocol: String): Map[String, String] = {
+    if (!isAbfsProtocol(storageProtocol) || storage.storageCredentials.exists(_.isOneLake)) {
+      Map.empty
+    } else {
+      val (config, sessionOptions) = ambientReadConfiguration(spark)
+      sessionOptions.filter(_._1.startsWith("fs.")).foreach { case (key, value) =>
+        config.set(key, value)
+      }
+      sessionOptions.filter(_._1.startsWith(sparkHadoopConfigPrefix)).foreach {
+        case (key, value) =>
+          config.set(key.stripPrefix(sparkHadoopConfigPrefix), value)
+      }
+      val credentials = storage.storageCredentials.iterator.flatMap { credential =>
+        val host = storageAccountHost(credential, storage)
+        credential.authMethod match {
+          case AuthMethod.Key =>
+            abfsAccountKeyOptions(credential, host) ++ Map(
+              s"fs.azure.account.keyprovider.$host" ->
+                classOf[org.apache.hadoop.fs.azurebfs.services.SimpleKeyProvider].getName)
+          case AuthMethod.Sas =>
+            abfsSasOptions(credential, host) ++ Map(
+              s"fs.azure.sas.token.provider.type.$host" ->
+                classOf[KustoFixedSasTokenProvider].getName)
+          case _ => Map.empty[String, String]
+        }
+      }.toMap
+      val protocol = storageProtocol.toLowerCase(java.util.Locale.ROOT)
+      val implementation = FileSystem.getFileSystemClass(protocol, config).getName
+      val hosts = storage.storageCredentials.map(storageAccountHost(_, storage))
+      val ambient = config
+        .iterator()
+        .asScala
+        .filter(entry => hosts.exists(host => entry.getKey.endsWith(s".$host")))
+        .map(entry => entry.getKey -> entry.getValue)
+        .toMap
+      // Read options cannot remove session settings, and Spark rebuilds the Hadoop configuration
+      // from the live session when it plans the files. The readback filesystem therefore keeps
+      // only the account settings captured here and drops any others for these accounts.
+      val accountOptions = ambient ++ credentials
+      accountOptions ++ Map(
+        KustoBlobReadFileSystem.AccountHosts -> hosts.distinct.sorted.mkString(","),
+        KustoBlobReadFileSystem.AccountKeys -> accountOptions.keys.toSeq.sorted.mkString(","),
+        KustoBlobReadFileSystem.ReadId -> UUID.randomUUID().toString,
+        KustoBlobReadFileSystem.DelegateImplementation -> implementation,
+        s"fs.$protocol.impl" -> classOf[KustoBlobReadFileSystem].getName,
+        s"fs.$protocol.impl.disable.cache" -> "true")
+    }
+  }
+
+  private[kusto] def snapshotStorage(
+      storage: TransientStorageParameters): TransientStorageParameters =
+    new TransientStorageParameters(
+      storage.storageCredentials.map { source =>
+        val copy = new TransientStorageCredentials()
+        copy.blobContainer = source.blobContainer
+        copy.storageAccountName = source.storageAccountName
+        copy.storageAccountKey = source.storageAccountKey
+        copy.sasKey = source.sasKey
+        copy.sasUrl = source.sasUrl
+        copy.domainSuffix = source.domainSuffix
+        copy.oneLakeUrl = source.oneLakeUrl
+        copy.oneLakeWorkspace = source.oneLakeWorkspace
+        copy.oneLakeEndpoint = source.oneLakeEndpoint
+        copy.oneLakeArtifactPath = source.oneLakeArtifactPath
+        copy
+      },
+      storage.endpointSuffix)
+
+  private[kusto] def cachedExportMatches(
+      cached: DistributedReadModeTransientCacheEntry,
+      storage: TransientStorageParameters,
+      protocol: String): Boolean = {
+    def identities(parameters: TransientStorageParameters) =
+      parameters.storageCredentials.toSeq.map(credential =>
+        (
+          credential.oneLakeAbfssBase,
+          credential.storageAccountName,
+          credential.blobContainer,
+          credentialFingerprint(credential)))
+    cached.storageProtocol == protocol && cached.storage.endpointSuffix == storage.endpointSuffix &&
+    identities(cached.storage) == identities(storage)
+  }
+
+  private[kusto] def dirExist(
       spark: SparkSession,
       params: TransientStorageCredentials,
       directory: String,
       endpointSuffix: String,
-      storageProtocol: String = KCONST.storageProtocolWasbs): Boolean = {
+      storageProtocol: String = KCONST.storageProtocolAbfss): Boolean = {
     if (params.isOneLake) {
       // OneLake: probe via Hadoop FileSystem over abfss using ambient AAD (Fabric Spark).
       val base = params.oneLakeAbfssBase
@@ -255,11 +484,16 @@ object KustoReader {
     } else if (params.authMethod == AuthMethod.Impersonation) {
       val url =
         s"$storageProtocol://${params.blobContainer}@${params.storageAccountName}.blob.$endpointSuffix"
-      val hadoopConf = spark.sparkContext.hadoopConfiguration
-      val fs = FileSystem.get(new URI(url), hadoopConf)
-
+      val hadoopConf = new Configuration(spark.sparkContext.hadoopConfiguration)
+      blobReadOptions(
+        spark,
+        new TransientStorageParameters(Array(params), endpointSuffix),
+        storageProtocol)
+        .foreach { case (key, value) => hadoopConf.set(key, value) }
+      val fs = FileSystem.newInstance(new URI(url), hadoopConf)
       val path = new Path(url + s"/$directory")
-      fs.exists(path)
+      try fs.exists(path)
+      finally fs.close()
     } else {
       val endpoint = s"https://${params.storageAccountName}.blob.$endpointSuffix"
       val container = params.authMethod match {
@@ -279,71 +513,82 @@ object KustoReader {
             .buildClient()
         case _ => throw new InvalidParameterException("")
       }
-      val exists = container.listBlobsByHierarchy(directory).stream().count() > 0
-      // Existing logic container.exists() && container.getDirectoryReference(directory).listBlobsSegmented().getLength > 0
-      exists
+      blobDirectoryExists(container, directory)
     }
   }
+
+  private[kusto] def blobDirectoryExists(
+      container: BlobContainerClient,
+      directory: String): Boolean =
+    container.listBlobs(new ListBlobsOptions().setPrefix(directory), null).iterator().hasNext
 
   private def exportToStorage(
       kustoClient: ExtendedKustoClient,
       request: KustoReadRequest,
-      storage: TransientStorageParameters,
+      exportStorage: TransientStorageParameters,
       options: KustoReadOptions,
-      filtering: KustoFiltering): DistributedReadModeTransientCacheEntry = {
+      filtering: KustoFiltering,
+      protocol: String): DistributedReadModeTransientCacheEntry = {
 
     KDSU.logInfo(
       className,
       s"Starting exporting data from Kusto to blob storage in Distributed mode. requestId: ${request.requestId}")
 
-    // OneLake transient storage always reads back over abfss; force the protocol when any
-    // credential is a OneLake URL so the rest of the read path uses the correct scheme.
-    val anyOneLake = storage.storageCredentials.exists(_.isOneLake)
-    val protocol =
-      if (anyOneLake) KCONST.storageProtocolAbfss
-      else options.storageProtocol.getOrElse(KCONST.storageProtocolWasbs)
-    // ABFS resolves SAS tokens per storage account (never per container), so two containers
-    // of the same account carrying different SAS tokens cannot both be configured. Keep a
-    // single container per account in that case to avoid reading with the wrong token.
-    val exportStorage =
-      if (isAbfsProtocol(protocol)) dedupeConflictingCredentials(storage) else storage
     setupBlobAccess(request, exportStorage, protocol)
     val partitions = calculatePartitions(options.partitionOptions)
     val reader = new KustoReader(kustoClient)
     val directory = s"${request.kustoCoordinates.database}/dir${UUID.randomUUID()}/"
       .replaceAll("[^0-9a-zA-Z/]", "_")
 
-    for (partition <- partitions) {
-      reader.exportPartitionToBlob(
-        partition.asInstanceOf[KustoPartition],
-        request,
-        exportStorage,
-        directory,
-        options,
-        filtering)
-    }
-
-    val paths = exportStorage.storageCredentials
-      .filter(params =>
-        dirExist(request.sparkSession, params, directory, exportStorage.endpointSuffix, protocol))
-      .map(params =>
-        if (params.isOneLake) {
-          s"${params.oneLakeAbfssBase}/$directory"
-        } else {
-          s"$protocol://${params.blobContainer}" +
-            s"@${params.storageAccountName}.blob.${exportStorage.endpointSuffix}/$directory"
-        })
+    val directories = reader.exportPartitionsToBlob(
+      partitions.toSeq.map(_.asInstanceOf[KustoPartition]),
+      request,
+      exportStorage,
+      directory,
+      options,
+      filtering)
+    val paths = exportedPaths(
+      exportStorage,
+      directories,
+      protocol,
+      (params, exportedDirectory) =>
+        dirExist(
+          request.sparkSession,
+          params,
+          exportedDirectory,
+          exportStorage.endpointSuffix,
+          protocol))
     KDSU.logInfo(
       className,
       s"Finished exporting from Kusto to ${paths.mkString(",")}" +
         s", on requestId: ${request.requestId}, will start parquet reading now")
-    DistributedReadModeTransientCacheEntry(paths.toSeq, exportStorage, protocol)
+    DistributedReadModeTransientCacheEntry(paths, exportStorage, protocol)
+  }
+
+  private[kusto] def exportedPaths(
+      storage: TransientStorageParameters,
+      directories: Seq[String],
+      protocol: String,
+      directoryExists: (TransientStorageCredentials, String) => Boolean): Seq[String] = {
+    // Never read the parent directory: aborted attempts can leave partial Parquet files there.
+    directories.flatMap { directory =>
+      storage.storageCredentials.iterator
+        .filter(params => directoryExists(params, directory))
+        .map(params =>
+          if (params.isOneLake) {
+            s"${params.oneLakeAbfssBase}/$directory"
+          } else {
+            s"$protocol://${params.blobContainer}" +
+              s"@${params.storageAccountName}.blob.${storage.endpointSuffix}/$directory"
+          })
+        .toSeq
+    }
   }
 
   private[kusto] def setupBlobAccess(
       request: KustoReadRequest,
       storageParameters: TransientStorageParameters,
-      storageProtocol: String = KCONST.storageProtocolWasbs,
+      storageProtocol: String = KCONST.storageProtocolAbfss,
       forceRefresh: Boolean = false): Unit = {
     val config = request.sparkSession.sparkContext.hadoopConfiguration
     val sparkConf = request.sparkSession.conf
@@ -427,13 +672,13 @@ object KustoReader {
             sparkConf,
             now,
             useAbfs,
-            storageProtocol,
             forceRefresh)
         case AuthMethod.Sas =>
           handleSasAuth(storage, storageParameters, config, sparkConf, now, useAbfs, forceRefresh)
         case _ =>
         // Impersonation (including OneLake) relies on ambient AAD configured by the
-        // Spark runtime (e.g. Fabric notebooks). Nothing to install here.
+        // Spark runtime (e.g. Fabric notebooks). Nothing to install here; JVM readback
+        // excludes connector-installed explicit credentials (see ambientReadConfiguration).
       }
     }
   }
@@ -445,23 +690,24 @@ object KustoReader {
       sparkConf: RuntimeConfig,
       now: Instant,
       useAbfs: Boolean,
-      storageProtocol: String,
       forceRefresh: Boolean): Unit = {
-    val wasCached = !forceRefresh && KustoAzureFsSetupCache.updateAndGetPrevStorageAccountAccess(
-      storage.storageAccountName,
-      storage.storageAccountKey,
-      now)
+    val wasCached = !forceRefresh && !useAbfs &&
+      KustoAzureFsSetupCache.updateAndGetPrevStorageAccountAccess(
+        storage.storageAccountName,
+        storage.storageAccountKey,
+        now)
 
     if (!wasCached) {
+      val accountHost = storageAccountHost(storage, storageParameters)
       if (useAbfs) {
-        throw new InvalidParameterException(
-          s"Storage protocol '$storageProtocol' with Account Key authentication is not supported yet. " +
-            "Please use SAS based authentication or switch to 'wasbs' protocol.")
+        abfsAccountKeyOptions(storage, accountHost).foreach { case (key, value) =>
+          installAccountAuth(config, sparkConf, key, value)
+        }
       } else {
         setHadoopConf(
           config,
           sparkConf,
-          s"fs.azure.account.key.${storage.storageAccountName}.blob.${storageParameters.endpointSuffix}",
+          s"fs.azure.account.key.$accountHost",
           storage.storageAccountKey)
       }
     }
@@ -490,12 +736,8 @@ object KustoReader {
       className,
       s"Setting up SAS auth for ${storage.storageAccountName}/${storage.blobContainer}, key: $sasConfigKey")
 
-    // The cache must mirror what is actually installed, but ABFS keys are account scoped: a
-    // sibling container of the same account, a second Spark session or a fresh Hadoop
-    // Configuration can all leave the account key holding a different token while the
-    // per-container cache entry still reports a hit. Config writes are cheap, so always
-    // (re)install them for ABFS and keep the cache only for the WASBS keys, which are
-    // container scoped and therefore never clobber each other.
+    // Always install account-scoped ABFS settings: a cache hit does not verify session state.
+    // WASBS retains its container-scoped setup cache.
     val wasCached = !forceRefresh && !useAbfs && KustoAzureFsSetupCache.updateAndGetPrevSas(
       storage.blobContainer,
       storage.storageAccountName,
@@ -525,18 +767,30 @@ object KustoReader {
     // 'fs.azure.account.auth.type' forces *every* other ABFS account used by the session
     // (OneLake / lakehouse / customer storage) into SAS auth, which then fails with
     // "At least one of fs.azure.sas.token.provider.type and fs.azure.sas.fixed.token must be set".
-    setHadoopConf(config, sparkConf, s"fs.azure.account.auth.type.$accountHost", "SAS")
-    setHadoopConf(config, sparkConf, s"fs.azure.account.hns.enabled.$accountHost", "false")
-    setHadoopConf(config, sparkConf, sasConfigKey, normalizeSasToken(storage.sasKey))
-    // Back-compat: keep publishing the container qualified key that older connector versions
-    // wrote, for runtimes that were adapted to look it up.
-    setHadoopConf(
-      config,
-      sparkConf,
-      s"fs.azure.sas.fixed.token.${storage.blobContainer}.$accountHost",
-      normalizeSasToken(storage.sasKey))
+    abfsSasOptions(storage, accountHost).foreach { case (key, value) =>
+      installAccountAuth(config, sparkConf, key, value)
+    }
     KDSU.logInfo(className, s"Set ABFS SAS config: $sasConfigKey")
   }
+
+  private def abfsAccountKeyOptions(
+      storage: TransientStorageCredentials,
+      host: String): Map[String, String] =
+    Map(
+      s"fs.azure.account.auth.type.$host" -> "SharedKey",
+      s"fs.azure.account.hns.enabled.$host" -> "false",
+      s"fs.azure.account.key.$host" -> storage.storageAccountKey)
+
+  private def abfsSasOptions(
+      storage: TransientStorageCredentials,
+      host: String): Map[String, String] =
+    Map(
+      s"fs.azure.account.auth.type.$host" -> "SAS",
+      s"fs.azure.account.hns.enabled.$host" -> "false",
+      s"fs.azure.sas.fixed.token.$host" -> normalizeSasToken(storage.sasKey),
+      // Back-compat for runtimes adapted to the older container-qualified key.
+      s"fs.azure.sas.fixed.token.${storage.blobContainer}.$host" -> normalizeSasToken(
+        storage.sasKey))
 
   private def setWasbsSasConfig(
       storage: TransientStorageCredentials,
@@ -568,18 +822,19 @@ object KustoReader {
 
   private def credentialFingerprint(
       credential: TransientStorageCredentials): (AuthMethod.AuthMethod, String) =
-    (credential.authMethod, normalizeSasToken(credential.sasKey))
+    (
+      credential.authMethod,
+      if (credential.authMethod == AuthMethod.Key) credential.storageAccountKey
+      else normalizeSasToken(credential.sasKey))
 
   /**
    * ABFS auth settings (auth type and SAS token alike) are configured per storage account, so
-   * several containers of the same account cannot be served when they carry different SAS tokens,
-   * or when they mix SAS with impersonation. Elect one credential per account and drop the
-   * conflicting siblings, so the export only targets locations that can be read back afterwards.
-   * A self contained SAS token always wins over impersonation, which depends on the ambient
-   * identity of the runtime and would otherwise make the readback depend on the order in which
-   * the credentials were returned; between credentials of the same auth method the first one
-   * wins. OneLake credentials (which have no storage account) and accounts whose containers agree
-   * on one credential are left untouched.
+   * several containers of the same account cannot be served when they carry different
+   * credentials. Elect one credential per account and drop the conflicting siblings, so the
+   * export only targets locations that can be read back afterwards. SAS takes precedence over
+   * account keys, and both take precedence over ambient impersonation; between credentials of the
+   * same auth method the first one wins. OneLake credentials (which have no storage account) and
+   * accounts whose containers agree on one credential are left untouched.
    */
   private[kusto] def dedupeConflictingCredentials(
       storageParameters: TransientStorageParameters): TransientStorageParameters = {
@@ -594,7 +849,8 @@ object KustoReader {
           val fingerprint = credentialFingerprint(credential)
           val elected = electedCredentialByAccount.get(host)
           if (elected.isEmpty ||
-            (elected.get._1 != AuthMethod.Sas && fingerprint._1 == AuthMethod.Sas)) {
+            (elected.get._1 != AuthMethod.Sas && fingerprint._1 == AuthMethod.Sas) ||
+            (elected.get._1 == AuthMethod.Impersonation && fingerprint._1 == AuthMethod.Key)) {
             electedCredentialByAccount.put(host, fingerprint)
           }
         }
@@ -701,8 +957,135 @@ object KustoReader {
 private[kusto] class KustoReader(client: ExtendedKustoClient) {
   private val myName = this.getClass.getSimpleName
 
-  // Export a single partition from Kusto to transient Blob storage.
-  // Returns the directory path for these blobs
+  private[kusto] def exportPartitionsToBlob(
+      partitions: Seq[KustoPartition],
+      request: KustoReadRequest,
+      storage: TransientStorageParameters,
+      directory: String,
+      options: KustoReadOptions,
+      filtering: KustoFiltering): Seq[String] =
+    partitions.map(partition =>
+      exportPartitionToBlobWithRetries(
+        partition,
+        request,
+        storage,
+        directory,
+        options,
+        filtering))
+
+  private[kusto] def exportRetryDelayMillis(retryNumber: Int): Long =
+    KustoReader.exportRetryInterval.apply(retryNumber)
+
+  private[kusto] def exportTimeNanos(): Long = System.nanoTime()
+
+  private[kusto] def waitBeforeExportRetry(delayMillis: Long): Unit = Thread.sleep(delayMillis)
+
+  private[kusto] def exportPartitionToBlobWithRetries(
+      partition: KustoPartition,
+      request: KustoReadRequest,
+      storage: TransientStorageParameters,
+      directory: String,
+      options: KustoReadOptions,
+      filtering: KustoFiltering): String = {
+    val started = exportTimeNanos()
+    var lastFailure: Throwable = null
+
+    def remainingTimeout(): FiniteDuration = {
+      if (Thread.currentThread().isInterrupted) {
+        throw new InterruptedException("Interrupted while exporting a Kusto read partition")
+      }
+      if (request.timeout < Duration.Zero) {
+        request.timeout
+      } else {
+        val remaining = request.timeout - (exportTimeNanos() - started).nanos
+        if (remaining <= Duration.Zero) {
+          val error = new TimeoutAwaitingPendingOperationException(
+            s"Timed out exporting partition ${partition.idx}. Connector requestId: ${request.requestId}")
+          if (lastFailure != null) error.initCause(lastFailure)
+          throw error
+        }
+        remaining
+      }
+    }
+
+    def fail(exception: Throwable, summary: String): Nothing = {
+      KDSU.logWarn(myName, s"$summary Connector requestId: ${request.requestId}")
+      exception match {
+        case failed: FailedOperationException =>
+          throw KustoReader.withExportReadContext(failed, request.requestId, summary)
+        case throttled: ThrottleException =>
+          throw KustoReader.withExportReadContext(throttled, request.requestId, summary)
+        case other => throw other
+      }
+    }
+
+    @tailrec
+    def attempt(attemptNumber: Int): String = {
+      remainingTimeout()
+      val attemptDirectory =
+        s"${directory.stripSuffix("/")}/part${partition.idx}/attempt${attemptNumber}_${UUID.randomUUID()}/"
+      val failure =
+        try {
+          exportPartitionToBlobAttempt(
+            partition,
+            request,
+            storage,
+            attemptDirectory,
+            options,
+            filtering,
+            () => remainingTimeout(),
+            Some(KustoReader.exportSubmissionRetryConfig))
+          None
+        } catch {
+          case exception: FailedOperationException =>
+            if (!KustoReader.operationField(exception, "State").contains("Throttled")) {
+              throw KustoReader.withExportReadContext(exception, request.requestId)
+            }
+            Some(exception)
+          case exception: ThrottleException => Some(exception)
+          case exception: InterruptedException =>
+            Thread.currentThread().interrupt()
+            throw exception
+        }
+
+      failure match {
+        case None => attemptDirectory
+        case Some(exception) =>
+          lastFailure = exception
+          if (attemptNumber >= KustoReader.MaxExportAttempts) {
+            fail(exception, s"Automatic export retries exhausted after $attemptNumber attempts.")
+          }
+          val delayMillis = exportRetryDelayMillis(attemptNumber)
+          if (request.timeout >= Duration.Zero && remainingTimeout() <= delayMillis.millis) {
+            fail(
+              exception,
+              s"Automatic export retry stopped at attempt $attemptNumber: the next backoff does not fit within timeoutLimit.")
+          }
+          val operationId = exception match {
+            case failed: FailedOperationException =>
+              KustoReader.operationField(failed, "OperationId")
+            case _ => None
+          }
+          KDSU.logInfo(
+            myName,
+            s"Export partition ${partition.idx} was throttled" +
+              operationId.map(id => s" (OperationId: $id)").getOrElse("") +
+              s"; retry ${attemptNumber}/${KustoReader.MaxExportAttempts - 1} in ${delayMillis}ms." +
+              s" Connector requestId: ${request.requestId}")
+          try waitBeforeExportRetry(delayMillis)
+          catch {
+            case interrupted: InterruptedException =>
+              Thread.currentThread().interrupt()
+              throw interrupted
+          }
+          attempt(attemptNumber + 1)
+      }
+    }
+
+    attempt(1)
+  }
+
+  // Uses the caller-supplied output directory and the existing submission retry policy.
   private[kusto] def exportPartitionToBlob(
       partition: KustoPartition,
       request: KustoReadRequest,
@@ -710,13 +1093,37 @@ private[kusto] class KustoReader(client: ExtendedKustoClient) {
       directory: String,
       options: KustoReadOptions,
       filtering: KustoFiltering): Unit = {
+    try {
+      exportPartitionToBlobAttempt(
+        partition,
+        request,
+        storage,
+        directory,
+        options,
+        filtering,
+        () => request.timeout,
+        None)
+    } catch {
+      case exception: FailedOperationException =>
+        throw KustoReader.withExportReadContext(exception, request.requestId)
+    }
+  }
+
+  private def exportPartitionToBlobAttempt(
+      partition: KustoPartition,
+      request: KustoReadRequest,
+      storage: TransientStorageParameters,
+      directory: String,
+      options: KustoReadOptions,
+      filtering: KustoFiltering,
+      remainingTimeout: () => FiniteDuration,
+      retryConfig: Option[RetryConfig]): Unit = {
     val supportNewParquetWriter = new ComparableVersion(request.sparkSession.version)
       .compareTo(new ComparableVersion(KustoReader.minimalParquetWriterVersion)) > 0
     if (!supportNewParquetWriter) {
       KDSU.logWarn(
         myName,
-        "Setting useNativeParquetWriter=false. Users are advised to move to Spark versions >= 3.3.0 to leverage the performance and cost improvements of" +
-          "new encoding schemes introduced in both Kusto parquet files write and Spark parquet read")
+        "For this Spark version, useNativeParquetWriter defaults to false unless explicitly overridden.")
     }
     val exportCommand = CslCommandsGenerator.generateExportDataCommand(
       query = KustoFilter.pruneAndFilter(request.schema, request.query, filtering),
@@ -732,14 +1139,37 @@ private[kusto] class KustoReader(client: ExtendedKustoClient) {
         request.kustoCoordinates.database,
         exportCommand,
         "exportPartitionToBlob",
-        request.clientRequestProperties.orNull)
+        request.clientRequestProperties.orNull,
+        retryConfig = retryConfig)
       .getPrimaryResults
+    val pollingTimeout =
+      try remainingTimeout()
+      catch {
+        case timeout: TimeoutAwaitingPendingOperationException =>
+          // Leave the result cursor untouched for the completion helper.
+          val operationId = Try(commandResult.getData.get(0).get(0).toString).toOption
+            .filter(_.nonEmpty)
+            .getOrElse("<unavailable>")
+          val error = new TimeoutAwaitingPendingOperationException(
+            s"Timed out exporting partition ${partition.idx} after submission. OperationId: '$operationId'." +
+              s" Connector requestId: ${request.requestId}. The operation may still be running.")
+          error.initCause(timeout)
+          throw error
+      }
+    awaitExportCompletion(request, commandResult, directory, pollingTimeout)
+  }
+
+  private[kusto] def awaitExportCompletion(
+      request: KustoReadRequest,
+      commandResult: KustoResultSetTable,
+      directory: String,
+      timeout: FiniteDuration): Unit = {
     KDSU.verifyAsyncCommandCompletion(
       client.engineClient,
       request.kustoCoordinates.database,
       commandResult,
-      timeOut = request.timeout,
-      doingWhat = s"export data to  blob directory: ('$directory') preparing it for reading.",
+      timeOut = timeout,
+      doingWhat = s"export data to blob directory: ('$directory') preparing it for reading.",
       loggerName = myName,
       requestId = request.requestId)
   }

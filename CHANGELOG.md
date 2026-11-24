@@ -4,7 +4,7 @@ All notable changes to the Azure Kusto Spark Connector will be documented in thi
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Version numbers follow the `{major}.{minor}.{patch}` scheme (e.g., `7.0.5`).
-Tags are created as `v4.0_{version}` (Spark 4 / master) and `v3.0_{version}` (Spark 3 / release/spark3).
+Tags are created as `v4.2_{version}` (Spark 4.2 / master), `v4.0_{version}` (Spark 4.0/4.1 / release/spark40; master before 7.1.7) and `v3.0_{version}` (Spark 3 / release/spark3).
 
 ## [Unreleased]
 
@@ -16,6 +16,46 @@ Tags are created as `v4.0_{version}` (Spark 4 / master) and `v3.0_{version}` (Sp
 
 ### Fixed
 - None
+
+## [7.1.7] - 2026-11-20
+
+### Changed
+- master now targets Spark 4.2 and publishes `kusto-spark_4.2_2.13` (tags `v4.2_{version}`), built against Spark 4.2.1, Scala 2.13.18, Hadoop 3.5.0 and Netty 4.2.13.Final. Spark 4.0/4.1 maintenance continues on `release/spark40` with `kusto-spark_4.0_2.13` and `v4.0_{version}` tags (#534)
+- Keep the patched Jackson 2.21.8 and Guava 33.8.0-jre versions from 7.1.6 (#527) on the Spark 4.2 line (#534)
+
+### Added
+- Spark 4.2 support (#534)
+
+### Fixed
+- Default distributed blob reads to ABFSS for Hadoop 3.5, reject unsupported WASB options, and support account-scoped SAS and SharedKey readback without changing unrelated storage accounts.
+- Isolate blob readback from cached filesystem credentials, close read-owned clients, and re-export when cached storage credentials change. Migrate the tagged blob readback test to ABFSS.
+- Impersonation (`;impersonate`) readback of a storage account now ignores explicit SAS/account-key settings the connector installed for that account in an earlier read (the shared settings stay in place for native readers), and explicit credentials take precedence over SAS token or key providers configured for that account.
+
+## [7.1.6] - 2026-11-09
+
+### Changed
+- None
+
+### Added
+- None
+
+### Fixed
+- Bundled dependencies upgraded to patched versions to address known critical and high vulnerabilities: Netty 4.1.118.Final → 4.1.140.Final, Jackson 2.19.2 → 2.21.8, Guava 27.0-jre → 33.8.0-jre (#527)
+
+## [7.1.5] - 2026-10-26
+
+### Changed
+- Distributed-read export submissions no longer use the generic command retry policy to replay ambiguous failures. Exhausted HTTP 429 submissions report a `FailedOperationException` with the original SDK exception retained as the cause (#520)
+- Unrecognized or unreadable asynchronous operation states report a monitoring error rather than triggering failed-operation retries in shared write callers (#520)
+
+### Added
+- Log the OSS connector and Kusto Java SDK versions as searchable `Kusto.Spark.Connector:<version>|Kusto.Java.Client:<version>` identifiers at INFO once per class loader, with troubleshooting guidance (#523)
+
+### Fixed
+- Retry explicitly throttled distributed-read exports up to four total attempts per partition, with jittered exponential backoff and a shared per-partition timeout budget (#520)
+- Isolate each export attempt's output and read/cache only successful attempt paths; stop blob-prefix existence checks after the first match (#520)
+- Correct shared asynchronous polling timeout/error propagation and timer cleanup; preserve accepted operation IDs in post-submission timeout diagnostics and handle unavailable write-failure status text safely (#520)
+- Default ingestion-test cleanup to the exact validated table so concurrent runs do not delete each other's tables (#520)
 
 ## [7.1.4] - 2026-09-23
 
