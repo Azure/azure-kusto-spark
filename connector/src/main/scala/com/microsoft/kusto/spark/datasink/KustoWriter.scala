@@ -341,10 +341,12 @@ object KustoWriter {
     }
   }
 
-  private def getSparkIngestionProperties(
+  private[kusto] def getSparkIngestionProperties(
       writeOptions: WriteOptions): SparkIngestionProperties = {
-    val sparkIngestionProperties =
-      writeOptions.maybeSparkIngestionProperties.getOrElse(new SparkIngestionProperties())
+    // Work on a copy: the caller's properties are still needed for the ingestIfNotExists check.
+    val sparkIngestionProperties = writeOptions.maybeSparkIngestionProperties
+      .map(props => SparkIngestionProperties.fromString(props.toString))
+      .getOrElse(new SparkIngestionProperties())
     sparkIngestionProperties.ingestIfNotExists = new util.ArrayList()
     sparkIngestionProperties
   }

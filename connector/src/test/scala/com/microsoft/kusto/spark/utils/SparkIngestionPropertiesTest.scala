@@ -3,7 +3,7 @@
 
 package com.microsoft.kusto.spark.utils
 
-import com.microsoft.kusto.spark.datasink.SparkIngestionProperties
+import com.microsoft.kusto.spark.datasink.{KustoWriter, SparkIngestionProperties, WriteOptions}
 import org.apache.commons.lang3.builder.EqualsBuilder
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.prop.TableDrivenPropertyChecks.forAll
@@ -41,6 +41,22 @@ class SparkIngestionPropertiesTest extends AnyFlatSpec {
       .toIngestionProperties("database", "tableName")
     val cloned = SparkIngestionProperties.cloneIngestionProperties(ingestionProperties)
     assert(EqualsBuilder.reflectionEquals(ingestionProperties, cloned))
+  }
+
+  "staging table properties" should "not change the user's ingestIfNotExists tags" in {
+    val userProps = new SparkIngestionProperties(
+      ingestIfNotExists = java.util.Arrays.asList("tag1"),
+      ingestByTags = java.util.Arrays.asList("tag1"))
+    val staging = KustoWriter.getSparkIngestionProperties(
+      WriteOptions(
+        maybeSparkIngestionProperties = Some(userProps),
+        kustoCustomDebugWriteOptions = KustoCustomDebugWriteOptions()))
+
+    assert(staging.ingestIfNotExists.isEmpty)
+    assert(staging.ingestByTags == java.util.Arrays.asList("tag1"))
+    staging.csvMapping = "changed"
+    assert(userProps.ingestIfNotExists == java.util.Arrays.asList("tag1"))
+    assert(userProps.csvMapping == null)
   }
 
   // This will be called only for WriteOption "Stream"
